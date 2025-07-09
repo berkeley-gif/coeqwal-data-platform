@@ -1,4 +1,2 @@
 id,email,name,display_name,affiliation,role,aws_sso_user_id,aws_sso_username,is_bootstrap,sync_source,is_active,last_login,created_at,updated_at
-1,system@coeqwal.gov,System User,System User,COEQWAL,service,,,true,bootstrap,true,,2024-01-01 00:00:00,2024-01-01 00:00:00
-2,admin@coeqwal.gov,Admin User,Admin User,COEQWAL,admin,,,true,bootstrap,true,,2024-01-01 00:00:00,2024-01-01 00:00:00
-3,researcher@coeqwal.gov,Research User,Research User,COEQWAL,researcher,,,true,bootstrap,true,,2024-01-01 00:00:00,2024-01-01 00:00:00
+1,jfantauzza@berkeley.edu,Jill Fantauzza,jill,UC Berkeley GIF,service,,,true,bootstrap,true,,,
