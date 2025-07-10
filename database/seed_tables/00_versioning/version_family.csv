@@ -1,12 +1,12 @@
 id,short_code,label,description,is_active,created_by,updated_by
-1,theme,Theme,Research themes and storylines,true,1,1
-2,scenario,Scenario,Water management scenarios,true,1,1
-3,assumption,Assumption,Model assumptions and parameters,true,1,1
-4,operation,Operation,Operational policies and rules,true,1,1
-5,outcome_framework,Outcome Framework,Outcome categories and measurement systems,true,1,1
-6,calsim_variable,CalSim Variable,CalSim model variables and definitions,true,1,1
-7,hydroclimate,Hydroclimate,Hydroclimate conditions and variable definitions,true,1,1
-8,spatial_data,Spatial Data,Geographic and spatial data definitions,true,1,1
-9,interpretive,Interpretive,Analysis and interpretive frameworks,true,1,1
-10,metadata,Metadata,Data metadata and documentation,true,1,1
-11,other,Other,Other version family types,true,1,1
+1,theme,Theme,Research themes and storylines,true,1,
+2,scenario,Scenario,Water management scenarios,true,1,
+3,assumption,Assumption,Scenario assumptions and parameters,true,1,
+4,operation,Operation,Operational policies and rules,true,1,
+5,hydroclimate,Hydroclimate,Hydroclimate conditions and projections,true,1,
+6,variable,Variable,CalSim model variables and definitions,true,1,
+7,outcome,Outcome,Outcome categories and measurement systems,true,1,
+8,tier,Tier,Tier definitions and classification systems,true,1,
+9,geospatial,Geospatial,Geographic and spatial data definitions,true,1,
+10,interpretive,Interpretive,Analysis and interpretive frameworks,true,1,
+11,metadata,Metadata,Data metadata and documentation,true,1,

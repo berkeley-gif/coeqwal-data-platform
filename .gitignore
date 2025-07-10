@@ -46,6 +46,7 @@ pip-wheel-metadata/
 .idea/
 *.code-workspace
 *.sublime*
+.~lock.*
 
 # OS
 .DS_Store

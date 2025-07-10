@@ -1,5 +1,6 @@
-id,short+AF8-code,is+AF8-active,title,subtitle,short+AF8-description,description,narrative,theme+AF8-short+AF8-code,baseline+AF8-short+AF8-code,hydroclimate+AF8-short+AF8-code,metadata+AF8-short+AF8-code,source,scenario+AF8-version+AF8-id
-2,9.3.1+AF8-danube+AF8-adj,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate,,,,,baseline,,2023+AF8-DWR+AF8-DCR+AF8-adj+AF8-hist,,,1
-3,9.3.1+AF8-danube+AF8-cc50	,1,2023 DWR Delivery Capability Report scenario with warmer and drier climate by 2043,,,,,baseline,,cc50+AF8-2043,,,1
-5,9.3.1+AF8-danube+AF8-cc95	,1,2023 DWR Delivery Capability Report scenario with much warmer and drier climate by 2043,,,,,baseline,,cc95+AF8-2043,,,1
-10,s0010+AF8-draftDCP+AF8-NDD+AF8-SWP6000+AF8-Beth+AF8-2020,1,+ACI-Delta Conveyance Project (+ACIAIg-The Tunnel+ACIAIg-) at a flow rate of 6000 cubic feet per second+ACI-,Bethany Alignment with North Delta Diversion,,,,delta+AF8-export+AF8-reliability,,DWR+AF8-historical+AF8-2015,,,1
+id,scenario_id,short_code,is_active,title,subtitle,short_title,simple_description,description,narrative,baseline_scenario_id,hydroclimate_id,source_id,scenario_version_id,created_by,updated_by
+2,s0002,9.3.1_danube_adj,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate,,2023 DWR baseline with historically adjusted hydroclimate,,,,,2,1,1,1,
+3,s0003,9.3.1_danube_cc50,1,2023 DWR Delivery Capability Report scenario with warmer and drier climate by 2043,,2023 DWR baseline with 50th percentile level of concern ,,,,,3,1,1,1,
+4,s0005,9.3.1_danube_cc95,1,2023 DWR Delivery Capability Report scenario with much warmer and drier climate by 2043,,2023 DWR baseline with 95th percentile level of concern ,,,,,4,1,1,1,
+5,s0010,s0010_draftDCP_NDD_SWP6000_Beth_2020,1,Delta Conveyance Project (The Tunnel) at a flow rate of 6000 cubic feet per second,Bethany Alignment with North Delta Diversion,DWR Delta Conveyance Project with Bethany Reservoir Alignment,,,,1,1,1,1,1,
+6,s0011,s0011_adjBL_wTUCP,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate and TUCPs,,,,,,1,2,3,1,1,
