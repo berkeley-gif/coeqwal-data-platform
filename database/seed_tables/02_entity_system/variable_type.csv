@@ -1,8 +1,9 @@
-id,short_code,label,description,is_active,created_by,updated_by
-1,output,Model Output,Standard CalSim model output variables (flows, storage, etc.),true,1,1
-2,control,Control Variable,Operational control indicators and binary flags,true,1,1
-3,decision,Decision Variable,Model decision variables and optimization targets,true,1,1
-4,state,State Variable,State variables including storage zones and bookkeeping accounts,true,1,1
-5,input,Input Variable,External inputs and boundary conditions,true,1,1
-6,intermediate,Intermediate Variable,Calculated intermediate values used in model logic,true,1,1
-7,aggregate,Aggregate Variable,Variables that sum or combine multiple reservoir/system components,true,1,1
+id,short_code,label,description,is_active
+1,output,output,Standard CalSim model output variables (flows,1
+2,control,control,Operational control indicators and binary flags,1
+3,decision,decision,Model decision variables and optimization targets,1
+4,state,state,State variables including storage zones and bookkeeping accounts,1
+5,input,input,External inputs and boundary conditions,1
+6,intermediate,intermediate,Calculated intermediate values used in model logic,1
+7,aggregate,aggregate,Variables that sum or combine multiple reservoir/system components,1
+8,index,index,Index,

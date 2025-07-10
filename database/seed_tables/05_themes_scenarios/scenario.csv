@@ -1,6 +1,6 @@
-id,scenario_id,short_code,is_active,title,subtitle,short_title,simple_description,description,narrative,baseline_scenario_id,hydroclimate_id,source_id,scenario_version_id,created_by,updated_by
-2,s0002,9.3.1_danube_adj,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate,,2023 DWR baseline with historically adjusted hydroclimate,,,,,2,1,1,1,
-3,s0003,9.3.1_danube_cc50,1,2023 DWR Delivery Capability Report scenario with warmer and drier climate by 2043,,2023 DWR baseline with 50th percentile level of concern ,,,,,3,1,1,1,
-4,s0005,9.3.1_danube_cc95,1,2023 DWR Delivery Capability Report scenario with much warmer and drier climate by 2043,,2023 DWR baseline with 95th percentile level of concern ,,,,,4,1,1,1,
-5,s0010,s0010_draftDCP_NDD_SWP6000_Beth_2020,1,Delta Conveyance Project (The Tunnel) at a flow rate of 6000 cubic feet per second,Bethany Alignment with North Delta Diversion,DWR Delta Conveyance Project with Bethany Reservoir Alignment,,,,1,1,1,1,1,
-6,s0011,s0011_adjBL_wTUCP,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate and TUCPs,,,,,,1,2,3,1,1,
+id,scenario_id,short_code,is_active,title,subtitle,short_title,simple_description,description,narrative,baseline_scenario_id,hydroclimate_id,scenario_author_id,scenario_version_id,created_by,updated_by
+1,s0002,9.3.1_danube_adj,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate,,2023 DWR baseline with historically adjusted hydroclimate,,,,,2,1,1,1,
+2,s0003,9.3.1_danube_cc50,1,2023 DWR Delivery Capability Report scenario with warmer and drier climate by 2043,,2023 DWR baseline with 50th percentile level of concern,,,,,3,1,1,1,
+3,s0005,9.3.1_danube_cc95,1,2023 DWR Delivery Capability Report scenario with much warmer and drier climate by 2043,,2023 DWR baseline with 95th percentile level of concern,,,,,4,1,1,1,
+4,s0010,s0010_draftDCP_NDD_SWP6000_Beth_2020,1,Delta Conveyance Project (The Tunnel) at a flow rate of 6000 cubic feet per second,Bethany Alignment with North Delta Diversion,DWR Delta Conveyance Project with Bethany Reservoir Alignment,,,,1,1,1,1,1,
+5,s0011,s0011_adjBL_wTUCP,1,2023 DWR Delivery Capability Report scenario with historically adjusted hydroclimate and TUCPs,,,,,,1,2,3,1,1,

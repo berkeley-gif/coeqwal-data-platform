@@ -1,10 +1,10 @@
-id,short_code,label,description,context,sort_order,is_active,created_by,updated_by
-1,daily,Daily,Daily temporal resolution,data_frequency,1,true,1,1
-2,weekly,Weekly,Weekly temporal resolution,data_frequency,2,true,1,1
-3,monthly,Monthly,Monthly temporal resolution,both,3,true,1,1
-4,seasonal,Seasonal,Seasonal temporal resolution (e.g. spring/summer),both,4,true,1,1
-5,flow_seasonal,Flow Seasonal,Flow-based seasonal periods (e.g. dry_early),data_frequency,5,true,1,1
-6,annual,Annual,Annual temporal resolution,both,6,true,1,1
-7,por,Period of Record,Full period of record analysis,outcome_analysis,7,true,1,1
-8,decadal,Decadal,Decadal temporal scale,outcome_analysis,8,true,1,1
-9,long_term,Long-term,Long-term planning horizon,outcome_analysis,9,true,1,1 
+id,short_code,label,description
+1,daily,Daily,Daily temporal resolution
+2,weekly,Weekly,Weekly temporal resolution
+3,monthly,Monthly,Monthly temporal resolution
+4,seasonal,Seasonal,Seasonal temporal resolution (e.g. spring/summer)
+5,flow_seasonal,Flow Seasonal,Flow-based seasonal periods (e.g. dry_early)
+6,annual,Annual,Annual temporal resolution
+7,por,Period of Record,Full period of record analysis
+8,decadal,Decadal,Decadal temporal scale
+9,long_term,Long-term,Long-term planning horizon

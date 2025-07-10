@@ -1,7 +1,8 @@
-id,type,schematic+AF8-type+AF8-id,description,key+AF8-dynamic,is+AF8-active
-1,reservoir,2,Reservoir or lake for water storage,storage levels,true
-2,channel,1,River channel or canal for water conveyance,flow amounts and rates,true
-3,inflow,1,Rim flow to reservoirs,inflow amounts and rates,true
-4,demand+AF8-unit,2,Water delivery district,delivery patterns,true
-5,groundwater,2,Groundwater aquifer,groundwater volume levels,true
-6,salinity+AF8-node,2,Delta salinity node,salinity,true
+id,type,schematic_type_id,description,key_dynamic,is_active
+1,reservoir,2,Reservoir or lake for water storage,storage levels,1
+2,channel,1,River channel or canal for water conveyance,flow amounts and rates,1
+3,inflow,1,Rim flow to reservoirs,inflow amounts and rates,1
+4,demand-unit,2,Water delivery district,delivery patterns,1
+5,groundwater,2,Groundwater aquifer,groundwater volume levels,1
+6,salinity-node,2,Delta salinity node,salinity,1
+7,Delta-outflow,1,Delta outflow,delta outflow,1
