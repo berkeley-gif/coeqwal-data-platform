@@ -111,31 +111,6 @@ Table source {
     Note: 'Unified source lookup table for all entity types'
 }
 
-Table entity_source_link {
-  entity_id     uuid    [not null]           // FK → calsim_entity.id
-  source_id     int     [not null]           // FK → source.id
-  notes         text                         // Source-specific notes or context
-  
-  created_at    timestamp [default: "now()"]
-  created_by  int      [not null]
-  updated_at    timestamp
-  updated_by  int
-
-  Indexes {
-    (entity_id, source_id) [pk]
-    (source_id, entity_id)           // Find entities by source
-    (entity_id)                      // All sources for entity
-    (source_id)                      // All entities for source
-  }
-
-  Note: 'Universal junction table for tracking which sources provide data for each entity. Replaces individual source_id fields and JSON sources arrays across all entity types.'
-}
-
-Ref: entity_source_link.entity_id  > calsim_entity.id [delete: cascade, update: cascade]
-Ref: entity_source_link.source_id  > source.id        [delete: restrict, update: cascade]
-Ref: entity_source_link.created_by > user.id          [delete: restrict, update: cascade]
-Ref: entity_source_link.updated_by > user.id          [delete: restrict, update: cascade]
-
 Table calsim_entity_type {
   id                  int   [pk, increment]
   type                text  [not null, unique]   // 'reservoir', 'channel', 'inflow', 'demand_unit', 'groundwater', 'delta_node'
@@ -2159,7 +2134,7 @@ Ref: inflow_variable.updated_by             > user.id          [delete: restrict
 
 Table channel_entity {
   id                   int    [pk, increment]
-  short_code           text   [not null, unique]      // 'SAC123', 'SJR456', 'C_AMR015'
+  calsim_id           text   [not null, unique]      // 'SAC123', 'SJR456', 'C_AMR015'
   name                 text   [not null]              // 'Sacramento River Section 123', 'American River'
   description          text                           
   
@@ -2168,27 +2143,25 @@ Table channel_entity {
   entity_type_id      int    [not null]              // FK → calsim_entity_type.id (currently "channel")
   schematic_type_id   int    [not null]              // FK → calsim_schematic_type.id (currently "arc")
   
+  // Regional classification
+  hydrologic_region_id int                           // FK → hydrologic_region.id
+
   // Network topology
+  boundary_condition  text                           // from Central Valley Modeling doc
   from_node           text                           // Upstream node ID
   to_node             text                           // Downstream node ID
   
-  // Regional classification
-  hydrologic_region_id int                           // FK → hydrologic_region.id
-  
   // Physical characteristics
-  shape_length_meters decimal                        // Length in meters from GIS
+  length_m decimal                                    // Length in meters from GIS
   
+  has_tiers            boolean [not null, default: false]  // TRUE for channels with tier classifications
+  is_main    boolean [not null, default: false]  // TRUE for main/primary channels in system
+
   // GIS and naming attributes
   has_gis_data        boolean [default: false]      // Whether variable has GIS data
   naming_convention   text                           // Naming convention pattern
   naming_prefix       text                           // Prefix extracted from calsim_id (e.g. "SAC", "AMR")
-  
-  has_tiers            boolean [not null, default: false]  // TRUE for channels with tier classifications
-  is_main_channel    boolean [not null, default: false]  // TRUE for main/primary channels in system
-  
-  // Link to unified entity system
-  entity_id           uuid                           // FK → calsim_entity.id (unified entity this channel belongs to)
-  
+ 
   // Standard metadata
   created_at          timestamp [default: "now()"]
   created_by  int      [not null]

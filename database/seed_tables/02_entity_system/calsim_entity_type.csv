@@ -5,4 +5,5 @@ id,type,schematic_type_id,description,key_dynamic,is_active
 4,demand-unit,2,Water delivery district,delivery patterns,1
 5,groundwater,2,Groundwater aquifer,groundwater volume levels,1
 6,salinity-node,2,Delta salinity node,salinity,1
-7,Delta-outflow,1,Delta outflow,delta outflow,1
+7,Delta-outflow,1,Delta outflow,Delta outflow,1
+8,flow-delivery,1,Delta export,Delta export divided between CVP and SWP,1
