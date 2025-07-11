@@ -1,5 +1,6 @@
 id,short_code,label
 1,SAC,Sacramento River Basin
 2,SJR,San Joaquin River Basin
-3,Tulare_Basin,Tulare Basin
-4,SoCal,Southern California
+3,Delta,Delta
+4,Tulare_Basin,Tulare Basin
+5,SoCal,Southern California
