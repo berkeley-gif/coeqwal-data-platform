@@ -1,196 +1,190 @@
-id,calsim_id,name,description,reservoir_entity_id,primary_entity_short_code,variable_type,storage_zone_type,operational_purpose,is_aggregate,aggregated_entities,trigger_threshold,outcome_category_short_code,unit_id,temporal_scale_id,variable_version_id,created_by,updated_by
-2,S_ALMNR,Almanor Reservoir Storage,Lake Almanor storage,1,ALMNR,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-3,S_ALOHA,Aloha Reservoir Storage,Aloha Lake storage,2,ALOHA,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-4,S_ALPNE,Alpine Reservoir Storage,Alpine Lake storage,3,ALPNE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-5,S_AMADR,Amador Reservoir Storage,Amador Lake storage,4,AMADR,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-6,S_ANTLP,Antelope Reservoir Storage,Antelope Lake storage,5,ANTLP,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-7,S_BEARD,Beardsley Reservoir Storage,Beardsley Lake storage,6,BEARD,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-8,S_BLKBT,Black Butte Reservoir Storage,Black Butte Lake storage,7,BLKBT,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-9,S_BLUMD,Blue Lakes Storage,Upper and Lower Blue Twin Meadow storage,8,BLUMD,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-10,S_BOWMN,Bowman Reservoir Storage,Bowman Lake storage,9,BOWMN,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-11,S_BRYSA,Berryessa Reservoir Storage,Lake Berryessa storage,10,BRYSA,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-12,S_BTVLY,Butt Valley Reservoir Storage,Butt Valley Reservoir storage,11,BTVLY,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-13,S_BUCKS,Bucks Lake Storage,Bucks Lake storage,12,BUCKS,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-14,S_CAPLS,Caples Lake Storage,Caples Lake storage,13,CAPLS,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-15,S_CLRLK,Clear Lake Storage,Clear Lake storage,14,CLRLK,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-16,S_CMBIE,Combie Reservoir Storage,Combie Lake storage,15,CMBIE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-17,S_CMCHE,Camanche Reservoir Storage,Camanche Lake storage,16,CMCHE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-18,S_CMPFW,Camp Far West Storage,Camp Far West Reservoir storage,17,CMPFW,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-19,S_CSTIC,Castaic Lake Storage,Castaic Lake storage,85,CSTIC,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-20,S_DAVIS,Davis Reservoir Storage,Davis Reservoir storage,18,DAVIS,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-21,S_DELVE,Del Valle Storage,Del Valle Reservoir storage,86,DELVE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-22,S_DONLL,Donnell Reservoir Storage,Donnell Lake storage,19,DONLL,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-23,S_EBTML,EBMUD Terminal Storage,EBMUD terminal reservoirs storage,21,EBTML,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-24,S_ECHOL,Echo Lake Storage,Echo Lake storage,22,ECHOL,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-25,S_ELENR,Eleanor Lake Storage,Eleanor Lake storage,87,ELENR,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-26,S_ENGLB,Englebright Storage,Englebright Lake storage,23,ENGLB,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-27,S_EPARK,East Park Storage,East Park Reservoir storage,24,EPARK,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-28,S_ESTMN,Eastman Lake Storage,Eastman Lake storage,25,ESTMN,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-29,S_FOLSM,Folsom Reservoir Storage,Folsom Lake storage,26,FOLSM,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-30,S_FOLSM_DELTA,Folsom Delta Reserve Storage,Folsom storage reserved for Delta water quality needs,26,FOLSM,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-31,S_FOLSM_DELTA_S,Folsom Delta Storage Zone,Folsom Delta storage zone for WRIMS weighting,26,FOLSM,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-32,S_FOLSM_EBMUD,Folsom EBMUD Storage,Folsom carryover storage for EBMUD transfers,26,FOLSM,storage,carryover,water_supply,false,,,reservoir_storage,1,3,1,1,
-33,S_FRDYC,Fordyce Lake Storage,Fordyce Lake storage,27,FRDYC,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-34,S_FRMAN,Frenchman Lake Storage,Frenchman Lake storage,28,FRMAN,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-35,S_FRMDW,French Meadows Storage,French Meadows Reservoir storage,29,FRMDW,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-36,S_FRNCH,French Lake Storage,French Lake storage,30,FRNCH,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-37,S_GERLE,Gerle Creek Storage,Gerle Creek Reservoir storage,31,GERLE,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-38,S_HHOLE,Hell Hole Storage,Hell Hole Reservoir storage,32,HHOLE,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-39,S_HNSLY,Hensley Lake Storage,Hensley Lake storage,33,HNSLY,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-40,S_HTCHY,Hetch Hetchy Storage,Hetch Hetchy Reservoir storage,88,HTCHY,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-41,S_ICEHS,Ice House Storage,Ice House Reservoir storage,34,ICEHS,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-42,S_INDVL,Indian Valley Storage,Indian Valley Reservoir storage,35,INDVL,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-43,S_JKSMD,Jackson Meadows Storage,Jackson Meadows Reservoir storage,36,JKSMD,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-44,S_JNKSN,Jenkinson Lake Storage,Jenkinson Lake storage,37,JNKSN,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-45,S_KSWCK,Keswick Reservoir Storage,Keswick Reservoir storage,38,KSWCK,storage,,regulating,false,,,reservoir_storage,1,3,1,1,
-46,S_LBEAR,Lower Bear Storage,Lower Bear Reservoir storage,39,LBEAR,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-47,S_LCBRF,LCBRF Storage,Lindsey Culbertson Blue Rucker Feeley storage,40,LCBRF,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-48,S_LGRSV,Little Grass Valley Storage,Little Grass Valley Reservoir storage,41,LGRSV,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-49,S_LKVLY,Lake Valley Storage,Lake Valley Reservoir storage,42,LKVLY,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-50,S_LLOYD,Lake Lloyd Storage,Lake Lloyd storage,89,LLOYD,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-51,S_LOONL,Loon Lake Storage,Loon Lake storage,43,LOONL,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-52,S_LOSVQ,Los Vaqueros Storage,Los Vaqueros Reservoir storage,44,LOSVQ,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-53,S_LWSTN,Lewiston Storage,Lewiston Lake storage,45,LWSTN,storage,,regulating,false,,,reservoir_storage,1,3,1,1,
-54,S_LYONS,Lyons Reservoir Storage,Lyons Reservoir storage,46,LYONS,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-55,S_MCLRE,McClure Storage,McClure Reservoir storage,47,MCLRE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-56,S_MDSTO,Modesto Storage,Modesto Reservoir storage,48,MDSTO,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-57,S_MELON,New Melones Storage,New Melones Lake storage,49,MELON,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-58,S_MERLC,Merle Collins Storage,Merle Collins Reservoir storage,50,MERLC,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-59,S_MLRTN,Millerton Storage,Millerton Lake storage,51,MLRTN,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-60,S_MTMDW,Mountain Meadows Storage,Mountain Meadows Reservoir storage,52,MTMDW,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-61,S_NBLDB,New Bullards Bar Storage,New Bullards Bar Reservoir storage,53,NBLDB,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-62,S_NHGAN,New Hogan Storage,New Hogan Lake storage,54,NHGAN,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-63,S_NTOMA,Natoma Storage,Lake Natoma storage,55,NTOMA,storage,,afterbay,false,,,reservoir_storage,1,3,1,1,
-64,S_OROVL,Oroville Storage,Lake Oroville storage,56,OROVL,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-65,S_OROVL_DELTA,Oroville Delta Storage,Oroville storage for SWP Delta obligations,56,OROVL,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-66,S_OROVL_DELTA_S,Oroville Delta Storage Zone,Oroville Delta storage zone for objective function,56,OROVL,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-67,S_PARDE,Pardee Storage,Pardee Reservoir storage,57,PARDE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-68,S_PCRST,Pine Crest Storage,Pine Crest Lake storage,58,PCRST,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-69,S_PEDRO,New Don Pedro Storage,New Don Pedro Reservoir storage,59,PEDRO,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-70,S_PRRIS,Perris Lake Storage,Lake Perris storage,90,PRRIS,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-71,S_PYRMD,Pyramid Lake Storage,Pyramid Lake storage,91,PYRMD,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-72,S_RLIEF,Relief Reservoir Storage,Relief Reservoir storage,60,RELIE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-73,S_RLLNS,Rollins Storage,Rollins Reservoir storage,61,RLLNS,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-74,S_RLLNS_PGE,Rollins PGE Storage,Rollins PGE storage allocation,61,RLLNS,storage,allocation,power_generation,false,,,reservoir_storage,1,3,1,1,
-75,S_RNCHO,Rancho Murieta Storage,Rancho Murieta local reservoir storage,62,RNCHO,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-76,S_RVPHB,Round Valley Philbrook Storage,Round Valley and Philbrook storage,63,RVPHB,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-77,S_SCOTF,Scott Flat Storage,Scott Flat Reservoir storage,64,SCOTF,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-78,S_SGRGE,Stony Gorge Storage,Stony Gorge Reservoir storage,65,SGRGE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-79,S_SHSTA,Shasta Storage,Shasta Lake storage,66,SHSTA,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-80,S_SHSTA_DELTA,Shasta Delta Storage,Shasta storage for CVP Delta obligations,66,SHSTA,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-81,S_SHSTA_DELTA_S,Shasta Delta Storage Zone,Shasta Delta storage zone for WRIMS weighting,66,SHSTA,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-82,S_SILVR,Silver Lake Storage,Silver Lake storage,67,SILVR,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-83,S_SLTSP,Salt Springs Storage,Salt Springs Reservoir storage,68,SLTSP,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-84,S_SLUIS,San Luis Storage,San Luis Reservoir total storage,69,SLUIS,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-85,S_SLUIS_CVP,San Luis CVP Storage,San Luis CVP storage allocation,70,SLUIS_CVP,storage,allocation,water_supply,false,,,reservoir_storage,1,3,1,1,
-86,S_SLUIS_CVP_DELTA,San Luis CVP Delta Storage,San Luis CVP Delta reserve storage,70,SLUIS_CVP,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-87,S_SLUIS_CVP_DELTA_S,San Luis CVP Delta Zone,San Luis CVP Delta storage zone,70,SLUIS_CVP,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-88,S_SLUIS_SWP,San Luis SWP Storage,San Luis SWP storage allocation,71,SLUIS_SWP,storage,allocation,water_supply,false,,,reservoir_storage,1,3,1,1,
-89,S_SLUIS_SWP_DELTA,San Luis SWP Delta Storage,San Luis SWP Delta reserve storage,71,SLUIS_SWP,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-90,S_SLUIS_SWP_DELTA_S,San Luis SWP Delta Zone,San Luis SWP Delta storage zone,71,SLUIS_SWP,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-91,S_SLYCK,Sly Creek Storage,Sly Creek Reservoir storage,72,SLYCK,storage,,flood_control,false,,,reservoir_storage,1,3,1,1,
-92,S_SPICE,Spice Reservoir Storage,Spice Reservoir storage,73,SPICE,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-93,S_SPLDG,Spaulding Storage,Spaulding Lake storage,74,SPLDG,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-94,S_STMPY,Stumpy Meadows Storage,Stumpy Meadows Reservoir storage,75,STMPY,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-95,S_SVRWD,Silverwood Lake Storage,Silverwood Lake storage,92,SVRWD,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-96,S_THRMA,Thermalito Afterbay Storage,Thermalito Afterbay storage,76,THRMA,storage,,afterbay,false,,,reservoir_storage,1,3,1,1,
-97,S_THRMF,Thermalito Forebay Storage,Thermalito Forebay storage,77,THRMF,storage,,regulating,false,,,reservoir_storage,1,3,1,1,
-98,S_TRLCK,Turlock Storage,Turlock Lake storage,78,TRLCK,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-99,S_TRNTY,Trinity Storage,Trinity Lake storage,79,TRNTY,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-100,S_TRNTY_DELTA,Trinity Delta Storage,Trinity storage for Delta transfer obligations,79,TRNTY,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-101,S_TRNTY_DELTA_S,Trinity Delta Storage Zone,Trinity Delta storage zone for WRIMS weighting,79,TRNTY,storage,delta_reserve,water_quality,false,,,reservoir_storage,1,3,1,1,
-102,S_TULOC,Tulloch Storage,Tulloch Reservoir storage,80,TULOC,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-103,S_UBEAR,Upper Bear Storage,Upper Bear River Reservoir storage,81,UBEAR,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-104,S_UNVLY,Union Valley Storage,Union Valley Reservoir storage,82,UNVLY,storage,,power_generation,false,,,reservoir_storage,1,3,1,1,
-105,S_UPPERFEATHER,Upper Feather Storage,Upper Feather River aggregate storage,,,storage,total,water_supply,false,,,reservoir_storage,1,3,1,1,
-106,S_WDWRD,Woodward Storage,Woodward Reservoir storage,83,WDWRD,storage,,water_supply,false,,,reservoir_storage,1,3,1,1,
-107,S_WKYTN,Whiskeytown Storage,Whiskeytown Lake storage,84,WKYTN,storage,,water_supply ,false,,,reservoir_storage,1,3,1,1,
-108,PGESTORAGE_LEVEL1_,PG+ACY-E Storage Level 1,PG+ACY-E aggregate storage level 1 decision variable,,PGE,storage_level,level,power_generation,false,,,,1,3,1,1,
-109,PGESTORAGE_LEVEL2_,PG+ACY-E Storage Level 2,PG+ACY-E aggregate storage level 2 decision variable,,PGE,storage_level,level,power_generation,false,,,,1,3,1,1,
-110,PGESTORAGE_LEVEL3_,PG+ACY-E Storage Level 3,PG+ACY-E aggregate storage level 3 decision variable,,PGE,storage_level,level,power_generation,false,,,,1,3,1,1,
-111,PGESTORAGE_LEVEL4_,PG+ACY-E Storage Level 4,PG+ACY-E aggregate storage level 4 decision variable,,PGE,storage_level,level,power_generation,false,,,,1,3,1,1,
-112,PGESTORAGE_LEVEL5_,PG+ACY-E Storage Level 5,PG+ACY-E aggregate storage level 5 decision variable,,PGE,storage_level,level,power_generation,false,,,,1,3,1,1,
-113,PGESTORAGE_LEVEL6_,PG+ACY-E Storage Level 6,PG+ACY-E aggregate storage level 6 decision variable,,PGE,storage_level,level,power_generation,false,,,,1,3,1,1,
-114,S_ALOHALEVEL1DV,Aloha Storage Level 1,Aloha Reservoir storage level 1 decision variable,2,ALOHA,storage_level,level,water_supply,false,,,,1,3,1,1,
-115,S_ALOHALEVEL2DV,Aloha Storage Level 2,Aloha Reservoir storage level 2 decision variable,2,ALOHA,storage_level,level,water_supply,false,,,,1,3,1,1,
-116,S_ALOHALEVEL3DV,Aloha Storage Level 3,Aloha Reservoir storage level 3 decision variable,2,ALOHA,storage_level,level,water_supply,false,,,,1,3,1,1,
-117,S_ALOHALEVEL4DV,Aloha Storage Level 4,Aloha Reservoir storage level 4 decision variable,2,ALOHA,storage_level,level,water_supply,false,,,,1,3,1,1,
-118,S_ALOHALEVEL5DV,Aloha Storage Level 5,Aloha Reservoir storage level 5 decision variable,2,ALOHA,storage_level,level,water_supply,false,,,,1,3,1,1,
-119,S_BLKBTLEVEL3DV,Black Butte Level 3,Black Butte Reservoir storage level 3 decision variable,7,BLKBT,storage_level,level,flood_control,false,,,,1,3,1,1,
-120,S_BLKBTLEVEL4DV,Black Butte Level 4,Black Butte Reservoir storage level 4 decision variable,7,BLKBT,storage_level,level,flood_control,false,,,,1,3,1,1,
-121,S_CAPLSLEVEL1DV,Caples Lake Level 1,Caples Lake storage level 1 decision variable,13,CAPLS,storage_level,level,power_generation,false,,,,1,3,1,1,
-122,S_CAPLSLEVEL2DV,Caples Lake Level 2,Caples Lake storage level 2 decision variable,13,CAPLS,storage_level,level,power_generation,false,,,,1,3,1,1,
-123,S_CAPLSLEVEL3DV,Caples Lake Level 3,Caples Lake storage level 3 decision variable,13,CAPLS,storage_level,level,power_generation,false,,,,1,3,1,1,
-124,S_CAPLSLEVEL4DV,Caples Lake Level 4,Caples Lake storage level 4 decision variable,13,CAPLS,storage_level,level,power_generation,false,,,,1,3,1,1,
-125,S_CAPLSLEVEL5DV,Caples Lake Level 5,Caples Lake storage level 5 decision variable,13,CAPLS,storage_level,level,power_generation,false,,,,1,3,1,1,
-126,S_CLRLKLEVEL4,Clear Lake Level 4,Clear Lake storage level 4,14,CLRLK,storage_level,level,water_supply,false,,,,1,3,1,1,
-127,S_ECHOLEVEL5_DV,Echo Lake Level 5,Echo Lake storage level 5 decision variable,22,ECHOL,storage_level,level,water_supply,false,,,,1,3,1,1,
-128,S_ECHOLLEVEL1DV,Echo Lake Level 1,Echo Lake storage level 1 decision variable,22,ECHOL,storage_level,level,water_supply,false,,,,1,3,1,1,
-129,S_ECHOLLEVEL2DV,Echo Lake Level 2,Echo Lake storage level 2 decision variable,22,ECHOL,storage_level,level,water_supply,false,,,,1,3,1,1,
-130,S_ECHOLLEVEL3DV,Echo Lake Level 3,Echo Lake storage level 3 decision variable,22,ECHOL,storage_level,level,water_supply,false,,,,1,3,1,1,
-131,S_ECHOLLEVEL4DV,Echo Lake Level 4,Echo Lake storage level 4 decision variable,22,ECHOL,storage_level,level,water_supply,false,,,,1,3,1,1,
-132,S_ECHOLLEVEL5DV,Echo Lake Level 5,Echo Lake storage level 5 decision variable,22,ECHOL,storage_level,level,water_supply,false,,,,1,3,1,1,
-133,S_ESTMNLEVEL4DV,Eastman Lake Level 4,Eastman Lake storage level 4 decision variable,25,ESTMN,storage_level,level,flood_control,false,,,,1,3,1,1,
-134,S_FOLSMLEVEL3ADJDV,Folsom Level 3 Adjusted,Folsom Reservoir storage level 3 adjusted decision variable,26,FOLSM,storage_level,level,water_supply,false,,,,1,3,1,1,
-135,S_FOLSMLEVEL4DV,Folsom Level 4,Folsom Reservoir storage level 4 decision variable,26,FOLSM,storage_level,level,water_supply,false,,,,1,3,1,1,
-136,S_FOLSMLEVEL5DV,Folsom Level 5,Folsom Reservoir storage level 5 decision variable,26,FOLSM,storage_level,level,water_supply,false,,,,1,3,1,1,
-137,S_FRDYCLEVEL3_DV,Fordyce Level 3,Fordyce Lake storage level 3 decision variable,27,FRDYC,storage_level,level,power_generation,false,,,,1,3,1,1,
-138,S_FRDYCLEVEL5_DV,Fordyce Level 5,Fordyce Lake storage level 5 decision variable,27,FRDYC,storage_level,level,power_generation,false,,,,1,3,1,1,
-139,S_FRMDWLEVEL2DV,French Meadows Level 2,French Meadows Reservoir storage level 2 decision variable,29,FRMDW,storage_level,level,power_generation,false,,,,1,3,1,1,
-140,S_FRMDWLEVEL3DV,French Meadows Level 3,French Meadows Reservoir storage level 3 decision variable,29,FRMDW,storage_level,level,power_generation,false,,,,1,3,1,1,
-141,S_FRMDWLEVEL4DV,French Meadows Level 4,French Meadows Reservoir storage level 4 decision variable,29,FRMDW,storage_level,level,power_generation,false,,,,1,3,1,1,
-142,S_FRMDWLEVEL5DV,French Meadows Level 5,French Meadows Reservoir storage level 5 decision variable,29,FRMDW,storage_level,level,power_generation,false,,,,1,3,1,1,
-143,S_FRMDWLEVEL6DV,French Meadows Level 6,French Meadows Reservoir storage level 6 decision variable,29,FRMDW,storage_level,level,power_generation,false,,,,1,3,1,1,
-144,S_HHOLELEVEL2DV,Hell Hole Level 2,Hell Hole Reservoir storage level 2 decision variable,32,HHOLE,storage_level,level,power_generation,false,,,,1,3,1,1,
-145,S_HHOLELEVEL3DV,Hell Hole Level 3,Hell Hole Reservoir storage level 3 decision variable,32,HHOLE,storage_level,level,power_generation,false,,,,1,3,1,1,
-146,S_HHOLELEVEL4DV,Hell Hole Level 4,Hell Hole Reservoir storage level 4 decision variable,32,HHOLE,storage_level,level,power_generation,false,,,,1,3,1,1,
-147,S_HHOLELEVEL6DV,Hell Hole Level 6,Hell Hole Reservoir storage level 6 decision variable,32,HHOLE,storage_level,level,power_generation,false,,,,1,3,1,1,
-148,S_HNSLYLEVEL2,Hensley Lake Level 2,Hensley Lake storage level 2,33,HNSLY,storage_level,level,flood_control,false,,,,1,3,1,1,
-149,S_HNSLYLEVEL4DV,Hensley Lake Level 4,Hensley Lake storage level 4 decision variable,33,HNSLY,storage_level,level,flood_control,false,,,,1,3,1,1,
-150,S_ICEHSLEVEL2DV,Ice House Level 2,Ice House Reservoir storage level 2 decision variable,34,ICEHS,storage_level,level,power_generation,false,,,,1,3,1,1,
-151,S_ICEHSLEVEL3DV,Ice House Level 3,Ice House Reservoir storage level 3 decision variable,34,ICEHS,storage_level,level,power_generation,false,,,,1,3,1,1,
-152,S_ICEHSLEVEL4DV,Ice House Level 4,Ice House Reservoir storage level 4 decision variable,34,ICEHS,storage_level,level,power_generation,false,,,,1,3,1,1,
-153,S_ICEHSLEVEL5DV,Ice House Level 5,Ice House Reservoir storage level 5 decision variable,34,ICEHS,storage_level,level,power_generation,false,,,,1,3,1,1,
-154,S_LOONLLEVEL2DV,Loon Lake Level 2,Loon Lake storage level 2 decision variable,43,LOONL,storage_level,level,power_generation,false,,,,1,3,1,1,
-155,S_LOONLLEVEL3DV,Loon Lake Level 3,Loon Lake storage level 3 decision variable,43,LOONL,storage_level,level,power_generation,false,,,,1,3,1,1,
-156,S_LOONLLEVEL4DV,Loon Lake Level 4,Loon Lake storage level 4 decision variable,43,LOONL,storage_level,level,power_generation,false,,,,1,3,1,1,
-157,S_LOONLLEVEL5DV,Loon Lake Level 5,Loon Lake storage level 5 decision variable,43,LOONL,storage_level,level,power_generation,false,,,,1,3,1,1,
-158,S_MCLRELEVEL4DV,McClure Level 4,McClure Reservoir storage level 4 decision variable,47,MCLRE,storage_level,level,water_supply,false,,,,1,3,1,1,
-159,S_MELONLEVEL3DV,New Melones Level 3,New Melones Lake storage level 3 decision variable,49,MELON,storage_level,level,water_supply,false,,,,1,3,1,1,
-160,S_MELONLEVEL4DV,New Melones Level 4,New Melones Lake storage level 4 decision variable,49,MELON,storage_level,level,water_supply,false,,,,1,3,1,1,
-161,S_MLRTNLEVEL2,Millerton Level 2,Millerton Lake storage level 2,51,MLRTN,storage_level,level,water_supply,false,,,,1,3,1,1,
-162,S_MLRTNLEVEL3,Millerton Level 3,Millerton Lake storage level 3,51,MLRTN,storage_level,level,water_supply,false,,,,1,3,1,1,
-163,S_MLRTNLEVEL4,Millerton Level 4,Millerton Lake storage level 4,51,MLRTN,storage_level,level,water_supply,false,,,,1,3,1,1,
-164,S_OROVLLEVEL1DV,Oroville Level 1,Lake Oroville storage level 1 decision variable,56,OROVL,storage_level,level,water_supply,false,,,,1,3,1,1,
-165,S_OROVLLEVEL2DV,Oroville Level 2,Lake Oroville storage level 2 decision variable,56,OROVL,storage_level,level,water_supply,false,,,,1,3,1,1,
-166,S_OROVLLEVEL3DV,Oroville Level 3,Lake Oroville storage level 3 decision variable,56,OROVL,storage_level,level,water_supply,false,,,,1,3,1,1,
-167,S_OROVLLEVEL4DV,Oroville Level 4,Lake Oroville storage level 4 decision variable,56,OROVL,storage_level,level,water_supply,false,,,,1,3,1,1,
-168,S_OROVLLEVEL5DV,Oroville Level 5,Lake Oroville storage level 5 decision variable,56,OROVL,storage_level,level,water_supply,false,,,,1,3,1,1,
-169,S_SHSTALEVEL1DV,Shasta Level 1,Shasta Lake storage level 1 decision variable,66,SHSTA,storage_level,level,water_supply,false,,,,1,3,1,1,
-170,S_SHSTALEVEL2DV,Shasta Level 2,Shasta Lake storage level 2 decision variable,66,SHSTA,storage_level,level,water_supply,false,,,,1,3,1,1,
-171,S_SHSTALEVEL3DV,Shasta Level 3,Shasta Lake storage level 3 decision variable,66,SHSTA,storage_level,level,water_supply,false,,,,1,3,1,1,
-172,S_SHSTALEVEL4DV,Shasta Level 4,Shasta Lake storage level 4 decision variable,66,SHSTA,storage_level,level,water_supply,false,,,,1,3,1,1,
-173,S_SHSTALEVEL5DV,Shasta Level 5,Shasta Lake storage level 5 decision variable,66,SHSTA,storage_level,level,water_supply,false,,,,1,3,1,1,
-174,S_SHSTALEVEL6DV,Shasta Level 6,Shasta Lake storage level 6 decision variable,66,SHSTA,storage_level,level,water_supply,false,,,,1,3,1,1,
-175,S_SILVRLEVEL1DV,Silver Lake Level 1,Silver Lake storage level 1 decision variable,67,SILVR,storage_level,level,power_generation,false,,,,1,3,1,1,
-176,S_SILVRLEVEL2DV,Silver Lake Level 2,Silver Lake storage level 2 decision variable,67,SILVR,storage_level,level,power_generation,false,,,,1,3,1,1,
-177,S_SILVRLEVEL3DV,Silver Lake Level 3,Silver Lake storage level 3 decision variable,67,SILVR,storage_level,level,power_generation,false,,,,1,3,1,1,
-178,S_SILVRLEVEL4DV,Silver Lake Level 4,Silver Lake storage level 4 decision variable,67,SILVR,storage_level,level,power_generation,false,,,,1,3,1,1,
-179,S_SILVRLEVEL5DV,Silver Lake Level 5,Silver Lake storage level 5 decision variable,67,SILVR,storage_level,level,power_generation,false,,,,1,3,1,1,
-180,S_SLUIS_CVPLEVEL1DV,San Luis CVP Level 1,San Luis CVP storage level 1 decision variable,70,SLUIS_CVP,storage_level,level,water_supply,false,,,,1,3,1,1,
-181,S_SLUIS_CVPLEVEL2DV,San Luis CVP Level 2,San Luis CVP storage level 2 decision variable,70,SLUIS_CVP,storage_level,level,water_supply,false,,,,1,3,1,1,
-182,S_SLUIS_CVPLEVEL3DV,San Luis CVP Level 3,San Luis CVP storage level 3 decision variable,70,SLUIS_CVP,storage_level,level,water_supply,false,,,,1,3,1,1,
-183,S_SLUIS_CVPLEVEL4DV,San Luis CVP Level 4,San Luis CVP storage level 4 decision variable,70,SLUIS_CVP,storage_level,level,water_supply,false,,,,1,3,1,1,
-184,S_SLUIS_CVPLEVEL5DV,San Luis CVP Level 5,San Luis CVP storage level 5 decision variable,70,SLUIS_CVP,storage_level,level,water_supply,false,,,,1,3,1,1,
-185,S_SLUIS_SWPLEVEL1DV,San Luis SWP Level 1,San Luis SWP storage level 1 decision variable,71,SLUIS_SWP,storage_level,level,water_supply,false,,,,1,3,1,1,
-186,S_SLUIS_SWPLEVEL2DV,San Luis SWP Level 2,San Luis SWP storage level 2 decision variable,71,SLUIS_SWP,storage_level,level,water_supply,false,,,,1,3,1,1,
-187,S_SLUIS_SWPLEVEL3DV,San Luis SWP Level 3,San Luis SWP storage level 3 decision variable,71,SLUIS_SWP,storage_level,level,water_supply,false,,,,1,3,1,1,
-188,S_SLUIS_SWPLEVEL4DV,San Luis SWP Level 4,San Luis SWP storage level 4 decision variable,71,SLUIS_SWP,storage_level,level,water_supply,false,,,,1,3,1,1,
-189,S_SLUIS_SWPLEVEL5DV,San Luis SWP Level 5,San Luis SWP storage level 5 decision variable,71,SLUIS_SWP,storage_level,level,water_supply,false,,,,1,3,1,1,
-190,S_SLYCKLEVEL1DV,Sly Creek Level 1,Sly Creek Reservoir storage level 1 decision variable,72,SLYCK,storage_level,level,flood_control,false,,,,1,3,1,1,
-191,S_SLYCKLEVEL2DV,Sly Creek Level 2,Sly Creek Reservoir storage level 2 decision variable,72,SLYCK,storage_level,level,flood_control,false,,,,1,3,1,1,
-192,S_SLYCKLEVEL3DV,Sly Creek Level 3,Sly Creek Reservoir storage level 3 decision variable,72,SLYCK,storage_level,level,flood_control,false,,,,1,3,1,1,
-193,S_SLYCKLEVEL4DV,Sly Creek Level 4,Sly Creek Reservoir storage level 4 decision variable,72,SLYCK,storage_level,level,flood_control,false,,,,1,3,1,1,
-194,S_SLYCKLEVEL5DV,Sly Creek Level 5,Sly Creek Reservoir storage level 5 decision variable,72,SLYCK,storage_level,level,flood_control,false,,,,1,3,1,1,
-195,S_SPLDGLEVEL4DV,Spaulding Level 4,Spaulding Lake storage level 4 decision variable,74,SPLDG,storage_level,level,power_generation,false,,,,1,3,1,1,
-196,S_SPLDGLEVEL5_DV,Spaulding Level 5,Spaulding Lake storage level 5 decision variable,74,SPLDG,storage_level,level,power_generation,false,,,,1,3,1,1,
+id,calsim_id,name,description,reservoir_entity_id,variable_type,is_aggregate,aggregated_entities,trigger_threshold,unit_id,temporal_scale_id,variable_version_id,created_by,updated_by,variable_id
+1,S_ALMNR,Almanor Reservoir Storage,Lake Almanor storage,1,storage,false,,,1,3,1,1,,94227a04-2b84-42e7-9d13-993eaa10edf7
+2,S_ALOHA,Aloha Reservoir Storage,Aloha Lake storage,2,storage,false,,,1,3,1,1,,c2871e12-d412-4fce-83da-6cfe31290aef
+3,S_ALPNE,Alpine Reservoir Storage,Alpine Lake storage,3,storage,false,,,1,3,1,1,,297f6ffb-ae12-4f21-99a6-dba3b77bb70f
+4,S_AMADR,Amador Reservoir Storage,Amador Lake storage,4,storage,false,,,1,3,1,1,,d89aab01-fa9a-4570-81eb-e96ac0c5e617
+5,S_ANTLP,Antelope Reservoir Storage,Antelope Lake storage,5,storage,false,,,1,3,1,1,,d368df93-df07-42d3-828c-7cb7a7f855c9
+6,S_BEARD,Beardsley Reservoir Storage,Beardsley Lake storage,6,storage,false,,,1,3,1,1,,b0f582b0-f7cf-47a1-bf29-de011c232964
+7,S_BLKBT,Black Butte Reservoir Storage,Black Butte Lake storage,7,storage,false,,,1,3,1,1,,2441bc7a-3f7d-4f8b-bf4d-d31701a7f232
+8,S_BLUMD,Blue Lakes Storage,Upper and Lower Blue Twin Meadow storage,8,storage,false,,,1,3,1,1,,1c364294-0795-4770-80ee-251fa5c6753e
+9,S_BOWMN,Bowman Reservoir Storage,Bowman Lake storage,9,storage,false,,,1,3,1,1,,b8948b52-1e46-4f44-9f65-2dc106aa06ea
+10,S_BRYSA,Berryessa Reservoir Storage,Lake Berryessa storage,10,storage,false,,,1,3,1,1,,07dc55c6-95bd-487a-8816-16039d8e05a4
+11,S_BTVLY,Butt Valley Reservoir Storage,Butt Valley Reservoir storage,11,storage,false,,,1,3,1,1,,b1dfa8ac-e413-4d34-be34-4df876c1b42a
+12,S_BUCKS,Bucks Lake Storage,Bucks Lake storage,12,storage,false,,,1,3,1,1,,991d8764-ba94-4ef4-ab30-d00c4fdfca15
+13,S_CAPLS,Caples Lake Storage,Caples Lake storage,13,storage,false,,,1,3,1,1,,f85c290d-6177-417c-a5b8-1e1e4f473db4
+14,S_CLRLK,Clear Lake Storage,Clear Lake storage,14,storage,false,,,1,3,1,1,,650d85c8-65a7-4dff-a913-e09ae86fd791
+15,S_CMBIE,Combie Reservoir Storage,Combie Lake storage,15,storage,false,,,1,3,1,1,,2de3cd57-ae12-465a-bf89-5c17975d34a6
+16,S_CMCHE,Camanche Reservoir Storage,Camanche Lake storage,16,storage,false,,,1,3,1,1,,4bd50f55-d1ab-4441-9fe1-421511c51a15
+17,S_CMPFW,Camp Far West Storage,Camp Far West Reservoir storage,17,storage,false,,,1,3,1,1,,d5a12b57-d678-4d95-8940-61f06af8f0b0
+18,S_CSTIC,Castaic Lake Storage,Castaic Lake storage,85,storage,false,,,1,3,1,1,,6f16e6bc-e953-4ad2-9779-bd3283d69efd
+19,S_DAVIS,Davis Reservoir Storage,Davis Reservoir storage,18,storage,false,,,1,3,1,1,,59963e95-b315-45bb-827c-394e189c8fa6
+20,S_DELVE,Del Valle Storage,Del Valle Reservoir storage,86,storage,false,,,1,3,1,1,,09222e21-0984-4a6f-bf4c-899b0f5c9cf4
+21,S_DONLL,Donnell Reservoir Storage,Donnell Lake storage,19,storage,false,,,1,3,1,1,,0842736a-d05b-4a79-bde4-62b522b35d7f
+22,S_EBTML,EBMUD Terminal Storage,EBMUD terminal reservoirs storage,21,storage,false,,,1,3,1,1,,9e33183f-1d64-4c31-a358-c8ba099e8c52
+23,S_ECHOL,Echo Lake Storage,Echo Lake storage,22,storage,false,,,1,3,1,1,,4a62515d-43b8-4586-ac02-780aab7f528c
+24,S_ELENR,Eleanor Lake Storage,Eleanor Lake storage,87,storage,false,,,1,3,1,1,,3ee98036-5d9e-4953-86a5-31bc348427a3
+25,S_ENGLB,Englebright Storage,Englebright Lake storage,23,storage,false,,,1,3,1,1,,c0afe55a-aaad-4fcb-8cb1-15f7eed00784
+26,S_EPARK,East Park Storage,East Park Reservoir storage,24,storage,false,,,1,3,1,1,,ca4be14d-9077-4564-b9e3-45df6a7ea272
+27,S_ESTMN,Eastman Lake Storage,Eastman Lake storage,25,storage,false,,,1,3,1,1,,5dd7a099-c9da-4706-ab6d-ce3f841f5451
+28,S_FOLSM,Folsom Reservoir Storage,Folsom Lake storage,26,storage,false,,,1,3,1,1,,94fc71c2-1c03-410c-a74a-2a46237c708f
+29,S_FOLSM_DELTA,Folsom Delta Reserve Storage,Folsom storage reserved for Delta water quality needs,26,storage,false,,,1,3,1,1,,d66f918c-f10c-4692-bcca-16b1af82f049
+31,S_FOLSM_EBMUD,Folsom EBMUD Storage,Folsom carryover storage for EBMUD transfers,26,storage,false,,,1,3,1,1,,551750bb-dc42-4aca-aecb-e4570ea09555
+32,S_FRDYC,Fordyce Lake Storage,Fordyce Lake storage,27,storage,false,,,1,3,1,1,,e036ec38-2fff-42ea-8cae-edefcccbe20e
+33,S_FRMAN,Frenchman Lake Storage,Frenchman Lake storage,28,storage,false,,,1,3,1,1,,e988dfff-96fd-4dc5-be1f-6bb5ab19e465
+34,S_FRMDW,French Meadows Storage,French Meadows Reservoir storage,29,storage,false,,,1,3,1,1,,f040d611-7986-4d38-ac07-a623b7e548eb
+35,S_FRNCH,French Lake Storage,French Lake storage,30,storage,false,,,1,3,1,1,,22f9ff3d-75c6-4738-b421-908ff6d1665a
+36,S_GERLE,Gerle Creek Storage,Gerle Creek Reservoir storage,31,storage,false,,,1,3,1,1,,4e6f1d83-b5d9-4437-9723-1707c03c28da
+37,S_HHOLE,Hell Hole Storage,Hell Hole Reservoir storage,32,storage,false,,,1,3,1,1,,b7bb77f5-2185-4345-b5a9-f51e600b3b4b
+38,S_HNSLY,Hensley Lake Storage,Hensley Lake storage,33,storage,false,,,1,3,1,1,,2479c3e7-9844-450e-9801-f3e674ec354a
+39,S_HTCHY,Hetch Hetchy Storage,Hetch Hetchy Reservoir storage,88,storage,false,,,1,3,1,1,,8f54a77c-cad9-45a7-b6b0-9faa2147271e
+40,S_ICEHS,Ice House Storage,Ice House Reservoir storage,34,storage,false,,,1,3,1,1,,5ef20d64-e61b-4c34-97a8-448a7ae1419e
+41,S_INDVL,Indian Valley Storage,Indian Valley Reservoir storage,35,storage,false,,,1,3,1,1,,ecbcfe2b-252a-497d-87d8-28b9dbec9616
+42,S_JKSMD,Jackson Meadows Storage,Jackson Meadows Reservoir storage,36,storage,false,,,1,3,1,1,,3d4553e6-2d37-48d3-95f4-3c254171fdc5
+43,S_JNKSN,Jenkinson Lake Storage,Jenkinson Lake storage,37,storage,false,,,1,3,1,1,,90beaaeb-f8eb-4ca4-8cc1-060b48c523ca
+44,S_KSWCK,Keswick Reservoir Storage,Keswick Reservoir storage,38,storage,false,,,1,3,1,1,,6438cb70-6653-4053-9f51-aa5f35692220
+45,S_LBEAR,Lower Bear Storage,Lower Bear Reservoir storage,39,storage,false,,,1,3,1,1,,6de15f23-2f0d-4631-ae07-a08330ad5486
+46,S_LCBRF,LCBRF Storage,Lindsey Culbertson Blue Rucker Feeley storage,40,storage,false,,,1,3,1,1,,81733c06-dacf-42dd-8f53-26b86905d170
+47,S_LGRSV,Little Grass Valley Storage,Little Grass Valley Reservoir storage,41,storage,false,,,1,3,1,1,,25b3808c-4dd4-4145-a34d-c2042f637905
+48,S_LKVLY,Lake Valley Storage,Lake Valley Reservoir storage,42,storage,false,,,1,3,1,1,,04744210-8b38-4be3-92d9-95e950aa4171
+49,S_LLOYD,Lake Lloyd Storage,Lake Lloyd storage,89,storage,false,,,1,3,1,1,,90553001-78db-40c2-8d05-da926d6e8175
+50,S_LOONL,Loon Lake Storage,Loon Lake storage,43,storage,false,,,1,3,1,1,,804cfe10-74dc-47da-8646-a5c39169385d
+51,S_LOSVQ,Los Vaqueros Storage,Los Vaqueros Reservoir storage,44,storage,false,,,1,3,1,1,,8c1686dd-628d-40fc-9653-aeef4189fb66
+52,S_LWSTN,Lewiston Storage,Lewiston Lake storage,45,storage,false,,,1,3,1,1,,3fc81876-5e1e-4a71-bcb9-e0e90121e221
+53,S_LYONS,Lyons Reservoir Storage,Lyons Reservoir storage,46,storage,false,,,1,3,1,1,,62177ea5-6848-44dd-bcd5-4ee31eb4dea0
+54,S_MCLRE,McClure Storage,McClure Reservoir storage,47,storage,false,,,1,3,1,1,,487f13d5-c3cb-4081-9fcc-68a3566c5797
+55,S_MDSTO,Modesto Storage,Modesto Reservoir storage,48,storage,false,,,1,3,1,1,,9c8579ed-4410-4f25-8eee-c1cee6256196
+56,S_MELON,New Melones Storage,New Melones Lake storage,49,storage,false,,,1,3,1,1,,139dcccb-c16d-4d8f-81b8-6845d87a2f34
+57,S_MERLC,Merle Collins Storage,Merle Collins Reservoir storage,50,storage,false,,,1,3,1,1,,febac730-8f75-45d8-b0b7-899ade373465
+58,S_MLRTN,Millerton Storage,Millerton Lake storage,51,storage,false,,,1,3,1,1,,15769f6c-a37d-4ca5-aef9-da9269b6c7b3
+59,S_MTMDW,Mountain Meadows Storage,Mountain Meadows Reservoir storage,52,storage,false,,,1,3,1,1,,4449b404-b580-4aa9-a8a6-e135654cff1e
+60,S_NBLDB,New Bullards Bar Storage,New Bullards Bar Reservoir storage,53,storage,false,,,1,3,1,1,,3087da5e-e5cd-455c-b7ab-e4ec1747a308
+61,S_NHGAN,New Hogan Storage,New Hogan Lake storage,54,storage,false,,,1,3,1,1,,788f93f6-5c55-461d-8779-ebe41f8e43e3
+62,S_NTOMA,Natoma Storage,Lake Natoma storage,55,storage,false,,,1,3,1,1,,6efe01db-b4d7-43cd-948e-3ba22be4dc5d
+63,S_OROVL,Oroville Storage,Lake Oroville storage,56,storage,false,,,1,3,1,1,,ab49aea8-4f5e-4c2c-a989-551a186c85e7
+64,S_OROVL_DELTA,Oroville Delta Storage,Oroville storage for SWP Delta obligations,56,storage,false,,,1,3,1,1,,b5bbcde9-b7f4-4ff8-accc-0e761298c320
+66,S_PARDE,Pardee Storage,Pardee Reservoir storage,57,storage,false,,,1,3,1,1,,1c9deebc-010f-4f0c-a23c-d869c7a1c904
+67,S_PCRST,Pine Crest Storage,Pine Crest Lake storage,58,storage,false,,,1,3,1,1,,6b96585b-e3d1-4303-85f5-89d85c0cadfc
+68,S_PEDRO,New Don Pedro Storage,New Don Pedro Reservoir storage,59,storage,false,,,1,3,1,1,,699fa142-89a6-451d-aa68-b3949a766a2c
+69,S_PRRIS,Perris Lake Storage,Lake Perris storage,90,storage,false,,,1,3,1,1,,3bc75d3f-be65-49d4-a2b9-ceeab9daa66f
+70,S_PYRMD,Pyramid Lake Storage,Pyramid Lake storage,91,storage,false,,,1,3,1,1,,fec03a11-0b8c-400c-b177-4fab173af0f1
+71,S_RLIEF,Relief Reservoir Storage,Relief Reservoir storage,60,storage,false,,,1,3,1,1,,956efd52-ffe9-4ced-b609-a4bd9cf52b5b
+72,S_RLLNS,Rollins Storage,Rollins Reservoir storage,61,storage,false,,,1,3,1,1,,a85c9c3d-6421-42ac-8f97-6f6b2136bd01
+73,S_RLLNS_PGE,Rollins PGE Storage,Rollins PGE storage allocation,61,storage,false,,,1,3,1,1,,a9be3e07-f4d6-4ff1-b844-6657a63fb982
+74,S_RNCHO,Rancho Murieta Storage,Rancho Murieta local reservoir storage,62,storage,false,,,1,3,1,1,,166fa3cb-f46b-460f-8094-44b6fc09912e
+75,S_RVPHB,Round Valley Philbrook Storage,Round Valley and Philbrook storage,63,storage,false,,,1,3,1,1,,7838acb4-8f58-477b-8983-cc98df9996bb
+76,S_SCOTF,Scott Flat Storage,Scott Flat Reservoir storage,64,storage,false,,,1,3,1,1,,016d5c14-8a5b-49a2-b2b8-f5bfebffb73d
+77,S_SGRGE,Stony Gorge Storage,Stony Gorge Reservoir storage,65,storage,false,,,1,3,1,1,,673290c0-bf52-4faf-bcdc-30d48b454c2e
+78,S_SHSTA,Shasta Storage,Shasta Lake storage,66,storage,false,,,1,3,1,1,,438ebd62-82f5-435a-bff5-9700b12402cc
+79,S_SHSTA_DELTA,Shasta Delta Storage,Shasta storage for CVP Delta obligations,66,storage,false,,,1,3,1,1,,55ff62aa-abec-4710-8f1b-21aa958fc998
+81,S_SILVR,Silver Lake Storage,Silver Lake storage,67,storage,false,,,1,3,1,1,,13d214b0-3571-4f97-a49f-33c84f4437e7
+82,S_SLTSP,Salt Springs Storage,Salt Springs Reservoir storage,68,storage,false,,,1,3,1,1,,cffe2f93-0120-41ad-8f15-f0fbb207dd4b
+83,S_SLUIS,San Luis Storage,San Luis Reservoir total storage,69,storage,false,,,1,3,1,1,,13100c99-30be-44eb-9b35-f6e650c52fd4
+84,S_SLUIS_CVP,San Luis CVP Storage,San Luis CVP storage allocation,70,storage,false,,,1,3,1,1,,b564e295-4327-4666-a945-13bd156933ae
+85,S_SLUIS_CVP_DELTA,San Luis CVP Delta Storage,San Luis CVP Delta reserve storage,70,storage,false,,,1,3,1,1,,6f464c1c-2466-493f-8c86-adfe1ec87494
+87,S_SLUIS_SWP,San Luis SWP Storage,San Luis SWP storage allocation,71,storage,false,,,1,3,1,1,,5db701c8-42f3-4c6d-828d-858806997756
+88,S_SLUIS_SWP_DELTA,San Luis SWP Delta Storage,San Luis SWP Delta reserve storage,71,storage,false,,,1,3,1,1,,00f3e4ab-7075-424b-a717-5f0c41611a60
+90,S_SLYCK,Sly Creek Storage,Sly Creek Reservoir storage,72,storage,false,,,1,3,1,1,,b3e2cdc6-5c21-49c1-9555-fc8c129d6830
+91,S_SPICE,Spice Reservoir Storage,Spice Reservoir storage,73,storage,false,,,1,3,1,1,,9ea6feac-8ec4-4db4-acf5-61b97ea011c9
+92,S_SPLDG,Spaulding Storage,Spaulding Lake storage,74,storage,false,,,1,3,1,1,,4a453f7f-1d33-4cb4-9b2c-7193bff9b4a7
+93,S_STMPY,Stumpy Meadows Storage,Stumpy Meadows Reservoir storage,75,storage,false,,,1,3,1,1,,3fbe2066-0807-4906-b8f1-d1c9e848d63b
+94,S_SVRWD,Silverwood Lake Storage,Silverwood Lake storage,92,storage,false,,,1,3,1,1,,78a259c7-5625-4aa0-8c1c-91b97ff98a90
+95,S_THRMA,Thermalito Afterbay Storage,Thermalito Afterbay storage,76,storage,false,,,1,3,1,1,,f4e52c73-e267-4396-9079-6159f444c1fc
+96,S_THRMF,Thermalito Forebay Storage,Thermalito Forebay storage,77,storage,false,,,1,3,1,1,,b378f105-37d5-47f5-956d-5ca22feb4c96
+97,S_TRLCK,Turlock Storage,Turlock Lake storage,78,storage,false,,,1,3,1,1,,273dcdbe-5c51-4d92-bcfa-0a866471c4cf
+98,S_TRNTY,Trinity Storage,Trinity Lake storage,79,storage,false,,,1,3,1,1,,6a7698d5-0d6e-46aa-81cf-a421096dd969
+99,S_TRNTY_DELTA,Trinity Delta Storage,Trinity storage for Delta transfer obligations,79,storage,false,,,1,3,1,1,,6cfab7bc-66ee-40ba-abe8-74134ecf169b
+101,S_TULOC,Tulloch Storage,Tulloch Reservoir storage,80,storage,false,,,1,3,1,1,,0d36a9a2-9291-4748-9cbf-43b67d0b07f9
+102,S_UBEAR,Upper Bear Storage,Upper Bear River Reservoir storage,81,storage,false,,,1,3,1,1,,eb3890d8-1272-4294-812e-6229da46fbd8
+103,S_UNVLY,Union Valley Storage,Union Valley Reservoir storage,82,storage,false,,,1,3,1,1,,02036d73-202f-48da-8d6e-f6afdc91adc0
+104,S_UPPERFEATHER,Upper Feather Storage,Upper Feather River aggregate storage,,storage,false,,,1,3,1,1,,bb395ef1-3f42-418c-be13-a48afb5a7ba9
+105,S_WDWRD,Woodward Storage,Woodward Reservoir storage,83,storage,false,,,1,3,1,1,,efa34dfa-87d5-4b4a-b516-4261b79f4fbc
+106,S_WKYTN,Whiskeytown Storage,Whiskeytown Lake storage,84,storage,false,,,1,3,1,1,,235d0e4c-1dbe-48e5-8574-9edee110bd49
+107,PGESTORAGE_LEVEL1_,PG&E Storage Level 1,PG&E aggregate storage level 1 decision variable,,storage_level,false,,,1,3,1,1,,bc46b1c6-ee05-4639-b101-3db3d317f621
+108,PGESTORAGE_LEVEL2_,PG&E Storage Level 2,PG&E aggregate storage level 2 decision variable,,storage_level,false,,,1,3,1,1,,eaab9cc0-6364-4c55-8200-c87f373d2c5d
+109,PGESTORAGE_LEVEL3_,PG&E Storage Level 3,PG&E aggregate storage level 3 decision variable,,storage_level,false,,,1,3,1,1,,1562ef46-9017-4a82-869e-86118f68dcf8
+110,PGESTORAGE_LEVEL4_,PG&E Storage Level 4,PG&E aggregate storage level 4 decision variable,,storage_level,false,,,1,3,1,1,,173ffaf3-6247-4b0f-9730-a55e7921a451
+111,PGESTORAGE_LEVEL5_,PG&E Storage Level 5,PG&E aggregate storage level 5 decision variable,,storage_level,false,,,1,3,1,1,,72a0c894-22ee-4f61-ad44-0a92dabc9b28
+112,PGESTORAGE_LEVEL6_,PG&E Storage Level 6,PG&E aggregate storage level 6 decision variable,,storage_level,false,,,1,3,1,1,,a8819431-c066-4622-a0c2-3d7d3f5cc5fa
+113,S_ALOHALEVEL1DV,Aloha Storage Level 1,Aloha Reservoir storage level 1 decision variable,2,storage_level,false,,,1,3,1,1,,f8d09304-64e2-4804-bcd2-b05f7b16d106
+114,S_ALOHALEVEL2DV,Aloha Storage Level 2,Aloha Reservoir storage level 2 decision variable,2,storage_level,false,,,1,3,1,1,,35f8a892-7d70-4d82-8bd8-952082196184
+115,S_ALOHALEVEL3DV,Aloha Storage Level 3,Aloha Reservoir storage level 3 decision variable,2,storage_level,false,,,1,3,1,1,,4dceb2f3-1210-4d05-8b81-34be9180f98a
+116,S_ALOHALEVEL4DV,Aloha Storage Level 4,Aloha Reservoir storage level 4 decision variable,2,storage_level,false,,,1,3,1,1,,c980657a-31ae-4c24-9d10-e7e64c3cc26d
+117,S_ALOHALEVEL5DV,Aloha Storage Level 5,Aloha Reservoir storage level 5 decision variable,2,storage_level,false,,,1,3,1,1,,72a7d005-114b-46c5-9a31-7959dbfdd089
+118,S_BLKBTLEVEL3DV,Black Butte Level 3,Black Butte Reservoir storage level 3 decision variable,7,storage_level,false,,,1,3,1,1,,a6274c41-0135-4562-916c-85459a6e27f1
+119,S_BLKBTLEVEL4DV,Black Butte Level 4,Black Butte Reservoir storage level 4 decision variable,7,storage_level,false,,,1,3,1,1,,3769c156-00cb-4979-9446-a0804da3c06e
+120,S_CAPLSLEVEL1DV,Caples Lake Level 1,Caples Lake storage level 1 decision variable,13,storage_level,false,,,1,3,1,1,,08fca065-4497-4f7b-b0bb-64c1693b469e
+121,S_CAPLSLEVEL2DV,Caples Lake Level 2,Caples Lake storage level 2 decision variable,13,storage_level,false,,,1,3,1,1,,beb1772d-9585-4826-8e39-3800502199cd
+122,S_CAPLSLEVEL3DV,Caples Lake Level 3,Caples Lake storage level 3 decision variable,13,storage_level,false,,,1,3,1,1,,9e0d8915-0f02-44f2-9f1d-3c2eafaa0c5f
+123,S_CAPLSLEVEL4DV,Caples Lake Level 4,Caples Lake storage level 4 decision variable,13,storage_level,false,,,1,3,1,1,,7ac04391-d72e-4e05-8151-9cca0ad7dbda
+124,S_CAPLSLEVEL5DV,Caples Lake Level 5,Caples Lake storage level 5 decision variable,13,storage_level,false,,,1,3,1,1,,13d0c106-ddef-4ca0-a0fd-7c99b084e00c
+125,S_CLRLKLEVEL4,Clear Lake Level 4,Clear Lake storage level 4,14,storage_level,false,,,1,3,1,1,,86c56fd3-b779-46e4-9d19-51f0a6b146d8
+126,S_ECHOLEVEL5_DV,Echo Lake Level 5,Echo Lake storage level 5 decision variable,22,storage_level,false,,,1,3,1,1,,ea96832b-deda-42d8-b0ac-1e0db20d690c
+127,S_ECHOLLEVEL1DV,Echo Lake Level 1,Echo Lake storage level 1 decision variable,22,storage_level,false,,,1,3,1,1,,616916fa-287e-45bb-a1fa-e01404605f2f
+128,S_ECHOLLEVEL2DV,Echo Lake Level 2,Echo Lake storage level 2 decision variable,22,storage_level,false,,,1,3,1,1,,41b47bc0-9df1-474a-8175-087af16fea95
+129,S_ECHOLLEVEL3DV,Echo Lake Level 3,Echo Lake storage level 3 decision variable,22,storage_level,false,,,1,3,1,1,,a4c9e8b1-9274-49e4-9707-f1283dcb4570
+130,S_ECHOLLEVEL4DV,Echo Lake Level 4,Echo Lake storage level 4 decision variable,22,storage_level,false,,,1,3,1,1,,52cd43a1-5792-4053-97f2-7534e97f777a
+131,S_ECHOLLEVEL5DV,Echo Lake Level 5,Echo Lake storage level 5 decision variable,22,storage_level,false,,,1,3,1,1,,20eba0f8-4019-4846-8dd4-b56cec6b4d57
+132,S_ESTMNLEVEL4DV,Eastman Lake Level 4,Eastman Lake storage level 4 decision variable,25,storage_level,false,,,1,3,1,1,,cec12645-b1ba-4a9c-9411-55fecce3205b
+133,S_FOLSMLEVEL3ADJDV,Folsom Level 3 Adjusted,Folsom Reservoir storage level 3 adjusted decision variable,26,storage_level,false,,,1,3,1,1,,48edd530-d598-49a0-af1b-1b0af05b53a3
+134,S_FOLSMLEVEL4DV,Folsom Level 4,Folsom Reservoir storage level 4 decision variable,26,storage_level,false,,,1,3,1,1,,11df3bed-b9e6-40a5-ade4-72052f13094a
+135,S_FOLSMLEVEL5DV,Folsom Level 5,Folsom Reservoir storage level 5 decision variable,26,storage_level,false,,,1,3,1,1,,77c6ec9c-5e78-40c6-aaf1-a5d5f950be71
+136,S_FRDYCLEVEL3_DV,Fordyce Level 3,Fordyce Lake storage level 3 decision variable,27,storage_level,false,,,1,3,1,1,,238c5874-6a1d-4391-83f9-eb6776489890
+137,S_FRDYCLEVEL5_DV,Fordyce Level 5,Fordyce Lake storage level 5 decision variable,27,storage_level,false,,,1,3,1,1,,9bf132d9-4792-4852-b08f-42a796594377
+138,S_FRMDWLEVEL2DV,French Meadows Level 2,French Meadows Reservoir storage level 2 decision variable,29,storage_level,false,,,1,3,1,1,,a3ca1338-ca6a-424d-a1ee-d14ac0d6628e
+139,S_FRMDWLEVEL3DV,French Meadows Level 3,French Meadows Reservoir storage level 3 decision variable,29,storage_level,false,,,1,3,1,1,,51b7a1af-42d2-4303-a7fb-4d69c929ad46
+140,S_FRMDWLEVEL4DV,French Meadows Level 4,French Meadows Reservoir storage level 4 decision variable,29,storage_level,false,,,1,3,1,1,,b291ab52-ab5c-4ab7-a1ed-a189f7acca22
+141,S_FRMDWLEVEL5DV,French Meadows Level 5,French Meadows Reservoir storage level 5 decision variable,29,storage_level,false,,,1,3,1,1,,fbebf237-40d2-42c4-895e-5656153918fd
+142,S_FRMDWLEVEL6DV,French Meadows Level 6,French Meadows Reservoir storage level 6 decision variable,29,storage_level,false,,,1,3,1,1,,331b5a28-26b9-456a-9131-01bfff394838
+143,S_HHOLELEVEL2DV,Hell Hole Level 2,Hell Hole Reservoir storage level 2 decision variable,32,storage_level,false,,,1,3,1,1,,396a9501-aab0-44dd-bb68-52687db5c53f
+144,S_HHOLELEVEL3DV,Hell Hole Level 3,Hell Hole Reservoir storage level 3 decision variable,32,storage_level,false,,,1,3,1,1,,06d47bd0-d091-4429-90fc-78a607b5b316
+145,S_HHOLELEVEL4DV,Hell Hole Level 4,Hell Hole Reservoir storage level 4 decision variable,32,storage_level,false,,,1,3,1,1,,ecc5132b-2fcb-4907-8180-9ceaf32f3095
+146,S_HHOLELEVEL6DV,Hell Hole Level 6,Hell Hole Reservoir storage level 6 decision variable,32,storage_level,false,,,1,3,1,1,,f919171e-4c45-4e0a-9a63-81124041ee7c
+147,S_HNSLYLEVEL2,Hensley Lake Level 2,Hensley Lake storage level 2,33,storage_level,false,,,1,3,1,1,,351323ae-9a98-4da7-ad02-319c42a5232a
+148,S_HNSLYLEVEL4DV,Hensley Lake Level 4,Hensley Lake storage level 4 decision variable,33,storage_level,false,,,1,3,1,1,,ffbf6b85-0d63-4d24-bf2a-e657f3ca6649
+149,S_ICEHSLEVEL2DV,Ice House Level 2,Ice House Reservoir storage level 2 decision variable,34,storage_level,false,,,1,3,1,1,,99cf333f-602f-4fde-a656-275cc1451f0f
+150,S_ICEHSLEVEL3DV,Ice House Level 3,Ice House Reservoir storage level 3 decision variable,34,storage_level,false,,,1,3,1,1,,540c3c92-1398-4ede-a918-cc082f21d0d6
+151,S_ICEHSLEVEL4DV,Ice House Level 4,Ice House Reservoir storage level 4 decision variable,34,storage_level,false,,,1,3,1,1,,d72fb05f-1eb8-4b46-8c8c-1196aa1584f6
+152,S_ICEHSLEVEL5DV,Ice House Level 5,Ice House Reservoir storage level 5 decision variable,34,storage_level,false,,,1,3,1,1,,dbce6602-e13c-459c-8c11-7ed287fc39dd
+153,S_LOONLLEVEL2DV,Loon Lake Level 2,Loon Lake storage level 2 decision variable,43,storage_level,false,,,1,3,1,1,,7c5e03a4-c386-4346-a5e2-4e8f462d0040
+154,S_LOONLLEVEL3DV,Loon Lake Level 3,Loon Lake storage level 3 decision variable,43,storage_level,false,,,1,3,1,1,,7a6f4328-168c-4a52-a158-7167c09e59a5
+155,S_LOONLLEVEL4DV,Loon Lake Level 4,Loon Lake storage level 4 decision variable,43,storage_level,false,,,1,3,1,1,,671b05db-2991-4802-9f7d-8a747c8b267a
+156,S_LOONLLEVEL5DV,Loon Lake Level 5,Loon Lake storage level 5 decision variable,43,storage_level,false,,,1,3,1,1,,cd4b27d2-d89a-4602-8219-b01810d34ea2
+157,S_MCLRELEVEL4DV,McClure Level 4,McClure Reservoir storage level 4 decision variable,47,storage_level,false,,,1,3,1,1,,bc9d73ed-de6d-4fb9-abb8-b63bc00acb7f
+158,S_MELONLEVEL3DV,New Melones Level 3,New Melones Lake storage level 3 decision variable,49,storage_level,false,,,1,3,1,1,,0e78d5c9-f40f-42a2-bedd-6b92a08a9394
+159,S_MELONLEVEL4DV,New Melones Level 4,New Melones Lake storage level 4 decision variable,49,storage_level,false,,,1,3,1,1,,2ae99cec-1d1e-4eff-a72b-f26c02f83925
+160,S_MLRTNLEVEL2,Millerton Level 2,Millerton Lake storage level 2,51,storage_level,false,,,1,3,1,1,,be482057-231a-49b2-8fa3-98ea4b7b0ff9
+161,S_MLRTNLEVEL3,Millerton Level 3,Millerton Lake storage level 3,51,storage_level,false,,,1,3,1,1,,772fd1b7-04f3-4bfe-9ea0-498f2f4aaa87
+162,S_MLRTNLEVEL4,Millerton Level 4,Millerton Lake storage level 4,51,storage_level,false,,,1,3,1,1,,98ace9b6-345b-487f-9d3d-8533f7c62d96
+163,S_OROVLLEVEL1DV,Oroville Level 1,Lake Oroville storage level 1 decision variable,56,storage_level,false,,,1,3,1,1,,50decca4-0293-43f3-aa17-066c2db44f1b
+164,S_OROVLLEVEL2DV,Oroville Level 2,Lake Oroville storage level 2 decision variable,56,storage_level,false,,,1,3,1,1,,d1f2d6c6-9279-4311-ac41-a78ba52cfaa2
+165,S_OROVLLEVEL3DV,Oroville Level 3,Lake Oroville storage level 3 decision variable,56,storage_level,false,,,1,3,1,1,,e9daca00-d55c-43c7-a286-5926a36f5804
+166,S_OROVLLEVEL4DV,Oroville Level 4,Lake Oroville storage level 4 decision variable,56,storage_level,false,,,1,3,1,1,,c72343ad-f53f-44b5-b7aa-7b00741295d4
+167,S_OROVLLEVEL5DV,Oroville Level 5,Lake Oroville storage level 5 decision variable,56,storage_level,false,,,1,3,1,1,,4b4da7d9-ef18-40d6-adfe-db1d6d5c69f5
+168,S_SHSTALEVEL1DV,Shasta Level 1,Shasta Lake storage level 1 decision variable,66,storage_level,false,,,1,3,1,1,,5ef2fae7-b422-4fc7-af4c-cef03a104bea
+169,S_SHSTALEVEL2DV,Shasta Level 2,Shasta Lake storage level 2 decision variable,66,storage_level,false,,,1,3,1,1,,fd94508b-a11f-4a32-8e47-679851805718
+170,S_SHSTALEVEL3DV,Shasta Level 3,Shasta Lake storage level 3 decision variable,66,storage_level,false,,,1,3,1,1,,34ac6115-1923-4594-b136-7944db44bb7f
+171,S_SHSTALEVEL4DV,Shasta Level 4,Shasta Lake storage level 4 decision variable,66,storage_level,false,,,1,3,1,1,,533f71e9-8936-4574-85be-134eaf2532db
+172,S_SHSTALEVEL5DV,Shasta Level 5,Shasta Lake storage level 5 decision variable,66,storage_level,false,,,1,3,1,1,,4ab220cd-ce95-418f-8f68-71074ce08263
+173,S_SHSTALEVEL6DV,Shasta Level 6,Shasta Lake storage level 6 decision variable,66,storage_level,false,,,1,3,1,1,,73b50ed5-b6ca-455b-8abd-dbcf645e8d42
+174,S_SILVRLEVEL1DV,Silver Lake Level 1,Silver Lake storage level 1 decision variable,67,storage_level,false,,,1,3,1,1,,db8fc2ec-2e5a-49ba-bbb6-c79d694ac312
+175,S_SILVRLEVEL2DV,Silver Lake Level 2,Silver Lake storage level 2 decision variable,67,storage_level,false,,,1,3,1,1,,577eb0bd-cffd-40f1-b642-71dffdb331b4
+176,S_SILVRLEVEL3DV,Silver Lake Level 3,Silver Lake storage level 3 decision variable,67,storage_level,false,,,1,3,1,1,,275f07b2-2799-4012-aed1-0bdf694e4954
+177,S_SILVRLEVEL4DV,Silver Lake Level 4,Silver Lake storage level 4 decision variable,67,storage_level,false,,,1,3,1,1,,acc8cdb0-c097-4532-92d8-a3ef5e57f8f1
+178,S_SILVRLEVEL5DV,Silver Lake Level 5,Silver Lake storage level 5 decision variable,67,storage_level,false,,,1,3,1,1,,054d3241-9cc6-4fda-a442-b63b867ddd41
+179,S_SLUIS_CVPLEVEL1DV,San Luis CVP Level 1,San Luis CVP storage level 1 decision variable,70,storage_level,false,,,1,3,1,1,,7cc7a0b7-eb12-4d48-b321-576cd43cbfc0
+180,S_SLUIS_CVPLEVEL2DV,San Luis CVP Level 2,San Luis CVP storage level 2 decision variable,70,storage_level,false,,,1,3,1,1,,3feb24c4-3c8e-4ec0-a3b8-774fe7ee0d51
+181,S_SLUIS_CVPLEVEL3DV,San Luis CVP Level 3,San Luis CVP storage level 3 decision variable,70,storage_level,false,,,1,3,1,1,,0f2a757e-73ea-4112-a8c3-3d7612d9b835
+182,S_SLUIS_CVPLEVEL4DV,San Luis CVP Level 4,San Luis CVP storage level 4 decision variable,70,storage_level,false,,,1,3,1,1,,1954a022-11bf-4cf4-bfc3-1bd8903f537c
+183,S_SLUIS_CVPLEVEL5DV,San Luis CVP Level 5,San Luis CVP storage level 5 decision variable,70,storage_level,false,,,1,3,1,1,,f03abb2e-160f-4a35-8c42-c2b62dd81926
+184,S_SLUIS_SWPLEVEL1DV,San Luis SWP Level 1,San Luis SWP storage level 1 decision variable,71,storage_level,false,,,1,3,1,1,,011016ad-32e4-430f-88df-381fd2a413bb
+185,S_SLUIS_SWPLEVEL2DV,San Luis SWP Level 2,San Luis SWP storage level 2 decision variable,71,storage_level,false,,,1,3,1,1,,d215ecf5-ac08-4765-b934-9e49918e1e1c
+186,S_SLUIS_SWPLEVEL3DV,San Luis SWP Level 3,San Luis SWP storage level 3 decision variable,71,storage_level,false,,,1,3,1,1,,cb57793e-5f0a-468d-a5e1-70bafcc4400b
+187,S_SLUIS_SWPLEVEL4DV,San Luis SWP Level 4,San Luis SWP storage level 4 decision variable,71,storage_level,false,,,1,3,1,1,,3101b2d4-bf1e-4083-9f7c-a6fd89e11e64
+188,S_SLUIS_SWPLEVEL5DV,San Luis SWP Level 5,San Luis SWP storage level 5 decision variable,71,storage_level,false,,,1,3,1,1,,af226ea7-08b3-428f-9d70-72ca2d2d3861
+189,S_SLYCKLEVEL1DV,Sly Creek Level 1,Sly Creek Reservoir storage level 1 decision variable,72,storage_level,false,,,1,3,1,1,,f99d6dcf-8790-4135-ba8e-fd579560d654
+190,S_SLYCKLEVEL2DV,Sly Creek Level 2,Sly Creek Reservoir storage level 2 decision variable,72,storage_level,false,,,1,3,1,1,,b30f4ef8-b98e-4911-85b8-583614891767
+191,S_SLYCKLEVEL3DV,Sly Creek Level 3,Sly Creek Reservoir storage level 3 decision variable,72,storage_level,false,,,1,3,1,1,,d1858089-329d-4770-8d2c-100fc5dfc807
+192,S_SLYCKLEVEL4DV,Sly Creek Level 4,Sly Creek Reservoir storage level 4 decision variable,72,storage_level,false,,,1,3,1,1,,6373fb2a-54d2-41ba-bdfd-368864a6cda6
+193,S_SLYCKLEVEL5DV,Sly Creek Level 5,Sly Creek Reservoir storage level 5 decision variable,72,storage_level,false,,,1,3,1,1,,695ba881-0ce9-4cf4-89c6-efc8656a879d
+194,S_SPLDGLEVEL4DV,Spaulding Level 4,Spaulding Lake storage level 4 decision variable,74,storage_level,false,,,1,3,1,1,,27e14f57-ef89-4dcf-ba3f-d514209a9e78
+195,S_SPLDGLEVEL5_DV,Spaulding Level 5,Spaulding Lake storage level 5 decision variable,74,storage_level,false,,,1,3,1,1,,cc8fc276-b8d0-4236-97b1-1babea596c7f

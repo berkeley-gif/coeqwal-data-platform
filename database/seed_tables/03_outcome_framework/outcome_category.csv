@@ -1,10 +1,11 @@
-id,short_code,label,description,outcome_version_id,is_active,created_by,updated_by
-1,community_water,Community water systems,Water supply and access for communities,5,true,1,1
-2,agricultural_water,Agricultural water systems,Water supply and use for agricultural purposes,5,true,1,1
-3,environmental_water,Environmental water systems,Water allocation and management for environmental needs,5,true,1,1
-4,delta_salinity,Delta salinity,Delta salinity management and impacts,5,true,1,1
-5,reservoir_storage,Reservoir storage,Water storage levels in reservoir systems,5,true,1,1
-6,groundwater_storage,Groundwater storage,Groundwater storage and aquifer levels,5,true,1,1
-7,salmon_abundance,Sacramento River Winter-run Chinook Salmon abundance,Population metrics for Sacramento River Winter-run Chinook Salmon,5,true,1,1
-8,distributional_equity,Distributional equity,Equitable distribution of water benefits and impacts,5,true,1,1
-9,drought_resilience,Drought resilience,System resilience to climate variability and drought,5,true,1,1
+0,short_code,label,description,outcome_version_id,is_active,created_by,updated_by
+1,community_water,Community water systems,Water supply and access for communities,1,1,1,
+2,agricultural_water,Agricultural water systems,Water supply and use for agricultural purposes,1,1,1,
+3,environmental_water,Environmental water systems,Water allocation and management for environmental needs,1,1,1,
+4,delta_salinity,Delta salinity,Delta salinity management and impacts,1,1,1,
+5,reservoir_storage,Reservoir storage,Water storage levels in reservoir systems,1,1,1,
+6,groundwater_storage,Groundwater storage,Groundwater storage and aquifer levels,1,1,1,
+7,salmon_abundance,Sacramento River Winter-run Chinook Salmon abundance,Population metrics for Sacramento River Winter-run Chinook Salmon,1,1,1,
+8,distributional_equity,Distributional equity,Equitable distribution of water benefits and impacts,1,1,1,
+9,drought_resilience,Drought resilience,System resilience to climate variability and drought,1,1,1,
+10,hydroclimate,Hydroclimate,,1,1,1,
