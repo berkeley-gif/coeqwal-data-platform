@@ -1785,6 +1785,9 @@ Table reservoir_entity {
   // Versioning
   entity_version_id    int    [not null]              // FK → version.id (entity definition version)
   
+  // Source tracking
+  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
+  
   // Standard metadata
   created_at           timestamp [default: "now()"]
   created_by  int      [not null]
@@ -1801,6 +1804,7 @@ Table reservoir_entity {
     (associated_river)                                 // Find reservoirs by river
     (operational_purpose)                              // Find reservoirs by operational purpose
     (entity_version_id)                                // Find entities by version
+    (source_ids) [type: gin]                           // GIN index for array operations on source IDs
   }
 
   Note: 'Reservoir entities with their physical characteristics and operational attributes'
@@ -1842,6 +1846,9 @@ Table reservoir_variable {
   variable_id           uuid
   variable_version_id  int    [not null]              // FK → version.id
   
+  // Source tracking
+  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
+  
   // Standard metadata
   created_at           timestamp [default: "now()"]
   created_by  int      [not null]
@@ -1856,6 +1863,7 @@ Table reservoir_variable {
     (operational_purpose)                             // Find variables by operational purpose
     (is_aggregate)                                    // Find aggregate variables
     (aggregated_variable_ids) [type: gin]            // GIN index for array operations on aggregated variables
+    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
   }
 
   Note: 'Storage and operational variables associated with reservoir entities'
@@ -1887,6 +1895,9 @@ Table inflow_entity {
   // Versioning
   entity_version_id    int    [not null]              // FK → version.id (entity definition version)
   
+  // Source tracking
+  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
+  
   // Standard metadata
   created_at           timestamp [default: "now()"]
   created_by  int      [not null]
@@ -1902,6 +1913,7 @@ Table inflow_entity {
     (hydrologic_region_id)                            // Find inflows by region
     (has_gis_data)                                    // Find inflows with/without GIS data
     (entity_version_id)                               // Find entities by version
+    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
   }
 
   Note: 'Inflow points where water enters the CalSim system. All are arcs in the schematic'
@@ -1932,6 +1944,9 @@ Table inflow_variable {
   temporal_scale_id    int                            // FK → temporal_scale.id (monthly, daily, etc.)
   variable_version_id  int    [not null]              // FK → version.id
   
+  // Source tracking
+  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
+  
   // Aggregation attributes
   is_aggregate         boolean [default: false]       // TRUE for variables that aggregate multiple inflows
   aggregated_variable_ids  uuid[]                     // Array of inflow variable IDs that this variable aggregates
@@ -1949,6 +1964,7 @@ Table inflow_variable {
     (variable_id) [unique]                           // Link to main variable system (one-to-one)
     (is_aggregate)                                   // Find aggregate variables
     (aggregated_variable_ids) [type: gin]           // GIN index for array operations on aggregated variables
+    (source_ids) [type: gin]                         // GIN index for array operations on source IDs
   }
 
   Note: 'Inflow rate variables (I_*) that measure water inputs to the system'
@@ -1997,6 +2013,9 @@ Table channel_entity {
   
   // Versioning
   entity_version_id   int    [not null]              // FK → version.id (entity definition version)
+  
+  // Source tracking
+  source_ids          int[]  [not null]              // Array of source IDs (FK → source.id)
  
   // Standard metadata
   created_at          timestamp [default: "now()"]
@@ -2016,6 +2035,7 @@ Table channel_entity {
     (from_node)
     (to_node)
     (entity_version_id)                               // Find entities by version
+    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
   }
 
   Note: 'Channel/stream/canal segments that convey water through the system'
@@ -2046,6 +2066,9 @@ Table channel_variable {
   temporal_scale_id   int                            // FK → temporal_scale.id (monthly, daily, etc.)
   variable_version_id int    [not null]              // FK → version.id
   
+  // Source tracking
+  source_ids          int[]  [not null]              // Array of source IDs (FK → source.id)
+  
   // Regulatory/operational
   is_regulatory       boolean [default: false]       // TRUE for minimum instream flow requirements
   regulatory_authority text                          // Agency setting the requirement
@@ -2071,6 +2094,7 @@ Table channel_variable {
     (is_aggregate)                                    // Find aggregate variables
     (aggregated_variable_ids) [type: gin]            // GIN index for array operations on aggregated variables
     (variable_id)                                     // Link to main variable system
+    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
   }
 
   Note: 'Flow variables for channels including scenario flow, unimpaired flow, and minimum instream flow'
@@ -2082,6 +2106,8 @@ Ref: channel_variable.temporal_scale_id     > temporal_scale.id    [delete: rest
 Ref: channel_variable.variable_version_id   > version.id              [delete: restrict, update: cascade]
 Ref: channel_variable.created_by            > user.id          [delete: restrict, update: cascade]
 Ref: channel_variable.updated_by            > user.id          [delete: restrict, update: cascade]
+
+
 
 //═══════════════════════════════════════════════
 // 4. ENTITY VARIABLES → OUTCOME LINKAGE

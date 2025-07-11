@@ -5,3 +5,4 @@ id,source,description,is_active,created_by,updated_by
 4,geopackage,CalSim3_GeoSchematic_20221227_COEQWAL_Revisions2024_corrected.gpkg,true,1,
 5,trend_report,variables from Gilbert team trend reports,true,1,
 6,metadata,scenario metadata,TRUE,1,
+7,cvm_docs,Central Valley Model documentation,true,1,

@@ -6,5 +6,4 @@ id,short_code,label,description
 5,flow_seasonal,Flow Seasonal,Flow-based seasonal periods (e.g. dry_early)
 6,annual,Annual,Annual temporal resolution
 7,por,Period of Record,Full period of record analysis
-8,decadal,Decadal,Decadal temporal scale
-9,long_term,Long-term,Long-term planning horizon
+8,long_term,Long-term,Long-term planning horizon

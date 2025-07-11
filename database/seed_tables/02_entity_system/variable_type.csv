@@ -6,4 +6,4 @@ id,short_code,label,description,is_active
 5,input,input,External inputs and boundary conditions,1
 6,intermediate,intermediate,Calculated intermediate values used in model logic,1
 7,aggregate,aggregate,Variables that sum or combine multiple reservoir/system components,1
-8,index,index,Index,
+8,index,index,Index,1
