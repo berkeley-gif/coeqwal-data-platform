@@ -1054,7 +1054,8 @@ Table outcome_variable_link {
 Ref: outcome_variable_link.outcome_id > outcome_measure.id [delete: restrict, update: cascade]
 
 //────────────────────────────────────────────
-// VALUES
+// DATABASE SUMMARY STATISTICS (S3 stores raw time series)
+// Pre-computed statistics for fast queries without S3 access
 //────────────────────────────────────────────
 
 Table scenario_variable_statistic {
@@ -1077,6 +1078,12 @@ Table scenario_variable_statistic {
   }
 
   Note: '''
+    DATABASE STORAGE: Pre-computed summary statistics (mean, p10, p90, etc.) stored in database.
+    RAW TIME SERIES: Full 100-year monthly time series (1,200 records) stored as Parquet files in S3.
+    
+    This table provides fast access to key statistics without loading full time series from S3.
+    Statistics computed from S3 time series during ETL processing.
+    
     CHECK (value >= 0)
     PARTITION BY RANGE (scenario_id)
     -- Partitioned for improved query performance on large datasets
@@ -1839,20 +1846,7 @@ Table constant {
 
 Ref: constant.metadata_version_id > version.id [delete: restrict, update: cascade]
 
-//────────────────────────────────────────────
-// CALSIM VARIABLE TIMESERIES (RAW OUTPUT)
-//────────────────────────────────────────────
-Table scenario_variable_timeseries {
-  scenario_id int      [not null, ref: > scenario.id]
-  variable_id uuid      [not null] 
-  timestamp   timestamp [not null]
-  value       numeric   [not null]
-  created_at  timestamp [not null, default: "now()"]
-
-  Indexes {
-    (scenario_id, variable_id, timestamp) [unique]
-  }
-}
+// NOTE: Time series data stored in S3 - see scenario_timeseries_file table for metadata
 
 //────────────────────────────────────────────
 // SCENARIO OUTCOME RESULTS (AGGREGATES)
@@ -3021,3 +3015,653 @@ Table model_source {
 
 Ref: model_source.created_by > user.id [delete: restrict, update: cascade]
 Ref: model_source.updated_by > user.id [delete: restrict, update: cascade]
+
+//────────────────────────────────────────────
+// S3 TIME SERIES ARCHITECTURE (Dual format: Snappy Parquet + Gzipped CSV)
+// DESIGN: S3 stores individual variables (Parquet/Snappy) and scenario aggregations (CSV/gzip)
+// INDIVIDUAL: ~10K variables × 1K scenarios = 10M Parquet+Snappy files (~10-50KB each)
+// AGGREGATED: 1K scenario CSV+gzip files (~50-500MB compressed, all variables per scenario)
+// DATABASE: Summary statistics only (mean, p10, p90, etc.)
+//────────────────────────────────────────────
+Table scenario_timeseries_file {
+  id                    int       [pk, increment]
+  scenario_id           int       [not null]         // FK → scenario.id
+  variable_id           uuid                          // Variable identifier (NULL for scenario-level CSV files)
+  
+  // S3 location metadata (Parquet for individual variables, CSV for scenario aggregations)
+  s3_bucket             text      [not null]         // 's3://coeqwal-timeseries'
+  s3_key                text      [not null]         // 'scenario_123/variable_abc/monthly.parquet' OR 'scenario_123/all_variables.csv.gz'
+  file_format           text      [not null, default: 'parquet'] // 'parquet' (individual variables) OR 'csv' (scenario-level)
+  compression           text      [default: 'snappy'] // Parquet: 'snappy' (fast decompression) | CSV: 'gzip' (good ratio)
+  
+  // Data characteristics (100 years monthly data = 1,200 rows; variable count depends on file type)
+  start_date            date      [not null]         // First timestamp in file (typically 1922-10-01)
+  end_date              date      [not null]         // Last timestamp in file (typically 2022-09-30)
+  record_count          int       [not null]         // Time series rows (typically 1,200 for monthly data)
+  variable_count        int       [default: 1]       // Variables in file: 1 (Parquet) or ~10,000 (scenario CSV)
+  temporal_resolution   text      [not null]         // 'monthly', 'daily', 'hourly' (primarily 'monthly')
+  
+  // File metadata (file sizes vary by type: Parquet 10-50KB, gzipped CSV 50-500MB)
+  file_size_bytes       bigint                       // File size: Parquet ~10-50KB | Gzipped CSV ~50-500MB
+  last_modified         timestamp [not null]         // S3 last modified timestamp
+  etag                  text                         // S3 ETag for change detection
+  
+  // Processing metadata
+  source_version_id     int       [not null]         // FK → version.id (data version)
+  processing_status     text      [default: 'ready'] // 'processing', 'ready', 'error'
+  processing_notes      text                         // Error messages or processing details
+  
+  // Quality and processing flags
+  data_quality_score    numeric   [default: 1.0]     // 0.0-1.0 overall quality score
+  has_quality_issues    boolean   [default: false]   // TRUE if quality checks found issues
+  processing_warnings   text[]                       // Array of processing warning messages
+  
+  // Standard metadata
+  created_at            timestamp [not null, default: "now()"]
+  created_by            int       [not null]
+  updated_at            timestamp [not null, default: "now()"]
+  updated_by            int       [not null]
+
+  Indexes {
+    (scenario_id, variable_id) [unique]              // One file per scenario/variable (variable_id can be NULL)
+    (s3_bucket, s3_key) [unique]                     // Unique S3 location
+    (scenario_id)                                    // Find all files for scenario
+    (variable_id)                                    // Find all scenarios for variable (excludes NULL)
+    (scenario_id) [note: 'Partial index WHERE variable_id IS NULL'] // Find scenario-level CSV files
+    (file_format)                                    // Find by format (parquet vs csv)
+    (processing_status)                              // Find files by status
+    (temporal_resolution)                            // Find files by resolution
+    (last_modified)                                  // Find recently updated files
+    (record_count, variable_count)                   // Find files with unexpected dimensions (QC)
+    (data_quality_score)                            // Find by quality
+    (has_quality_issues)                            // Find problematic files
+  }
+
+  Note: '''
+    DUAL FILE ARCHITECTURE: S3 stores both individual variables (Parquet) and scenario aggregations (CSV).
+    
+         FILE TYPES:
+     1. INDIVIDUAL VARIABLES (variable_id NOT NULL):
+        - Format: Parquet with Snappy compression
+        - Content: Single variable, 1,200 monthly values
+        - Size: ~10-50KB per file
+        - S3 key: 'scenario_123/S_SHSTA/monthly.parquet'
+        
+     2. SCENARIO AGGREGATIONS (variable_id IS NULL):
+        - Format: CSV with gzip compression
+        - Content: All variables for scenario, 1,200 rows × ~10,000 columns
+        - Size: ~50-500MB compressed with gzip
+        - S3 key: 'scenario_123/all_variables.csv.gz'
+    
+    DATABASE: Pre-computed statistics in scenario_variable_statistic (mean, p10, p90, etc.)
+    
+    CHECK (processing_status IN ('processing', 'ready', 'error'))
+    CHECK (file_format IN ('parquet', 'csv'))
+         CHECK (compression IN ('snappy', 'gzip', 'lz4', 'none'))
+     CHECK ((file_format = 'parquet') = (compression = 'snappy'))  -- Parquet uses Snappy
+     CHECK ((file_format = 'csv') = (compression = 'gzip'))        -- CSV uses gzip
+    CHECK (temporal_resolution IN ('hourly', 'daily', 'monthly', 'annual'))
+    CHECK (data_quality_score >= 0.0 AND data_quality_score <= 1.0)
+    CHECK (record_count > 0 AND record_count <= 2000)  -- Time series length bounds
+    CHECK (variable_count > 0 AND variable_count <= 15000)  -- Variable count bounds
+    CHECK (end_date > start_date)  -- End date must be after start date
+    CHECK (file_size_bytes IS NULL OR file_size_bytes > 0)  -- File size must be positive
+    CHECK ((variable_id IS NULL) = (file_format = 'csv'))  -- CSV files are scenario-level only
+    CHECK ((file_format = 'parquet') = (variable_count = 1))  -- Parquet files contain one variable
+  '''
+}
+
+Ref: scenario_timeseries_file.scenario_id       > scenario.id [delete: restrict, update: cascade]
+Ref: scenario_timeseries_file.source_version_id > version.id [delete: restrict, update: cascade]
+Ref: scenario_timeseries_file.created_by        > user.id    [delete: restrict, update: cascade]
+Ref: scenario_timeseries_file.updated_by        > user.id    [delete: restrict, update: cascade]
+
+//────────────────────────────────────────────
+// ETL PROCESSING METADATA (for S3 time series generation)
+//────────────────────────────────────────────
+Table etl_batch_run {
+  id                  uuid      [pk]
+  run_type            text      [not null]              // 'initial_load', 'incremental', 'reprocess', 'validation'
+  scenario_batch_ids  int[]                             // Array of scenario IDs processed in this batch
+  
+  // Processing details
+  start_time          timestamp [not null]
+  end_time            timestamp
+  status              text      [default: 'running']    // 'running', 'completed', 'failed', 'cancelled'
+  records_processed   int       [default: 0]
+  records_failed      int       [default: 0]
+  error_details       text[]                           // Array of error messages
+  
+  // S3 output tracking
+  s3_output_prefix    text                             // 's3://bucket/batch_uuid/'
+  files_created       int       [default: 0]
+  total_file_size_mb  numeric   [default: 0]
+  
+  // Processing metadata
+  etl_version         text      [not null]             // ETL pipeline version
+  config_used         jsonb                            // Processing configuration
+  source_version_id   int       [not null]             // FK → version.id
+  
+  // Standard metadata
+  created_at          timestamp [not null, default: "now()"]
+  created_by          int       [not null]
+  updated_at          timestamp [not null, default: "now()"]
+  updated_by          int       [not null]
+
+  Indexes {
+    (status, start_time)                               // Find active/recent runs
+    (run_type, status)                                 // Find runs by type and status
+    (start_time DESC)                                  // Recent runs first
+    (scenario_batch_ids) [type: gin]                   // GIN index for scenario arrays
+  }
+
+  Note: '''
+    Tracks ETL batch processing runs that generate S3 time series files
+    CHECK (status IN ('running', 'completed', 'failed', 'cancelled'))
+    CHECK (run_type IN ('initial_load', 'incremental', 'reprocess', 'validation'))
+  '''
+}
+
+Ref: etl_batch_run.source_version_id > version.id [delete: restrict, update: cascade]
+Ref: etl_batch_run.created_by        > user.id    [delete: restrict, update: cascade]
+Ref: etl_batch_run.updated_by        > user.id    [delete: restrict, update: cascade]
+
+// Link S3 files to ETL batches
+Table etl_file_output {
+  etl_batch_id           uuid [not null]              // FK → etl_batch_run.id
+  scenario_timeseries_id int  [not null]              // FK → scenario_timeseries_file.id
+  processing_duration_ms int                          // Time to process this specific file
+  validation_status      text [default: 'pending']    // 'pending', 'passed', 'failed'
+  validation_errors      text[]                       // Array of validation errors
+  
+  created_at            timestamp [not null, default: "now()"]
+
+  Indexes {
+    (etl_batch_id, scenario_timeseries_id) [pk]
+    (validation_status)
+    (processing_duration_ms DESC)                     // Find slowest processing files
+  }
+
+  Note: '''
+    Links S3 time series files to the ETL batch that created them
+    CHECK (validation_status IN ('pending', 'passed', 'failed'))
+  '''
+}
+
+Ref: etl_file_output.etl_batch_id           > etl_batch_run.id              [delete: cascade, update: cascade]
+Ref: etl_file_output.scenario_timeseries_id > scenario_timeseries_file.id [delete: cascade, update: cascade]
+
+//────────────────────────────────────────────
+// S3 ACCESS TRACKING & OPTIMIZATION
+//────────────────────────────────────────────
+Table s3_access_log {
+  id                    bigserial [pk, increment]
+  scenario_timeseries_id int      [not null]           // FK → scenario_timeseries_file.id
+  
+  // Request details
+  user_id               int       [not null]           // FK → user.id
+  api_endpoint          text      [not null]           // '/api/scenarios/123/variables/abc/timeseries'
+  request_source        text                           // 'dashboard', 'api', 'batch_download'
+  
+  // Access metadata
+  access_timestamp      timestamp [not null, default: "now()"]
+  download_size_bytes   bigint                         // Actual bytes transferred
+  response_time_ms      int                            // API response time
+  http_status_code      int       [not null]           // 200, 404, 500, etc.
+  
+  // Caching info
+  cache_hit             boolean   [default: false]     // TRUE if served from cache
+  cache_key             text                           // Cache identifier
+  
+  // Session tracking
+  session_id            text                           // User session for analytics
+  user_agent            text                           // Browser/client info
+
+  Indexes {
+    (scenario_timeseries_id, access_timestamp DESC)   // Recent access per file
+    (user_id, access_timestamp DESC)                  // User access history
+    (access_timestamp DESC)                           // Recent global access
+    (cache_hit, access_timestamp)                     // Cache performance analysis
+    (http_status_code, access_timestamp)              // Error analysis
+  }
+
+  Note: '''
+    Tracks S3 time series file access for performance optimization and analytics
+    Enables identification of frequently accessed files for caching
+  '''
+}
+
+Ref: s3_access_log.scenario_timeseries_id > scenario_timeseries_file.id [delete: restrict, update: cascade]
+Ref: s3_access_log.user_id                > user.id                     [delete: restrict, update: cascade]
+
+//────────────────────────────────────────────
+// S3 FILE CACHE MANAGEMENT
+//────────────────────────────────────────────
+Table s3_file_cache {
+  id                    int       [pk, increment]
+  scenario_timeseries_id int      [not null, unique]  // FK → scenario_timeseries_file.id
+  
+  // Cache metadata
+  cache_key             text      [not null, unique]  // Redis/memcached key
+  cache_size_bytes      bigint    [not null]          // Size of cached data
+  cache_format          text      [not null]          // 'json', 'parquet_binary', 'csv'
+  
+  // Cache lifecycle
+  cached_at             timestamp [not null, default: "now()"]
+  last_accessed         timestamp [not null, default: "now()"]
+  access_count          int       [not null, default: 0]
+  expires_at            timestamp                      // NULL = no expiration
+  
+  // Cache strategy
+  cache_strategy        text      [not null]          // 'frequent_access', 'user_requested', 'preload'
+  priority_score        numeric   [default: 1.0]      // Higher = keep longer
+  
+  created_at           timestamp [not null, default: "now()"]
+  updated_at           timestamp [not null, default: "now()"]
+
+  Indexes {
+    (cache_key) [unique]
+    (last_accessed DESC)                              // LRU eviction
+    (priority_score DESC, last_accessed DESC)         // Weighted LRU
+    (expires_at)                                      // Expiration cleanup
+    (cache_strategy)
+  }
+
+  Note: '''
+    Manages caching of frequently accessed S3 time series files
+    Enables intelligent cache eviction and preloading strategies
+    CHECK (cache_strategy IN ('frequent_access', 'user_requested', 'preload'))
+  '''
+}
+
+Ref: s3_file_cache.scenario_timeseries_id > scenario_timeseries_file.id [delete: cascade, update: cascade]
+
+//────────────────────────────────────────────
+// DATA QUALITY TRACKING FOR S3 FILES
+//────────────────────────────────────────────
+Table s3_data_quality_check {
+  id                    int       [pk, increment]
+  scenario_timeseries_id int      [not null]          // FK → scenario_timeseries_file.id
+  etl_batch_id          uuid                          // FK → etl_batch_run.id (NULL for manual checks)
+  
+  // Quality check details
+  check_type            text      [not null]          // 'completeness', 'range_validation', 'temporal_consistency', 'statistical_outliers'
+  check_status          text      [not null]          // 'passed', 'warning', 'failed'
+  expected_value        numeric                       // Expected result (e.g., expected record count)
+  actual_value          numeric                       // Actual result
+  
+  // Check results
+  error_count           int       [default: 0]
+  warning_count         int       [default: 0]
+  details               jsonb                         // Detailed check results
+  error_sample          text[]                        // Sample of specific errors found
+  
+  // Check metadata
+  checked_at            timestamp [not null, default: "now()"]
+  check_duration_ms     int                           // Time taken to run check
+  checker_version       text                          // Version of quality check tool
+  
+  created_at           timestamp [not null, default: "now()"]
+
+  Indexes {
+    (scenario_timeseries_id, check_type, checked_at DESC)  // Recent checks per file/type
+    (check_status, checked_at DESC)                        // Failed checks
+    (etl_batch_id)                                         // Checks per batch
+  }
+
+  Note: '''
+    Tracks data quality validation results for S3 time series files
+    CHECK (check_type IN ('completeness', 'range_validation', 'temporal_consistency', 'statistical_outliers'))
+    CHECK (check_status IN ('passed', 'warning', 'failed'))
+  '''
+}
+
+Ref: s3_data_quality_check.scenario_timeseries_id > scenario_timeseries_file.id [delete: cascade, update: cascade]
+Ref: s3_data_quality_check.etl_batch_id          > etl_batch_run.id            [delete: set null, update: cascade]
+
+//────────────────────────────────────────────
+// S3 COST OPTIMIZATION & MONITORING
+//────────────────────────────────────────────
+Table s3_cost_tracking {
+  id                    int       [pk, increment]
+  scenario_timeseries_id int      [not null]          // FK → scenario_timeseries_file.id
+  
+  // Cost period (monthly aggregation)
+  cost_month            date      [not null]          // First day of month (YYYY-MM-01)
+  
+  // Storage costs
+  storage_class         text      [not null]          // 'standard', 'standard_ia', 'glacier', 'deep_archive'
+  avg_file_size_gb      numeric   [not null]
+  storage_cost_usd      numeric   [default: 0]
+  
+  // Transfer costs
+  download_count        int       [default: 0]
+  total_download_gb     numeric   [default: 0]
+  transfer_cost_usd     numeric   [default: 0]
+  
+  // Request costs
+  get_requests          int       [default: 0]
+  put_requests          int       [default: 0]
+  request_cost_usd      numeric   [default: 0]
+  
+  // Optimization recommendations
+  recommended_storage_class text               // AI-generated recommendation
+  potential_savings_usd     numeric [default: 0]
+  last_accessed_days_ago    int               // Days since last access
+  
+  // Metadata
+  calculated_at         timestamp [not null, default: "now()"]
+  aws_billing_period    text                  // AWS billing period reference
+
+  Indexes {
+    (scenario_timeseries_id, cost_month) [unique]     // One record per file per month
+    (cost_month DESC)                                 // Recent costs first
+    (storage_cost_usd DESC)                           // Highest cost files
+    (last_accessed_days_ago DESC)                     // Least accessed files
+    (potential_savings_usd DESC)                      // Optimization opportunities
+  }
+
+  Note: '''
+    Tracks S3 storage and transfer costs for optimization.
+    Scale: Parquet+Snappy files (~10-50KB each) + CSV+gzip files (~50-500MB each).
+    Total storage manageable. Frequent access files should stay in Standard class.
+    Enables cost-based decisions for storage class transitions.
+    CHECK (storage_class IN ('standard', 'standard_ia', 'glacier', 'deep_archive'))
+  '''
+}
+
+Ref: s3_cost_tracking.scenario_timeseries_id > scenario_timeseries_file.id [delete: cascade, update: cascade]
+
+//────────────────────────────────────────────
+// COMPREHENSIVE TIME SERIES METADATA VIEWS
+//────────────────────────────────────────────
+
+// Materialized view for comprehensive time series metadata (for complex queries)
+View timeseries_metadata_complete {
+  // File identification
+  file_id                    int
+  s3_key                     text
+  s3_bucket                  text
+  file_format                text
+  file_size_mb               numeric
+  
+  // Time series characteristics
+  start_date                 date
+  end_date                   date
+  record_count               int
+  temporal_resolution        text
+  data_quality_score         numeric
+  has_quality_issues         boolean
+  
+  // Variable metadata (complete)
+  variable_id                uuid
+  variable_calsim_id         text
+  variable_name              text
+  variable_description       text
+  variable_type              text
+  variable_entity_type       text
+  variable_entity_name       text
+  variable_unit_code         text
+  variable_unit_name         text
+  variable_is_regulatory     boolean
+  variable_regulatory_authority text
+  variable_is_aggregate      boolean
+  variable_operational_purpose text
+  
+  // Entity context (where applicable)
+  entity_id                  int
+  entity_short_code          text
+  entity_name                text
+  entity_hydrologic_region   text
+  entity_capacity_taf        numeric
+  entity_operational_purpose text
+  
+  // Scenario metadata (complete)
+  scenario_id                int
+  scenario_short_code        text
+  scenario_title             text
+  scenario_description       text
+  scenario_author_name       text
+  scenario_author_org        text
+  scenario_author_email      text
+  scenario_is_baseline       boolean
+  baseline_scenario_code     text
+  baseline_scenario_title    text
+  
+  // Hydroclimate context
+  hydroclimate_name          text
+  hydroclimate_description   text
+  projection_year            int
+  slr_value                  numeric
+  slr_unit                   text
+  
+  // Theme associations
+  theme_codes                text[]
+  theme_titles               text[]
+  primary_theme_code         text
+  primary_theme_title        text
+  
+  // Outcome linkages
+  outcome_categories         text[]
+  outcome_measures           text[]
+  tier_classifications       text[]
+  
+  // Access and usage metrics
+  total_downloads            int
+  last_accessed              timestamp
+  avg_response_time_ms       int
+  cache_hit_ratio           numeric
+  
+  // Processing metadata
+  etl_batch_id              uuid
+  processing_duration_ms    int
+  validation_status         text
+  processing_warnings       text[]
+  created_at                timestamp
+  last_modified             timestamp
+
+  Note: '''
+    Comprehensive materialized view joining all time series metadata
+    Updated nightly for performance - use scenario_timeseries_file for real-time queries
+  '''
+}
+
+// View for API responses (JOINs to get rich metadata)
+View timeseries_api_metadata {
+  // File identification
+  file_id                    int
+  s3_key                     text
+  s3_bucket                  text
+  
+  // Basic file info
+  file_format                text
+  file_size_mb               numeric
+  temporal_resolution        text
+  record_count               int
+  start_date                 date
+  end_date                   date
+  
+  // Variable info (from JOINs)
+  variable_calsim_id         text
+  variable_name              text
+  variable_description       text
+  variable_type              text
+  variable_entity_type       text
+  variable_entity_name       text
+  variable_unit_code         text
+  variable_unit_name         text
+  
+  // Scenario info (from JOINs)
+  scenario_short_code        text
+  scenario_title             text
+  scenario_description       text
+  scenario_author_name       text
+  scenario_author_org        text
+  hydroclimate_name          text
+  baseline_scenario_code     text
+  
+  // Quality flags
+  data_quality_score         numeric
+  has_quality_issues         boolean
+  processing_status          text
+  processing_warnings        text[]
+  
+  // Metadata
+  created_at                 timestamp
+  last_modified              timestamp
+
+  Note: '''
+    API view with rich metadata via JOINs:
+    - Joins scenario_timeseries_file with scenario, variable tables
+    - Includes scenario_author, hydroclimate, unit tables
+    - Can be materialized for performance if needed
+  '''
+}
+
+//────────────────────────────────────────────
+// S3 TIME SERIES QUERY EXAMPLES
+//────────────────────────────────────────────
+
+/*
+-- Get comprehensive time series metadata for API responses
+SELECT 
+    stf.id,
+    stf.s3_key,
+    stf.s3_bucket,
+    stf.file_format,
+    stf.file_size_bytes / 1024 / 1024 as file_size_mb,
+    stf.temporal_resolution,
+    stf.record_count,
+    stf.start_date,
+    stf.end_date,
+    
+    -- Variable metadata via JOINs
+    COALESCE(rv.calsim_id, cv.calsim_id, iv.calsim_id, dv.calsim_id) as variable_calsim_id,
+    COALESCE(rv.name, cv.name, iv.name, dv.name) as variable_name,
+    COALESCE(rv.description, cv.description, iv.description, dv.description) as variable_description,
+    COALESCE(rv.variable_type, cv.variable_type, iv.variable_type, dvt.short_code) as variable_type,
+    CASE 
+        WHEN rv.id IS NOT NULL THEN 'reservoir'
+        WHEN cv.id IS NOT NULL THEN 'channel'
+        WHEN iv.id IS NOT NULL THEN 'inflow'
+        WHEN dv.id IS NOT NULL THEN 'derived'
+    END as variable_entity_type,
+    COALESCE(re.name, ce.name, ie.name) as variable_entity_name,
+    u.short_code as variable_unit_code,
+    u.full_name as variable_unit_name,
+    
+    -- Scenario metadata via JOINs
+    s.short_code as scenario_short_code,
+    s.title as scenario_title,
+    s.description as scenario_description,
+    sa.name as scenario_author_name,
+    sa.organization as scenario_author_org,
+    h.name as hydroclimate_name,
+    bs.short_code as baseline_scenario_code,
+    
+    -- Quality flags
+    stf.data_quality_score,
+    stf.has_quality_issues,
+    stf.processing_status,
+    stf.processing_warnings,
+    
+    -- Metadata
+    stf.created_at,
+    stf.last_modified
+    
+FROM scenario_timeseries_file stf
+JOIN scenario s ON stf.scenario_id = s.id
+LEFT JOIN scenario_author sa ON s.scenario_author_id = sa.id
+LEFT JOIN hydroclimate h ON s.hydroclimate_id = h.id
+LEFT JOIN scenario bs ON s.baseline_scenario_id = bs.id
+
+-- Variable JOINs (exactly one will match)
+LEFT JOIN reservoir_variable rv ON rv.variable_id = stf.variable_id
+LEFT JOIN channel_variable cv ON cv.variable_id = stf.variable_id
+LEFT JOIN inflow_variable iv ON iv.variable_id = stf.variable_id
+LEFT JOIN derived_variable dv ON dv.variable_id = stf.variable_id
+LEFT JOIN derived_variable_type dvt ON dv.variable_type_id = dvt.id
+
+-- Entity JOINs (for physical entities)
+LEFT JOIN reservoir_entity re ON rv.reservoir_entity_id = re.id
+LEFT JOIN channel_entity ce ON cv.channel_entity_id = ce.id
+LEFT JOIN inflow_entity ie ON iv.inflow_entity_id = ie.id
+
+-- Unit JOIN
+LEFT JOIN unit u ON COALESCE(rv.unit_id, cv.unit_id, iv.unit_id, dv.unit_id) = u.id
+
+WHERE stf.processing_status = 'ready'
+ORDER BY stf.created_at DESC;
+*/
+
+//────────────────────────────────────────────
+// CONVENIENCE FUNCTIONS FOR TIME SERIES MANAGEMENT
+//────────────────────────────────────────────
+
+/*
+-- Function to create a new time series file record (supports both Parquet and CSV files)
+CREATE OR REPLACE FUNCTION create_timeseries_file(
+    p_scenario_id           int,
+    p_variable_id           uuid,               -- NULL for scenario-level CSV files
+    p_s3_bucket             text,
+    p_s3_key                text,
+    p_file_format           text,               -- 'parquet' or 'csv'
+    p_start_date            date,
+    p_end_date              date,
+    p_record_count          int,
+    p_variable_count        int DEFAULT 1,      -- 1 for Parquet, ~10K for CSV
+    p_temporal_resolution   text,
+    p_file_size_bytes       bigint DEFAULT NULL,
+    p_compression           text DEFAULT NULL,
+    p_etag                  text DEFAULT NULL,
+    p_created_by            int DEFAULT 1
+)
+RETURNS int AS $$
+DECLARE
+    new_file_id int;
+BEGIN
+    -- Insert new time series file record
+    INSERT INTO scenario_timeseries_file (
+        scenario_id, variable_id, s3_bucket, s3_key, file_format,
+        start_date, end_date, record_count, variable_count, temporal_resolution,
+        file_size_bytes, compression, etag, last_modified,
+        source_version_id, created_by, updated_by
+    ) VALUES (
+        p_scenario_id, p_variable_id, p_s3_bucket, p_s3_key, p_file_format,
+        p_start_date, p_end_date, p_record_count, p_variable_count, p_temporal_resolution,
+        p_file_size_bytes, p_compression, p_etag, NOW(),
+        1, p_created_by, p_created_by  -- Default to version 1
+    ) RETURNING id INTO new_file_id;
+    
+    RETURN new_file_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Example usage for individual variable (Parquet):
+-- SELECT create_timeseries_file(
+--     p_scenario_id => 123,
+--     p_variable_id => 'uuid-here',
+--     p_s3_bucket => 'coeqwal-timeseries',
+--     p_s3_key => 'scenario_123/S_SHSTA/monthly.parquet',
+--     p_file_format => 'parquet',
+--     p_start_date => '1921-10-31',
+--     p_end_date => '2021-10-31',
+--     p_record_count => 1200,
+--     p_variable_count => 1,           -- Single variable
+--     p_temporal_resolution => 'monthly'
+-- );
+
+-- Example usage for scenario aggregation (CSV):
+-- SELECT create_timeseries_file(
+--     p_scenario_id => 123,
+--     p_variable_id => NULL,           -- NULL for scenario-level files
+--     p_s3_bucket => 'coeqwal-timeseries',
+--     p_s3_key => 'scenario_123/all_variables.csv.gz',
+--     p_file_format => 'csv',
+--     p_start_date => '1921-10-31',
+--     p_end_date => '2021-10-31', 
+--     p_record_count => 1200,
+--     p_variable_count => 9847,        -- All variables for scenario
+--     p_temporal_resolution => 'monthly'
+-- );
+*/
