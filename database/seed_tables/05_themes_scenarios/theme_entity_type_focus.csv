@@ -1,0 +1,12 @@
+theme_id,entity_type_id,focus_description,focus_weight,created_by,created_at,updated_at,updated_by
+1,1,Primary focus on reservoir storage entities for baseline analysis,1.0,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,2,Environmental flow management focuses on channel entities,0.8,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,3,Secondary focus on inflow entities for unimpaired flow comparison,0.6,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,4,Groundwater management focuses on demand unit entities,1.0,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,1,Community water supply focuses on reservoir storage entities,0.9,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,4,Secondary focus on demand unit entities for delivery analysis,0.7,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,2,Delta estuary flows focus on channel entities,1.0,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,1,Delta uses focus on reservoir entities for carryover storage,0.8,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,2,Delta uses focus on channel entities for flow management,0.9,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,1,Export reliability focuses on reservoir storage entities,1.0,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,2,Export reliability focuses on channel entities for conveyance,0.8,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1

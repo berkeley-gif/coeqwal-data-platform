@@ -1,0 +1,53 @@
+theme_id,outcome_measure_id,focus_level,analytical_emphasis,tier_relevance,created_by,created_at,updated_at,updated_by
+1,1,primary,Baseline reliability assessment across all community types,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,2,primary,Comprehensive volumetric delivery tracking,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,4,primary,Agricultural economic baseline for comparison scenarios,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,5,primary,Baseline surface water allocation patterns,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,7,primary,Environmental flow baseline conditions,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,10,primary,Baseline Delta outflow patterns and variability,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,16,primary,System-wide storage baseline for drought analysis,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,19,primary,Groundwater sustainability baseline assessment,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,22,primary,Salmon population baseline for ecosystem indicators,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,7,primary,Environmental flow performance under restoration scenarios,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,8,primary,Functional flow achievement and ecosystem benefits,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,9,primary,Refuge water delivery reliability under flow constraints,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,10,primary,Enhanced outflow for estuarine ecosystem restoration,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,11,primary,Outflow restoration relative to natural conditions,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,22,primary,Salmon population response to flow restoration,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,23,primary,Population trajectory analysis under different flow scenarios,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,1,secondary,Community supply impacts of environmental flow restoration,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,5,secondary,Agricultural adaptation to environmental flow requirements,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,19,primary,Groundwater sustainability under agricultural transformation,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,20,primary,Groundwater level trends and depletion rates,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,21,primary,Volumetric storage changes and safe yield analysis,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,1,primary,Community water security under groundwater restrictions,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,2,primary,Urban water supply alternatives to groundwater,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,4,primary,Agricultural productivity under groundwater constraints,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,6,primary,Farm revenue impacts of reduced groundwater access,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,1,primary,Community water delivery prioritization and equity,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,2,primary,Municipal contractor supply reliability,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,3,primary,Community water reliability under supply constraints,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,15,primary,Delta export capacity for community water supplies,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,5,secondary,Agricultural supply impacts of community water prioritization,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,8,contextual,Environmental flow compliance under community priority,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,10,primary,Outflow enhancement for estuarine ecosystem health,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,11,primary,Outflow restoration targets and achievement,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,12,primary,X2 position management for ecosystem function,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,13,primary,Fall X2 position for salmon outmigration,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,1,primary,Community supply reliability under enhanced outflow,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,5,primary,Agricultural impacts of outflow requirements,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,15,secondary,Export constraints from outflow enhancement,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,17,secondary,Reservoir coordination for outflow targets,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,12,primary,April X2 management for in-Delta beneficial uses,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,13,primary,September X2 management for agricultural season,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,14,primary,Salinity tier classification for in-Delta uses,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,1,primary,In-Delta community water quality protection,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,5,primary,In-Delta agricultural salinity tolerance,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,15,secondary,Export water quality and salinity constraints,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,17,secondary,Reservoir releases for salinity management,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,1,primary,Community water reliability via Delta exports,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,2,primary,Municipal contractor delivery via exports,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,5,primary,Agricultural contractor delivery via exports,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,6,primary,Agricultural economic dependence on exports,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,15,primary,Export facility capacity and operational reliability,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,10,secondary,Export-outflow balance and operational constraints,False,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1

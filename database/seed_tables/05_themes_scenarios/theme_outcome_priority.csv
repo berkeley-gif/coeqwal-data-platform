@@ -1,0 +1,44 @@
+theme_id,outcome_category_id,priority_rank,focus_weight,research_rationale,measurement_focus,created_by,created_at,updated_at,updated_by
+1,1,1,1.0,Community water deliveries are the foundation for urban resilience and public health,Volumetric deliveries and reliability across demand units,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,2,2,1.0,Agricultural water deliveries drive Central Valley economic stability,Surface water allocation and delivery reliability,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,3,3,1.0,Environmental water maintains ecosystem function and regulatory compliance,River flows and refuge water deliveries,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,4,4,1.0,Delta outflow connects upstream management to Bay ecosystem health,Monthly and annual outflow volumes,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,5,5,1.0,Delta salinity affects both in-Delta uses and export water quality,X2 position and compliance point salinity,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,6,6,0.9,In-Delta water quality supports local communities and agriculture,Salinity thresholds for drinking water and irrigation,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,7,7,0.9,Delta exports supply water to San Joaquin Valley and Southern California,Export volumes and operational constraints,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,8,8,0.8,Reservoir storage provides system flexibility and drought resilience,April and September storage levels across major reservoirs,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,9,9,0.8,Groundwater storage represents long-term water security,Storage volume changes and sustainability indicators,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+1,10,10,0.7,Salmon population health indicates ecosystem integrity,Winter Run Chinook spawner abundance,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,3,1,1.0,Environmental flows are the primary focus for ecosystem restoration,River flow percentages and functional flow targets,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,4,2,1.0,Delta outflow drives estuarine ecosystem health and function,Outflow volumes and timing relative to unimpaired conditions,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,5,3,1.0,Delta salinity management balances ecosystem and human needs,X2 position during critical life stages,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,8,4,0.9,Reservoir storage management affects downstream environmental flows,Storage operations that support environmental objectives,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,10,5,0.9,Salmon populations are key indicators of ecosystem restoration success,Population trends and habitat connectivity,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,1,6,0.7,Community water needs must be balanced with environmental priorities,Urban supply reliability under environmental flow scenarios,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,2,7,0.7,Agricultural impacts are secondary but important for implementation,Farm-level adaptation to environmental flow requirements,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,9,1,1.0,Groundwater sustainability is the core challenge in agricultural regions,Storage depletion rates and sustainable yield analysis,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,1,2,1.0,Community water security depends on sustainable groundwater management,Urban groundwater dependence and alternative supplies,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,2,3,1.0,Agricultural adaptation drives groundwater management decisions,Crop shifts and irrigation efficiency under reduced groundwater access,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,1,1,1.0,Community water deliveries receive highest priority in this theme,Reliability and equity of municipal water supplies,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,7,2,0.9,Delta exports support community water supplies in dependent regions,Export capacity and reliability for municipal contractors,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,2,3,0.8,Agricultural water needs are balanced against community priorities,Agricultural shortage tolerance and adaptation capacity,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,3,4,0.7,Environmental water requirements set minimum flow constraints,Environmental flow compliance while maximizing urban supplies,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,4,1,1.0,Delta outflow is the primary driver of estuarine health,Outflow volumes and seasonal patterns for ecosystem function,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,1,2,0.9,Community water deliveries must be maintained during outflow enhancement,Municipal supply reliability under enhanced outflow requirements,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,2,3,0.9,Agricultural water impacts from increased outflow requirements,Farm-level economic impacts of reduced water availability,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,6,4,0.8,In-Delta water quality affects local communities and farms,Salinity management for in-Delta beneficial uses,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,7,5,0.8,Delta exports are constrained by outflow requirements,Export-outflow balance and operational flexibility,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,8,6,0.7,Reservoir storage operations support increased outflow,Coordinated reservoir releases for outflow targets,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,10,7,0.7,Salmon population benefits from improved Delta conditions,Population response to enhanced outflow and reduced diversions,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,5,1,1.0,Delta salinity directly affects in-Delta agricultural and municipal uses,Salinity compliance at interior Delta locations,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,6,2,1.0,In-Delta water quality supports local communities and farms,Water quality standards for drinking water and crop tolerance,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,1,3,0.9,Community water systems within the Delta require salinity protection,Municipal water quality and treatment costs,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,2,4,0.9,Agricultural productivity in the Delta depends on salinity management,Crop salt tolerance and soil salinity accumulation,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,8,5,0.8,Reservoir storage operations affect Delta salinity conditions,Coordinated releases to manage interior Delta salinity,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,3,6,0.7,Environmental water requirements may conflict with salinity goals,Flow-salinity relationships and ecosystem trade-offs,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,7,7,0.7,Delta exports affect salinity through hydraulic and water balance effects,Export operations and interior Delta hydraulics,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,1,1,1.0,Community water deliveries via Delta exports support urban growth,Municipal contractor reliability and delivery capacity,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,2,2,1.0,Agricultural water deliveries via Delta exports drive Valley economy,Agricultural contractor water supply and economic impacts,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,6,3,0.9,In-Delta water quality affects export water quality and treatment costs,Export water quality and downstream treatment requirements,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,7,4,0.9,Delta exports are the primary infrastructure for south-of-Delta supplies,Export capacity and operational reliability,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,4,5,0.8,Delta outflows constrain export operations and must be balanced,Export-outflow operational coordination,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
