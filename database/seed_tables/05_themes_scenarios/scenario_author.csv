@@ -1,4 +1,4 @@
-id,short_code,title,citation,url,notes
-1,dwr,California Department of Water Resources,,,Official state agency for water resources management
-2,usbr,US Bureau of Reclamation,,,Federal agency for water and power resources
-3,james_gilbert,"James Gilbert and team, COEQWAL",,,COEQWAL research team lead
+id,short_code,title,citation,url,notes,created_at,updated_at,created_by,updated_by
+1,dwr,California Department of Water Resources,,,Official state agency for water resources management,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+2,usbr,US Bureau of Reclamation,,,Federal agency for water and power resources,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+3,james_gilbert,"James Gilbert and team, COEQWAL",,,COEQWAL research team lead,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1

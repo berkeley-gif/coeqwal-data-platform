@@ -1,12 +1,12 @@
-id,short_code,label,description
-1,system_wide,System-wide,Entire CalSim system
-2,regional,Regional,Hydrologic region (SAC SJR etc.)
-3,reservoir,Reservoir,Individual reservoir
-4,river_reach,River reach,Specific river reach or segment
-5,demand_unit,Demand unit,Individual demand unit
-6,county,County,County-level aggregation
-7,water_system,Water system,Local water system
-8,basin,Basin,Watershed or hydrologic basin
-9,delta,Delta,Sacramento-San Joaquin Delta
-10,node,Node,Individual CalSim node
-11,arc,Arc,Individual CalSim arc 
+id,short_code,label,description,created_at,updated_at,created_by,updated_by
+1,system_wide,System-wide,Entire CalSim system,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+2,regional,Regional,Hydrologic region (SAC SJR etc.),2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+3,reservoir,Reservoir,Individual reservoir,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+4,river_reach,River reach,Specific river reach or segment,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+5,demand_unit,Demand unit,Individual demand unit,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+6,county,County,County-level aggregation,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+7,water_system,Water system,Local water system,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+8,basin,Basin,Watershed or hydrologic basin,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+9,delta,Delta,Sacramento-San Joaquin Delta,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+10,node,Node,Individual CalSim node,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+11,arc,Arc,Individual CalSim arc ,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1

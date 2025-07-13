@@ -1,9 +1,9 @@
-id,short_code,label,description
-1,daily,Daily,Daily temporal resolution
-2,weekly,Weekly,Weekly temporal resolution
-3,monthly,Monthly,Monthly temporal resolution
-4,seasonal,Seasonal,Seasonal temporal resolution (e.g. spring/summer)
-5,flow_seasonal,Flow Seasonal,Flow-based seasonal periods (e.g. dry_early)
-6,annual,Annual,Annual temporal resolution
-7,por,Period of Record,Full period of record analysis
-8,long_term,Long-term,Long-term planning horizon
+id,short_code,label,description,created_at,updated_at,created_by,updated_by
+1,daily,Daily,Daily temporal resolution,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+2,weekly,Weekly,Weekly temporal resolution,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+3,monthly,Monthly,Monthly temporal resolution,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+4,seasonal,Seasonal,Seasonal temporal resolution (e.g. spring/summer),2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+5,flow_seasonal,Flow Seasonal,Flow-based seasonal periods (e.g. dry_early),2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+6,annual,Annual,Annual temporal resolution,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+7,por,Period of Record,Full period of record analysis,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+8,long_term,Long-term,Long-term planning horizon,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1

@@ -1,16 +1,16 @@
-id,short_code,title,short_title,category,description,assumptions_version_id,is_active,notes,created_by,updated_by
-1,TUCP_TUCO,TUCP's and TUCO's,,TUCP_TUCO,,1,1,,1,
-2,lu_2004_2013,2004-2013 land use model,,land_use,,1,1,,1,
-3,lu_updated,updated land use model,,land_use,,1,1,,1,
-4,lu_proj_reductions,updated land use model with projected land use reductions,,land_use,,1,1,,1,
-5,SGMA_SJV,San Joaquin Valley SGMA groundwater pumping limits,,gw_restrictions,,1,1,,1,
-6,SGMA_SAC,Sacramento Valley SGMA-type groundwater pumping limits,,gw_restrictions,,1,1,,1,
-7,SGMA_CV,Central Valley-wide SGMA-type groundwater pumping limits,,gw_restrictions,,1,1,,1,
-8,slr_15,15mm sea level rise,15mm sea level rise,slr,,1,1,,1,
-9,slr_30,30mm sea level rise,30mm sea level rise,slr,,,,,,
-10,gw_model,groundwater model,,gw_model,,1,1,,1,
-11,DCP_6000,Delta Conveyance Project (The Tunnel) transporting at 6000 CFS,,infrastructure,,1,1,,1,
-12,DCP_Bethany,Delta Conveyance Project (The Tunnel) with the proposed Bethany Reservoir alignment,,infrastructure,,,,,,
-13,no_min_flow,minimum flow requirements removed,,flow,,1,1,,1,
-14,functional_flows,functional flows,,flow,,1,1,,1,
-15,salmon_flows,modified functional flows adjusted for Winter-run Chinook salmon,,flow,,1,1,,1,
+id,short_code,title,short_title,category,description,assumptions_version_id,is_active,notes,created_by,updated_by,created_at,updated_at
+1,TUCP_TUCO,TUCP's and TUCO's,,TUCP_TUCO,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+2,lu_2004_2013,2004-2013 land use model,,land_use,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+3,lu_updated,updated land use model,,land_use,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+4,lu_proj_reductions,updated land use model with projected land use reductions,,land_use,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+5,SGMA_SJV,San Joaquin Valley SGMA groundwater pumping limits,,gw_restrictions,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+6,SGMA_SAC,Sacramento Valley SGMA-type groundwater pumping limits,,gw_restrictions,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+7,SGMA_CV,Central Valley-wide SGMA-type groundwater pumping limits,,gw_restrictions,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+8,slr_15,15mm sea level rise,15mm sea level rise,slr,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+9,slr_30,30mm sea level rise,30mm sea level rise,slr,,,,,,,2024-01-01 00:00:00,2024-01-01 00:00:00
+10,gw_model,groundwater model,,gw_model,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+11,DCP_6000,Delta Conveyance Project (The Tunnel) transporting at 6000 CFS,,infrastructure,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+12,DCP_Bethany,Delta Conveyance Project (The Tunnel) with the proposed Bethany Reservoir alignment,,infrastructure,,,,,,,2024-01-01 00:00:00,2024-01-01 00:00:00
+13,no_min_flow,minimum flow requirements removed,,flow,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+14,functional_flows,functional flows,,flow,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+15,salmon_flows,modified functional flows adjusted for Winter-run Chinook salmon,,flow,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00

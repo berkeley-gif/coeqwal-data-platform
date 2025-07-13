@@ -3,3 +3,4 @@ id,short_code,full_name,canonical_group
 2,CFS,cubic feet per second,flow
 3,acres,acres,area
 4,mm,millimeters,length
+5,km,kilometers,length

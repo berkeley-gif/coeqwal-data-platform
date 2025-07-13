@@ -1,11 +1,11 @@
-id,short_code,label,description,outcome_version_id,is_active,created_by
-1,community_water,Community Water Systems,Water supply reliability and delivery performance for cities and small communities,7,true,1
-2,agricultural_water,Agricultural Water,"Water supply and economic outcomes for Central Valley agriculture, including productivity and employment impacts",7,true,1
-3,environmental_water,Environmental Water,"River flows, wildlife refuge deliveries, and ecosystem function indicators",7,true,1
-4,delta_outflow,Delta Outflow,Water flows from the Delta to San Francisco Bay that support estuarine ecosystem health,7,true,1
-5,delta_salinity,Delta Salinity,"Salinity levels within the Delta affecting both ecosystem function and beneficial uses, including X2 position",7,true,1
-6,delta_water_quality,In-Delta Water Quality,Salinity levels and water quality suitable for in-Delta community drinking water and agricultural irrigation,7,true,1
-7,delta_exports,Delta Exports,Water exported from the Delta to the San Joaquin Valley and Southern California via state and federal pumping facilities,7,true,1
-8,reservoir_storage,Reservoir Storage,Water stored in major Central Valley reservoirs providing system flexibility and drought resilience,7,true,1
-9,groundwater_storage,Groundwater Storage,Water stored in Central Valley aquifers representing long-term water security and sustainability,7,true,1
-10,salmon_population,Salmon Population Health,Population status and abundance of Winter Run Chinook Salmon on the Sacramento River as ecosystem indicator,7,true,1
+id,short_code,label,description,outcome_version_id,is_active,created_by,created_at,updated_at,updated_by
+1,community_water,Community Water Systems,Water supply reliability and delivery performance for cities and small communities,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+2,agricultural_water,Agricultural Water,"Water supply and economic outcomes for Central Valley agriculture, including productivity and employment impacts",7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+3,environmental_water,Environmental Water,"River flows, wildlife refuge deliveries, and ecosystem function indicators",7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+4,delta_outflow,Delta Outflow,Water flows from the Delta to San Francisco Bay that support estuarine ecosystem health,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+5,delta_salinity,Delta Salinity,"Salinity levels within the Delta affecting both ecosystem function and beneficial uses, including X2 position",7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+6,delta_water_quality,In-Delta Water Quality,Salinity levels and water quality suitable for in-Delta community drinking water and agricultural irrigation,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+7,delta_exports,Delta Exports,Water exported from the Delta to the San Joaquin Valley and Southern California via state and federal pumping facilities,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+8,reservoir_storage,Reservoir Storage,Water stored in major Central Valley reservoirs providing system flexibility and drought resilience,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+9,groundwater_storage,Groundwater Storage,Water stored in Central Valley aquifers representing long-term water security and sustainability,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
+10,salmon_population,Salmon Population Health,Population status and abundance of Winter Run Chinook Salmon on the Sacramento River as ecosystem indicator,7,True,1,2024-01-01 00:00:00,2024-01-01 00:00:00,1
