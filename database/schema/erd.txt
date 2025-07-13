@@ -1946,13 +1946,14 @@ Ref: analysis_result_delta.delta_id > scenario_outcome_delta.id [delete: cascade
 // Single Source: CS3_NetworkSchematic_Integrated_11.28.23.xml
 //═══════════════════════════════════════════════
 
-// Arc type lookup table for consistency
-Table network_arc_type {
-  id          int  [pk, increment]
-  short_code  text [not null, unique]           // 'inflow', 'channel', 'diversion', 'bypass', 'return_flow'
-  name        text [not null]                   // 'Inflow Arc', 'Channel Arc', 'Diversion Arc'
-  description text
-  is_active   boolean [not null, default: true]
+// Node type lookup table for consistency across models
+Table network_node_type {
+  id                   int  [pk, increment]
+  short_code           text [not null, unique]        // 'reservoir', 'habitat_node', 'junction', 'treatment_plant', 'diversion'
+  name                 text [not null]                // 'Reservoir Node', 'Habitat Node', 'Junction', 'Treatment Plant'
+  description          text
+  model_source_id      int                            // FK → model_source.id (NULL = generic/cross-model)
+  is_active            boolean [not null, default: true]
   
   created_at  timestamp [default: "now()"]
   created_by  int      [not null]
@@ -1961,31 +1962,75 @@ Table network_arc_type {
 
   Indexes {
     (short_code) [unique]
-    (is_active, short_code)
+    (model_source_id)
+    (is_active, model_source_id)
   }
 
-  Note: 'Lookup table for network arc types to maintain consistency and prevent typos'
+  Note: 'Node types supporting multiple models'
+}
+
+Ref: network_node_type.created_by > user.id [delete: restrict, update: cascade]
+Ref: network_node_type.updated_by > user.id [delete: restrict, update: cascade]
+Ref: network_node_type.model_source_id > model_source.id [delete: restrict, update: cascade]
+
+// Arc type lookup table for consistency across models
+Table network_arc_type {
+  id                   int  [pk, increment]
+  short_code           text [not null, unique]        // 'calsim_inflow', 'riparian_flow', 'socal_import', 'cross_model_boundary'
+  name                 text [not null]                // 'CalSim Inflow Arc', 'Riparian Flow Connection', 'Cross-Model Boundary'
+  description          text
+  model_source_id      int                            // FK → model_source.id (NULL = generic/cross-model)
+  is_cross_model       boolean [default: false]       // TRUE for arcs connecting different models
+  flow_direction       text [default: 'unidirectional'] // 'unidirectional', 'bidirectional', 'variable'
+  is_active            boolean [not null, default: true]
+  
+  created_at  timestamp [default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp
+  updated_by  int
+
+  Indexes {
+    (short_code) [unique]
+    (model_source_id)
+    (is_cross_model)
+    (is_active, model_source_id)
+  }
+
+  Note: 'Arc types supporting multiple models and cross-model connections'
 }
 
 Ref: network_arc_type.created_by > user.id [delete: restrict, update: cascade]
 Ref: network_arc_type.updated_by > user.id [delete: restrict, update: cascade]
+Ref: network_arc_type.model_source_id > model_source.id [delete: restrict, update: cascade]
+
+
 
 // SCHEMA: network
 // Core network topology tables organized under network schema
 Table network.node {
   id                   int    [pk, increment]
-  short_code           text   [not null]              // 'SHSTA', 'FOLSM', 'SAC001', 'JUNCTION_42'
-  node_type            text   [not null]              // 'reservoir', 'junction', 'diversion', 'demand_unit', 'outflow'
-  name                 text                           // Human-readable name from XML
-  description          text                           // Description from XML or domain knowledge
-  diagram_id           int    [not null]              // Source-agnostic reference to diagram node ID
+  short_code           text   [not null]              // 'SHSTA', 'RIP_SAC_01', 'SOCAL_MWD_12'
+  node_type_id         int    [not null]              // FK → network_node_type.id
+  name                 text                           // Human-readable name from model source
+  description          text                           // Description from model source or domain knowledge
   
-  // Minimal network-only attributes
+  // Multi-model identification
+  model_source_id      int    [not null]              // FK → model_source.id ('calsim3', 'riparian', etc.)
+  model_node_id        text                           // Original node ID from source model
+  diagram_id           int                            // Source diagram reference (for models with diagrams)
+  
+  // Cross-model integration
+  parent_node_id       int                            // FK → network.node.id (for model hierarchies)
+  equivalent_nodes     int[]                          // Array of equivalent node IDs from other models
+  integration_status   text   [default: 'active']     // 'active', 'deprecated', 'merged', 'conflicted'
+  
+  // Spatial and model-specific attributes
   geom                 geometry(Point,4326)           // Spatial location if available
+  model_attributes     jsonb                          // Model-specific attributes as JSON
   
   // Versioning and source tracking
   network_version_id   int    [not null]              // FK → version.id (network topology version)
-  source_ids           int[]  [not null]              // Array of source IDs - should be [network_schematic_source_id]
+  source_ids           int[]  [not null]              // Array of source IDs from multiple models
   
   // Standard metadata
   created_at           timestamp [default: "now()"]
@@ -1995,23 +2040,35 @@ Table network.node {
 
   Indexes {
     (network_version_id, short_code) [unique]          // Composite unique constraint - no duplicate names per version
-    (diagram_id) [unique]                              // Authoritative diagram reference
-    (node_type)                                        // Find nodes by type
+    (model_source_id, model_node_id) [unique]          // Unique within each model
+    (diagram_id)                                       // Authoritative diagram reference
+    (node_type_id, model_source_id)                    // Find nodes by type within model
+    (parent_node_id)                                   // Hierarchical queries
+    (equivalent_nodes) [type: gin]                     // Cross-model equivalence queries
+    (integration_status)                               // Find integration issues
     (network_version_id)                               // Version-specific queries
     (source_ids) [type: gin]                           // GIN index for array operations on sources
     (geom) [type: gist]                                // GIST index for spatial queries
+    (model_attributes) [type: gin]                     // JSON attribute search
   }
 
-  Note: 'Core network nodes from CalSim XML schematic. Represents points in the network topology.'
+  Note: '''
+    Multi-model network nodes supporting CalSim3, riparian models, SoCal systems, etc.
+    CHECK (integration_status IN ('active', 'deprecated', 'merged', 'conflicted'))
+  '''
 }
 
 Table network.arc {
   id                   int    [pk, increment]
-  short_code           text   [not null]              // 'I_SHSTA', 'C_SAC123', 'D_SHSTA_PU1'
+  short_code           text   [not null]              // 'I_SHSTA', 'RIP_FLOW_01', 'SOCAL_IMPORT_12'
   arc_type_id          int    [not null]              // FK → network_arc_type.id
-  name                 text                           // Human-readable name from XML
-  description          text                           // Description from XML or domain knowledge
-  diagram_id           int    [not null]              // Source-agnostic reference to diagram link ID
+  name                 text                           // Human-readable name from model source
+  description          text                           // Description from model source or domain knowledge
+  
+  // Multi-model identification
+  model_source_id      int    [not null]              // FK → model_source.id ('calsim3', 'riparian', etc.)
+  model_arc_id         text                           // Original arc ID from source model
+  diagram_id           int                            // Source diagram reference (for models with diagrams)
   
   // Network topology - THE definitive connections
   from_node_id         int                            // FK → network.node.id (nullable for boundary inflows)
@@ -2019,13 +2076,20 @@ Table network.arc {
   
   // Directional flow properties
   is_reversible        boolean [not null, default: false] // TRUE if flow can go both directions
+  flow_capacity        numeric                        // Maximum flow capacity (if applicable)
   
-  // Minimal network-only attributes
+  // Cross-model integration
+  parent_arc_id        int                            // FK → network.arc.id (for model hierarchies)
+  equivalent_arcs      int[]                          // Array of equivalent arc IDs from other models
+  integration_status   text   [default: 'active']     // 'active', 'deprecated', 'merged', 'conflicted'
+  
+  // Spatial and model-specific attributes
   geom                 geometry(LineString,4326)      // Spatial path if available
+  model_attributes     jsonb                          // Model-specific attributes as JSON
   
   // Versioning and source tracking
   network_version_id   int    [not null]              // FK → version.id (network topology version)
-  source_ids           int[]  [not null]              // Array of source IDs - should be [network_schematic_source_id]
+  source_ids           int[]  [not null]              // Array of source IDs from multiple models
   
   // Standard metadata
   created_at           timestamp [default: "now()"]
@@ -2035,17 +2099,25 @@ Table network.arc {
 
   Indexes {
     (network_version_id, short_code) [unique]          // Composite unique constraint - no duplicate names per version
-    (diagram_id) [unique]                              // Authoritative diagram reference
-    (arc_type_id)                                      // Find arcs by type
-    (from_node_id)                                     // B-tree index for one-hop traversals (outgoing arcs)
-    (to_node_id)                                       // B-tree index for one-hop traversals (incoming arcs)
+    (model_source_id, model_arc_id) [unique]           // Unique within each model
+    (diagram_id)                                       // Authoritative diagram reference
+    (arc_type_id, model_source_id)                     // Find arcs by type within model
+    (from_node_id, model_source_id)                    // Model-specific topology queries
+    (to_node_id, model_source_id)                      // Model-specific topology queries
+    (parent_arc_id)                                    // Hierarchical queries
+    (equivalent_arcs) [type: gin]                      // Cross-model equivalence queries
+    (integration_status)                               // Find integration issues
     (network_version_id)                               // Version-specific queries
     (source_ids) [type: gin]                           // GIN index for array operations on sources
     (geom) [type: gist]                                // GIST index for spatial queries
     (is_reversible)                                    // Find reversible arcs
+    (model_attributes) [type: gin]                     // JSON attribute search
   }
 
-  Note: 'Core network arcs from CalSim XML schematic. Represents connections in the network topology.'
+  Note: '''
+    Multi-model network arcs supporting CalSim3, riparian models, SoCal systems, etc.
+    CHECK (integration_status IN ('active', 'deprecated', 'merged', 'conflicted'))
+  '''
 }
 
 // Extension table for variable node attributes (key-value pattern)
@@ -2075,10 +2147,15 @@ Table network.node_attributes {
   Note: 'Extension table for variable node attributes discovered in XML or added through domain knowledge'
 }
 
-// Foreign key relationships for Ring 1
+// Foreign key relationships for Ring 1 (Multi-Model)
 Ref: network.arc.from_node_id > network.node.id [delete: restrict, update: cascade]
 Ref: network.arc.to_node_id   > network.node.id [delete: restrict, update: cascade]
 Ref: network.arc.arc_type_id  > network_arc_type.id [delete: restrict, update: cascade]
+Ref: network.node.node_type_id > network_node_type.id [delete: restrict, update: cascade]
+Ref: network.arc.parent_arc_id > network.arc.id [delete: set null, update: cascade]
+Ref: network.node.parent_node_id > network.node.id [delete: set null, update: cascade]
+Ref: network.node.model_source_id > model_source.id [delete: restrict, update: cascade]
+Ref: network.arc.model_source_id > model_source.id [delete: restrict, update: cascade]
 Ref: network.node.network_version_id > version.id [delete: restrict, update: cascade]
 Ref: network.arc.network_version_id  > version.id [delete: restrict, update: cascade]
 Ref: network.node_attributes.node_id > network.node.id [delete: cascade, update: cascade]
@@ -2488,23 +2565,25 @@ Ring 4 tables:
 //═══════════════════════════════════════════════
 
 /*
-RING-BASED CALSIM ARCHITECTURE DOCUMENTATION/SUMMARY/THINKING:
+MULTI-MODEL RING-BASED ARCHITECTURE DOCUMENTATION:
 
-RING 1: GRAPH CORE (Network Topology)
-   - network.node: Core network nodes (reservoirs, junctions, diversions)
-   - network.arc: Core network arcs (inflows, channels, bypasses)
+RING 1: GRAPH CORE (Multi-Model Network Topology)
+   - network.node: Core network nodes from multiple models (CalSim3, riparian, SoCal)
+   - network.arc: Core network arcs from multiple models  
    - network.node_attributes: Extension table for variable node attributes
-   - network_arc_type: Lookup table for arc types (consistency)
-   - Source: CS3_NetworkSchematic_Integrated_11.28.23.xml
-   - Purpose: Authoritative network topology and connectivity
+   - network_node_type: Node types supporting multiple models (reservoir, junction, etc.)
+   - network_arc_type: Arc types supporting multiple models (inflow, channel, etc.)
+   - model_source: Defines different water management models
+   - Sources: CS3_NetworkSchematic_Integrated_11.28.23.xml, riparian models, SoCal water systems
+   - Purpose: Unified network topology supporting multiple models with cross-model integration
 
 RING 2: ENTITY VIEWS (Domain-Specific Rich Data)
-   - reservoir_entity: Rich domain data for reservoirs (capacity, operational purpose, etc.)
-   - inflow_entity: Rich domain data for inflows (descriptions, regional classification)
-   - channel_entity: Rich domain data for channels (length, subtype, naming patterns)
+   - reservoir_entity: Rich domain data for reservoirs (references network.node)
+   - inflow_entity: Rich domain data for inflows (references network.arc)
+   - channel_entity: Rich domain data for channels (references network.arc)
    - reservoir_variable, inflow_variable, channel_variable: Rich variable classifications
    - Sources: CalSim reports, domain expertise, GIS data, operational documents
-   - Purpose: Preserve domain expertise while linking to network topology
+   - Purpose: Preserve domain expertise while linking to unified network topology
 
 RING 3: SUMMARY STATISTICS (Existing - No Changes)
    - scenario_variable_statistic: Variable values per scenario
@@ -2516,12 +2595,48 @@ RING 4: INTERPRETIVE FRAMEWORK (Existing - No Changes)
    - Purpose: Support dashboard views and research analysis
 
 KEY ARCHITECTURAL BENEFITS:
-- Single source of truth for network topology (Ring 1)
+- Single source of truth for network topology across all models (Ring 1)
+- Support for multiple water management models in unified structure
+- Cross-model analysis and comparison capabilities
 - Rich domain expertise preserved (Ring 2)
-- Network analysis capabilities enabled
+- Network analysis capabilities enabled across models
 - Independent versioning for topology vs domain data
 - Seamless integration with existing outcome system
-- Supports both entity-focused and network-focused queries
+- Future-proof for new models (groundwater, urban systems, etc.)
+
+MULTI-MODEL INTEGRATION EXAMPLES:
+
+1. CALSIM3 + RIPARIAN HABITAT MODEL:
+   - CalSim3 provides water flow network
+   - Riparian model adds habitat nodes connected to flow network
+   - Cross-model arcs link water availability to habitat quality
+   - equivalent_nodes field maps CalSim reservoirs to riparian habitat zones
+
+2. CALSIM3 + SOCAL WATER SYSTEMS:
+   - CalSim3 provides statewide network
+   - SoCal model provides detailed regional urban/treatment infrastructure
+   - Boundary connections at key import/export points
+   - parent_node_id enables hierarchical modeling (regional detail within statewide)
+
+3. CROSS-MODEL QUERIES:
+   ```sql
+   -- Find all nodes from CalSim3 that connect to riparian habitat
+   SELECT cs.short_code, rip.short_code, csnt.short_code as cs_node_type, ripnt.short_code as rip_node_type
+   FROM network.node cs
+   JOIN network_node_type csnt ON cs.node_type_id = csnt.id
+   JOIN network.arc a ON cs.id = a.from_node_id
+   JOIN network.node rip ON a.to_node_id = rip.id
+   JOIN network_node_type ripnt ON rip.node_type_id = ripnt.id
+   WHERE cs.model_source_id = (SELECT id FROM model_source WHERE short_code = 'calsim3')
+   AND rip.model_source_id = (SELECT id FROM model_source WHERE short_code = 'riparian');
+   
+   -- Find equivalent nodes across models
+   SELECT n1.short_code as calsim_node, n2.short_code as riparian_node
+   FROM network.node n1
+   JOIN network.node n2 ON n2.id = ANY(n1.equivalent_nodes)
+   WHERE n1.model_source_id = (SELECT id FROM model_source WHERE short_code = 'calsim3')
+   AND n2.model_source_id = (SELECT id FROM model_source WHERE short_code = 'riparian');
+   ```
 
 OUTCOME FLOW:
 
@@ -2776,3 +2891,34 @@ View outcome_measurement_summary {
   Note: 'Materialized view for outcome measurement analysis'
 }
 */
+
+//────────────────────────────────────────────
+// MULTI-MODEL SUPPORT
+//────────────────────────────────────────────
+
+Table model_source {
+  id           int  [pk, increment]
+  short_code   text [not null, unique]           // 'calsim3', 'riparian', 'socal_water', 'groundwater'
+  name         text [not null]                   // 'CalSim3', 'Riparian Habitat Model', 'SoCal Water System'
+  description  text
+  agency       text                              // 'DWR/USBR', 'Academic/NGO', 'MWD'
+  version      text                              // 'CS3.2', 'RHM_1.0', 'SOCAL_2024'
+  model_domain text                              // 'statewide', 'sacramento_valley', 'socal_region'
+  is_active    boolean [not null, default: true]
+  
+  created_at   timestamp [default: "now()"]
+  created_by   int      [not null]
+  updated_at   timestamp
+  updated_by   int
+
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+    (model_domain)
+  }
+
+  Note: 'Defines different water management models that contribute nodes and arcs'
+}
+
+Ref: model_source.created_by > user.id [delete: restrict, update: cascade]
+Ref: model_source.updated_by > user.id [delete: restrict, update: cascade]
