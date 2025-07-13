@@ -2896,9 +2896,9 @@ View scenario_dashboard_summary {
   projection_year         int
   baseline_scenario_code  text
   baseline_scenario_title text
-  theme_count             bigint
-  variable_count          bigint
-  measure_count           bigint
+  theme_count             int     // < 100 themes
+  variable_count          int     // tens of thousands per scenario
+  measure_count           int     // similar to variables
   avg_variable_value      numeric
   min_variable_value      numeric
   max_variable_value      numeric
@@ -2918,12 +2918,12 @@ View theme_analysis_summary {
   primary_source_code     text
   primary_source_name     text
   primary_source_citation text
-  scenario_count          bigint
-  active_scenario_count   bigint
-  outcome_category_count  bigint
+  scenario_count          int     // thousands of scenarios
+  active_scenario_count   int     // subset of scenarios
+  outcome_category_count  int     // < 100 outcome categories
   avg_focus_weight        numeric
-  assumption_count        bigint
-  operation_count         bigint
+  assumption_count        int     // < 100 assumptions
+  operation_count         int     // < 100 operations
   created_at              timestamp
   updated_at              timestamp
   
@@ -2934,8 +2934,8 @@ View variable_statistics_summary {
   variable_id             uuid
   statistic_code          text
   statistic_name          text
-  scenario_count          bigint
-  active_scenario_count   bigint
+  scenario_count          int     // thousands of scenarios
+  active_scenario_count   int     // subset of scenarios
   avg_value               numeric
   min_value               numeric
   max_value               numeric
@@ -2959,8 +2959,8 @@ View entity_inventory_summary {
   operational_purpose     text
   hydrologic_region_code  text
   hydrologic_region_name  text
-  variable_count          bigint
-  scenario_count          bigint
+  variable_count          int     // tens of thousands per entity
+  scenario_count          int     // thousands of scenarios
   source_list             text[]
   created_at              timestamp
   updated_at              timestamp
@@ -2978,9 +2978,9 @@ View outcome_measurement_summary {
   unit_name               text
   temporal_scale_code     text
   spatial_scale_code      text
-  theme_count             bigint
+  theme_count             int     // < 100 themes
   theme_codes             text[]
-  scenario_count          bigint
+  scenario_count          int     // thousands of scenarios
   avg_value               numeric
   min_value               numeric
   max_value               numeric
