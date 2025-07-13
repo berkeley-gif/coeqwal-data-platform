@@ -1,0 +1,6 @@
+id,short_code,name,description,model_source_id,is_active,created_at,updated_at,created_by,updated_by
+1,reservoir,reservoir,Reservoir or lake for water storage,1,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+2,demand_unit,demand unit,Water delivery district,1,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+3,groundwater,groundwater,Groundwater aquifer,1,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+4,salinity_node,salinity,Delta salinity node,1,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+5,junction,junction,Generic network junction or connection point,1,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1 

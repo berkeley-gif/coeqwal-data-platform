@@ -1,0 +1,5 @@
+id,short_code,name,description,is_active,created_at,updated_at,created_by,updated_by
+1,system_aggregate,aggregate,Variables that aggregate multiple system components,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+2,delta_variable,Delta,Variables specific to Delta conditions and operations,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+3,environmental_indicator,environmental indicator,Environmental metrics and indicators,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+4,regional_summary,regional summary,Regional roll-up and summary variables,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1 

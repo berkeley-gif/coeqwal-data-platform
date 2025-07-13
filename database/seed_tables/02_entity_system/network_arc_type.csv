@@ -1,0 +1,6 @@
+id,short_code,name,description,model_source_id,is_cross_model,flow_direction,is_active,created_at,updated_at,created_by,updated_by
+1,channel,channel,River channel or canal for water conveyance,1,false,unidirectional,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+2,inflow,inflow,Rim flow to reservoirs,1,false,unidirectional,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+3,delta_outflow,Delta outflow,Delta outflow,1,false,unidirectional,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+4,flow_delivery,flow delivery,Delta export divided between CVP and SWP,1,false,unidirectional,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1
+5,connection,connection,Generic network connection,1,false,unidirectional,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1 

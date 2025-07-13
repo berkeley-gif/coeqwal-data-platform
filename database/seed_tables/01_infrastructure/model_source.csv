@@ -1,0 +1,2 @@
+id,short_code,name,description,agency,version,model_domain,is_active,created_at,updated_at,created_by,updated_by
+1,calsim3,CalSim3,California Central Valley water system allocation simulation model,DWR/USBR,3.0,Central Valley,true,2024-01-01 00:00:00,2024-01-01 00:00:00,1,1 
