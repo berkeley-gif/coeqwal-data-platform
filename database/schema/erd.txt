@@ -2543,6 +2543,99 @@ Ref: channel_variable.variable_version_id   > version.id              [delete: r
 Ref: channel_variable.created_by            > user.id          [delete: restrict, update: cascade]
 Ref: channel_variable.updated_by            > user.id          [delete: restrict, update: cascade]
 
+Table derived_variable_type {
+  id          int  [pk, increment]
+  short_code  text [not null, unique]           // 'system_aggregate', 'regional_summary', 'delta_variable', 'environmental_indicator'
+  name        text [not null]                   // 'System Aggregate', 'Regional Summary', 'Delta Variable'
+  description text
+  is_active   boolean [not null, default: true]
+  
+  created_at  timestamp [default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp
+  updated_by  int
+
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+
+  Note: 'Types of derived variables for categorization and analysis'
+}
+
+Ref: derived_variable_type.created_by > user.id [delete: restrict, update: cascade]
+Ref: derived_variable_type.updated_by > user.id [delete: restrict, update: cascade]
+
+Table derived_variable {
+  id                   int    [pk, increment]
+  calsim_id            text   [not null, unique]      // 'NDO', 'X2', etc.
+  name                 text   [not null]              // 'net Delta outflow', 'salinity X2 position', etc.
+  description          text                           
+  
+  // Variable classification - NOT tied to specific network elements
+  variable_type_id     int    [not null]              // FK → derived_variable_type.id
+  system_scope         text                           // 'statewide', 'delta', 'cvp_system', 'swp_system', 'regional'
+  calculation_method   text                           // 'sum_of_components', 'spatial_interpolation', 'regulatory_formula'
+  
+  // Spatial/regional context (not specific nodes/arcs)
+  hydrologic_region_id int                            // FK → hydrologic_region.id (regional context)
+  spatial_description  text                           // 'Delta boundary', 'Sacramento-San Joaquin confluence', 'CVP service area'
+  
+  // Technical attributes  
+  unit_id              int                            // FK → unit.id (psu for salinity, cfs for flows, etc.)
+  temporal_scale_id    int                            // FK → temporal_scale.id (monthly, daily, etc.)
+  variable_id          uuid                           // Universal variable identifier
+  variable_version_id  int    [not null]              // FK → version.id
+  
+  // Component relationships (for aggregate variables)
+  is_aggregate         boolean [default: false]       // TRUE for variables that aggregate multiple components
+  component_variable_ids  uuid[]                      // Array of variable IDs that contribute to this derived variable
+  aggregation_rule     text                           // 'sum', 'weighted_average', 'minimum', 'maximum', 'complex_formula'
+  
+  // Regulatory/operational significance
+  is_regulatory        boolean [default: false]       // TRUE for regulatory indicators (like X2)
+  regulatory_authority text                           // 'SWRCB', 'USFWS', 'NMFS', 'DWR'
+  regulatory_threshold numeric                        // Regulatory threshold value (e.g., X2 < 81 km)
+  
+  // Linkage to outcomes
+  outcome_category_short_code text                    // FK reference to outcome_category
+  
+  // Source tracking
+  source_ids           int[]  [not null]              // Array of source IDs (CalSim variables, reports, etc.)
+  
+  // Standard metadata
+  created_at           timestamp [default: "now()"]
+  created_by           int    [not null]
+  updated_at           timestamp
+  updated_by           int
+
+  Indexes {
+    (calsim_id) [unique]                              // Primary CalSim3 lookup
+    (variable_type_id)                                // Find by type: system_aggregate, environmental_indicator, etc.
+    (system_scope)                                    // Find by scope: statewide, delta, regional
+    (hydrologic_region_id)                           // Regional queries
+    (is_regulatory)                                   // Find regulatory indicators
+    (is_aggregate)                                    // Find aggregate variables
+    (component_variable_ids) [type: gin]             // GIN index for array operations on component variables
+    (variable_id)                                     // Link to main variable system
+    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
+    (outcome_category_short_code)                     // Outcome linkage queries
+  }
+
+  Note: '''
+    System-wide, regional, and derived variables not tied to specific network nodes/arcs.
+  '''
+}
+
+// Foreign key relationships for Ring 2 - Derived Variable
+Ref: derived_variable.variable_type_id     > derived_variable_type.id [delete: restrict, update: cascade]
+Ref: derived_variable.hydrologic_region_id > hydrologic_region.id  [delete: restrict, update: cascade]
+Ref: derived_variable.unit_id              > unit.id               [delete: restrict, update: cascade]
+Ref: derived_variable.temporal_scale_id    > temporal_scale.id     [delete: restrict, update: cascade]
+Ref: derived_variable.variable_version_id  > version.id               [delete: restrict, update: cascade]
+Ref: derived_variable.created_by           > user.id               [delete: restrict, update: cascade]
+Ref: derived_variable.updated_by           > user.id               [delete: restrict, update: cascade]
+
 //═══════════════════════════════════════════════
 // RING 3: SUMMARY STATISTICS & OUTCOMES (documentation, these tables exist above from previous version TODO: rewrite schema to integrate.)
 // Ring 3 and Ring 4 tables reference variables from Ring 2, which now properly link to Ring 1 topology.
@@ -2581,7 +2674,8 @@ RING 2: ENTITY VIEWS (Domain-Specific Rich Data)
    - reservoir_entity: Rich domain data for reservoirs (references network.node)
    - inflow_entity: Rich domain data for inflows (references network.arc)
    - channel_entity: Rich domain data for channels (references network.arc)
-   - reservoir_variable, inflow_variable, channel_variable: Rich variable classifications
+   - reservoir_variable, inflow_variable, channel_variable: Rich variable classifications (tied to network)
+   - derived_variable: System-wide, regional, and derived variables (NOT tied to specific network elements)
    - Sources: CalSim reports, domain expertise, GIS data, operational documents
    - Purpose: Preserve domain expertise while linking to unified network topology
 
@@ -2663,6 +2757,11 @@ OUTCOME FLOW:
    │                               ├─ C_SAC123_UNIMPAIRED (unimpaired_flow) 
    │                               └─ C_SAC123_MIF (minimum_instream_flow)  
    └─ SJR456                       
+   
+   [SYSTEM-WIDE]        ────→      derived_variable        ────→    scenario_variable_statistic
+   │                               │                               │
+   ├─ Delta conditions             ├─ NDO (net_delta_outflow)     └─ System statistics per scenario
+   ├─ CVP/SWP systems              ├─ X2 (salinity_position)                      
    
 2. KEY LINKING FIELDS:
 
