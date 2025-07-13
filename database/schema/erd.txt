@@ -9,10 +9,10 @@ Table version_family {
   description text
   is_active   boolean [not null, default: true]
 
-  created_at  timestamp [default: "now()"]
-  created_by  int
-  updated_at  timestamp
-  updated_by  int
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
 
   Indexes { (is_active, short_code) }
 
@@ -47,9 +47,19 @@ Table version {
   Indexes {
     (version_family_id, version_number) [unique]
     (version_family_id) [unique, note: 'Postgres partial index WHERE is_active = TRUE']
+    (manifest) [type: gin, note: 'JSONB search for version metadata']
   }
 
-  Note: 'Version instances for each family. Only one version per family can be active at a time.'
+  Note: '''
+    Version instances for each family. Only one version per family can be active at a time.
+    CHECK (version_number ~ "^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$")
+    CHECK (NOT (is_active = TRUE AND EXISTS (
+      SELECT 1 FROM version v2 
+      WHERE v2.version_family_id = version.version_family_id 
+      AND v2.is_active = TRUE 
+      AND v2.id != version.id
+    )))
+  '''
 }
 
 Ref: version.version_family_id > version_family.id [delete: restrict, update: cascade]
@@ -91,17 +101,23 @@ Table user {
     (sync_source, is_active)
   }
 
-  Note: 'Hybrid user table: Bootstrap users (CSV) for initialization, AWS SSO integration for production. Bootstrap users can be deactivated after AWS SSO sync.'
+  Note: '''
+    Hybrid user table: Bootstrap users (CSV) for initialization, AWS SSO integration for production. Bootstrap users can be deactivated after AWS SSO sync.
+    CHECK (email ~ "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+    CHECK (role IN ("researcher", "analyst", "admin", "service", "viewer"))
+  '''
 }
-
-Ref: source.created_by > user.id [delete: restrict, update: cascade]
-Ref: source.updated_by > user.id [delete: restrict, update: cascade]
 
 Table source {
     id          int     [pk, increment]
     source      text    [not null, unique]   // 'calsim_report', 'james_gilbert', 'calsim_variables', 'geopackage', 'trend_report'
     description text                          // Description of the data source
     is_active   boolean [not null, default: true]
+
+    created_at  timestamp [not null, default: "now()"]
+    created_by  int      [not null]
+    updated_at  timestamp [not null, default: "now()"]
+    updated_by  int      [not null]
 
     Indexes {
         (source) [unique]
@@ -110,6 +126,9 @@ Table source {
 
     Note: 'Unified source lookup table for all entity types'
 }
+
+Ref: source.created_by > user.id [delete: restrict, update: cascade]
+Ref: source.updated_by > user.id [delete: restrict, update: cascade]
 
 Table calsim_entity_type {
   id                  int   [pk, increment]
@@ -129,37 +148,56 @@ Table calsim_schematic_type {
 }
 
 //────────────────────────────────────────────
-// UNIFIED ENTITY SYSTEM (DISABLED - Using Entity-Specific Tables)
+// ENTITY SYSTEM
 //────────────────────────────────────────────
 
 /*
-NOTE: The unified entity system has been disabled in favor of entity-specific tables:
+Entity-specific tables:
 - reservoir_entity, channel_entity, inflow_entity
 - reservoir_variable, channel_variable, inflow_variable
-
-This provides better domain-specific structure for water management use cases.
-If you need the unified system in the future, uncomment the tables below.
-
-Table calsim_entity { ... }
-Table calsim_entity_variable_link { ... }
-Table channel { ... }
-Table demand_unit { ... }
 */
 
 Table hydrologic_region {
   id         int  [pk, increment]
   short_code text [not null, unique]   // 'SAC' | 'SJR' | 'Tul' | 'SoCal'
   label      text                      // full name ("Sacramento River", …)
+  is_active  boolean [not null, default: true]
 
-  Indexes { (short_code) }
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
+
+  Indexes { 
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
+
+Ref: hydrologic_region.created_by > user.id [delete: restrict, update: cascade]
+Ref: hydrologic_region.updated_by > user.id [delete: restrict, update: cascade]
 
 Table unit {
    id              int     [pk, increment]
    short_code      text    [not null, unique] // "cfs", "taf"
    full_name       text
    canonical_group text    // "flow", "volume", "length"
+   is_active       boolean [not null, default: true]
+
+   created_at  timestamp [not null, default: "now()"]
+   created_by  int      [not null]
+   updated_at  timestamp [not null, default: "now()"]
+   updated_by  int      [not null]
+
+   Indexes {
+     (short_code) [unique]
+     (is_active, short_code)
+     (canonical_group)
+   }
  }
+
+Ref: unit.created_by > user.id [delete: restrict, update: cascade]
+Ref: unit.updated_by > user.id [delete: restrict, update: cascade]
 
  Table flow_regime {
    id          int   [pk, increment]
@@ -173,6 +211,11 @@ Table unit {
    start_month int   // 1-12  (optional)
    end_month   int
    notes       text
+
+   Note: '''
+     CHECK (start_month BETWEEN 1 AND 12)
+     CHECK (end_month BETWEEN 1 AND 12)
+   '''
  }
 
  Table region {
@@ -182,8 +225,6 @@ Table unit {
    alias_names text[]
    geom        geometry(Geometry,4326)
  }
-
- // reservoir_group table removed - was redundant and underutilized
 
 Table hydroclimate_variable_type {
   id          int  [pk, increment]
@@ -306,7 +347,7 @@ VALUES
   ('p95',    '95th percentile',       TRUE,  :system_user, :system_user),
   ('other',  'Other / custom value',  FALSE, :system_user, :system_user);
 
--- Variable types for categorizing variables by purpose
+-- Variable types for categorizing variables by purpose...not sure if doing this...if this is helpful. Could implement later if there is a need.
 INSERT INTO variable_type (short_code, label, description, created_by, updated_by)
 VALUES
   ('output', 'Model Output', 'Standard CalSim model output variables (flows, storage, etc.)', :system_user, :system_user),
@@ -345,7 +386,12 @@ Table theme {
   Indexes {
     (short_code, is_active) [unique, note: 'UNIQUE WHERE is_active = TRUE']
     (is_active)
+    (short_code) [note: 'Partial index WHERE is_active = TRUE']
   }
+
+  Note: '''
+    CHECK (short_code ~ "^[a-z0-9_]+$" AND length(short_code) BETWEEN 2 AND 50)
+  '''
 }
 
 Ref: theme.theme_version_id > version.id [delete: restrict, update: cascade]
@@ -376,11 +422,15 @@ Table scenario {
     (is_active)
     (baseline_scenario_id)
     (hydroclimate_id)
+    (is_active, scenario_version_id) [note: 'Partial index WHERE is_active = TRUE']
+    (narrative) [type: gin, note: 'JSONB search']
+    (title, description) [type: gin, note: 'Full-text search using to_tsvector']
   }
 }
 
 Ref: scenario.baseline_scenario_id > scenario.id [delete: set null, update: cascade]
 Ref: scenario.hydroclimate_id > hydroclimate.id [delete: restrict, update: cascade]
+Ref: scenario.scenario_author_id > scenario_author.id [delete: restrict, update: cascade]
 Ref: scenario.scenario_version_id > version.id [delete: restrict, update: cascade]
 Ref: scenario.created_by > user.id    [delete: restrict, update: cascade]
 Ref: scenario.updated_by > user.id    [delete: restrict, update: cascade]
@@ -426,6 +476,31 @@ Table theme_source_link {
 Ref: theme_source_link.theme_id > theme.id [delete: restrict, update: cascade]
 Ref: theme_source_link.theme_source_id > theme_source.id [delete: restrict, update: cascade]
 
+Table scenario_author {
+  id            int   [pk, increment]
+  short_code    text  [not null, unique]
+  name          text  [not null]              // e.g. "James Gilbert"
+  email         text
+  organization  text                          // e.g. "NOAA Southwest Fisheries Science Center"
+  affiliation   text                          // e.g. "COEQWAL"
+  is_active     boolean [not null, default: true]
+
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
+
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+
+  Note: 'Authors of CalSim scenarios and studies'
+}
+
+Ref: scenario_author.created_by > user.id [delete: restrict, update: cascade]
+Ref: scenario_author.updated_by > user.id [delete: restrict, update: cascade]
+
 Table scenario_source {
   id            int   [pk, increment]
   short_code    text  [not null, unique]
@@ -434,7 +509,19 @@ Table scenario_source {
   url           text
   doc_date          date
   notes         text
+
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
+
+  Indexes {
+    (short_code) [unique]
+  }
 }
+
+Ref: scenario_source.created_by > user.id [delete: restrict, update: cascade]
+Ref: scenario_source.updated_by > user.id [delete: restrict, update: cascade]
 
 // Scenario ↔ Scenario Source
 Table scenario_source_link {
@@ -847,10 +934,10 @@ Table outcome_category {
   outcome_version_id int  [not null]
   is_active   boolean [default: true]
 
-  created_at  timestamp [default: "now()"]
-  created_by  int
-  updated_at  timestamp
-  updated_by  int
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
 
   Indexes { (is_active, short_code) }
 }
@@ -872,14 +959,15 @@ Table outcome_measure {
   metrics_version_id int [not null]
   is_active         boolean [default: true]
 
-  created_at  timestamp [default: "now()"]
-  created_by  int
-  updated_at  timestamp
-  updated_by  int
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
                                
   Indexes {
     (outcome_category_id, short_code) [unique, note: 'UNIQUE WHERE is_active = TRUE']
     (is_active)
+    (outcome_category_id, short_code) [note: 'Partial index WHERE is_active = TRUE']
   }
 }
 
@@ -912,14 +1000,42 @@ Table temporal_scale {
   short_code  text [not null, unique]   // 'monthly', 'annual', 'por', 'daily', 'seasonal'
   label       text [not null]           // 'Monthly', 'Annual', 'Period of Record'
   description text
+  is_active   boolean [not null, default: true]
+
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
+
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
+
+Ref: temporal_scale.created_by > user.id [delete: restrict, update: cascade]
+Ref: temporal_scale.updated_by > user.id [delete: restrict, update: cascade]
 
 Table spatial_scale {
   id          int  [pk, increment]
   short_code  text [not null, unique]   // 'demand_unit', 'reservoir', …
   label       text
   description text
+  is_active   boolean [not null, default: true]
+
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp [not null, default: "now()"]
+  updated_by  int      [not null]
+
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
+
+Ref: spatial_scale.created_by > user.id [delete: restrict, update: cascade]
+Ref: spatial_scale.updated_by > user.id [delete: restrict, update: cascade]
 
 //────────────────────────────────────────────
 // MAPPING CalSim VARIABLES → OUTCOMES
@@ -957,8 +1073,14 @@ Table scenario_variable_statistic {
     (scenario_id, variable_id, statistic_type_id) [pk]
     (variable_id, statistic_type_id)
     (scenario_id, variable_id)
-    (variable_id, scenario_id)
+    (variable_id, scenario_id) [note: 'Cross-scenario variable analysis']
   }
+
+  Note: '''
+    CHECK (value >= 0)
+    PARTITION BY RANGE (scenario_id)
+    -- Partitioned for improved query performance on large datasets
+  '''
 }
 
 Ref: scenario_variable_statistic.source_version_id > version.id            [delete: restrict, update: cascade]
@@ -981,8 +1103,13 @@ Table scenario_measure_statistic {
 
   Indexes {
     (scenario_id, measure_id, statistic_type_id) [pk]
-    (measure_id, statistic_type_id)  // cross-scenario look-ups
+    (measure_id, statistic_type_id) [note: 'Cross-scenario look-ups']
+    (measure_id, scenario_id) [note: 'Cross-scenario measure analysis']
   }
+
+  Note: '''
+    CHECK (value >= 0)
+  '''
 }
 
 Ref: scenario_measure_statistic.measure_id > outcome_measure.id [delete: restrict, update: cascade]
@@ -1034,12 +1161,64 @@ Table scenario_category_statistic {
   }
 }
 
-Table theme_key_outcome_link {
-  theme_id              int [not null, ref: > theme.id]
-  outcome_definition_id int [not null, ref: > outcome_category.id]
+//═══════════════════════════════════════════════
+// THEME-OUTCOME INTEGRATION
+//═══════════════════════════════════════════════
 
-  Indexes { (theme_id, outcome_definition_id) [pk] }
+Table theme_outcome_priority {
+  theme_id            int     [not null]              // FK → theme.id
+  outcome_category_id int     [not null]              // FK → outcome_category.id  
+  priority_rank       int     [not null]              // 1 = highest priority for this theme
+  focus_weight        numeric [default: 1.0]          // Relative importance weight (0.0-1.0)
+  research_rationale  text                            // Why this outcome is key for this theme
+  measurement_focus   text                            // Specific measurement emphasis for theme
+  
+  created_at          timestamp [not null, default: "now()"]
+  created_by          int      [not null]
+  updated_at          timestamp
+  updated_by          int
+
+  Indexes {
+    (theme_id, priority_rank) [unique]                // Each rank unique within theme
+    (theme_id, outcome_category_id) [unique]          // Each outcome unique within theme
+    (outcome_category_id, theme_id)                   // Reverse lookup
+    (priority_rank)                                   // Cross-theme priority analysis
+  }
+
+  Note: '''
+    Links themes to prioritized outcome categories with research focus details
+    CHECK (focus_weight >= 0.0 AND focus_weight <= 1.0)
+  '''
 }
+
+Ref: theme_outcome_priority.theme_id            > theme.id            [delete: cascade, update: cascade]
+Ref: theme_outcome_priority.outcome_category_id > outcome_category.id [delete: restrict, update: cascade]
+Ref: theme_outcome_priority.created_by          > user.id      [delete: restrict, update: cascade]
+Ref: theme_outcome_priority.updated_by          > user.id      [delete: restrict, update: cascade]
+
+Table theme_outcome_measure_focus {
+  theme_id         int     [not null]              // FK → theme.id
+  outcome_measure_id int   [not null]              // FK → outcome_measure.id
+  focus_level      text    [not null]              // 'primary', 'secondary', 'contextual'
+  analytical_emphasis text                         // Specific analytical focus for this theme
+  tier_relevance   boolean [default: false]       // TRUE if tier classification is key for theme
+  
+  created_at       timestamp [not null, default: "now()"]
+  created_by       int      [not null]
+
+  Indexes {
+    (theme_id, outcome_measure_id) [pk]
+    (outcome_measure_id, theme_id)
+    (focus_level)
+    (tier_relevance)
+  }
+
+  Note: 'Links themes to specific outcome measures with analytical focus details'
+}
+
+Ref: theme_outcome_measure_focus.theme_id           > theme.id         [delete: cascade, update: cascade]
+Ref: theme_outcome_measure_focus.outcome_measure_id > outcome_measure.id [delete: restrict, update: cascade]
+Ref: theme_outcome_measure_focus.created_by         > user.id    [delete: restrict, update: cascade]
 
 //────────────────────────────────────────────
 // HYDROCLIMATE
@@ -1289,7 +1468,12 @@ Table scenario_metadata {
   updated_at  timestamp [not null, default: "now()"]
   updated_by  int      [not null]
 
-  Indexes { (scenario_id) (study_name) (alias) }
+  Indexes { 
+    (scenario_id) [unique]
+    (study_name) 
+    (alias)
+    (theme_id, scenario_id) 
+  }
 }
 Ref: scenario_metadata.theme_id    > theme.id      [delete: restrict, update: cascade]
 Ref: scenario_metadata.scenario_id > scenario.id   [delete: cascade,  update: restrict]
@@ -1754,69 +1938,362 @@ Ref: analysis_result_delta.delta_id > scenario_outcome_delta.id [delete: cascade
 
 
 //────────────────────────────────────────────
-// ENTITY-SPECIFIC TABLES & THEIR VARIABLES
+// RING-BASED CALSIM ARCHITECTURE!
 //────────────────────────────────────────────
 
 //═══════════════════════════════════════════════
-// 1. RESERVOIR ENTITIES AND VARIABLES
+// RING 1: GRAPH CORE (Network Topology)
+// Single Source: CS3_NetworkSchematic_Integrated_11.28.23.xml
+//═══════════════════════════════════════════════
+
+// Arc type lookup table for consistency
+Table network_arc_type {
+  id          int  [pk, increment]
+  short_code  text [not null, unique]           // 'inflow', 'channel', 'diversion', 'bypass', 'return_flow'
+  name        text [not null]                   // 'Inflow Arc', 'Channel Arc', 'Diversion Arc'
+  description text
+  is_active   boolean [not null, default: true]
+  
+  created_at  timestamp [default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp
+  updated_by  int
+
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+
+  Note: 'Lookup table for network arc types to maintain consistency and prevent typos'
+}
+
+Ref: network_arc_type.created_by > user.id [delete: restrict, update: cascade]
+Ref: network_arc_type.updated_by > user.id [delete: restrict, update: cascade]
+
+// SCHEMA: network
+// Core network topology tables organized under network schema
+Table network.node {
+  id                   int    [pk, increment]
+  short_code           text   [not null]              // 'SHSTA', 'FOLSM', 'SAC001', 'JUNCTION_42'
+  node_type            text   [not null]              // 'reservoir', 'junction', 'diversion', 'demand_unit', 'outflow'
+  name                 text                           // Human-readable name from XML
+  description          text                           // Description from XML or domain knowledge
+  diagram_id           int    [not null]              // Source-agnostic reference to diagram node ID
+  
+  // Minimal network-only attributes
+  geom                 geometry(Point,4326)           // Spatial location if available
+  
+  // Versioning and source tracking
+  network_version_id   int    [not null]              // FK → version.id (network topology version)
+  source_ids           int[]  [not null]              // Array of source IDs - should be [network_schematic_source_id]
+  
+  // Standard metadata
+  created_at           timestamp [default: "now()"]
+  created_by           int    [not null]
+  updated_at           timestamp
+  updated_by           int
+
+  Indexes {
+    (network_version_id, short_code) [unique]          // Composite unique constraint - no duplicate names per version
+    (diagram_id) [unique]                              // Authoritative diagram reference
+    (node_type)                                        // Find nodes by type
+    (network_version_id)                               // Version-specific queries
+    (source_ids) [type: gin]                           // GIN index for array operations on sources
+    (geom) [type: gist]                                // GIST index for spatial queries
+  }
+
+  Note: 'Core network nodes from CalSim XML schematic. Represents points in the network topology.'
+}
+
+Table network.arc {
+  id                   int    [pk, increment]
+  short_code           text   [not null]              // 'I_SHSTA', 'C_SAC123', 'D_SHSTA_PU1'
+  arc_type_id          int    [not null]              // FK → network_arc_type.id
+  name                 text                           // Human-readable name from XML
+  description          text                           // Description from XML or domain knowledge
+  diagram_id           int    [not null]              // Source-agnostic reference to diagram link ID
+  
+  // Network topology - THE definitive connections
+  from_node_id         int                            // FK → network.node.id (nullable for boundary inflows)
+  to_node_id           int    [not null]              // FK → network.node.id (all arcs must terminate)
+  
+  // Directional flow properties
+  is_reversible        boolean [not null, default: false] // TRUE if flow can go both directions
+  
+  // Minimal network-only attributes
+  geom                 geometry(LineString,4326)      // Spatial path if available
+  
+  // Versioning and source tracking
+  network_version_id   int    [not null]              // FK → version.id (network topology version)
+  source_ids           int[]  [not null]              // Array of source IDs - should be [network_schematic_source_id]
+  
+  // Standard metadata
+  created_at           timestamp [default: "now()"]
+  created_by           int    [not null]
+  updated_at           timestamp
+  updated_by           int
+
+  Indexes {
+    (network_version_id, short_code) [unique]          // Composite unique constraint - no duplicate names per version
+    (diagram_id) [unique]                              // Authoritative diagram reference
+    (arc_type_id)                                      // Find arcs by type
+    (from_node_id)                                     // B-tree index for one-hop traversals (outgoing arcs)
+    (to_node_id)                                       // B-tree index for one-hop traversals (incoming arcs)
+    (network_version_id)                               // Version-specific queries
+    (source_ids) [type: gin]                           // GIN index for array operations on sources
+    (geom) [type: gist]                                // GIST index for spatial queries
+    (is_reversible)                                    // Find reversible arcs
+  }
+
+  Note: 'Core network arcs from CalSim XML schematic. Represents connections in the network topology.'
+}
+
+// Extension table for variable node attributes (key-value pattern)
+Table network.node_attributes {
+  id          int  [pk, increment]
+  node_id     int  [not null]                         // FK → network.node.id
+  attr_key    text [not null]                         // 'outlet_type', 'flow_split_ratio', 'demand_priority'
+  attr_value  text [not null]                         // Attribute value as text
+  data_type   text [not null, default: 'text']        // 'text', 'numeric', 'boolean', 'json'
+  
+  // Versioning
+  network_version_id int [not null]                   // FK → version.id (must match node's version)
+  
+  // Standard metadata
+  created_at  timestamp [default: "now()"]
+  created_by  int      [not null]
+  updated_at  timestamp
+  updated_by  int
+
+  Indexes {
+    (node_id, attr_key) [unique]                       // One value per key per node
+    (attr_key)                                         // Find all nodes with specific attribute
+    (network_version_id)                               // Version-specific queries
+    (node_id)                                          // All attributes for a node
+  }
+
+  Note: 'Extension table for variable node attributes discovered in XML or added through domain knowledge'
+}
+
+// Foreign key relationships for Ring 1
+Ref: network.arc.from_node_id > network.node.id [delete: restrict, update: cascade]
+Ref: network.arc.to_node_id   > network.node.id [delete: restrict, update: cascade]
+Ref: network.arc.arc_type_id  > network_arc_type.id [delete: restrict, update: cascade]
+Ref: network.node.network_version_id > version.id [delete: restrict, update: cascade]
+Ref: network.arc.network_version_id  > version.id [delete: restrict, update: cascade]
+Ref: network.node_attributes.node_id > network.node.id [delete: cascade, update: cascade]
+Ref: network.node_attributes.network_version_id > version.id [delete: restrict, update: cascade]
+Ref: network.node.created_by > user.id [delete: restrict, update: cascade]
+Ref: network.node.updated_by > user.id [delete: restrict, update: cascade]
+Ref: network.arc.created_by  > user.id [delete: restrict, update: cascade]
+Ref: network.arc.updated_by  > user.id [delete: restrict, update: cascade]
+Ref: network.node_attributes.created_by > user.id [delete: restrict, update: cascade]
+Ref: network.node_attributes.updated_by > user.id [delete: restrict, update: cascade]
+
+//═══════════════════════════════════════════════
+// RING 2: ENTITY VIEWS (Domain-Specific Rich Data)
+// Multiple Sources: CalSim reports, domain expertise, GIS data
 //═══════════════════════════════════════════════
 
 Table reservoir_entity {
   id                   int    [pk, increment]
-  short_code           text   [not null, unique]      // 'SHSTA', 'OROVL', 'FOLSM'
+  network_node_id      int    [not null, unique]      // FK → network.node.id (Ring 1 reference)
+  
+  // Domain-derived identifiers (for convenience and legacy compatibility)
+  short_code           text   [not null, unique]      // 'SHSTA', 'OROVL', 'FOLSM' (derived from network.node)
   name                 text   [not null]              // 'Shasta Reservoir', 'Lake Oroville'
-  description          text                            
-  associated_river     text                          // 'Sacramento River', 'Feather River'
+  description          text                           // Detailed description from domain sources
+  associated_river     text                           // 'Sacramento River', 'Feather River'
+  
+  // Legacy CalSim classifications (may be deprecated in favor of Ring 1)
   entity_type_id       int    [not null]              // FK → calsim_entity_type.id (currently "reservoir")
   schematic_type_id    int    [not null]              // FK → calsim_schematic_type.id (currently "node")
-  hydrologic_region_id int                             // FK → hydrologic_region.id (SAC, SJR)
+
   
-  // Physical characteristics
-  capacity_taf         numeric                         // Total capacity in TAF
-  dead_pool_taf        numeric                         // Dead pool storage in TAF
-  surface_area_acres   numeric                         // Surface area in acres
-  operational_purpose  text                            // 'water_supply', 'flood_control', 'power_generation', 'water_quality', 'regulating', 'afterbay'
+  // Regional classification
+  hydrologic_region_id int                            // FK → hydrologic_region.id (SAC, SJR)
+  
+  // Rich physical characteristics (domain expertise)
+  capacity_taf         numeric                        // Total capacity in TAF
+  dead_pool_taf        numeric                        // Dead pool storage in TAF
+  surface_area_acres   numeric                        // Surface area in acres
+  operational_purpose  text                           // 'water_supply', 'flood_control', 'power_generation', 'water_quality', 'regulating', 'afterbay'
+  
+  // Domain-specific flags and attributes
   has_gis_data         boolean [default: false]       // Whether entity has spatial/geographic data
-  
-  // Classification flags
   has_tiers            boolean [not null, default: false]  // TRUE for reservoirs with tier classifications
-  is_main    boolean [not null, default: false]  // TRUE for main/primary reservoirs in system
+  is_main              boolean [not null, default: false]  // TRUE for main/primary reservoirs in system
   
-  // Versioning
-  entity_version_id    int    [not null]              // FK → version.id (entity definition version)
-  
-  // Source tracking
-  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
+  // Versioning and source tracking (domain data, not network)
+  entity_version_id    int    [not null]              // FK → version.id (domain entity data version)
+  source_ids           int[]  [not null]              // Array of domain source IDs (reports, GIS, etc.)
   
   // Standard metadata
   created_at           timestamp [default: "now()"]
-  created_by  int      [not null]
+  created_by           int    [not null]
   updated_at           timestamp
-  updated_by  int
+  updated_by           int
 
   Indexes {
-    (short_code) [unique]                              
-    (entity_version_id, short_code) [unique]          // Ensure unique short_code within each version
-    (hydrologic_region_id)
+    (network_node_id) [unique]                         // One-to-one with network node
+    (short_code) [unique]                              // Domain lookup
+    (entity_version_id, short_code) [unique]           // Ensure unique short_code within each version
+    (hydrologic_region_id)                             // Regional queries
+    (hydrologic_region_id, entity_type_id) [note: 'Composite index for common queries']
     (has_gis_data)                                     // Find reservoirs with/without GIS data
     (has_tiers)                                        // Find tier reservoirs
-    (is_main_reservoir)                                // Find main reservoirs
+    (is_main)                                          // Find main reservoirs
     (associated_river)                                 // Find reservoirs by river
     (operational_purpose)                              // Find reservoirs by operational purpose
     (entity_version_id)                                // Find entities by version
     (source_ids) [type: gin]                           // GIN index for array operations on source IDs
   }
 
-  Note: 'Reservoir entities with their physical characteristics and operational attributes'
+  Note: '''
+    Rich domain-specific data for reservoir entities. References Ring 1 network topology.
+    CHECK (capacity_taf >= 0)
+    CHECK (dead_pool_taf >= 0 AND dead_pool_taf <= capacity_taf)
+  '''
 }
 
+// Foreign key relationships for Ring 2 - Reservoir Entity
+Ref: reservoir_entity.network_node_id      > network.node.id [delete: restrict, update: cascade]
 Ref: reservoir_entity.entity_type_id       > calsim_entity_type.id [delete: restrict, update: cascade]
 Ref: reservoir_entity.schematic_type_id    > calsim_schematic_type.id [delete: restrict, update: cascade]
 Ref: reservoir_entity.hydrologic_region_id > hydrologic_region.id  [delete: restrict, update: cascade]
 Ref: reservoir_entity.entity_version_id    > version.id        [delete: restrict, update: cascade]
-
 Ref: reservoir_entity.created_by           > user.id          [delete: restrict, update: cascade]
 Ref: reservoir_entity.updated_by           > user.id          [delete: restrict, update: cascade]
+
+Table inflow_entity {
+  id                   int    [pk, increment]
+  network_arc_id       int    [not null, unique]      // FK → network.arc.id (Ring 1 reference)
+  
+  // Domain-derived identifiers (for convenience and legacy compatibility)
+  short_code           text   [not null, unique]      // 'I_SHSTA', 'I_OROVL', 'I_FOLSM' (derived from network.arc)
+  name                 text   [not null]              // 'Shasta Lake Inflow', 'Lake Oroville Inflow'
+  description          text                           // Detailed description from CalSim manual
+  
+  // Domain-specific inflow attributes
+  to_node              text   [not null]              // Downstream node ID where inflow enters (legacy field)
+  has_gis_data         boolean [default: false]       // Whether entity has spatial/geographic data
+  
+  // Legacy CalSim classifications (may be deprecated in favor of Ring 1)
+  entity_type_id       int    [not null]              // FK → calsim_entity_type.id (currently "inflow")
+  schematic_type_id    int    [not null]              // FK → calsim_schematic_type.id (currently "arc")
+  
+  // Regional classification
+  hydrologic_region_id int                            // FK → hydrologic_region.id (SAC, SJR)
+  
+  // Versioning and source tracking (domain data, not network)
+  entity_version_id    int    [not null]              // FK → version.id (domain entity data version)
+  source_ids           int[]  [not null]              // Array of domain source IDs (reports, CalSim data, etc.)
+  
+  // Standard metadata
+  created_at           timestamp [default: "now()"]
+  created_by           int    [not null]
+  updated_at           timestamp
+  updated_by           int
+
+  Indexes {
+    (network_arc_id) [unique]                          // One-to-one with network arc
+    (short_code) [unique]                              // Primary domain lookup
+    (entity_version_id, short_code) [unique]           // Ensure unique short_code within each version
+    (to_node)                                          // Find inflows by destination node
+    (entity_type_id)                                   // Find inflows by entity type
+    (schematic_type_id)                                // Find inflows by schematic type
+    (hydrologic_region_id)                             // Find inflows by region
+    (has_gis_data)                                     // Find inflows with/without GIS data
+    (entity_version_id)                                // Find entities by version
+    (source_ids) [type: gin]                           // GIN index for array operations on source IDs
+  }
+
+  Note: 'Rich domain-specific data for inflow entities. References Ring 1 network topology.'
+}
+
+// Foreign key relationships for Ring 2 - Inflow Entity
+Ref: inflow_entity.network_arc_id       > network.arc.id [delete: restrict, update: cascade]
+Ref: inflow_entity.entity_type_id       > calsim_entity_type.id [delete: restrict, update: cascade]
+Ref: inflow_entity.schematic_type_id    > calsim_schematic_type.id [delete: restrict, update: cascade]
+Ref: inflow_entity.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
+Ref: inflow_entity.entity_version_id    > version.id        [delete: restrict, update: cascade]
+Ref: inflow_entity.created_by           > user.id          [delete: restrict, update: cascade]
+Ref: inflow_entity.updated_by           > user.id          [delete: restrict, update: cascade]
+
+Table channel_entity {
+  id                   int    [pk, increment]
+  network_arc_id       int    [not null, unique]      // FK → network.arc.id (Ring 1 reference)
+  
+  // Domain-derived identifiers (for convenience and legacy compatibility)
+  short_code           text   [not null, unique]      // 'C_SAC123', 'C_SJR456', 'C_AMR015' (derived from network.arc)
+  name                 text   [not null]              // 'Sacramento River Section 123', 'American River'
+  description          text                           // Detailed description from domain sources
+  
+  // Domain-specific channel attributes
+  subtype              text                           // 'Stream', 'Canal', 'Bypass', 'Aqueduct'
+  boundary_condition   text                           // From Central Valley Modeling doc
+  from_node            text                           // Upstream node ID (legacy field)
+  to_node              text                           // Downstream node ID (legacy field)
+  
+  // Physical characteristics
+  length_m             numeric                        // Length in meters from GIS
+  
+  // Domain-specific flags and attributes
+  has_tiers            boolean [not null, default: false]  // TRUE for channels with tier classifications
+  is_main              boolean [not null, default: false]  // TRUE for main/primary channels in system
+  has_gis_data         boolean [default: false]       // Whether variable has GIS data
+  naming_convention    text                           // Naming convention pattern
+  naming_prefix        text                           // Prefix extracted from calsim_id (e.g. "SAC", "AMR")
+  
+  // Legacy CalSim classifications (may be deprecated in favor of Ring 1)
+  entity_type_id       int    [not null]              // FK → calsim_entity_type.id (currently "channel")
+  schematic_type_id    int    [not null]              // FK → calsim_schematic_type.id (currently "arc")
+  
+  // Regional classification
+  hydrologic_region_id int                            // FK → hydrologic_region.id
+  
+  // Versioning and source tracking (domain data, not network)
+  entity_version_id    int    [not null]              // FK → version.id (domain entity data version)
+  source_ids           int[]  [not null]              // Array of domain source IDs (reports, GIS, etc.)
+  
+  // Standard metadata
+  created_at           timestamp [default: "now()"]
+  created_by           int    [not null]
+  updated_at           timestamp
+  updated_by           int
+
+  Indexes {
+    (network_arc_id) [unique]                          // One-to-one with network arc
+    (short_code) [unique]                              // Primary domain lookup
+    (entity_version_id, short_code) [unique]           // Ensure unique short_code within each version
+    (entity_type_id)                                   // Find channels by entity type
+    (schematic_type_id)                                // Find channels by schematic type
+    (hydrologic_region_id)                             // Regional queries
+    (naming_prefix)                                    // Find channels by naming pattern
+    (has_gis_data)                                     // Find channels with/without GIS data
+    (subtype)                                          // Find channels by subtype
+    (from_node)                                        // Legacy topology queries
+    (to_node)                                          // Legacy topology queries
+    (entity_version_id)                                // Find entities by version
+    (source_ids) [type: gin]                           // GIN index for array operations on source IDs
+  }
+
+  Note: 'Rich domain-specific data for channel entities. References Ring 1 network topology.'
+}
+
+// Foreign key relationships for Ring 2 - Channel Entity
+Ref: channel_entity.network_arc_id       > network.arc.id [delete: restrict, update: cascade]
+Ref: channel_entity.entity_type_id       > calsim_entity_type.id [delete: restrict, update: cascade]
+Ref: channel_entity.schematic_type_id    > calsim_schematic_type.id [delete: restrict, update: cascade]
+Ref: channel_entity.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
+Ref: channel_entity.entity_version_id    > version.id        [delete: restrict, update: cascade]
+Ref: channel_entity.created_by           > user.id          [delete: restrict, update: cascade]
+Ref: channel_entity.updated_by           > user.id          [delete: restrict, update: cascade]
+
+//═══════════════════════════════════════════════
+// RING 2: VARIABLE TABLES (Domain-Specific Variable Data)
+// Multiple Sources: CalSim variables, reports, operational documents
+//═══════════════════════════════════════════════
 
 Table reservoir_variable {
   id                   int    [pk, increment]
@@ -1877,99 +2354,51 @@ Ref: reservoir_variable.updated_by          > user.id          [delete: restrict
 Ref: reservoir_variable.temporal_scale_id      > temporal_scale.id    [delete: restrict, update: cascade]
 
 
-//═══════════════════════════════════════════════
-// 2. INFLOW ENTITIES AND VARIABLES  
-//═══════════════════════════════════════════════
-
-Table inflow_entity {
-  id                   int    [pk, increment]
-  short_code           text   [not null, unique]      // 'I_SHSTA', 'I_OROVL', 'I_FOLSM'
-  name                 text   [not null]              // 'Shasta Lake Inflow', 'Lake Oroville Inflow'
-  description          text                           // Detailed description from CalSim manual
-  to_node              text   [not null]              // Downstream node ID where inflow enters
-  has_gis_data         boolean [default: false]      // Whether entity has spatial/geographic data
-  entity_type_id       int    [not null]              // FK → calsim_entity_type.id (currently "inflow")
-  schematic_type_id    int    [not null]              // FK → calsim_schematic_type.id (currently "arc")
-  hydrologic_region_id int                            // FK → hydrologic_region.id (SAC, SJR)
-  
-  // Versioning
-  entity_version_id    int    [not null]              // FK → version.id (entity definition version)
-  
-  // Source tracking
-  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
-  
-  // Standard metadata
-  created_at           timestamp [default: "now()"]
-  created_by  int      [not null]
-  updated_at           timestamp
-  updated_by  int
-
-  Indexes {
-    (short_code) [unique]                             // Primary lookup
-    (entity_version_id, short_code) [unique]          // Ensure unique short_code within each version
-    (to_node)                                         // Find inflows by destination node
-    (entity_type_id)                                  // Find inflows by entity type
-    (schematic_type_id)                               // Find inflows by schematic type
-    (hydrologic_region_id)                            // Find inflows by region
-    (has_gis_data)                                    // Find inflows with/without GIS data
-    (entity_version_id)                               // Find entities by version
-    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
-  }
-
-  Note: 'Inflow points where water enters the CalSim system. All are arcs in the schematic'
-}
-
-Ref: inflow_entity.entity_type_id      > calsim_entity_type.id [delete: restrict, update: cascade]
-Ref: inflow_entity.schematic_type_id   > calsim_schematic_type.id [delete: restrict, update: cascade]
-Ref: inflow_entity.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
-Ref: inflow_entity.entity_version_id   > version.id        [delete: restrict, update: cascade]
-
-Ref: inflow_entity.created_by           > user.id          [delete: restrict, update: cascade]
-Ref: inflow_entity.updated_by           > user.id          [delete: restrict, update: cascade]
-
 Table inflow_variable {
   id                   int    [pk, increment]
   calsim_id            text   [not null, unique]      // 'I_SHSTA', 'I_OROVL', 'I_FOLSM'
   name                 text   [not null]              // 'Shasta Lake inflow rate'
   description          text                           // Detailed description from CalSim manual
   
-  // Link to inflow entity
+  // Link to Ring 2 inflow entity
   inflow_entity_id     int    [not null]              // FK → inflow_entity.id
   
-  // Variable classification
+  // Variable classification (domain expertise)
   variable_type        text   [not null]              // 'inflow_rate', 'historical_inflow', 'projected_inflow'
   
   // Technical attributes
   unit_id              int                            // FK → unit.id (typically CFS)
   temporal_scale_id    int                            // FK → temporal_scale.id (monthly, daily, etc.)
+  variable_id          uuid                           // Universal variable identifier
   variable_version_id  int    [not null]              // FK → version.id
-  
-  // Source tracking
-  source_ids           int[]  [not null]              // Array of source IDs (FK → source.id)
   
   // Aggregation attributes
   is_aggregate         boolean [default: false]       // TRUE for variables that aggregate multiple inflows
   aggregated_variable_ids  uuid[]                     // Array of inflow variable IDs that this variable aggregates
   
+  // Source tracking (domain variable data)
+  source_ids           int[]  [not null]              // Array of source IDs (CalSim variables, reports, etc.)
+  
   // Standard metadata
   created_at           timestamp [default: "now()"]
-  created_by  int      [not null]
+  created_by           int    [not null]
   updated_at           timestamp
-  updated_by  int
+  updated_by           int
 
   Indexes {
-    (calsim_id) [unique]                             // Primary CalSim3 lookup
-    (inflow_entity_id)                               // Find variables for an inflow entity
-    (variable_type)                                  // Find variables by type
-    (variable_id) [unique]                           // Link to main variable system (one-to-one)
-    (is_aggregate)                                   // Find aggregate variables
-    (aggregated_variable_ids) [type: gin]           // GIN index for array operations on aggregated variables
-    (source_ids) [type: gin]                         // GIN index for array operations on source IDs
+    (calsim_id) [unique]                              // Primary CalSim3 lookup
+    (inflow_entity_id)                                // Find variables for an inflow entity
+    (variable_type)                                   // Find variables by type
+    (variable_id) [unique]                            // Link to main variable system (one-to-one)
+    (is_aggregate)                                    // Find aggregate variables
+    (aggregated_variable_ids) [type: gin]             // GIN index for array operations on aggregated variables
+    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
   }
 
   Note: 'Inflow rate variables (I_*) that measure water inputs to the system'
 }
 
+// Foreign key relationships for Ring 2 - Inflow Variable
 Ref: inflow_variable.inflow_entity_id       > inflow_entity.id     [delete: cascade, update: cascade]
 Ref: inflow_variable.unit_id                > unit.id              [delete: restrict, update: cascade]
 Ref: inflow_variable.temporal_scale_id      > temporal_scale.id    [delete: restrict, update: cascade]
@@ -1977,122 +2406,51 @@ Ref: inflow_variable.variable_version_id    > version.id              [delete: r
 Ref: inflow_variable.created_by             > user.id          [delete: restrict, update: cascade]
 Ref: inflow_variable.updated_by             > user.id          [delete: restrict, update: cascade]
 
-//═══════════════════════════════════════════════
-// 3. CHANNEL ENTITIES AND VARIABLES
-//═══════════════════════════════════════════════
-
-Table channel_entity {
-  id                   int    [pk, increment]
-  short_code           text   [not null, unique]      // 'SAC123', 'SJR456', 'C_AMR015'
-  name                 text   [not null]              // 'Sacramento River Section 123', 'American River'
-  description          text                           
-  
-  // Channel classification
-  subtype            text                           // 'Stream', 'Canal', 'Bypass', 'Aqueduct'
-  entity_type_id      int    [not null]              // FK → calsim_entity_type.id (currently "channel")
-  schematic_type_id   int    [not null]              // FK → calsim_schematic_type.id (currently "arc")
-  
-  // Regional classification
-  hydrologic_region_id int                           // FK → hydrologic_region.id
-
-  // Network topology
-  boundary_condition  text                           // from Central Valley Modeling doc
-  from_node           text                           // Upstream node ID
-  to_node             text                           // Downstream node ID
-  
-  // Physical characteristics
-  length_m decimal                                    // Length in meters from GIS
-  
-  has_tiers            boolean [not null, default: false]  // TRUE for channels with tier classifications
-  is_main    boolean [not null, default: false]  // TRUE for main/primary channels in system
-
-  // GIS and naming attributes
-  has_gis_data        boolean [default: false]      // Whether variable has GIS data
-  naming_convention   text                           // Naming convention pattern
-  naming_prefix       text                           // Prefix extracted from calsim_id (e.g. "SAC", "AMR")
-  
-  // Versioning
-  entity_version_id   int    [not null]              // FK → version.id (entity definition version)
-  
-  // Source tracking
-  source_ids          int[]  [not null]              // Array of source IDs (FK → source.id)
- 
-  // Standard metadata
-  created_at          timestamp [default: "now()"]
-  created_by  int      [not null]
-  updated_at          timestamp
-  updated_by  int
-
-  Indexes {
-    (short_code) [unique]
-    (entity_version_id, short_code) [unique]          // Ensure unique short_code within each version
-    (entity_type_id)                                  // Find channels by entity type
-    (schematic_type_id)                               // Find channels by schematic type
-    (hydrologic_region_id)
-    (naming_prefix)
-    (has_gis_data)
-    (subtype)
-    (from_node)
-    (to_node)
-    (entity_version_id)                               // Find entities by version
-    (source_ids) [type: gin]                          // GIN index for array operations on source IDs
-  }
-
-  Note: 'Channel/stream/canal segments that convey water through the system'
-}
-
-Ref: channel_entity.entity_type_id      > calsim_entity_type.id [delete: restrict, update: cascade]
-Ref: channel_entity.schematic_type_id   > calsim_schematic_type.id [delete: restrict, update: cascade]
-Ref: channel_entity.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
-Ref: channel_entity.entity_version_id   > version.id        [delete: restrict, update: cascade]
-
-Ref: channel_entity.created_by           > user.id          [delete: restrict, update: cascade]
-Ref: channel_entity.updated_by           > user.id          [delete: restrict, update: cascade]
-
 Table channel_variable {
   id                   int    [pk, increment]
   calsim_id            text   [not null, unique]      // 'C_SAC123', 'UI_SAC123', 'MF_SAC123'
   name                 text   [not null]              // 'Sacramento River flow', 'Sacramento River unimpaired flow'
   description          text                           
   
-  // Link to channel entity
+  // Link to Ring 2 channel entity
   channel_entity_id    int    [not null]              // FK → channel_entity.id
   
-  // Variable classification - THIS IS KEY FOR YOUR USE CASE
-  variable_type     text   [not null]              // 'flow', 'unimpaired_flow', 'minimum_flow'
+  // Variable classification - CRITICAL FOR DOMAIN ANALYSIS
+  variable_type        text   [not null]              // 'flow', 'unimpaired_flow', 'minimum_flow'
   
   // Technical attributes
-  unit_id             int                            // FK → unit.id (typically CFS)
-  temporal_scale_id   int                            // FK → temporal_scale.id (monthly, daily, etc.)
-  variable_version_id int    [not null]              // FK → version.id
+  unit_id              int                            // FK → unit.id (typically CFS)
+  temporal_scale_id    int                            // FK → temporal_scale.id (monthly, daily, etc.)
+  variable_id          uuid                           // Universal variable identifier
+  variable_version_id  int    [not null]              // FK → version.id
   
-  // Source tracking
-  source_ids          int[]  [not null]              // Array of source IDs (FK → source.id)
-  
-  // Regulatory/operational
-  is_regulatory       boolean [default: false]       // TRUE for minimum instream flow requirements
-  regulatory_authority text                          // Agency setting the requirement
+  // Regulatory/operational (domain expertise)
+  is_regulatory        boolean [default: false]       // TRUE for minimum instream flow requirements
+  regulatory_authority text                           // Agency setting the requirement
 
   // Aggregation attributes
   is_aggregate         boolean [default: false]       // TRUE for variables that aggregate multiple channels
   aggregated_variable_ids  uuid[]                     // Array of channel variable IDs that this variable aggregates 
   
-  // Linkage
+  // Linkage to outcomes
   outcome_category_short_code text                    // FK reference to outcome_category
   
+  // Source tracking (domain variable data)
+  source_ids           int[]  [not null]              // Array of source IDs (CalSim variables, reports, etc.)
+  
   // Standard metadata
-  created_at          timestamp [default: "now()"]
-  created_by  int      [not null]
-  updated_at          timestamp
-  updated_by  int
+  created_at           timestamp [default: "now()"]
+  created_by           int    [not null]
+  updated_at           timestamp
+  updated_by           int
 
   Indexes {
-    (calsim_id) [unique]
+    (calsim_id) [unique]                              // Primary CalSim3 lookup
     (channel_entity_id)                               // Find variables for a channel entity
     (variable_type)                                   // Find by type: flow, unimpaired_flow, minimum_flow
     (is_regulatory)                                   // Find regulatory requirements
     (is_aggregate)                                    // Find aggregate variables
-    (aggregated_variable_ids) [type: gin]            // GIN index for array operations on aggregated variables
+    (aggregated_variable_ids) [type: gin]             // GIN index for array operations on aggregated variables
     (variable_id)                                     // Link to main variable system
     (source_ids) [type: gin]                          // GIN index for array operations on source IDs
   }
@@ -2100,6 +2458,7 @@ Table channel_variable {
   Note: 'Flow variables for channels including scenario flow, unimpaired flow, and minimum instream flow'
 }
 
+// Foreign key relationships for Ring 2 - Channel Variable
 Ref: channel_variable.channel_entity_id     > channel_entity.id    [delete: cascade, update: cascade]
 Ref: channel_variable.unit_id               > unit.id              [delete: restrict, update: cascade]
 Ref: channel_variable.temporal_scale_id     > temporal_scale.id    [delete: restrict, update: cascade]
@@ -2107,13 +2466,63 @@ Ref: channel_variable.variable_version_id   > version.id              [delete: r
 Ref: channel_variable.created_by            > user.id          [delete: restrict, update: cascade]
 Ref: channel_variable.updated_by            > user.id          [delete: restrict, update: cascade]
 
-
-
 //═══════════════════════════════════════════════
-// 4. ENTITY VARIABLES → OUTCOME LINKAGE
+// RING 3: SUMMARY STATISTICS & OUTCOMES (documentation, these tables exist above from previous version TODO: rewrite schema to integrate.)
+// Ring 3 and Ring 4 tables reference variables from Ring 2, which now properly link to Ring 1 topology.
 //═══════════════════════════════════════════════
 
 /*
+Ring 3 tables:
+- scenario_variable_statistic (links to Ring 2 variables)
+- scenario_measure_statistic (links to outcome measures)
+- scenario_outcome_statistic (aggregated outcomes)
+
+Ring 4 tables:  
+- theme (interpretive framework)
+- tier_definition (analysis framework)
+- outcome_measure (links to Ring 2 variables via measure_variable_link)
+*/
+
+//═══════════════════════════════════════════════
+// RING ARCHITECTURE INTEGRATION WITH EXISTING OUTCOME SYSTEM
+//═══════════════════════════════════════════════
+
+/*
+RING-BASED CALSIM ARCHITECTURE DOCUMENTATION/SUMMARY/THINKING:
+
+RING 1: GRAPH CORE (Network Topology)
+   - network.node: Core network nodes (reservoirs, junctions, diversions)
+   - network.arc: Core network arcs (inflows, channels, bypasses)
+   - network.node_attributes: Extension table for variable node attributes
+   - network_arc_type: Lookup table for arc types (consistency)
+   - Source: CS3_NetworkSchematic_Integrated_11.28.23.xml
+   - Purpose: Authoritative network topology and connectivity
+
+RING 2: ENTITY VIEWS (Domain-Specific Rich Data)
+   - reservoir_entity: Rich domain data for reservoirs (capacity, operational purpose, etc.)
+   - inflow_entity: Rich domain data for inflows (descriptions, regional classification)
+   - channel_entity: Rich domain data for channels (length, subtype, naming patterns)
+   - reservoir_variable, inflow_variable, channel_variable: Rich variable classifications
+   - Sources: CalSim reports, domain expertise, GIS data, operational documents
+   - Purpose: Preserve domain expertise while linking to network topology
+
+RING 3: SUMMARY STATISTICS (Existing - No Changes)
+   - scenario_variable_statistic: Variable values per scenario
+   - scenario_measure_statistic: Outcome measure values per scenario
+   - Purpose: Store computational results and analysis outcomes
+
+RING 4: INTERPRETIVE FRAMEWORK (Existing - No Changes)  
+   - theme, tier_definition, outcome_measure: Analysis and interpretation framework
+   - Purpose: Support dashboard views and research analysis
+
+KEY ARCHITECTURAL BENEFITS:
+- Single source of truth for network topology (Ring 1)
+- Rich domain expertise preserved (Ring 2)
+- Network analysis capabilities enabled
+- Independent versioning for topology vs domain data
+- Seamless integration with existing outcome system
+- Supports both entity-focused and network-focused queries
+
 OUTCOME FLOW:
 
 1. ENTITY TABLES → VARIABLE TABLES → OUTCOME STATISTICS
@@ -2178,4 +2587,192 @@ OUTCOME FLOW:
    - scenario_measure_statistic stores calculated outcome statistics
    
    This enables outcome-based analysis across multiple variables.
+*/
+
+//═══════════════════════════════════════════════
+// NETWORK-FOCUSED THEME INTEGRATION
+// Purpose: Enable themes to highlight specific network regions or critical infrastructure
+//═══════════════════════════════════════════════
+
+Table theme_network_region_link {
+  theme_id            int [not null]           // FK → theme.id
+  hydrologic_region_id int [not null]          // FK → hydrologic_region.id
+  focus_description   text                     // "Primary network focus area for this theme"
+  
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+
+  Indexes {
+    (theme_id, hydrologic_region_id) [pk]
+    (hydrologic_region_id, theme_id)
+  }
+
+  Note: 'Links themes to specific network regions for research focus (e.g., "Sacramento Valley Connectivity")'
+}
+
+Ref: theme_network_region_link.theme_id            > theme.id             [delete: cascade, update: cascade]
+Ref: theme_network_region_link.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
+Ref: theme_network_region_link.created_by          > user.id      [delete: restrict, update: cascade]
+
+Table theme_entity_type_focus {
+  theme_id           int  [not null]           // FK → theme.id
+  entity_type_id     int  [not null]           // FK → calsim_entity_type.id
+  focus_description  text                      // "Primary focus on reservoir storage entities"
+  focus_weight       numeric [default: 1.0]    // Relative importance weight (0.0-1.0)
+  
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+
+  Indexes {
+    (theme_id, entity_type_id) [pk]
+    (entity_type_id, theme_id)
+  }
+
+  Note: 'Links themes to broad entity type focus areas (e.g., all reservoir entities, all groundwater entities)'
+}
+
+Ref: theme_entity_type_focus.theme_id       > theme.id              [delete: cascade, update: cascade]
+Ref: theme_entity_type_focus.entity_type_id > calsim_entity_type.id [delete: restrict, update: cascade]
+Ref: theme_entity_type_focus.created_by     > user.id               [delete: restrict, update: cascade]
+
+Table theme_focus_entity_link {
+  theme_id     int  [not null]           // FK → theme.id
+  node_id      int                       // FK → network.node.id (nullable)
+  arc_id       int                       // FK → network.arc.id (nullable)
+  significance text [not null]           // 'critical_bottleneck', 'key_junction', 'major_input', 'outcome_point'
+  description  text                      // Research rationale for highlighting this specific network element
+  
+  created_at  timestamp [not null, default: "now()"]
+  created_by  int      [not null]
+
+  Indexes {
+    (theme_id, node_id, arc_id) [pk]
+    (node_id)
+    (arc_id)
+    (significance)
+  }
+
+  Note: 'Links themes to specific network nodes or arcs for focused analysis. CHECK ((node_id IS NOT NULL)::int + (arc_id IS NOT NULL)::int = 1) -- Exactly one of node_id or arc_id must be specified'
+}
+
+Ref: theme_focus_entity_link.theme_id > theme.id         [delete: cascade, update: cascade]
+Ref: theme_focus_entity_link.node_id  > network.node.id  [delete: restrict, update: cascade]
+Ref: theme_focus_entity_link.arc_id   > network.arc.id   [delete: restrict, update: cascade]
+Ref: theme_focus_entity_link.created_by > user.id        [delete: restrict, update: cascade]
+
+//────────────────────────────────────────────
+// MATERIALIZED VIEWS (with read-only optimization)
+//────────────────────────────────────────────
+
+// Note: These are materialized views, not regular tables
+// They will be created by the materialized_views.sql script
+/*
+
+View scenario_dashboard_summary {
+  id                      int
+  short_code              text
+  title                   text
+  subtitle                text
+  description             text
+  is_active               boolean
+  author_name             text
+  author_organization     text
+  hydroclimate_code       text
+  hydroclimate_name       text
+  projection_year         int
+  baseline_scenario_code  text
+  baseline_scenario_title text
+  theme_count             bigint
+  variable_count          bigint
+  measure_count           bigint
+  avg_variable_value      numeric
+  min_variable_value      numeric
+  max_variable_value      numeric
+  created_at              timestamp
+  updated_at              timestamp
+  
+  Note: 'Materialized view for scenario dashboard performance'
+}
+
+View theme_analysis_summary {
+  id                      int
+  short_code              text
+  title                   text
+  subtitle                text
+  description             text
+  is_active               boolean
+  primary_source_code     text
+  primary_source_name     text
+  primary_source_citation text
+  scenario_count          bigint
+  active_scenario_count   bigint
+  outcome_category_count  bigint
+  avg_focus_weight        numeric
+  assumption_count        bigint
+  operation_count         bigint
+  created_at              timestamp
+  updated_at              timestamp
+  
+  Note: 'Materialized view for theme analysis performance'
+}
+
+View variable_statistics_summary {
+  variable_id             uuid
+  statistic_code          text
+  statistic_name          text
+  scenario_count          bigint
+  active_scenario_count   bigint
+  avg_value               numeric
+  min_value               numeric
+  max_value               numeric
+  stddev_value            numeric
+  p25_value               numeric
+  median_value            numeric
+  p75_value               numeric
+  p90_value               numeric
+  last_updated            timestamp
+  
+  Note: 'Materialized view for pre-aggregated variable statistics'
+}
+
+View entity_inventory_summary {
+  entity_type             text
+  entity_id               int
+  entity_code             text
+  entity_name             text
+  capacity_taf            numeric
+  dead_pool_taf           numeric
+  operational_purpose     text
+  hydrologic_region_code  text
+  hydrologic_region_name  text
+  variable_count          bigint
+  scenario_count          bigint
+  source_list             text[]
+  created_at              timestamp
+  updated_at              timestamp
+  
+  Note: 'Materialized view for comprehensive entity inventory'
+}
+
+View outcome_measurement_summary {
+  measure_id              int
+  measure_code            text
+  measure_name            text
+  category_code           text
+  category_label          text
+  unit_code               text
+  unit_name               text
+  temporal_scale_code     text
+  spatial_scale_code      text
+  theme_count             bigint
+  theme_codes             text[]
+  scenario_count          bigint
+  avg_value               numeric
+  min_value               numeric
+  max_value               numeric
+  created_at              timestamp
+  updated_at              timestamp
+  
+  Note: 'Materialized view for outcome measurement analysis'
+}
 */
