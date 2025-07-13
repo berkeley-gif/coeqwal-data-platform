@@ -23,13 +23,19 @@ hydroclimate_source,5,Hydroclimate source table versioning (hydroclimate_version
 hydroclimate_variable_summary,5,Hydroclimate variable summary table versioning (variable_version_id)
 variable_group_type,6,Variable group type table versioning (variable_version_id)
 variable_group,6,Variable group table versioning (variable_version_id)
-reservoir_entity,6,Reservoir entity table versioning (entity_version_id)
-inflow_entity,6,Inflow entity table versioning (entity_version_id)
-channel_entity,6,Channel entity table versioning (entity_version_id)
-reservoir_variable,6,Reservoir variable table versioning (variable_version_id)
-inflow_variable,6,Inflow variable table versioning (variable_version_id)
-channel_variable,6,Channel variable table versioning (variable_version_id)
-entity_source_detail,6,Entity source detail table versioning (entity source tracking)
+calsim_node,12,CalSim network node table versioning (network_version_id) - Ring 1 Graph Core
+calsim_arc,12,CalSim network arc table versioning (network_version_id) - Ring 1 Graph Core
+reservoir_entity,6,Reservoir entity table versioning (entity_version_id) - Ring 2 Domain Views
+inflow_entity,6,Inflow entity table versioning (entity_version_id) - Ring 2 Domain Views
+channel_entity,6,Channel entity table versioning (entity_version_id) - Ring 2 Domain Views
+reservoir_variable,6,Reservoir variable table versioning (variable_version_id) - Ring 2 Domain Views
+inflow_variable,6,Inflow variable table versioning (variable_version_id) - Ring 2 Domain Views
+channel_variable,6,Channel variable table versioning (variable_version_id) - Ring 2 Domain Views
+theme_outcome_priority,1,Theme outcome priority table versioning (theme_version_id) - Theme Research Focus
+theme_outcome_measure_focus,1,Theme outcome measure focus table versioning (theme_version_id) - Theme Research Focus
+theme_network_region_link,1,Theme network region link table versioning (theme_version_id) - Theme Research Focus
+theme_entity_type_focus,1,Theme entity type focus table versioning (theme_version_id) - Theme Research Focus
+theme_focus_entity_link,1,Theme focus entity link table versioning (theme_version_id) - Theme Research Focus
 model_variable,6,Model variable table versioning (variable_version_id)
 outcome_category,7,Outcome category table versioning (outcome_version_id)
 outcome_measure,7,Outcome measure table versioning (metrics_version_id)

@@ -1,4 +1,4 @@
-id,short_code,name,description,subtype,entity_type_id,schematic_type_id,hydrologic_region_id,boundary_condition,from_node,to_node,length_m,has_tiers,is_main,has_gis_data,entity_version_id,source_ids,created_by,updated_by
+id,calsim_arc_id,short_code,name,description,subtype,entity_type_id,schematic_type_id,hydrologic_region_id,boundary_condition,from_node,to_node,length_m,has_tiers,is_main,has_gis_data,entity_version_id,source_ids,created_by,updated_by
 1,C_ABN000,East Side Canal/Natomas Cross Canal,,Canal,2,1,1,,ABN000,CRC002,7420.28975526427,,,1,1,"{1,3,4}",1,
 2,C_ABN006,Auburn Ravine,,Stream,2,1,1,,ABN006,ABN000,10441.5893756618,,,1,1,"{1,3,4}",1,
 3,C_ABN010,Auburn Ravine,,Stream,2,1,1,,ABN010,ABN006,6270.99051383392,,,1,1,"{1,3,4}",1,
