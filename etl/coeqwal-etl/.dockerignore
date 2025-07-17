@@ -1,0 +1,7 @@
+.git
+**/__pycache__/
+*.pyc
+data/
+logs/
+docker-compose.yml
+*.ipynb
