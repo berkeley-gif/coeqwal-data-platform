@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+
+# This script is the entrypoint for the Batch job.
+# It controls what gets run when AWS Batch executes the Docker container.
+# It is responsible for downloading the input zip file,
+# unzipping it, and running the classification and conversion
+# processes.
+#
+# It is also responsible for updating the DynamoDB table with
+# the status of the job.
+
 set -euo pipefail
 
 # Required env (Batch container overrides from Lambda)
@@ -73,7 +83,7 @@ echo "[INFO] Classification:"
 cat "${CLASSIFY_ENV}"
 
 # shellcheck disable=SC1090
-source "${CLASSIFY_ENV}"   # SCENARIO_ID, SV_PATH, CAL_PATH
+source "${CLASSIFY_ENV}"   # SCENARIO_ID, SV_PATH, CALSIM_OUTPUT_PATH
 
 # Mark RUNNING (Lambda wrote SUBMITTED earlier)
 SCENARIO_ID="${SCENARIO_ID}" ddb_update "RUNNING" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
@@ -123,13 +133,13 @@ if [[ -n "${SV_PATH}" ]]; then
   sample_bparts_py "${SV_PATH}" "${SV_BPARTS_FILE}"
 fi
 
-if [[ -n "${CAL_PATH}" ]]; then
-  echo "[INFO] Converting CalSim DSS: ${CAL_PATH}"
+if [[ -n "${CALSIM_OUTPUT_PATH}" ]]; then
+  echo "[INFO] Converting CalSim DSS: ${CALSIM_OUTPUT_PATH}"
   python /app/python-code/dss_to_csv.py \
-    --dss "./${CAL_PATH}" \
+    --dss "./${CALSIM_OUTPUT_PATH}" \
     --csv "${CAL_CSV_LOCAL}" \
     --type calsim_output || echo "[WARN] CalSim convert error."
-  sample_bparts_py "${CAL_PATH}" "${CAL_BPARTS_FILE}"
+  sample_bparts_py "${CALSIM_OUTPUT_PATH}" "${CAL_BPARTS_FILE}"
 fi
 
 SV_B_SAMPLE="$(cat "${SV_BPARTS_FILE}" 2>/dev/null || echo "")"
@@ -160,7 +170,7 @@ cat >"${WORKDIR}/manifest.json" <<MF
   "source_zip_key": "${SRC_ZIP_KEY}",
   "dss_files_detected": {
     "sv_input": "${SV_PATH}",
-    "calsim_output": "${CAL_PATH}"
+    "calsim_output": "${CALSIM_OUTPUT_PATH}"
   },
   "variable_sample_b_parts": {
     "sv_input": "${SV_B_SAMPLE}",
@@ -177,9 +187,9 @@ aws s3 cp "${WORKDIR}/manifest.json" "s3://${ZIP_BUCKET}/${MANIFEST_KEY}"
 # ------------------------------------------------------------------
 # Final status (WARN partial)
 # ------------------------------------------------------------------
-if [[ -n "${SV_PATH}" && -n "${CAL_PATH}" ]]; then
+if [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
   FINAL_STATUS="SUCCEEDED"
-elif [[ -n "${SV_PATH}" || -n "${CAL_PATH}" ]]; then
+elif [[ -n "${SV_PATH}" || -n "${CALSIM_OUTPUT_PATH}" ]]; then
   FINAL_STATUS="SUCCEEDED_PARTIAL"
 else
   ddb_update "FAILED" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
