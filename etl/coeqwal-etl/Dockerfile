@@ -1,14 +1,23 @@
+# etl/coeqwal-etl/Dockerfile
+
 # ------------------------------------------------------------------
+
 # COEQWAL DSS ➜ CSV batch image
+
 #   - Builds pydsstools environment (heclib static lib injected)
+
 #   - Includes AWS CLI + unzip for S3 + ZIP handling
+
 #   - Copies project code into /app
+
 #   - Wrapper entrypoint downloads ZIP, runs dss_to_csv.py, uploads outputs
+
 # ------------------------------------------------------------------
-# coeqwal-etl / Dockerfile
+
+
 FROM --platform=linux/amd64 python:3.10-slim
 
-# System deps (pydsstools build, unzip)
+# System deps (pydsstools build, unzip, curl for AWS CLI v2 installer)
 RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
@@ -18,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     python3-dev \
     unzip \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
 # pydsstools expected layout
@@ -33,7 +43,7 @@ COPY heclib/heclib.a /pydsstools/src/external/dss/linux64/
 ENV CFLAGS="-I/usr/include -I/pydsstools/src/external/dss/headers -I/pydsstools/src/external/gridv6/headers"
 ENV LDFLAGS="-L/usr/lib/x86_64-linux-gnu -L/pydsstools/src/external/dss/linux64"
 
-# Python deps + AWS CLI
+# ---- Python dependencies ----
 RUN pip install --no-cache-dir \
     numpy==1.24.4 \
     pandas==2.0.3 \
@@ -41,12 +51,20 @@ RUN pip install --no-cache-dir \
     psutil==5.9.8 \
     psycopg2-binary==2.9.9 \
     boto3==1.34.162 \
-    awscli==1.34.162 \
     setuptools \
     wheel
 
 # pydsstools after env/inputs ready
 RUN pip install --no-cache-dir pydsstools
+
+# ---- Install AWS CLI v2 (official installer) ----
+RUN curl -L "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+ && unzip /tmp/awscliv2.zip -d /tmp \
+ && /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update \
+ && rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# quick sanity check during build
+RUN aws --version
 
 WORKDIR /app
 
