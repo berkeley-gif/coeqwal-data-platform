@@ -16,7 +16,7 @@ set -euo pipefail
 : "${ZIP_KEY:?ZIP_KEY required}"
 
 # Optional env / defaults
-DDB_TABLE="${DDB_TABLE:-coeqwal_scenarios}"
+DDB_TABLE="${DDB_TABLE:-coeqwal_scenario}"
 OUTPUT_PREFIX="${OUTPUT_PREFIX:-scenario/}"
 JOB_ID="${AWS_BATCH_JOB_ID:-unknown}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
@@ -152,11 +152,9 @@ SCEN_OUT_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/"
 SV_CSV_KEY="${SCEN_OUT_DIR}${SCENARIO_ID}_sv_input.csv"
 CAL_CSV_KEY="${SCEN_OUT_DIR}${SCENARIO_ID}_calsim_output.csv"
 MANIFEST_KEY="${SCEN_OUT_DIR}${SCENARIO_ID}_manifest.json"
-SRC_ZIP_KEY="${SCEN_OUT_DIR}source/${ZIP_BASENAME}"
 
 [[ -f "${SV_CSV_LOCAL}"  ]] && aws s3 cp "${SV_CSV_LOCAL}"  "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
 [[ -f "${CAL_CSV_LOCAL}" ]] && aws s3 cp "${CAL_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${CAL_CSV_KEY}" || CAL_CSV_KEY=""
-aws s3 cp "s3://${ZIP_BUCKET}/${ZIP_KEY}" "s3://${ZIP_BUCKET}/${SRC_ZIP_KEY}"
 
 # ------------------------------------------------------------------
 # Manifest
@@ -167,7 +165,6 @@ cat >"${WORKDIR}/manifest.json" <<MF
   "processed_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
   "job_id": "${JOB_ID}",
   "original_upload_key": "${ZIP_KEY}",
-  "source_zip_key": "${SRC_ZIP_KEY}",
   "dss_files_detected": {
     "sv_input": "${SV_PATH}",
     "calsim_output": "${CALSIM_OUTPUT_PATH}"

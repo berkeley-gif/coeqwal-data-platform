@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------
-# COEQWAL DSS ➜ CSV Batch Image
+# COEQWAL DSS ➜ CSV batch image
 #   - Builds pydsstools environment (heclib static lib injected)
 #   - Includes AWS CLI + unzip for S3 + ZIP handling
 #   - Copies project code into /app
