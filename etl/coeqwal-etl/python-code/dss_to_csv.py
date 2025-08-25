@@ -235,10 +235,14 @@ class DSSProcessor:
         ts_dt = pd.Timestamp(dt).normalize()
 
         if adjustment == "end_of_month":
-            # If already month-end keep; else roll forward to month-end
+            # Many DSS monthly stamps are 24:00 EOM -> 00:00 first-of-next-month.
+            # Keep true month-ends; map 1st-of-month back to previous month-end;
+            # otherwise, round to this month-end.
             if ts_dt.is_month_end:
                 return ts_dt
-            return ts_dt + MonthEnd(0)
+            if ts_dt.day == 1:
+                return (ts_dt - MonthEnd(1))
+            return (ts_dt + MonthEnd(0))
         elif adjustment == "start_of_month":
             return ts_dt.replace(day=1)
         else:  # 'none'
