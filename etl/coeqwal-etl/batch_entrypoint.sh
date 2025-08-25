@@ -98,7 +98,7 @@ CAL_BPARTS_FILE="${WORKDIR}/bparts_cal.txt"
 
 sample_bparts_py () {
   local rel="$1" out_file="$2"
-  python <<'PY' "$rel" "$out_file"
+  python - <<'PY' "$rel" "$out_file"
 import sys, os
 from pydsstools.heclib.dss import HecDss
 rel=sys.argv[1]; out=sys.argv[2]
