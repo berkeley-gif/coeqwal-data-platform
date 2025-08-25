@@ -148,10 +148,12 @@ CAL_B_SAMPLE="$(cat "${CAL_BPARTS_FILE}" 2>/dev/null || echo "")"
 # ------------------------------------------------------------------
 # Upload outputs
 # ------------------------------------------------------------------
-SCEN_OUT_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/"
-SV_CSV_KEY="${SCEN_OUT_DIR}${SCENARIO_ID}_sv_input.csv"
-CAL_CSV_KEY="${SCEN_OUT_DIR}${SCENARIO_ID}_calsim_output.csv"
-MANIFEST_KEY="${SCEN_OUT_DIR}${SCENARIO_ID}_manifest.json"
+CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
+SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_sv_input.csv"
+CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_calsim_output.csv"
+
+# manifest at scenario/<id>/
+MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
 
 [[ -f "${SV_CSV_LOCAL}"  ]] && aws s3 cp "${SV_CSV_LOCAL}"  "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
 [[ -f "${CAL_CSV_LOCAL}" ]] && aws s3 cp "${CAL_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${CAL_CSV_KEY}" || CAL_CSV_KEY=""

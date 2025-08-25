@@ -30,8 +30,8 @@ etl/
 
 ### 1. DSS processing pipeline
 **Purpose**: Process CalSim DSS files and extract variable data
-**Input**: DSS files from your existing DSS-to-CSV repo
-**Output**: Normalized CSV files ready for database loading
+**Input**: CalSim model run
+**Output**: Output variable csv, SV csv
 
 ```python
 # Example usage
@@ -46,12 +46,12 @@ pipeline.run()
 
 ### 2. GIS integration pipeline  
 **Purpose**: Process spatial data and integrate with CalSim variables
-**Input**: GIS shapefiles, CSV with spatial data
-**Output**: Enhanced variable data with spatial attributes
+**Input**: GIS shapefiles from CalSim geopackage
+**Output**: Variable data with spatial attributes
 
 ### 3. Variable mapping pipeline
 **Purpose**: Normalize and map CalSim variables across sources
-**Input**: Multiple CSV files from different sources
+**Input**: Variable lists
 **Output**: Unified variable tables with source tracking
 
 ### 4. Statistics computation pipeline
