@@ -91,8 +91,8 @@ SCENARIO_ID="${SCENARIO_ID}" ddb_update "RUNNING" "job_id=${JOB_ID}" "zip_key=${
 # ------------------------------------------------------------------
 # Convert DSS -> CSV + sample B-parts
 # ------------------------------------------------------------------
-SV_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_sv_input.csv"
-CAL_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_calsim_output.csv"
+SV_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_sv_input.csv"
+CAL_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_calsim_output.csv"
 SV_BPARTS_FILE="${WORKDIR}/bparts_sv.txt"
 CAL_BPARTS_FILE="${WORKDIR}/bparts_cal.txt"
 
@@ -149,8 +149,8 @@ CAL_B_SAMPLE="$(cat "${CAL_BPARTS_FILE}" 2>/dev/null || echo "")"
 # Upload outputs
 # ------------------------------------------------------------------
 CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
-SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_sv_input.csv"
-CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_calsim_output.csv"
+SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv"
+CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
 
 # manifest at scenario/<id>/
 MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
