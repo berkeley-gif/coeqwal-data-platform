@@ -19,7 +19,9 @@ OUTPUT_PREFIX="${OUTPUT_PREFIX:-scenario/}"
 JOB_ID="${AWS_BATCH_JOB_ID:-unknown}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
 SCENARIO_ID_OVERRIDE="${SCENARIO_ID:-}"        # allow upstream override (optional)
-VALIDATION_REF_CSV_KEY="${VALIDATION_REF_CSV_KEY:-}"  # e.g. scenario/s0020/verify/s0020_trend.csv
+VALIDATION_REF_CSV_KEY="${VALIDATION_REF_CSV_KEY:-}"  # e.g. scenario/s0020/verify/xxx.csv
+ABS_TOL="${VALIDATION_ABS_TOL:-1e-06}"
+REL_TOL="${VALIDATION_REL_TOL:-1e-06}"
 
 WORKDIR=/tmp/work
 mkdir -p "$WORKDIR"
@@ -34,7 +36,8 @@ ZIP_LOCAL="${WORKDIR}/input.zip"
 # ----------------------------- Dynamo helper -----------------------------
 ddb_update () {
   local status="$1"; shift
-  local epoch="$(date +%s)"
+  local epoch
+  epoch="$(date +%s)"
   local ue="SET #s=:s, updated=:u"
   local names='{"#s":"status"}'
   local vals="{\":s\":{\"S\":\"${status}\"},\":u\":{\"N\":\"${epoch}\"}"
@@ -84,7 +87,6 @@ source "${CLASSIFY_ENV}"   # exports: SCENARIO_ID, SV_PATH, CALSIM_OUTPUT_PATH
 SCENARIO_ID="${SCENARIO_ID}" ddb_update "RUNNING" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
 
 # ----------------------------- Convert DSS -> CSV ------------------------
-# Align names with API: scenario/<id>/csv/<id>_coeqwal_sv_input.csv and <id>_coeqwal_calsim_output.csv
 SV_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_sv_input.csv"
 CAL_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_calsim_output.csv"
 SV_BPARTS_FILE="${WORKDIR}/bparts_sv.txt"
@@ -140,9 +142,6 @@ SV_B_SAMPLE="$(cat "${SV_BPARTS_FILE}" 2>/dev/null || echo "")"
 CAL_B_SAMPLE="$(cat "${CAL_BPARTS_FILE}" 2>/dev/null || echo "")"
 
 # ----------------------------- Optional validation -----------------------
-# If the trigger passed a reference csv (i.e.Trend Report) in VALIDATION_REF_CSV_KEY,
-# download it and attempt to validate against the produced CalSim csv (preferred),
-# falling back to SV csv. This block is non-fatal.
 VALIDATION_RESULT="skipped"
 VALIDATION_TARGET="none"
 VALIDATION_SUMMARY="No reference CSV supplied."
@@ -150,14 +149,8 @@ VALIDATION_SUMMARY="No reference CSV supplied."
 if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
   echo "[INFO] Validation CSV provided: s3://${ZIP_BUCKET}/${VALIDATION_REF_CSV_KEY}"
   REF_LOCAL="${WORKDIR}/reference.csv"
-  aws s3 cp "s3://${ZIP_BUCKET}/${VALIDATION_REF_CSV_KEY}" "${REF_LOCAL}" || {
-    echo "[WARN] Could not download reference CSV."
-    VALIDATION_RESULT="download_failed"
-    VALIDATION_SUMMARY="Failed to download reference CSV."
-  }
-
-  if [[ -f "${REF_LOCAL}" ]]; then
-    # Prefer validating against CalSim output csv, else SV csv
+  if aws s3 cp "s3://${ZIP_BUCKET}/${VALIDATION_REF_CSV_KEY}" "${REF_LOCAL}"; then
+    # Prefer CalSim output, then SV
     if [[ -f "${CAL_CSV_LOCAL}" ]]; then
       TARGET_LOCAL="${CAL_CSV_LOCAL}"
       VALIDATION_TARGET="calsim_output"
@@ -171,14 +164,13 @@ if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
     if [[ -n "${TARGET_LOCAL:-}" ]]; then
       echo "[INFO] Validating reference CSV against ${VALIDATION_TARGET} CSV..."
       if [[ -f /app/python-code/validate_csvs.py ]]; then
-        # capture output but never fail the job on validation
         set +e
         VAL_OUT="$(
           python /app/python-code/validate_csvs.py \
             --ref "${REF_LOCAL}" \
             --file "${TARGET_LOCAL}" \
-            --abs-tol 1e-05 \
-            --rel-tol 0 \
+            --abs-tol "${ABS_TOL}" \
+            --rel-tol "${REL_TOL}" \
             2>&1
         )"
         VAL_RC=$?
@@ -189,8 +181,7 @@ if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
           echo "[INFO] Validation PASSED."
         else
           VALIDATION_RESULT="failed"
-          # keep summary short to avoid huge manifest, tail a few lines
-          VALIDATION_SUMMARY="$(echo "${VAL_OUT}" | tail -n 10 | tr -d '\r')"
+          VALIDATION_SUMMARY="${VAL_OUT}"
           echo "[WARN] Validation FAILED."
         fi
       else
@@ -203,15 +194,19 @@ if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
       VALIDATION_SUMMARY="No produced CSVs to validate against."
       echo "[INFO] Skipping validation: no produced CSVs."
     fi
+  else
+    VALIDATION_RESULT="download_failed"
+    VALIDATION_SUMMARY="Failed to download reference CSV."
   fi
 fi
+
+# --- right before you write the manifest: JSON-escape the summary text ---
+VALIDATION_SUMMARY_JSON=$(python -c 'import json,sys; print(json.dumps(sys.stdin.read()))' <<< "$VALIDATION_SUMMARY")
 
 # ----------------------------- Upload outputs ----------------------------
 CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
 SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv"
 CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
-
-# manifest at scenario/<id>/
 MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
 
 [[ -f "${SV_CSV_LOCAL}"  ]] && aws s3 cp "${SV_CSV_LOCAL}"  "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
@@ -255,7 +250,7 @@ cat > "${WORKDIR}/manifest.json" <<MF
     "reference_csv_key": "${VALIDATION_REF_CSV_KEY}",
     "target": "${VALIDATION_TARGET}",
     "result": "${VALIDATION_RESULT}",
-    "summary": "$(printf '%s' "${VALIDATION_SUMMARY}" | sed 's/"/\\"/g')"
+    "summary": ${VALIDATION_SUMMARY_JSON}
   },
   "variable_sample_b_parts": {
     "sv_input": "${SV_B_SAMPLE}",
