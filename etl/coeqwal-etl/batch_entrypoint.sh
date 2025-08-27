@@ -177,7 +177,9 @@ if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
           python /app/python-code/validate_csvs.py \
             --ref "${REF_LOCAL}" \
             --file "${TARGET_LOCAL}" \
-            --tolerance 1e-05 2>&1
+            --abs-tol 1e-05 \
+            --rel-tol 0 \
+            2>&1
         )"
         VAL_RC=$?
         set -e
@@ -206,8 +208,8 @@ fi
 
 # ----------------------------- Upload outputs ----------------------------
 CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
-SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_sv_input.csv"
-CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_calsim_output.csv"
+SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv"
+CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
 
 # manifest at scenario/<id>/
 MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"

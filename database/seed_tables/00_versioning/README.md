@@ -175,7 +175,7 @@ JOIN version_family vf ON v.version_family_id = vf.id
 WHERE vf.short_code = 'theme' AND v.is_active = true;
 ```
 
-## 🔧 Graceful system design
+## System design
 
 ### Application code pattern
 
