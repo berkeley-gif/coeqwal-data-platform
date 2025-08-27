@@ -1,26 +1,25 @@
 #!/usr/bin/env bash
 
-# This script is the entrypoint for the Batch job.
-# It controls what gets run when AWS Batch executes the Docker container.
-# It is responsible for downloading the input zip file,
-# unzipping it, and running the classification and conversion
-# processes.
-#
-# It is also responsible for updating the DynamoDB table with
-# the status of the job.
+# Batch entrypoint for COEQWAL ETL
+# - Downloads ZIP from S3, unzips, classifies DSS files
+# - Converts DSS -> CSV (SV + CalSim output)
+# - (Optional) Validates against a reference CSV if provided by trigger Lambda
+# - Uploads CSVs + manifest to S3
+# - Updates DynamoDB status
 
 set -euo pipefail
 
-# Required env (Batch container overrides from Lambda)
+# ----------------------------- Required env ------------------------------
 : "${ZIP_BUCKET:?ZIP_BUCKET required}"
 : "${ZIP_KEY:?ZIP_KEY required}"
 
-# Optional env / defaults
+# ----------------------------- Optional env ------------------------------
 DDB_TABLE="${DDB_TABLE:-coeqwal_scenario}"
 OUTPUT_PREFIX="${OUTPUT_PREFIX:-scenario/}"
 JOB_ID="${AWS_BATCH_JOB_ID:-unknown}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
-SCENARIO_ID_OVERRIDE="${SCENARIO_ID:-}"  # allow upstream override (optional)
+SCENARIO_ID_OVERRIDE="${SCENARIO_ID:-}"        # allow upstream override (optional)
+VALIDATION_REF_CSV_KEY="${VALIDATION_REF_CSV_KEY:-}"  # e.g. scenario/s0020/verify/s0020_trend.csv
 
 WORKDIR=/tmp/work
 mkdir -p "$WORKDIR"
@@ -32,9 +31,7 @@ echo "[INFO] Input: s3://${ZIP_BUCKET}/${ZIP_KEY}"
 ZIP_BASENAME="$(basename "${ZIP_KEY}")"
 ZIP_LOCAL="${WORKDIR}/input.zip"
 
-# ------------------------------------------------------------------
-# Dynamo helper (best-effort; non-fatal)
-# ------------------------------------------------------------------
+# ----------------------------- Dynamo helper -----------------------------
 ddb_update () {
   local status="$1"; shift
   local epoch="$(date +%s)"
@@ -58,9 +55,7 @@ ddb_update () {
     >/dev/null 2>&1 || echo "[WARN] DDB update failed (${status})."
 }
 
-# ------------------------------------------------------------------
-# Download & unzip
-# ------------------------------------------------------------------
+# ----------------------------- Download & unzip --------------------------
 aws s3 cp "s3://${ZIP_BUCKET}/${ZIP_KEY}" "${ZIP_LOCAL}"
 unzip -q "${ZIP_LOCAL}" -d "${WORKDIR}/unzipped"
 
@@ -70,7 +65,7 @@ echo "[INFO] Found ${#ALL_DSS[@]} DSS file(s)."
 printf '  - %s\n' "${ALL_DSS[@]}"
 
 PATH_FILE="${WORKDIR}/dss_paths.txt"
-printf '%s\n' "${ALL_DSS[@]}" >"${PATH_FILE}"
+printf '%s\n' "${ALL_DSS[@]}" > "${PATH_FILE}"
 
 CLASSIFY_ENV="${WORKDIR}/classify.env"
 python /app/python-code/classify_dss.py \
@@ -83,14 +78,13 @@ echo "[INFO] Classification:"
 cat "${CLASSIFY_ENV}"
 
 # shellcheck disable=SC1090
-source "${CLASSIFY_ENV}"   # SCENARIO_ID, SV_PATH, CALSIM_OUTPUT_PATH
+source "${CLASSIFY_ENV}"   # exports: SCENARIO_ID, SV_PATH, CALSIM_OUTPUT_PATH
 
 # Mark RUNNING (Lambda wrote SUBMITTED earlier)
 SCENARIO_ID="${SCENARIO_ID}" ddb_update "RUNNING" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
 
-# ------------------------------------------------------------------
-# Convert DSS -> CSV + sample B-parts
-# ------------------------------------------------------------------
+# ----------------------------- Convert DSS -> CSV ------------------------
+# Align names with API: scenario/<id>/csv/<id>_coeqwal_sv_input.csv and <id>_coeqwal_calsim_output.csv
 SV_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_sv_input.csv"
 CAL_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_calsim_output.csv"
 SV_BPARTS_FILE="${WORKDIR}/bparts_sv.txt"
@@ -145,12 +139,75 @@ fi
 SV_B_SAMPLE="$(cat "${SV_BPARTS_FILE}" 2>/dev/null || echo "")"
 CAL_B_SAMPLE="$(cat "${CAL_BPARTS_FILE}" 2>/dev/null || echo "")"
 
-# ------------------------------------------------------------------
-# Upload outputs
-# ------------------------------------------------------------------
+# ----------------------------- Optional validation -----------------------
+# If the trigger passed a reference csv (i.e.Trend Report) in VALIDATION_REF_CSV_KEY,
+# download it and attempt to validate against the produced CalSim csv (preferred),
+# falling back to SV csv. This block is non-fatal.
+VALIDATION_RESULT="skipped"
+VALIDATION_TARGET="none"
+VALIDATION_SUMMARY="No reference CSV supplied."
+
+if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
+  echo "[INFO] Validation CSV provided: s3://${ZIP_BUCKET}/${VALIDATION_REF_CSV_KEY}"
+  REF_LOCAL="${WORKDIR}/reference.csv"
+  aws s3 cp "s3://${ZIP_BUCKET}/${VALIDATION_REF_CSV_KEY}" "${REF_LOCAL}" || {
+    echo "[WARN] Could not download reference CSV."
+    VALIDATION_RESULT="download_failed"
+    VALIDATION_SUMMARY="Failed to download reference CSV."
+  }
+
+  if [[ -f "${REF_LOCAL}" ]]; then
+    # Prefer validating against CalSim output csv, else SV csv
+    if [[ -f "${CAL_CSV_LOCAL}" ]]; then
+      TARGET_LOCAL="${CAL_CSV_LOCAL}"
+      VALIDATION_TARGET="calsim_output"
+    elif [[ -f "${SV_CSV_LOCAL}" ]]; then
+      TARGET_LOCAL="${SV_CSV_LOCAL}"
+      VALIDATION_TARGET="sv_input"
+    else
+      TARGET_LOCAL=""
+    fi
+
+    if [[ -n "${TARGET_LOCAL:-}" ]]; then
+      echo "[INFO] Validating reference CSV against ${VALIDATION_TARGET} CSV..."
+      if [[ -f /app/python-code/validate_csvs.py ]]; then
+        # capture output but never fail the job on validation
+        set +e
+        VAL_OUT="$(
+          python /app/python-code/validate_csvs.py \
+            --ref "${REF_LOCAL}" \
+            --file "${TARGET_LOCAL}" \
+            --tolerance 1e-05 2>&1
+        )"
+        VAL_RC=$?
+        set -e
+        if [[ ${VAL_RC} -eq 0 ]]; then
+          VALIDATION_RESULT="passed"
+          VALIDATION_SUMMARY="Reference CSV matched (${VALIDATION_TARGET})."
+          echo "[INFO] Validation PASSED."
+        else
+          VALIDATION_RESULT="failed"
+          # keep summary short to avoid huge manifest, tail a few lines
+          VALIDATION_SUMMARY="$(echo "${VAL_OUT}" | tail -n 10 | tr -d '\r')"
+          echo "[WARN] Validation FAILED."
+        fi
+      else
+        VALIDATION_RESULT="skipped_no_script"
+        VALIDATION_SUMMARY="validate_csvs.py not present in container."
+        echo "[INFO] Skipping validation: no validate_csvs.py"
+      fi
+    else
+      VALIDATION_RESULT="skipped_no_targets"
+      VALIDATION_SUMMARY="No produced CSVs to validate against."
+      echo "[INFO] Skipping validation: no produced CSVs."
+    fi
+  fi
+fi
+
+# ----------------------------- Upload outputs ----------------------------
 CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
-SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv"
-CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
+SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_sv_input.csv"
+CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_calsim_output.csv"
 
 # manifest at scenario/<id>/
 MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
@@ -158,18 +215,45 @@ MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
 [[ -f "${SV_CSV_LOCAL}"  ]] && aws s3 cp "${SV_CSV_LOCAL}"  "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
 [[ -f "${CAL_CSV_LOCAL}" ]] && aws s3 cp "${CAL_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${CAL_CSV_KEY}" || CAL_CSV_KEY=""
 
-# ------------------------------------------------------------------
-# Manifest
-# ------------------------------------------------------------------
-cat >"${WORKDIR}/manifest.json" <<MF
+# ----------------------------- Compute final status ----------------------
+SV_DETECTED=$([[ -n "${SV_PATH}" ]] && echo true || echo false)
+CAL_DETECTED=$([[ -n "${CALSIM_OUTPUT_PATH}" ]] && echo true || echo false)
+SV_CSV_WRITTEN=$([[ -f "${SV_CSV_LOCAL}" ]] && echo true || echo false)
+CAL_CSV_WRITTEN=$([[ -f "${CAL_CSV_LOCAL}" ]] && echo true || echo false)
+
+if [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
+  FINAL_STATUS="SUCCEEDED"
+elif [[ -n "${SV_PATH}" || -n "${CALSIM_OUTPUT_PATH}" ]]; then
+  FINAL_STATUS="SUCCEEDED_PARTIAL"
+else
+  ddb_update "FAILED" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
+  echo "[ERROR] No DSS candidates in expected folders; failing." >&2
+  exit 1
+fi
+
+# ----------------------------- Manifest ----------------------------------
+cat > "${WORKDIR}/manifest.json" <<MF
 {
   "scenario_id": "${SCENARIO_ID}",
   "processed_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
   "job_id": "${JOB_ID}",
+  "status": "${FINAL_STATUS}",
   "original_upload_key": "${ZIP_KEY}",
   "dss_files_detected": {
     "sv_input": "${SV_PATH}",
     "calsim_output": "${CALSIM_OUTPUT_PATH}"
+  },
+  "status_summary": {
+    "sv_detected": ${SV_DETECTED},
+    "calsim_detected": ${CAL_DETECTED},
+    "sv_csv_written": ${SV_CSV_WRITTEN},
+    "calsim_csv_written": ${CAL_CSV_WRITTEN}
+  },
+  "validation": {
+    "reference_csv_key": "${VALIDATION_REF_CSV_KEY}",
+    "target": "${VALIDATION_TARGET}",
+    "result": "${VALIDATION_RESULT}",
+    "summary": "$(printf '%s' "${VALIDATION_SUMMARY}" | sed 's/"/\\"/g')"
   },
   "variable_sample_b_parts": {
     "sv_input": "${SV_B_SAMPLE}",
@@ -181,21 +265,10 @@ cat >"${WORKDIR}/manifest.json" <<MF
   }
 }
 MF
+
 aws s3 cp "${WORKDIR}/manifest.json" "s3://${ZIP_BUCKET}/${MANIFEST_KEY}"
 
-# ------------------------------------------------------------------
-# Final status (WARN partial)
-# ------------------------------------------------------------------
-if [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
-  FINAL_STATUS="SUCCEEDED"
-elif [[ -n "${SV_PATH}" || -n "${CALSIM_OUTPUT_PATH}" ]]; then
-  FINAL_STATUS="SUCCEEDED_PARTIAL"
-else
-  ddb_update "FAILED" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
-  echo "[ERROR] No DSS candidates in expected folders; failing." >&2
-  exit 1
-fi
-
+# ----------------------------- Final DDB status --------------------------
 ddb_update "${FINAL_STATUS}" \
   "job_id=${JOB_ID}" \
   "zip_key=${ZIP_KEY}" \
