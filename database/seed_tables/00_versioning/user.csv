@@ -1,2 +1,0 @@
-id,email,name,display_name,affiliation,role,aws_sso_user_id,aws_sso_username,is_bootstrap,sync_source,is_active,last_login,created_at,updated_at
-1,jfantauzza@berkeley.edu,Jill Fantauzza,jill,UC Berkeley GIF,service,,,true,bootstrap,true,,,

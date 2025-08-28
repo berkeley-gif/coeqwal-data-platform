@@ -6,7 +6,7 @@ The COEQWAL database includes both versioned and non-versioned tables designed f
 
 ```
 00_versioning/
-├── user.csv                    # Bootstrap users and AWS SSO integration
+├── developer.csv               # Bootstrap users and AWS SSO integration
 ├── version_family.csv          # Version domains (theme, scenario, etc.)
 ├── version.csv                 # Version instances within families
 ├── domain_family_map.csv       # Maps tables to version families
@@ -37,7 +37,7 @@ The versioning system provides:
 | `version_family` | Define versioning domains (theme, scenario, etc.) |
 | `version` | Specific version instances (immutable once created) |
 | `domain_family_map` | Map tables to version families |
-| `user` | Bootstrap users for system initialization |
+| `developer` | Bootstrap users for system initialization |
 
 ## 🔍 Table classification
 
@@ -75,7 +75,7 @@ Tables that should NOT be versioned:
 **Examples:**
 ```sql
 -- Infrastructure
-user, source, unit, hydrologic_region
+developer, source, unit, hydrologic_region
 
 -- Lookups
 calsim_entity_type, calsim_schematic_type, temporal_scale
