@@ -1,53 +1,34 @@
-table_name,version_family_id,note
-theme,1,Theme table versioning (theme_version_id)
-theme_source,1,Theme source table versioning (theme_version_id)
-theme_source_link,1,Theme source link table versioning (theme_version_id)
-scenario,2,Scenario table versioning (scenario_version_id)
-scenario_source,2,Scenario source table versioning (scenario_version_id)
-scenario_source_link,2,Scenario source link table versioning (scenario_version_id)
-scenario_variable_statistic,2,Scenario variable statistic table versioning (source_version_id)
-scenario_measure_statistic,2,Scenario measure statistic table versioning (source_version_id)
-scenario_outcome_statistic,2,Scenario outcome statistic table versioning (source_version_id)
-scenario_category_statistic,2,Scenario category statistic table versioning (source_version_id)
-scenario_variable_timeseries,2,Scenario variable timeseries versioning (scenario results)
-scenario_outcome_value,2,Scenario outcome value versioning (scenario results)
-scenario_tier_value,2,Scenario tier value versioning (scenario results)
-scenario_metadata,11,Scenario metadata table versioning (metadata_version_id)
-scenario_ancillary_output,11,Scenario ancillary output table versioning (metadata_version_id)
-assumption_category,3,Assumption category table versioning (assumption_version_id)
-assumption_definition,3,Assumption definition table versioning (assumption_version_id)
-operation_category,4,Operation category table versioning (operation_version_id)
-operation_definition,4,Operation definition table versioning (operation_version_id)
-hydroclimate,5,Hydroclimate table versioning (hydroclimate_version_id)
-hydroclimate_source,5,Hydroclimate source table versioning (hydroclimate_version_id)
-hydroclimate_variable_summary,5,Hydroclimate variable summary table versioning (variable_version_id)
-variable_group_type,6,Variable group type table versioning (variable_version_id)
-variable_group,6,Variable group table versioning (variable_version_id)
-calsim_node,12,CalSim network node table versioning (network_version_id) - Ring 1 Graph Core
-calsim_arc,12,CalSim network arc table versioning (network_version_id) - Ring 1 Graph Core
-reservoir_entity,6,Reservoir entity table versioning (entity_version_id) - Ring 2 Domain Views
-inflow_entity,6,Inflow entity table versioning (entity_version_id) - Ring 2 Domain Views
-channel_entity,6,Channel entity table versioning (entity_version_id) - Ring 2 Domain Views
-reservoir_variable,6,Reservoir variable table versioning (variable_version_id) - Ring 2 Domain Views
-inflow_variable,6,Inflow variable table versioning (variable_version_id) - Ring 2 Domain Views
-channel_variable,6,Channel variable table versioning (variable_version_id) - Ring 2 Domain Views
-theme_outcome_priority,1,Theme outcome priority table versioning (theme_version_id) - Theme Research Focus
-theme_outcome_measure_focus,1,Theme outcome measure focus table versioning (theme_version_id) - Theme Research Focus
-theme_network_region_link,1,Theme network region link table versioning (theme_version_id) - Theme Research Focus
-theme_entity_type_focus,1,Theme entity type focus table versioning (theme_version_id) - Theme Research Focus
-theme_focus_entity_link,1,Theme focus entity link table versioning (theme_version_id) - Theme Research Focus
-model_variable,6,Model variable table versioning (variable_version_id)
-outcome_category,7,Outcome category table versioning (outcome_version_id)
-outcome_measure,7,Outcome measure table versioning (metrics_version_id)
-outcome_definition,7,Outcome definition table versioning (metrics_version_id)
-tier_definition,8,Tier definition table versioning (tier_version_id)
-tier_level,8,Tier level table versioning (tier_version_id)
-geometry,9,Geometry table versioning (geometries_version_id)
-analysis,10,Analysis table versioning (interpretive_version_id)
-key_concept,10,Key concept table versioning (interpretive_version_id)
-chart_type,10,Chart type table versioning (interpretive_version_id)
-ancillary_data,10,Ancillary data table versioning (interpretive_version_id)
-constant,11,Constant table versioning (metadata_version_id)
-model_source,11,Model source table versioning (version_family_id)
-model_run,11,Model run table versioning (metadata for external models)
-model_value,11,Model value table versioning (source_version_id)
+schema_name,table_name,version_family_short_code,target_version_column,note
+public,theme,theme,theme_version_id,Theme table versioning
+public,scenario,scenario,scenario_version_id,Scenario table versioning
+public,scenario_variable_statistic,scenario,source_version_id,Scenario variable stats versioning
+public,scenario_measure_statistic,scenario,source_version_id,Scenario measure stats versioning
+public,scenario_outcome_statistic,scenario,source_version_id,Scenario outcome stats versioning
+public,scenario_category_statistic,scenario,source_version_id,Scenario category stats versioning
+public,scenario_tier_value,scenario,source_version_id,Scenario tier value versioning
+public,scenario_metadata,metadata,metadata_version_id,Scenario metadata versioning
+public,scenario_ancillary_output,metadata,metadata_version_id,Scenario ancillary output versioning
+public,assumption_definition,assumption,assumptions_version_id,Assumption definition versioning
+public,operation_definition,operation,operation_version_id,Operation definition versioning
+public,hydroclimate,hydroclimate,hydroclimate_version_id,Hydroclimate versioning
+public,variable_group,variable,variable_version_id,Variable group versioning
+public,model_variable,variable,variable_version_id,Model variable catalog versioning
+public,network_node,network,network_version_id,CalSim network node versioning (Ring 1)
+public,network_arc,network,network_version_id,CalSim network arc versioning (Ring 1)
+public,reservoir_entity,variable,entity_version_id,Reservoir entity versioning (Ring 2)
+public,inflow_entity,variable,entity_version_id,Inflow entity versioning (Ring 2)
+public,channel_entity,variable,entity_version_id,Channel entity versioning (Ring 2)
+public,reservoir_variable,variable,variable_version_id,Reservoir variable versioning (Ring 2)
+public,inflow_variable,variable,variable_version_id,Inflow variable versioning (Ring 2)
+public,channel_variable,variable,variable_version_id,Channel variable versioning (Ring 2)
+public,outcome_category,outcome,outcome_version_id,Outcome category versioning
+public,outcome_measure,outcome,metrics_version_id,Outcome measure versioning
+public,tier_definition,tier,tier_version_id,Tier definition versioning
+public,tier_level,tier,tier_version_id,Tier level versioning
+public,geometry,geospatial,geometries_version_id,Geometry catalog versioning
+public,analysis,interpretive,interpretive_version_id,Analysis catalog versioning
+public,key_concept,interpretive,interpretive_version_id,Key concept catalog versioning
+public,chart_type,interpretive,interpretive_version_id,Chart type catalog versioning
+public,ancillary_data,interpretive,interpretive_version_id,Ancillary data catalog versioning
+public,constant,metadata,metadata_version_id,Constant/lookup versioning
+public,model_value,metadata,source_version_id,Values tagged by source/version

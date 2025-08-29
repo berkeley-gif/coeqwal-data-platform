@@ -4,11 +4,13 @@ Table version_family {
   label       text
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 Ref: version_family.created_by > developer.id [delete: restrict, update: cascade]
 Ref: version_family.updated_by > developer.id [delete: restrict, update: cascade]
@@ -18,7 +20,9 @@ Table domain_family_map {
   table_name        text [not null]
   version_family_id int  [not null]
   note              text
-  Indexes { (schema_name, table_name) [pk] }
+  Indexes {
+    (schema_name, table_name) [pk]
+  }
 }
 Ref: domain_family_map.version_family_id > version_family.id [delete: restrict, update: cascade]
 
@@ -29,13 +33,13 @@ Table version {
   manifest          jsonb
   changelog         text
   is_active         boolean   [not null, default: false]
-  created_at        timestamptz [not null, default: "now()"]
+  created_at        timestamptz [not null, default: `now()`]
   created_by        int      [not null]
-  updated_at        timestamptz [not null, default: "now()"]
+  updated_at        timestamptz [not null, default: `now()`]
   updated_by        int      [not null]
   Indexes {
     (version_family_id, version_number) [unique]
-    (manifest) [type: gin]
+    (manifest)
     (version_family_id)
   }
 }
@@ -56,8 +60,8 @@ Table developer {
   sync_source  text      [default: 'manual']
   is_active    boolean   [not null, default: true]
   last_login   timestamptz
-  created_at   timestamptz [not null, default: "now()"]
-  updated_at   timestamptz [not null, default: "now()"]
+  created_at   timestamptz [not null, default: `now()`]
+  updated_at   timestamptz [not null, default: `now()`]
   Indexes {
     (email) [unique]
     (aws_sso_user_id) [unique]
@@ -73,16 +77,22 @@ Table source {
   source      text    [not null, unique]
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (source) [unique], (is_active, source) }
+  Indexes {
+    (source) [unique]
+    (is_active, source)
+  }
 }
 Ref: source.created_by > developer.id [delete: restrict, update: cascade]
 Ref: source.updated_by > developer.id [delete: restrict, update: cascade]
 
-Table calsim_schematic_type { id int [pk, increment]; label text [not null, unique] }
+Table calsim_schematic_type {
+  id int [pk, increment]
+  label text [not null, unique]
+}
 
 Table calsim_entity_type {
   id                int   [pk, increment]
@@ -91,7 +101,9 @@ Table calsim_entity_type {
   description       text
   key_dynamic       text
   is_active         boolean [default: true]
-  Indexes { (is_active, type) }
+  Indexes {
+    (is_active, type)
+  }
 }
 Ref: calsim_entity_type.schematic_type_id > calsim_schematic_type.id
 
@@ -100,11 +112,14 @@ Table hydrologic_region {
   short_code text [not null, unique]
   label      text
   is_active  boolean [not null, default: true]
-  created_at timestamptz [not null, default: "now()"]
+  created_at timestamptz [not null, default: `now()`]
   created_by int [not null]
-  updated_at timestamptz [not null, default: "now()"]
+  updated_at timestamptz [not null, default: `now()`]
   updated_by int [not null]
-  Indexes { (short_code) [unique], (is_active, short_code) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
 Ref: hydrologic_region.created_by > developer.id [delete: restrict, update: cascade]
 Ref: hydrologic_region.updated_by > developer.id [delete: restrict, update: cascade]
@@ -115,11 +130,15 @@ Table unit {
   full_name       text
   canonical_group text
   is_active       boolean [not null, default: true]
-  created_at      timestamptz [not null, default: "now()"]
+  created_at      timestamptz [not null, default: `now()`]
   created_by      int      [not null]
-  updated_at      timestamptz [not null, default: "now()"]
+  updated_at      timestamptz [not null, default: `now()`]
   updated_by      int      [not null]
-  Indexes { (short_code) [unique], (is_active, short_code), (canonical_group) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+    (canonical_group)
+  }
 }
 Ref: unit.created_by > developer.id [delete: restrict, update: cascade]
 Ref: unit.updated_by > developer.id [delete: restrict, update: cascade]
@@ -143,7 +162,7 @@ Table region {
   primary_name text  [not null, unique]
   type         text
   alias_names  text[]
-  geom         geometry(Geometry,4326)
+  geom         geometry
 }
 
 Table hydroclimate_variable_type {
@@ -153,7 +172,9 @@ Table hydroclimate_variable_type {
   unit_hint   text
   description text
   is_active   boolean [default: true]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 Ref: hydroclimate_variable_type.unit_id > unit.id [delete: restrict, update: cascade]
 
@@ -163,7 +184,9 @@ Table variable_type {
   label       text [not null]
   description text
   is_active   boolean [default: true]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 
 Table analysis_type {
@@ -172,7 +195,9 @@ Table analysis_type {
   label       text
   description text
   is_active   boolean [default: true]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 
 Table geometry_type {
@@ -181,7 +206,9 @@ Table geometry_type {
   label       text
   description text
   is_active   boolean [default: true]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 
 Table statistic_type {
@@ -190,11 +217,13 @@ Table statistic_type {
   name          text   [not null]
   description   text
   is_percentile boolean [not null, default: false]
-  created_at    timestamptz [not null, default: "now()"]
+  created_at    timestamptz [not null, default: `now()`]
   created_by    int      [not null]
-  updated_at    timestamptz [not null, default: "now()"]
+  updated_at    timestamptz [not null, default: `now()`]
   updated_by    int      [not null]
-  Indexes { (code) [unique] }
+  Indexes {
+    (code) [unique]
+  }
 }
 Ref: statistic_type.created_by > developer.id  [delete: restrict, update: cascade]
 Ref: statistic_type.updated_by > developer.id  [delete: restrict, update: cascade]
@@ -214,11 +243,14 @@ Table theme {
   outcome_narrative    text
   source               text
   theme_version_id     int       [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int      [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int      [not null]
-  Indexes { (short_code, is_active), (is_active) }
+  Indexes {
+    (short_code, is_active)
+    (is_active)
+  }
 }
 Ref: theme.theme_version_id > version.id [delete: restrict, update: cascade]
 Ref: theme.created_by > developer.id [delete: restrict, update: cascade]
@@ -238,9 +270,9 @@ Table scenario {
   hydroclimate_id      int
   scenario_author_id   int
   scenario_version_id  int       [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int      [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int      [not null]
   Indexes {
     (short_code, is_active)
@@ -248,8 +280,8 @@ Table scenario {
     (baseline_scenario_id)
     (hydroclimate_id)
     (is_active, scenario_version_id)
-    (narrative) [type: gin]
-    (title, description) [type: gin]
+    (narrative)
+    (title, description)
   }
 }
 Ref: scenario.baseline_scenario_id > scenario.id [delete: set null, update: cascade]
@@ -262,7 +294,10 @@ Ref: scenario.updated_by > developer.id    [delete: restrict, update: cascade]
 Table theme_scenario_link {
   theme_id    int  [not null]
   scenario_id int  [not null]
-  Indexes { (theme_id, scenario_id) [pk], (scenario_id, theme_id) }
+  Indexes {
+    (theme_id, scenario_id) [pk]
+    (scenario_id, theme_id)
+  }
 }
 Ref: theme_scenario_link.theme_id    > theme.id    [delete: restrict, update: cascade]
 Ref: theme_scenario_link.scenario_id > scenario.id [delete: restrict, update: cascade]
@@ -275,9 +310,9 @@ Table theme_source {
   url           text
   doc_date      date
   notes         text
-  created_at    timestamptz [not null, default: "now()"]
+  created_at    timestamptz [not null, default: `now()`]
   created_by    int      [not null]
-  updated_at    timestamptz [not null, default: "now()"]
+  updated_at    timestamptz [not null, default: `now()`]
   updated_by    int      [not null]
 }
 Ref: theme_source.created_by > developer.id [delete: restrict, update: cascade]
@@ -286,7 +321,9 @@ Ref: theme_source.updated_by > developer.id [delete: restrict, update: cascade]
 Table theme_source_link {
   theme_id        int  [not null]
   theme_source_id int  [not null]
-  Indexes { (theme_id, theme_source_id) [pk] }
+  Indexes {
+    (theme_id, theme_source_id) [pk]
+  }
 }
 Ref: theme_source_link.theme_id > theme.id [delete: restrict, update: cascade]
 Ref: theme_source_link.theme_source_id > theme_source.id [delete: restrict, update: cascade]
@@ -299,11 +336,14 @@ Table scenario_author {
   organization  text
   affiliation   text
   is_active     boolean [not null, default: true]
-  created_at    timestamptz [not null, default: "now()"]
+  created_at    timestamptz [not null, default: `now()`]
   created_by    int      [not null]
-  updated_at    timestamptz [not null, default: "now()"]
+  updated_at    timestamptz [not null, default: `now()`]
   updated_by    int      [not null]
-  Indexes { (short_code) [unique], (is_active, short_code) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
 Ref: scenario_author.created_by > developer.id [delete: restrict, update: cascade]
 Ref: scenario_author.updated_by > developer.id [delete: restrict, update: cascade]
@@ -316,11 +356,13 @@ Table scenario_source {
   url           text
   doc_date      date
   notes         text
-  created_at    timestamptz [not null, default: "now()"]
+  created_at    timestamptz [not null, default: `now()`]
   created_by    int      [not null]
-  updated_at    timestamptz [not null, default: "now()"]
+  updated_at    timestamptz [not null, default: `now()`]
   updated_by    int      [not null]
-  Indexes { (short_code) [unique] }
+  Indexes {
+    (short_code) [unique]
+  }
 }
 Ref: scenario_source.created_by > developer.id [delete: restrict, update: cascade]
 Ref: scenario_source.updated_by > developer.id [delete: restrict, update: cascade]
@@ -328,7 +370,9 @@ Ref: scenario_source.updated_by > developer.id [delete: restrict, update: cascad
 Table scenario_source_link {
   scenario_id        int [not null]
   scenario_source_id int [not null]
-  Indexes { (scenario_id, scenario_source_id) [pk] }
+  Indexes {
+    (scenario_id, scenario_source_id) [pk]
+  }
 }
 Ref: scenario_source_link.scenario_id > scenario.id [delete: restrict, update: cascade]
 Ref: scenario_source_link.scenario_source_id > scenario_source.id [delete: restrict, update: cascade]
@@ -339,11 +383,13 @@ Table assumption_category {
   label       text   [not null]
   description text
   is_active   boolean   [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 Ref: assumption_category.created_by > developer.id [delete: restrict, update: cascade]
 Ref: assumption_category.updated_by > developer.id [delete: restrict, update: cascade]
@@ -360,9 +406,9 @@ Table assumption_definition {
   assumptions_version_id int   [not null]
   is_active              boolean   [not null, default: true]
   notes                  text
-  created_at             timestamptz [not null, default: "now()"]
+  created_at             timestamptz [not null, default: `now()`]
   created_by             int      [not null]
-  updated_at             timestamptz [not null, default: "now()"]
+  updated_at             timestamptz [not null, default: `now()`]
   updated_by             int      [not null]
   Indexes {
     (category_id, short_code)
@@ -375,12 +421,14 @@ Ref: assumption_definition.created_by > developer.id [delete: restrict, update: 
 Ref: assumption_definition.updated_by > developer.id [delete: restrict, update: cascade]
 
 Table assumption_param_TUCP_TUCO {
-  id           int  [pk, increment]
+  id            int  [pk, increment]
   assumption_id int  [not null]
-  region_id    int
-  season_id    int
-  detail       jsonb
-  Indexes { (assumption_id) }
+  region_id     int
+  season_id     int
+  detail        jsonb
+  Indexes {
+    (assumption_id)
+  }
 }
 Ref: assumption_param_TUCP_TUCO.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 Ref: assumption_param_TUCP_TUCO.region_id > region.id [delete: restrict, update: cascade]
@@ -395,7 +443,9 @@ Table assumption_param_land_use {
   region_id     int
   season_id     int
   detail        jsonb
-  Indexes { (assumption_id, crop) [unique] }
+  Indexes {
+    (assumption_id, crop) [unique]
+  }
 }
 Ref: assumption_param_land_use.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 Ref: assumption_param_land_use.unit_id > unit.id [delete: restrict, update: cascade]
@@ -408,20 +458,24 @@ Table assumption_param_SGMA {
   amount        numeric
   unit_id       int
   detail        jsonb
-  Indexes { (assumption_id, region_id) [unique] }
+  Indexes {
+    (assumption_id, region_id) [unique]
+  }
 }
 Ref: assumption_param_SGMA.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 Ref: assumption_param_SGMA.region_id > region.id [delete: restrict, update: cascade]
 Ref: assumption_param_SGMA.unit_id > unit.id [delete: restrict, update: cascade]
 
 Table assumption_param_slr {
-  id             int  [pk, increment]
-  assumption_id  int  [not null]
+  id              int  [pk, increment]
+  assumption_id   int  [not null]
   projection_year int
-  slr            numeric
-  unit_id        int
-  detail         jsonb
-  Indexes { (assumption_id, slr, unit_id) [unique] }
+  slr             numeric
+  unit_id         int
+  detail          jsonb
+  Indexes {
+    (assumption_id, slr, unit_id) [unique]
+  }
 }
 Ref: assumption_param_slr.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 Ref: assumption_param_slr.unit_id > unit.id [delete: restrict, update: cascade]
@@ -430,7 +484,9 @@ Table assumption_param_gwmodel {
   id            int  [pk, increment]
   assumption_id int  [not null]
   detail        jsonb
-  Indexes { (assumption_id) }
+  Indexes {
+    (assumption_id)
+  }
 }
 Ref: assumption_param_gwmodel.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 
@@ -438,7 +494,9 @@ Table assumption_param_bioops {
   id            int  [pk, increment]
   assumption_id int  [not null]
   detail        jsonb
-  Indexes { (assumption_id) }
+  Indexes {
+    (assumption_id)
+  }
 }
 Ref: assumption_param_bioops.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 
@@ -452,7 +510,9 @@ Table assumption_param_kv {
   region_id     int
   season_id     int
   detail        jsonb
-  Indexes { (assumption_id, key) [unique] }
+  Indexes {
+    (assumption_id, key) [unique]
+  }
 }
 Ref: assumption_param_kv.assumption_id > assumption_definition.id [delete: cascade, update: restrict]
 Ref: assumption_param_kv.unit_id > unit.id [delete: restrict, update: cascade]
@@ -462,7 +522,10 @@ Ref: assumption_param_kv.season_id > season.id [delete: restrict, update: cascad
 Table theme_key_assumption_link {
   theme_id                 int  [not null]
   assumption_definition_id int  [not null]
-  Indexes { (theme_id, assumption_definition_id) [pk], (assumption_definition_id, theme_id) }
+  Indexes {
+    (theme_id, assumption_definition_id) [pk]
+    (assumption_definition_id, theme_id)
+  }
 }
 Ref: theme_key_assumption_link.theme_id                 > theme.id                 [delete: restrict, update: cascade]
 Ref: theme_key_assumption_link.assumption_definition_id > assumption_definition.id [delete: restrict, update: cascade]
@@ -470,7 +533,10 @@ Ref: theme_key_assumption_link.assumption_definition_id > assumption_definition.
 Table scenario_key_assumption_link {
   scenario_id   int [not null]
   assumption_id int [not null]
-  Indexes { (scenario_id, assumption_id) [pk], (assumption_id, scenario_id) }
+  Indexes {
+    (scenario_id, assumption_id) [pk]
+    (assumption_id, scenario_id)
+  }
 }
 Ref: scenario_key_assumption_link.scenario_id  > scenario.id            [delete: restrict, update: cascade]
 Ref: scenario_key_assumption_link.assumption_id > assumption_definition.id [delete: restrict, update: cascade]
@@ -481,11 +547,13 @@ Table operation_category {
   name        text
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 Ref: operation_category.created_by > developer.id [delete: restrict, update: cascade]
 Ref: operation_category.updated_by > developer.id [delete: restrict, update: cascade]
@@ -499,9 +567,9 @@ Table operation_definition {
   is_active            boolean   [not null, default: true]
   notes                text
   operation_version_id int   [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int      [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int      [not null]
   Indexes {
     (is_active)
@@ -520,7 +588,9 @@ Table operation_param_priority_allocation {
   region_id       int
   season_id       int
   detail          jsonb
-  Indexes { (operation_id) }
+  Indexes {
+    (operation_id)
+  }
 }
 Ref: operation_param_priority_allocation.operation_id  > operation_definition.id [delete: cascade, update: restrict]
 Ref: operation_param_priority_allocation.region_id > region.id [delete: restrict, update: cascade]
@@ -536,7 +606,10 @@ Table operation_param_minimum_flow {
   flow_target_value numeric
   unit_id           int
   detail            jsonb
-  Indexes { (operation_id), (operation_id, tributary) [unique] }
+  Indexes {
+    (operation_id)
+    (operation_id, tributary) [unique]
+  }
 }
 Ref: operation_param_minimum_flow.operation_id  > operation_definition.id [delete: cascade, update: restrict]
 Ref: operation_param_minimum_flow.region_id > region.id [delete: restrict, update: cascade]
@@ -551,7 +624,10 @@ Table operation_param_infrastructure {
   operation_level     text
   unit_id             int
   detail              jsonb
-  Indexes { (operation_id), (operation_id, infrastructure_name) [unique] }
+  Indexes {
+    (operation_id)
+    (operation_id, infrastructure_name) [unique]
+  }
 }
 Ref: operation_param_infrastructure.operation_id  > operation_definition.id [delete: cascade, update: restrict]
 Ref: operation_param_infrastructure.unit_id > unit.id [delete: restrict, update: cascade]
@@ -562,7 +638,10 @@ Table operation_param_regulatory {
   regulation_type  int
   regulation_name  text
   detail           jsonb
-  Indexes { (operation_id), (operation_id, regulation_type, regulation_name) [unique] }
+  Indexes {
+    (operation_id)
+    (operation_id, regulation_type, regulation_name) [unique]
+  }
 }
 Ref: operation_param_regulatory.operation_id  > operation_definition.id [delete: cascade, update: restrict]
 
@@ -573,7 +652,10 @@ Table operation_param_carryover {
   amount        numeric
   unit_id       int
   detail        jsonb
-  Indexes { (operation_id), (operation_id, reservoir_id, amount) [unique] }
+  Indexes {
+    (operation_id)
+    (operation_id, reservoir_id, amount) [unique]
+  }
 }
 Ref: operation_param_carryover.operation_id  > operation_definition.id [delete: cascade, update: restrict]
 Ref: operation_param_carryover.reservoir_id  > reservoir_entity.id [delete: cascade, update: restrict]
@@ -589,7 +671,9 @@ Table operation_param_kv {
   region_id     int
   season_id     int
   detail        jsonb
-  Indexes { (operation_id, key) [unique] }
+  Indexes {
+    (operation_id, key) [unique]
+  }
 }
 Ref: operation_param_kv.operation_id  > operation_definition.id [delete: cascade, update: restrict]
 Ref: operation_param_kv.unit_id > unit.id [delete: restrict, update: cascade]
@@ -599,7 +683,10 @@ Ref: operation_param_kv.season_id > season.id [delete: restrict, update: cascade
 Table theme_key_operation_link {
   theme_id     int [not null]
   operation_id int [not null]
-  Indexes { (theme_id, operation_id) [pk], (operation_id, theme_id) }
+  Indexes {
+    (theme_id, operation_id) [pk]
+    (operation_id, theme_id)
+  }
 }
 Ref: theme_key_operation_link.theme_id     > theme.id                [delete: restrict, update: cascade]
 Ref: theme_key_operation_link.operation_id > operation_definition.id [delete: restrict, update: cascade]
@@ -607,7 +694,10 @@ Ref: theme_key_operation_link.operation_id > operation_definition.id [delete: re
 Table scenario_key_operation_link {
   scenario_id  int [not null]
   operation_id int [not null]
-  Indexes { (scenario_id, operation_id) [pk], (operation_id, scenario_id) }
+  Indexes {
+    (scenario_id, operation_id) [pk]
+    (operation_id, scenario_id)
+  }
 }
 Ref: scenario_key_operation_link.scenario_id  > scenario.id           [delete: restrict, update: cascade]
 Ref: scenario_key_operation_link.operation_id > operation_definition.id [delete: restrict, update: cascade]
@@ -619,33 +709,38 @@ Table outcome_category {
   description        text
   outcome_version_id int  [not null]
   is_active          boolean [default: true]
-  created_at         timestamptz [not null, default: "now()"]
+  created_at         timestamptz [not null, default: `now()`]
   created_by         int      [not null]
-  updated_at         timestamptz [not null, default: "now()"]
+  updated_at         timestamptz [not null, default: `now()`]
   updated_by         int      [not null]
-  Indexes { (is_active, short_code) }
+  Indexes {
+    (is_active, short_code)
+  }
 }
 Ref: outcome_category.outcome_version_id > version.id           [delete: restrict, update: cascade]
 Ref: outcome_category.created_by         > developer.id      [delete: restrict, update: cascade]
 Ref: outcome_category.updated_by         > developer.id      [delete: restrict, update: cascade]
 
 Table outcome_measure {
-  id                int  [pk, increment]
+  id                  int  [pk, increment]
   outcome_category_id int  [not null]
-  short_code        text [not null]
-  name              text [not null]
-  description       text
-  unit_id           int
-  temporal_scale_id int
-  spatial_scale_id  int
-  calc_note         text
-  metrics_version_id int [not null]
-  is_active         boolean [default: true]
-  created_at        timestamptz [not null, default: "now()"]
-  created_by        int      [not null]
-  updated_at        timestamptz [not null, default: "now()"]
-  updated_by        int      [not null]
-  Indexes { (outcome_category_id, short_code), (is_active) }
+  short_code          text [not null]
+  name                text [not null]
+  description         text
+  unit_id             int
+  temporal_scale_id   int
+  spatial_scale_id    int
+  calc_note           text
+  metrics_version_id  int [not null]
+  is_active           boolean [default: true]
+  created_at          timestamptz [not null, default: `now()`]
+  created_by          int      [not null]
+  updated_at          timestamptz [not null, default: `now()`]
+  updated_by          int      [not null]
+  Indexes {
+    (outcome_category_id, short_code)
+    (is_active)
+  }
 }
 Ref: outcome_measure.outcome_category_id  > outcome_category.id [delete: restrict, update: cascade]
 Ref: outcome_measure.unit_id              > unit.id             [delete: restrict, update: cascade]
@@ -658,7 +753,10 @@ Ref: outcome_measure.updated_by           > developer.id        [delete: restric
 Table measure_variable_link {
   measure_id  int  [not null]
   variable_id uuid [not null]
-  Indexes { (measure_id, variable_id) [pk], (variable_id, measure_id) }
+  Indexes {
+    (measure_id, variable_id) [pk]
+    (variable_id, measure_id)
+  }
 }
 Ref: measure_variable_link.measure_id  > outcome_measure.id  [delete: restrict, update: cascade]
 Ref: measure_variable_link.variable_id > variable.id        [delete: restrict, update: cascade]
@@ -669,11 +767,14 @@ Table temporal_scale {
   label       text [not null]
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (short_code) [unique], (is_active, short_code) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
 Ref: temporal_scale.created_by > developer.id [delete: restrict, update: cascade]
 Ref: temporal_scale.updated_by > developer.id [delete: restrict, update: cascade]
@@ -684,22 +785,25 @@ Table spatial_scale {
   label       text
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (short_code) [unique], (is_active, short_code) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
 Ref: spatial_scale.created_by > developer.id [delete: restrict, update: cascade]
 Ref: spatial_scale.updated_by > developer.id [delete: restrict, update: cascade]
 
 Table scenario_variable_statistic {
-  scenario_id        int [not null]
+  scenario_id        int  [not null]
   variable_id        uuid [not null]
   statistic_type_id  int  [not null]
   value              numeric [not null]
   source_version_id  int    [not null]
-  created_at         timestamptz [not null, default: "now()"]
+  created_at         timestamptz [not null, default: `now()`]
   created_by         int
   updated_at         timestamptz
   updated_by         int
@@ -722,7 +826,7 @@ Table scenario_measure_statistic {
   statistic_type_id  int  [not null]
   value              numeric [not null]
   source_version_id  int    [not null]
-  created_at         timestamptz [not null, default: "now()"]
+  created_at         timestamptz [not null, default: `now()`]
   created_by         int
   updated_at         timestamptz
   updated_by         int
@@ -745,11 +849,14 @@ Table scenario_outcome_statistic {
   statistic_type_id int  [not null]
   value             numeric [not null]
   source_version_id int [not null]
-  created_at        timestamptz [not null, default: "now()"]
+  created_at        timestamptz [not null, default: `now()`]
   created_by        int
   updated_at        timestamptz
   updated_by        int
-  Indexes { (scenario_id, outcome_id, statistic_type_id) [pk], (outcome_id, statistic_type_id) }
+  Indexes {
+    (scenario_id, outcome_id, statistic_type_id) [pk]
+    (outcome_id, statistic_type_id)
+  }
 }
 Ref: scenario_outcome_statistic.source_version_id > version.id
 Ref: scenario_outcome_statistic.scenario_id > scenario.id
@@ -759,16 +866,19 @@ Ref: scenario_outcome_statistic.created_by > developer.id
 Ref: scenario_outcome_statistic.updated_by > developer.id
 
 Table scenario_category_statistic {
-  scenario_id       int [not null, ref: > scenario.id]
+  scenario_id       int  [not null, ref: > scenario.id]
   category_id       int  [not null, ref: > outcome_category.id]
   statistic_type_id int  [not null, ref: > statistic_type.id]
   value             numeric [not null]
-  source_version_id int [not null, ref: > version.id]
-  created_at        timestamptz [not null, default: "now()"]
+  source_version_id int  [not null, ref: > version.id]
+  created_at        timestamptz [not null, default: `now()`]
   created_by        int
   updated_at        timestamptz
   updated_by        int
-  Indexes { (scenario_id, category_id, statistic_type_id) [pk], (category_id, statistic_type_id) }
+  Indexes {
+    (scenario_id, category_id, statistic_type_id) [pk]
+    (category_id, statistic_type_id)
+  }
 }
 
 Table theme_outcome_priority {
@@ -778,7 +888,7 @@ Table theme_outcome_priority {
   focus_weight        numeric [default: 1.0]
   research_rationale  text
   measurement_focus   text
-  created_at          timestamptz [not null, default: "now()"]
+  created_at          timestamptz [not null, default: `now()`]
   created_by          int      [not null]
   updated_at          timestamptz
   updated_by          int
@@ -800,9 +910,14 @@ Table theme_outcome_measure_focus {
   focus_level         text    [not null]
   analytical_emphasis text
   tier_relevance      boolean [default: false]
-  created_at          timestamptz [not null, default: "now()"]
+  created_at          timestamptz [not null, default: `now()`]
   created_by          int      [not null]
-  Indexes { (theme_id, outcome_measure_id) [pk], (outcome_measure_id, theme_id), (focus_level), (tier_relevance) }
+  Indexes {
+    (theme_id, outcome_measure_id) [pk]
+    (outcome_measure_id, theme_id)
+    (focus_level)
+    (tier_relevance)
+  }
 }
 Ref: theme_outcome_measure_focus.theme_id           > theme.id         [delete: cascade, update: cascade]
 Ref: theme_outcome_measure_focus.outcome_measure_id > outcome_measure.id [delete: restrict, update: cascade]
@@ -816,11 +931,13 @@ Table hydroclimate_source {
   citation    text
   url         text
   notes       text
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (short_code) }
+  Indexes {
+    (short_code)
+  }
 }
 Ref: hydroclimate_source.created_by > developer.id
 Ref: hydroclimate_source.updated_by > developer.id
@@ -837,11 +954,14 @@ Table hydroclimate {
   source_id               int
   notes                   text
   hydroclimate_version_id int
-  created_at              timestamptz [not null, default: "now()"]
+  created_at              timestamptz [not null, default: `now()`]
   created_by              int      [not null]
-  updated_at              timestamptz [not null, default: "now()"]
+  updated_at              timestamptz [not null, default: `now()`]
   updated_by              int      [not null]
-  Indexes { (is_active, short_code), (source_id) }
+  Indexes {
+    (is_active, short_code)
+    (source_id)
+  }
 }
 Ref: hydroclimate.hydroclimate_version_id > version.id
 Ref: hydroclimate.source_id              > hydroclimate_source.id
@@ -857,11 +977,13 @@ Table hydroclimate_variable_summary {
   description         text
   distribution_data   jsonb
   variable_version_id int       [not null]
-  created_at          timestamptz [not null, default: "now()"]
+  created_at          timestamptz [not null, default: `now()`]
   created_by          int      [not null]
-  updated_at          timestamptz [not null, default: "now()"]
+  updated_at          timestamptz [not null, default: `now()`]
   updated_by          int      [not null]
-  Indexes { (hydroclimate_id, variable_type_id) [unique] }
+  Indexes {
+    (hydroclimate_id, variable_type_id) [unique]
+  }
 }
 Ref: hydroclimate_variable_summary.variable_type_id > hydroclimate_variable_type.id
 Ref: hydroclimate_variable_summary.hydroclimate_id > hydroclimate.id
@@ -876,11 +998,14 @@ Table variable_group_type {
   name        text   [not null]
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
-  updated_at  timestamptz [not null, default: "now()"]
+  updated_at  timestamptz [not null, default: `now()`]
   updated_by  int      [not null]
-  Indexes { (short_code) [unique], (is_active, short_code) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
 Ref: variable_group_type.created_by > developer.id
 Ref: variable_group_type.updated_by > developer.id
@@ -895,11 +1020,14 @@ Table variable_group {
   selection_criteria   text
   is_active            boolean [not null, default: true]
   variable_version_id  int     [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int      [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int      [not null]
-  Indexes { (group_type_id, short_code) [unique], (is_active, group_type_id) }
+  Indexes {
+    (group_type_id, short_code) [unique]
+    (is_active, group_type_id)
+  }
 }
 Ref: variable_group.group_type_id       > variable_group_type.id [delete: restrict, update: cascade]
 Ref: variable_group.variable_version_id > version.id
@@ -907,20 +1035,26 @@ Ref: variable_group.created_by          > developer.id
 Ref: variable_group.updated_by          > developer.id
 
 Table variable {
-  id            uuid     [pk, default: "gen_random_uuid()"]
+  id            uuid     [pk, default: `gen_random_uuid()`]
   kind          text     [not null]
   source_table  text     [not null]
   source_pk     int      [not null]
-  created_at    timestamptz [not null, default: "now()"]
+  created_at    timestamptz [not null, default: `now()`]
   created_by    int      [not null]
-  Indexes { (source_table, source_pk) [unique], (kind) }
+  Indexes {
+    (source_table, source_pk) [unique]
+    (kind)
+  }
 }
 Ref: variable.created_by > developer.id
 
 Table variable_source_link {
   variable_id uuid [not null]
   source_id   int  [not null]
-  Indexes { (variable_id, source_id) [pk], (source_id, variable_id) }
+  Indexes {
+    (variable_id, source_id) [pk]
+    (source_id, variable_id)
+  }
 }
 Ref: variable_source_link.variable_id > variable.id [delete: cascade, update: cascade]
 Ref: variable_source_link.source_id > source.id [delete: restrict, update: cascade]
@@ -929,42 +1063,49 @@ Table variable_aggregation {
   parent_variable_id uuid [not null]
   child_variable_id  uuid [not null]
   relationship       text
-  Indexes { (parent_variable_id, child_variable_id) [pk], (child_variable_id, parent_variable_id) }
+  Indexes {
+    (parent_variable_id, child_variable_id) [pk]
+    (child_variable_id, parent_variable_id)
+  }
 }
 Ref: variable_aggregation.parent_variable_id > variable.id [delete: cascade, update: cascade]
 Ref: variable_aggregation.child_variable_id  > variable.id [delete: restrict, update: cascade]
 
 Table tier_definition {
-  id              int  [pk, increment]
-  name            text [not null, unique]
-  description     text
-  rationale       text
-  method          text
+  id               int  [pk, increment]
+  name             text [not null, unique]
+  description      text
+  rationale        text
+  method           text
   outcome_measures text[]
-  is_active       boolean   [not null, default: false]
-  tier_version_id int       [not null]
-  created_at      timestamptz [not null, default: "now()"]
-  created_by      int      [not null]
-  updated_at      timestamptz [not null, default: "now()"]
-  updated_by      int      [not null]
-  Indexes { (is_active, name) }
+  is_active        boolean   [not null, default: false]
+  tier_version_id  int       [not null]
+  created_at       timestamptz [not null, default: `now()`]
+  created_by       int      [not null]
+  updated_at       timestamptz [not null, default: `now()`]
+  updated_by       int      [not null]
+  Indexes {
+    (is_active, name)
+  }
 }
 Ref: tier_definition.tier_version_id > version.id
 Ref: tier_definition.created_by  > developer.id
 Ref: tier_definition.updated_by  > developer.id
 
 Table tier_level {
-  tier_id             int  [not null]
-  level               int  [not null]
-  label               text
-  short_description   text
+  tier_id              int  [not null]
+  level                int  [not null]
+  label                text
+  short_description    text
   detailed_description text
-  tier_version_id     int  [not null]
-  created_at          timestamptz [not null, default: "now()"]
-  created_by          int      [not null]
-  updated_at          timestamptz [not null, default: "now()"]
-  updated_by          int      [not null]
-  Indexes { (tier_id, level) [pk] }
+  tier_version_id      int  [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  Indexes {
+    (tier_id, level) [pk]
+  }
 }
 Ref: tier_level.tier_id        > tier_definition.id         [delete: cascade,  update: cascade]
 Ref: tier_level.tier_version_id> version.id
@@ -974,7 +1115,10 @@ Ref: tier_level.updated_by     > developer.id
 Table tier_outcome_link {
   tier_id    int [not null]
   outcome_id int [not null]
-  Indexes { (tier_id, outcome_id) [pk], (outcome_id, tier_id) }
+  Indexes {
+    (tier_id, outcome_id) [pk]
+    (outcome_id, tier_id)
+  }
 }
 Ref: tier_outcome_link.tier_id    > tier_definition.id
 Ref: tier_outcome_link.outcome_id > outcome_measure.id
@@ -982,30 +1126,38 @@ Ref: tier_outcome_link.outcome_id > outcome_measure.id
 Table tier_variable_group_link {
   tier_id    int [not null]
   group_id   int [not null]
-  created_at timestamptz [not null, default: "now()"]
+  created_at timestamptz [not null, default: `now()`]
   created_by int [not null]
-  Indexes { (tier_id, group_id) [pk], (group_id, tier_id) }
+  Indexes {
+    (tier_id, group_id) [pk]
+    (group_id, tier_id)
+  }
 }
 Ref: tier_variable_group_link.tier_id    > tier_definition.id [delete: cascade, update: cascade]
 Ref: tier_variable_group_link.group_id   > variable_group.id  [delete: cascade, update: cascade]
 Ref: tier_variable_group_link.created_by > developer.id
 
 Table scenario_metadata {
-  id              uuid   [pk, default: "gen_random_uuid()"]
-  scenario_id     int   [not null]
-  theme_id        int    [not null]
-  study_name      text
-  alias           text
-  version         text
-  url             text
-  created         date
-  last_modified   date
-  raw             jsonb  [not null]
-  created_at      timestamptz [not null, default: "now()"]
-  created_by      int      [not null]
-  updated_at      timestamptz [not null, default: "now()"]
-  updated_by      int      [not null]
-  Indexes { (scenario_id) [unique], (study_name), (alias), (theme_id, scenario_id) }
+  id            uuid   [pk, default: `gen_random_uuid()`]
+  scenario_id   int    [not null]
+  theme_id      int    [not null]
+  study_name    text
+  alias         text
+  version       text
+  url           text
+  created       date
+  last_modified date
+  raw           jsonb  [not null]
+  created_at    timestamptz [not null, default: `now()`]
+  created_by    int      [not null]
+  updated_at    timestamptz [not null, default: `now()`]
+  updated_by    int      [not null]
+  Indexes {
+    (scenario_id) [unique]
+    (study_name)
+    (alias)
+    (theme_id, scenario_id)
+  }
 }
 Ref: scenario_metadata.theme_id    > theme.id
 Ref: scenario_metadata.scenario_id > scenario.id
@@ -1013,14 +1165,14 @@ Ref: scenario_metadata.created_by  > developer.id
 Ref: scenario_metadata.updated_by  > developer.id
 
 Table scenario_ancillary_output {
-  id                   uuid [pk, default: "gen_random_uuid()"]
+  id                   uuid [pk, default: `gen_random_uuid()`]
   scenario_metadata_id uuid [not null]
   output_type          text
   file_name            text
   metadata_version_id  int  [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int  [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int  [not null]
 }
 Ref: scenario_ancillary_output.scenario_metadata_id > scenario_metadata.id
@@ -1036,9 +1188,9 @@ Table model_source {
   description       text
   contact           text
   notes             text
-  created_at        timestamptz [not null, default: "now()"]
+  created_at        timestamptz [not null, default: `now()`]
   created_by        int      [not null]
-  updated_at        timestamptz [not null, default: "now()"]
+  updated_at        timestamptz [not null, default: `now()`]
   updated_by        int      [not null]
 }
 Ref: model_source.version_family_id > version_family.id
@@ -1055,7 +1207,9 @@ Table model_variable {
   geometry_type_id    int
   description         text
   variable_version_id int   [not null]
-  Indexes { (model_source_id, short_code) [unique] }
+  Indexes {
+    (model_source_id, short_code) [unique]
+  }
 }
 Ref: model_variable.model_source_id     > model_source.id
 Ref: model_variable.variable_version_id > version.id
@@ -1064,17 +1218,19 @@ Ref: model_variable.temporal_scale_id > temporal_scale.id
 Ref: model_variable.geometry_type_id > geometry_type.id
 
 Table model_run {
-  id              uuid [pk, default: "gen_random_uuid()"]
+  id              uuid [pk, default: `gen_random_uuid()`]
   model_source_id int  [not null]
   scenario_id     int  [not null]
   run_timestamp   timestamptz [not null]
   manifest        jsonb
   notes           text
-  created_at      timestamptz [not null, default: "now()"]
+  created_at      timestamptz [not null, default: `now()`]
   created_by      int [not null]
-  updated_at      timestamptz [not null, default: "now()"]
+  updated_at      timestamptz [not null, default: `now()`]
   updated_by      int [not null]
-  Indexes { (model_source_id, scenario_id, run_timestamp) [unique] }
+  Indexes {
+    (model_source_id, scenario_id, run_timestamp) [unique]
+  }
 }
 Ref: model_run.model_source_id > model_source.id
 Ref: model_run.scenario_id     > scenario.id
@@ -1088,11 +1244,15 @@ Table model_value {
   geometry_id       uuid
   value             numeric [not null]
   source_version_id int     [not null]
-  created_at        timestamptz [not null, default: "now()"]
+  created_at        timestamptz [not null, default: `now()`]
   created_by        int [not null]
-  updated_at        timestamptz [not null, default: "now()"]
+  updated_at        timestamptz [not null, default: `now()`]
   updated_by        int [not null]
-  Indexes { (model_run_id, variable_id, geometry_id) [unique], (variable_id, geometry_id), (geometry_id) }
+  Indexes {
+    (model_run_id, variable_id, geometry_id) [unique]
+    (variable_id, geometry_id)
+    (geometry_id)
+  }
 }
 Ref: model_value.model_run_id      > model_run.id
 Ref: model_value.variable_id       > model_variable.id
@@ -1102,16 +1262,16 @@ Ref: model_value.created_by        > developer.id
 Ref: model_value.updated_by        > developer.id
 
 Table analysis {
-  id                     int  [pk, increment]
-  name                   text [unique, not null]
-  description            text
-  analysis_type_id       int
-  notes                  text
+  id                      int  [pk, increment]
+  name                    text [unique, not null]
+  description             text
+  analysis_type_id        int
+  notes                   text
   interpretive_version_id int [not null]
-  created_at             timestamptz [not null, default: "now()"]
-  created_by             int      [not null]
-  updated_at             timestamptz [not null, default: "now()"]
-  updated_by             int      [not null]
+  created_at              timestamptz [not null, default: `now()`]
+  created_by              int      [not null]
+  updated_at              timestamptz [not null, default: `now()`]
+  updated_by              int      [not null]
 }
 Ref: analysis.analysis_type_id       > analysis_type.id
 Ref: analysis.interpretive_version_id> version.id
@@ -1119,27 +1279,27 @@ Ref: analysis.created_by             > developer.id
 Ref: analysis.updated_by             > developer.id
 
 Table key_concept {
-  id                     int  [pk, increment]
-  name                   text [unique, not null]
-  definition             text
+  id                      int  [pk, increment]
+  name                    text [unique, not null]
+  definition              text
   interpretive_version_id int  [not null]
-  created_at             timestamptz [not null, default: "now()"]
-  created_by             int      [not null]
-  updated_at             timestamptz [not null, default: "now()"]
-  updated_by             int      [not null]
+  created_at              timestamptz [not null, default: `now()`]
+  created_by              int      [not null]
+  updated_at              timestamptz [not null, default: `now()`]
+  updated_by              int      [not null]
 }
 Ref: key_concept.interpretive_version_id > version.id
 Ref: key_concept.created_by              > developer.id
 Ref: key_concept.updated_by              > developer.id
 
 Table chart_type {
-  id                     int  [pk, increment]
-  type                   text [unique, not null]
+  id                      int  [pk, increment]
+  type                    text [unique, not null]
   interpretive_version_id int  [not null]
-  created_at             timestamptz [not null, default: "now()"]
-  created_by             int      [not null]
-  updated_at             timestamptz [not null, default: "now()"]
-  updated_by             int      [not null]
+  created_at              timestamptz [not null, default: `now()`]
+  created_by              int      [not null]
+  updated_at              timestamptz [not null, default: `now()`]
+  updated_by              int      [not null]
 }
 Ref: chart_type.interpretive_version_id > version.id
 Ref: chart_type.created_by              > developer.id
@@ -1152,9 +1312,9 @@ Table ancillary_data {
   description              text
   source                   text
   interpretive_version_id  int  [not null]
-  created_at               timestamptz [not null, default: "now()"]
+  created_at               timestamptz [not null, default: `now()`]
   created_by               int      [not null]
-  updated_at               timestamptz [not null, default: "now()"]
+  updated_at               timestamptz [not null, default: `now()`]
   updated_by               int      [not null]
 }
 Ref: ancillary_data.interpretive_version_id > version.id
@@ -1164,7 +1324,10 @@ Ref: ancillary_data.updated_by              > developer.id
 Table theme_key_concept_link {
   theme_id       int [not null]
   key_concept_id int [not null]
-  Indexes { (theme_id, key_concept_id) [pk], (key_concept_id, theme_id) }
+  Indexes {
+    (theme_id, key_concept_id) [pk]
+    (key_concept_id, theme_id)
+  }
 }
 Ref: theme_key_concept_link.theme_id       > theme.id
 Ref: theme_key_concept_link.key_concept_id > key_concept.id
@@ -1172,7 +1335,10 @@ Ref: theme_key_concept_link.key_concept_id > key_concept.id
 Table theme_chart_type_link {
   theme_id      int [not null]
   chart_type_id int [not null]
-  Indexes { (theme_id, chart_type_id) [pk], (chart_type_id, theme_id) }
+  Indexes {
+    (theme_id, chart_type_id) [pk]
+    (chart_type_id, theme_id)
+  }
 }
 Ref: theme_chart_type_link.theme_id     > theme.id
 Ref: theme_chart_type_link.chart_type_id > chart_type.id
@@ -1180,7 +1346,10 @@ Ref: theme_chart_type_link.chart_type_id > chart_type.id
 Table theme_ancillary_data_link {
   theme_id          int [not null]
   ancillary_data_id int [not null]
-  Indexes { (theme_id, ancillary_data_id) [pk], (ancillary_data_id, theme_id) }
+  Indexes {
+    (theme_id, ancillary_data_id) [pk]
+    (ancillary_data_id, theme_id)
+  }
 }
 Ref: theme_ancillary_data_link.theme_id          > theme.id
 Ref: theme_ancillary_data_link.ancillary_data_id > ancillary_data.id
@@ -1188,7 +1357,10 @@ Ref: theme_ancillary_data_link.ancillary_data_id > ancillary_data.id
 Table theme_analysis_link {
   theme_id    int [not null]
   analysis_id int [not null]
-  Indexes { (theme_id, analysis_id) [pk], (analysis_id, theme_id) }
+  Indexes {
+    (theme_id, analysis_id) [pk]
+    (analysis_id, theme_id)
+  }
 }
 Ref: theme_analysis_link.theme_id    > theme.id
 Ref: theme_analysis_link.analysis_id > analysis.id
@@ -1196,25 +1368,30 @@ Ref: theme_analysis_link.analysis_id > analysis.id
 Table theme_variable_group_link {
   theme_id   int [not null]
   group_id   int [not null]
-  created_at timestamptz [not null, default: "now()"]
+  created_at timestamptz [not null, default: `now()`]
   created_by int [not null]
-  Indexes { (theme_id, group_id) [pk], (group_id, theme_id) }
+  Indexes {
+    (theme_id, group_id) [pk]
+    (group_id, theme_id)
+  }
 }
 Ref: theme_variable_group_link.theme_id    > theme.id [delete: cascade, update: cascade]
 Ref: theme_variable_group_link.group_id    > variable_group.id [delete: cascade, update: cascade]
 Ref: theme_variable_group_link.created_by  > developer.id
 
 Table geometry {
-  id                   uuid   [pk, default: "gen_random_uuid()"]
-  name                 text
-  geometry_type_id     int    [not null]
-  geom                 geometry(Geometry,4326)
+  id                    uuid   [pk, default: `gen_random_uuid()`]
+  name                  text
+  geometry_type_id      int    [not null]
+  geom                  geometry
   geometries_version_id int   [not null]
-  created_at           timestamptz [not null, default: "now()"]
-  created_by           int      [not null]
-  updated_at           timestamptz [not null, default: "now()"]
-  updated_by           int      [not null]
-  Indexes { (geom) [type: gist] }
+  created_at            timestamptz [not null, default: `now()`]
+  created_by            int      [not null]
+  updated_at            timestamptz [not null, default: `now()`]
+  updated_by            int      [not null]
+  Indexes {
+    (geom)
+  }
 }
 Ref: geometry.geometry_type_id       > geometry_type.id
 Ref: geometry.geometries_version_id  > version.id
@@ -1222,77 +1399,94 @@ Ref: geometry.created_by             > developer.id
 Ref: geometry.updated_by             > developer.id
 
 Table geometry_lookup {
-  id             uuid   [pk, default: "gen_random_uuid()"]
+  id             uuid   [pk, default: `gen_random_uuid()`]
   geometry_id    uuid   [not null]
   variable_id    uuid   [not null]
   attribute_name text
   value          numeric
-  Indexes { (geometry_id), (variable_id) }
+  Indexes {
+    (geometry_id)
+    (variable_id)
+  }
 }
 Ref: geometry_lookup.geometry_id > geometry.id [delete: cascade, update: cascade]
 Ref: geometry_lookup.variable_id > variable.id [delete: restrict, update: cascade]
 
 Table node {
-  id               uuid [pk, default: "gen_random_uuid()"]
+  id               uuid [pk, default: `gen_random_uuid()`]
   name             text
   geometry_type_id int
-  geom             geometry(Point,4326) [not null]
-  Indexes { (geom) [type: gist] }
+  geom             geometry [not null]
+  Indexes {
+    (geom)
+  }
 }
 Ref: node.geometry_type_id > geometry_type.id
 
 Table arc {
-  id               uuid [pk, default: "gen_random_uuid()"]
+  id               uuid [pk, default: `gen_random_uuid()`]
   from_node_id     uuid [not null, ref: > node.id]
   to_node_id       uuid [not null, ref: > node.id]
   geometry_type_id int
-  geom             geometry(LineString,4326) [not null]
+  geom             geometry [not null]
   metadata         json
-  Indexes { (from_node_id), (to_node_id), (geom) [type: gist] }
+  Indexes {
+    (from_node_id)
+    (to_node_id)
+    (geom)
+  }
 }
 Ref: arc.geometry_type_id > geometry_type.id
 
 Table geometry_attributes_node {
-  id           uuid   [pk, default: "gen_random_uuid()"]
+  id           uuid   [pk, default: `gen_random_uuid()`]
   geometry_id  uuid   [not null]
   sub_type     text
   region_id    int
   shape_length numeric
-  Indexes { (geometry_id) [unique] }
+  Indexes {
+    (geometry_id) [unique]
+  }
 }
 Ref: geometry_attributes_node.geometry_id > geometry.id [delete: cascade, update: restrict]
 Ref: geometry_attributes_node.region_id > region.id
 
 Table geometry_attributes_arc {
-  id              uuid   [pk, default: "gen_random_uuid()"]
+  id              uuid   [pk, default: `gen_random_uuid()`]
   geometry_id     uuid   [not null]
   arc_description text
   from_node       text
   to_node         text
   shape_length    numeric
-  Indexes { (geometry_id) [unique] }
+  Indexes {
+    (geometry_id) [unique]
+  }
 }
 Ref: geometry_attributes_arc.geometry_id > geometry.id [delete: cascade, update: restrict]
 
 Table geometry_attributes_demand_unit {
-  id          uuid   [pk, default: "gen_random_uuid()"]
+  id          uuid   [pk, default: `gen_random_uuid()`]
   geometry_id uuid   [not null]
   crop_type   text
   region_id   int
   area_ha     numeric
-  Indexes { (geometry_id) [unique] }
+  Indexes {
+    (geometry_id) [unique]
+  }
 }
 Ref: geometry_attributes_demand_unit.geometry_id > geometry.id [delete: cascade, update: restrict]
 Ref: geometry_attributes_demand_unit.region_id > region.id
 
 Table constant {
-  id                  uuid   [pk, default: "gen_random_uuid()"]
+  id                  uuid   [pk, default: `gen_random_uuid()`]
   label               text
   year                int
   value               text
   source              text
   metadata_version_id int    [not null]
-  Indexes { (label, year) [unique] }
+  Indexes {
+    (label, year) [unique]
+  }
 }
 Ref: constant.metadata_version_id > version.id
 
@@ -1303,23 +1497,25 @@ Table scenario_outcome_value {
   time_period        text
   statistic_type_id  int  [not null, ref: > statistic_type.id]
   value              numeric [not null]
-  created_at         timestamptz [not null, default: "now()"]
-  Indexes { (scenario_id, outcome_measure_id, geometry_id, time_period, statistic_type_id) [unique] }
+  created_at         timestamptz [not null, default: `now()`]
+  Indexes {
+    (scenario_id, outcome_measure_id, geometry_id, time_period, statistic_type_id) [unique]
+  }
 }
 
 Table scenario_tier_value {
-  id               bigserial [pk]
-  scenario_id      int  [not null, ref: > scenario.id]
-  outcome_measure_id int [ref: > outcome_measure.id]
-  variable_id      uuid
-  tier_id          int   [not null, ref: > tier_definition.id]
-  level            int   [not null]
-  geometry_id      uuid  [ref: > geometry.id]
-  time_period      text  [not null]
-  source_version_id int  [not null, ref: > version.id]
-  created_by       int [not null, ref: > developer.id]
-  created_at       timestamptz [not null, default: "now()"]
-  updated_at       timestamptz
+  id                 bigserial [pk]
+  scenario_id        int  [not null, ref: > scenario.id]
+  outcome_measure_id int  [ref: > outcome_measure.id]
+  variable_id        uuid
+  tier_id            int   [not null, ref: > tier_definition.id]
+  level              int   [not null]
+  geometry_id        uuid  [ref: > geometry.id]
+  time_period        text  [not null]
+  source_version_id  int   [not null, ref: > version.id]
+  created_by         int   [not null, ref: > developer.id]
+  created_at         timestamptz [not null, default: `now()`]
+  updated_at         timestamptz
 }
 
 Table scenario_outcome_delta {
@@ -1332,15 +1528,20 @@ Table scenario_outcome_delta {
   analysis_type_id     int
   rationale            text
   significance_flag    boolean
-  created_at           timestamptz [not null, default: "now()"]
-  Indexes { (scenario_id, outcome_measure_id, stat) [unique], (analysis_type_id) }
+  created_at           timestamptz [not null, default: `now()`]
+  Indexes {
+    (scenario_id, outcome_measure_id, stat) [unique]
+    (analysis_type_id)
+  }
 }
 Ref: scenario_outcome_delta.analysis_type_id > analysis_type.id
 
 Table analysis_result_delta {
   analysis_id int [not null]
   delta_id    int [not null]
-  Indexes { (analysis_id, delta_id) [pk] }
+  Indexes {
+    (analysis_id, delta_id) [pk]
+  }
 }
 Ref: analysis_result_delta.analysis_id > analysis.id [delete: cascade, update: cascade]
 Ref: analysis_result_delta.delta_id > scenario_outcome_delta.id [delete: cascade, update: cascade]
@@ -1352,59 +1553,68 @@ Table network_integration_status {
 }
 
 Table network_node_type {
-  id             int  [pk, increment]
-  short_code     text [not null, unique]
-  name           text [not null]
-  description    text
+  id              int  [pk, increment]
+  short_code      text [not null, unique]
+  name            text [not null]
+  description     text
   model_source_id int
-  is_active      boolean [not null, default: true]
-  created_at     timestamptz [not null, default: "now()"]
-  created_by     int  [not null]
-  updated_at     timestamptz
-  updated_by     int
-  Indexes { (short_code) [unique], (model_source_id), (is_active, model_source_id) }
+  is_active       boolean [not null, default: true]
+  created_at      timestamptz [not null, default: `now()`]
+  created_by      int  [not null]
+  updated_at      timestamptz
+  updated_by      int
+  Indexes {
+    (short_code) [unique]
+    (model_source_id)
+    (is_active, model_source_id)
+  }
 }
 Ref: network_node_type.created_by > developer.id
 Ref: network_node_type.updated_by > developer.id
 Ref: network_node_type.model_source_id > model_source.id
 
 Table network_arc_type {
-  id             int  [pk, increment]
-  short_code     text [not null, unique]
-  name           text [not null]
-  description    text
+  id              int  [pk, increment]
+  short_code      text [not null, unique]
+  name            text [not null]
+  description     text
   model_source_id int
-  is_cross_model boolean [default: false]
-  flow_direction text [default: 'unidirectional']
-  is_active      boolean [not null, default: true]
-  created_at     timestamptz [not null, default: "now()"]
-  created_by     int  [not null]
-  updated_at     timestamptz
-  updated_by     int
-  Indexes { (short_code) [unique], (model_source_id), (is_cross_model), (is_active, model_source_id) }
+  is_cross_model  boolean [default: false]
+  flow_direction  text [default: 'unidirectional']
+  is_active       boolean [not null, default: true]
+  created_at      timestamptz [not null, default: `now()`]
+  created_by      int  [not null]
+  updated_at      timestamptz
+  updated_by      int
+  Indexes {
+    (short_code) [unique]
+    (model_source_id)
+    (is_cross_model)
+    (is_active, model_source_id)
+  }
 }
 Ref: network_arc_type.created_by > developer.id
 Ref: network_arc_type.updated_by > developer.id
 Ref: network_arc_type.model_source_id > model_source.id
 
-Table network.node {
-  id                   int    [pk, increment]
-  short_code           text   [not null]
-  node_type_id         int    [not null]
-  name                 text
-  description          text
-  model_source_id      int    [not null]
-  model_node_id        text
-  diagram_id           int
-  parent_node_id       int
-  integration_status_id int   [not null, default: 1]
-  geom                 geometry(Point,4326)
-  model_attributes     jsonb
-  network_version_id   int    [not null]
-  created_at           timestamptz [not null, default: "now()"]
-  created_by           int    [not null]
-  updated_at           timestamptz
-  updated_by           int
+Table network_node {
+  id                    int    [pk, increment]
+  short_code            text   [not null]
+  node_type_id          int    [not null]
+  name                  text
+  description           text
+  model_source_id       int    [not null]
+  model_node_id         text
+  diagram_id            int
+  parent_node_id        int
+  integration_status_id int    [not null, default: 1]
+  geom                  geometry
+  model_attributes      jsonb
+  network_version_id    int    [not null]
+  created_at            timestamptz [not null, default: `now()`]
+  created_by            int    [not null]
+  updated_at            timestamptz
+  updated_by            int
   Indexes {
     (network_version_id, short_code) [unique]
     (model_source_id, model_node_id) [unique]
@@ -1413,40 +1623,40 @@ Table network.node {
     (parent_node_id)
     (integration_status_id)
     (network_version_id)
-    (geom) [type: gist]
-    (model_attributes) [type: gin]
+    (geom)
+    (model_attributes)
   }
 }
-Ref: network.node.node_type_id > network_node_type.id
-Ref: network.node.parent_node_id > network.node.id [delete: set null, update: cascade]
-Ref: network.node.model_source_id > model_source.id
-Ref: network.node.network_version_id > version.id
-Ref: network.node.integration_status_id > network_integration_status.id
-Ref: network.node.created_by > developer.id
-Ref: network.node.updated_by > developer.id
+Ref: network_node.node_type_id > network_node_type.id
+Ref: network_node.parent_node_id > network_node.id [delete: set null, update: cascade]
+Ref: network_node.model_source_id > model_source.id
+Ref: network_node.network_version_id > version.id
+Ref: network_node.integration_status_id > network_integration_status.id
+Ref: network_node.created_by > developer.id
+Ref: network_node.updated_by > developer.id
 
-Table network.arc {
-  id                   int    [pk, increment]
-  short_code           text   [not null]
-  arc_type_id          int    [not null]
-  name                 text
-  description          text
-  model_source_id      int    [not null]
-  model_arc_id         text
-  diagram_id           int
-  from_node_id         int
-  to_node_id           int    [not null]
-  is_reversible        boolean [not null, default: false]
-  flow_capacity        numeric
-  parent_arc_id        int
-  integration_status_id int   [not null, default: 1]
-  geom                 geometry(LineString,4326)
-  model_attributes     jsonb
-  network_version_id   int    [not null]
-  created_at           timestamptz [not null, default: "now()"]
-  created_by           int    [not null]
-  updated_at           timestamptz
-  updated_by           int
+Table network_arc {
+  id                    int    [pk, increment]
+  short_code            text   [not null]
+  arc_type_id           int    [not null]
+  name                  text
+  description           text
+  model_source_id       int    [not null]
+  model_arc_id          text
+  diagram_id            int
+  from_node_id          int
+  to_node_id            int    [not null]
+  is_reversible         boolean [not null, default: false]
+  flow_capacity         numeric
+  parent_arc_id         int
+  integration_status_id int    [not null, default: 1]
+  geom                  geometry
+  model_attributes      jsonb
+  network_version_id    int    [not null]
+  created_at            timestamptz [not null, default: `now()`]
+  created_by            int    [not null]
+  updated_at            timestamptz
+  updated_by            int
   Indexes {
     (network_version_id, short_code) [unique]
     (model_source_id, model_arc_id) [unique]
@@ -1457,70 +1667,85 @@ Table network.arc {
     (parent_arc_id)
     (integration_status_id)
     (network_version_id)
-    (geom) [type: gist]
+    (geom)
     (is_reversible)
-    (model_attributes) [type: gin]
+    (model_attributes)
   }
 }
-Ref: network.arc.arc_type_id > network_arc_type.id
-Ref: network.arc.from_node_id > network.node.id [delete: restrict, update: cascade]
-Ref: network.arc.to_node_id > network.node.id [delete: restrict, update: cascade]
-Ref: network.arc.parent_arc_id > network.arc.id [delete: set null, update: cascade]
-Ref: network.arc.model_source_id > model_source.id
-Ref: network.arc.network_version_id > version.id
-Ref: network.arc.integration_status_id > network_integration_status.id
-Ref: network.arc.created_by > developer.id
-Ref: network.arc.updated_by > developer.id
+Ref: network_arc.arc_type_id > network_arc_type.id
+Ref: network_arc.from_node_id > network_node.id [delete: restrict, update: cascade]
+Ref: network_arc.to_node_id > network_node.id [delete: restrict, update: cascade]
+Ref: network_arc.parent_arc_id > network_arc.id [delete: set null, update: cascade]
+Ref: network_arc.model_source_id > model_source.id
+Ref: network_arc.network_version_id > version.id
+Ref: network_arc.integration_status_id > network_integration_status.id
+Ref: network_arc.created_by > developer.id
+Ref: network_arc.updated_by > developer.id
 
-Table network.node_source_link {
+Table network_node_source_link {
   node_id   int [not null]
   source_id int [not null]
-  Indexes { (node_id, source_id) [pk] }
+  Indexes {
+    (node_id, source_id) [pk]
+  }
 }
-Ref: network.node_source_link.node_id > network.node.id [delete: cascade, update: cascade]
-Ref: network.node_source_link.source_id > source.id [delete: restrict, update: cascade]
+Ref: network_node_source_link.node_id > network_node.id [delete: cascade, update: cascade]
+Ref: network_node_source_link.source_id > source.id [delete: restrict, update: cascade]
 
-Table network.arc_source_link {
+Table network_arc_source_link {
   arc_id    int [not null]
   source_id int [not null]
-  Indexes { (arc_id, source_id) [pk] }
+  Indexes {
+    (arc_id, source_id) [pk]
+  }
 }
-Ref: network.arc_source_link.arc_id > network.arc.id [delete: cascade, update: cascade]
-Ref: network.arc_source_link.source_id > source.id [delete: restrict, update: cascade]
+Ref: network_arc_source_link.arc_id > network_arc.id [delete: cascade, update: cascade]
+Ref: network_arc_source_link.source_id > source.id [delete: restrict, update: cascade]
 
-Table network.node_equivalence {
-  node_id           int [not null]
+Table network_node_equivalence {
+  node_id            int [not null]
   equivalent_node_id int [not null]
-  Indexes { (node_id, equivalent_node_id) [pk], (equivalent_node_id, node_id) }
+  Indexes {
+    (node_id, equivalent_node_id) [pk]
+    (equivalent_node_id, node_id)
+  }
 }
-Ref: network.node_equivalence.node_id > network.node.id [delete: cascade, update: cascade]
-Ref: network.node_equivalence.equivalent_node_id > network.node.id [delete: restrict, update: cascade]
+Ref: network_node_equivalence.node_id > network_node.id [delete: cascade, update: cascade]
+Ref: network_node_equivalence.equivalent_node_id > network_node.id [delete: restrict, update: cascade]
 
-Table network.arc_equivalence {
-  arc_id           int [not null]
+Table network_arc_equivalence {
+  arc_id            int [not null]
   equivalent_arc_id int [not null]
-  Indexes { (arc_id, equivalent_arc_id) [pk], (equivalent_arc_id, arc_id) }
+  Indexes {
+    (arc_id, equivalent_arc_id) [pk]
+    (equivalent_arc_id, arc_id)
+  }
 }
-Ref: network.arc_equivalence.arc_id > network.arc.id [delete: cascade, update: cascade]
-Ref: network.arc_equivalence.equivalent_arc_id > network.arc.id [delete: restrict, update: cascade]
+Ref: network_arc_equivalence.arc_id > network_arc.id [delete: cascade, update: cascade]
+Ref: network_arc_equivalence.equivalent_arc_id > network_arc.id [delete: restrict, update: cascade]
 
-Table network.node_attributes {
-  id                  int  [pk, increment]
-  node_id             int  [not null]
-  attr_key            text [not null]
-  attr_value          text [not null]
-  data_type           text [not null, default: 'text']
-  network_version_id  int  [not null]
-  created_at          timestamptz [not null, default: "now()"]
-  created_by          int  [not null]
-  updated_at          timestamptz
-  updated_by          int
-  Indexes { (node_id, attr_key) [unique], (attr_key), (network_version_id), (node_id) }
+Table network_node_attributes {
+  id                 int  [pk, increment]
+  node_id            int  [not null]
+  attr_key           text [not null]
+  attr_value         text [not null]
+  data_type          text [not null, default: 'text']
+  network_version_id int  [not null]
+  created_at         timestamptz [not null, default: `now()`]
+  created_by         int  [not null]
+  updated_at         timestamptz
+  updated_by         int
+  Indexes {
+    (node_id, attr_key) [unique]
+    (attr_key)
+    (network_version_id)
+    (node_id)
+  }
 }
-Ref: network.node_attributes.node_id > network.node.id [delete: cascade, update: cascade]
-Ref: network.node_attributes.network_version_id > version.id
-Ref: network.node_attributes.created_by > developer.id
-Ref: network.node_attributes.updated_by > developer.id
+Ref: network_node_attributes.node_id > network_node.id [delete: cascade, update: cascade]
+Ref: network_node_attributes.network_version_id > version.id
+Ref: network_node_attributes.created_by > developer.id
+Ref: network_node_attributes.updated_by > developer.id
 
 Table reservoir_entity {
   id                   int    [pk, increment]
@@ -1540,9 +1765,10 @@ Table reservoir_entity {
   has_tiers            boolean [not null, default: false]
   is_main              boolean [not null, default: false]
   entity_version_id    int    [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  source_ids           int[]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int    [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int
   Indexes {
     (network_node_id) [unique]
@@ -1558,7 +1784,7 @@ Table reservoir_entity {
     (entity_version_id)
   }
 }
-Ref: reservoir_entity.network_node_id      > network.node.id
+Ref: reservoir_entity.network_node_id      > network_node.id
 Ref: reservoir_entity.entity_type_id       > calsim_entity_type.id
 Ref: reservoir_entity.schematic_type_id    > calsim_schematic_type.id
 Ref: reservoir_entity.hydrologic_region_id > hydrologic_region.id
@@ -1569,7 +1795,9 @@ Ref: reservoir_entity.updated_by           > developer.id
 Table reservoir_entity_source_link {
   reservoir_entity_id int [not null]
   source_id           int [not null]
-  Indexes { (reservoir_entity_id, source_id) [pk] }
+  Indexes {
+    (reservoir_entity_id, source_id) [pk]
+  }
 }
 Ref: reservoir_entity_source_link.reservoir_entity_id > reservoir_entity.id [delete: cascade, update: cascade]
 Ref: reservoir_entity_source_link.source_id > source.id [delete: restrict, update: cascade]
@@ -1587,9 +1815,9 @@ Table inflow_entity {
   schematic_type_id    int    [not null]
   hydrologic_region_id int
   entity_version_id    int    [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int    [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int
   Indexes {
     (network_arc_id) [unique]
@@ -1602,8 +1830,8 @@ Table inflow_entity {
     (schematic_type_id)
   }
 }
-Ref: inflow_entity.network_arc_id       > network.arc.id
-Ref: inflow_entity.to_node_id           > network.node.id
+Ref: inflow_entity.network_arc_id       > network_arc.id
+Ref: inflow_entity.to_node_id           > network_node.id
 Ref: inflow_entity.entity_type_id       > calsim_entity_type.id
 Ref: inflow_entity.schematic_type_id    > calsim_schematic_type.id
 Ref: inflow_entity.hydrologic_region_id > hydrologic_region.id
@@ -1614,7 +1842,9 @@ Ref: inflow_entity.updated_by           > developer.id
 Table inflow_entity_source_link {
   inflow_entity_id int [not null]
   source_id        int [not null]
-  Indexes { (inflow_entity_id, source_id) [pk] }
+  Indexes {
+    (inflow_entity_id, source_id) [pk]
+  }
 }
 Ref: inflow_entity_source_link.inflow_entity_id > inflow_entity.id [delete: cascade, update: cascade]
 Ref: inflow_entity_source_link.source_id > source.id [delete: restrict, update: cascade]
@@ -1641,9 +1871,9 @@ Table channel_entity {
   schematic_type_id    int    [not null]
   hydrologic_region_id int
   entity_version_id    int    [not null]
-  created_at           timestamptz [not null, default: "now()"]
+  created_at           timestamptz [not null, default: `now()`]
   created_by           int [not null]
-  updated_at           timestamptz [not null, default: "now()"]
+  updated_at           timestamptz [not null, default: `now()`]
   updated_by           int
   Indexes {
     (network_arc_id) [unique]
@@ -1659,9 +1889,9 @@ Table channel_entity {
     (to_node)
   }
 }
-Ref: channel_entity.network_arc_id       > network.arc.id
-Ref: channel_entity.from_node_id         > network.node.id
-Ref: channel_entity.to_node_id           > network.node.id
+Ref: channel_entity.network_arc_id       > network_arc.id
+Ref: channel_entity.from_node_id         > network_node.id
+Ref: channel_entity.to_node_id           > network_node.id
 Ref: channel_entity.entity_type_id       > calsim_entity_type.id
 Ref: channel_entity.schematic_type_id    > calsim_schematic_type.id
 Ref: channel_entity.hydrologic_region_id > hydrologic_region.id
@@ -1672,7 +1902,9 @@ Ref: channel_entity.updated_by           > developer.id
 Table channel_entity_source_link {
   channel_entity_id int [not null]
   source_id         int [not null]
-  Indexes { (channel_entity_id, source_id) [pk] }
+  Indexes {
+    (channel_entity_id, source_id) [pk]
+  }
 }
 Ref: channel_entity_source_link.channel_entity_id > channel_entity.id [delete: cascade, update: cascade]
 Ref: channel_entity_source_link.source_id > source.id [delete: restrict, update: cascade]
@@ -1693,9 +1925,9 @@ Table reservoir_variable {
   temporal_scale_id           int
   variable_id                 uuid   [not null, unique]
   variable_version_id         int    [not null]
-  created_at                  timestamptz [not null, default: "now()"]
+  created_at                  timestamptz [not null, default: `now()`]
   created_by                  int [not null]
-  updated_at                  timestamptz [not null, default: "now()"]
+  updated_at                  timestamptz [not null, default: `now()`]
   updated_by                  int
   Indexes {
     (reservoir_entity_id)
@@ -1725,11 +1957,15 @@ Table inflow_variable {
   variable_id              uuid   [not null, unique]
   variable_version_id      int    [not null]
   is_aggregate             boolean [default: false]
-  created_at               timestamptz [not null, default: "now()"]
+  created_at               timestamptz [not null, default: `now()`]
   created_by               int    [not null]
-  updated_at               timestamptz [not null, default: "now()"]
+  updated_at               timestamptz [not null, default: `now()`]
   updated_by               int
-  Indexes { (inflow_entity_id), (variable_type), (is_aggregate) }
+  Indexes {
+    (inflow_entity_id)
+    (variable_type)
+    (is_aggregate)
+  }
 }
 Ref: inflow_variable.inflow_entity_id       > inflow_entity.id     [delete: cascade, update: cascade]
 Ref: inflow_variable.unit_id                > unit.id              [delete: restrict, update: cascade]
@@ -1754,9 +1990,9 @@ Table channel_variable {
   regulatory_authority        text
   is_aggregate                boolean [default: false]
   outcome_category_short_code text
-  created_at                  timestamptz [not null, default: "now()"]
+  created_at                  timestamptz [not null, default: `now()`]
   created_by                  int    [not null]
-  updated_at                  timestamptz [not null, default: "now()"]
+  updated_at                  timestamptz [not null, default: `now()`]
   updated_by                  int
   Indexes {
     (channel_entity_id)
@@ -1779,11 +2015,14 @@ Table derived_variable_type {
   name        text [not null]
   description text
   is_active   boolean [not null, default: true]
-  created_at  timestamptz [not null, default: "now()"]
+  created_at  timestamptz [not null, default: `now()`]
   created_by  int      [not null]
   updated_at  timestamptz
   updated_by  int
-  Indexes { (short_code) [unique], (is_active, short_code) }
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
 }
 Ref: derived_variable_type.created_by > developer.id
 Ref: derived_variable_type.updated_by > developer.id
@@ -1808,9 +2047,9 @@ Table derived_variable {
   regulatory_authority        text
   regulatory_threshold        numeric
   outcome_category_short_code text
-  created_at                  timestamptz [not null, default: "now()"]
+  created_at                  timestamptz [not null, default: `now()`]
   created_by                  int    [not null]
-  updated_at                  timestamptz [not null, default: "now()"]
+  updated_at                  timestamptz [not null, default: `now()`]
   updated_by                  int
   Indexes {
     (variable_type_id)
@@ -1831,12 +2070,15 @@ Ref: derived_variable.updated_by           > developer.id
 Ref: derived_variable.variable_id          > variable.id
 
 Table theme_network_region_link {
-  theme_id            int [not null]
+  theme_id             int [not null]
   hydrologic_region_id int [not null]
-  focus_description   text
-  created_at          timestamptz [not null, default: "now()"]
-  created_by          int [not null]
-  Indexes { (theme_id, hydrologic_region_id) [pk], (hydrologic_region_id, theme_id) }
+  focus_description    text
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int [not null]
+  Indexes {
+    (theme_id, hydrologic_region_id) [pk]
+    (hydrologic_region_id, theme_id)
+  }
 }
 Ref: theme_network_region_link.theme_id            > theme.id             [delete: cascade, update: cascade]
 Ref: theme_network_region_link.hydrologic_region_id > hydrologic_region.id
@@ -1847,9 +2089,11 @@ Table theme_entity_type_focus {
   entity_type_id     int  [not null]
   focus_description  text
   focus_weight       numeric [default: 1.0]
-  created_at         timestamptz [not null, default: "now()"]
+  created_at         timestamptz [not null, default: `now()`]
   created_by         int [not null]
-  Indexes { (theme_id, entity_type_id) [pk] }
+  Indexes {
+    (theme_id, entity_type_id) [pk]
+  }
 }
 Ref: theme_entity_type_focus.theme_id > theme.id
 Ref: theme_entity_type_focus.entity_type_id > calsim_entity_type.id
