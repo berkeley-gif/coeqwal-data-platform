@@ -1,7 +1,7 @@
 """
 COEQWAL API
 FastAPI backend
-With connection pooling and workshop optimization
+Production-ready with connection pooling and workshop optimization
 """
 
 from fastapi import FastAPI, HTTPException, Query, Depends
@@ -52,25 +52,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="COEQWAL Network API",
-    description="COEQWAL Production API",
+    description="Production API for California water network topology visualization",
     version="2.0.0",
     lifespan=lifespan
 )
 
-# Middleware for good performance
+# Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-        "http://localhost:3003",
-        "http://localhost:3004",
-        "https://dev.coeqwal.org",
-        "https://staging.coeqwal.org",
-        "https://coeqwal.org",
-        "https://*.coeqwal.org"
+        "https://your-frontend-domain.com",
+        "https://*.your-frontend-domain.com"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
@@ -143,12 +137,11 @@ class NetworkAnalysis(BaseModel):
     downstream_nodes: List[ConnectedElement]
     connected_arcs: List[ConnectedElement]
 
-# Database connection
 @app.get("/")
 async def root():
     return {
-        "message": "COEQWAL API",
-        "version": "1.0.0",
+        "message": "COEQWAL Network Topology API",
+        "version": "2.0.0",
         "endpoints": {
             "nodes": "/api/nodes",
             "arcs": "/api/arcs", 
@@ -397,14 +390,16 @@ async def get_node_analysis(
             connected_arcs=connected_arcs
         )
         
-    finally:
-        # Connection handled by dependency injection
+    except Exception as e:
+        logger.error(f"Network analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Network analysis failed")
 
 @app.get("/api/arcs/{arc_id}/analysis", response_model=NetworkAnalysis)
-async def get_arc_analysis(arc_id: int):
+async def get_arc_analysis(
+    arc_id: int,
+    db: asyncpg.Connection = Depends(get_db)
+):
     """Get network analysis for a specific arc (connected nodes)"""
-    
-    # Using dependency injection
     try:
         # Get arc endpoints and their connections
         query = """
@@ -452,24 +447,22 @@ async def get_arc_analysis(arc_id: int):
         return NetworkAnalysis(
             origin_id=arc_id,
             origin_type='arc',
-            upstream_nodes=[],  # Extend to get upstream from from_node
-            downstream_nodes=[], # Extend to get downstream from to_node
-            connected_arcs=connected_nodes  # Field for connected nodes
+            upstream_nodes=[],  # Could extend to get upstream from from_node
+            downstream_nodes=[], # Could extend to get downstream from to_node
+            connected_arcs=connected_nodes  # Using this field for connected nodes
         )
         
-    finally:
-        # Connection handled by dependency injection
+    except Exception as e:
+        logger.error(f"Arc analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Arc analysis failed")
 
 @app.get("/api/search")
 async def search_network(
     q: str = Query(..., description="Search query for nodes/arcs by name or code"),
     limit: int = Query(20, description="Maximum results to return"),
-    db: asyncpg.Connection = Depends(get_db) = Query(..., description="Search query for nodes/arcs by name or code"),
-    limit: int = Query(20, description="Maximum results to return")
+    db: asyncpg.Connection = Depends(get_db)
 ):
     """Search network elements by name or code"""
-    
-    # Using dependency injection
     try:
         search_pattern = f"%{q.lower()}%"
         
@@ -519,16 +512,16 @@ async def search_network(
         
         return {"results": results, "total": len(results)}
         
-    finally:
-        # Connection handled by dependency injection
+    except Exception as e:
+        logger.error(f"Search failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Search failed")
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
     try:
-        # Using dependency injection
-        await db.fetchval("SELECT 1")
-        # Connection handled by dependency injection
+        async with db_pool.acquire() as db:
+            await db.fetchval("SELECT 1")
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
@@ -541,88 +534,6 @@ async def health_check():
             "database": "disconnected",
             "error": str(e)
         }
-
-# === EXPANDABLE ENDPOINTS FOR FUTURE DATA ===
-
-@app.get("/api/scenarios")
-async def get_scenarios(
-    limit: int = Query(100, le=1000),
-    theme_id: Optional[int] = None,
-    db: asyncpg.Connection = Depends(get_db)
-):
-    """Get scenario data - expandable for future scenario analysis"""
-    # Placeholder for when you add scenario tables
-    return {"message": "Scenarios endpoint ready for expansion", "limit": limit}
-
-@app.get("/api/variables")
-async def get_variables(
-    limit: int = Query(1000, le=50000),
-    entity_type: Optional[str] = None,
-    variable_type: Optional[str] = None,
-    db: asyncpg.Connection = Depends(get_db)
-):
-    """Get variable data - ready for large datasets"""
-    # Placeholder for when you add Ring 2/3 data
-    return {"message": "Variables endpoint ready for GB-scale data", "limit": limit}
-
-@app.get("/api/timeseries/{variable_id}")
-async def get_timeseries(
-    variable_id: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    limit: int = Query(10000, le=100000),
-    db: asyncpg.Connection = Depends(get_db)
-):
-    """Get time series data - optimized for large datasets"""
-    # Placeholder for time series data
-    return {
-        "variable_id": variable_id,
-        "message": "Time series endpoint ready for large data volumes",
-        "limit": limit
-    }
-
-@app.get("/api/bulk/export")
-async def bulk_export(
-    data_type: str = Query(..., description="Type of data to export"),
-    format: str = Query("geojson", description="Export format: geojson, csv, parquet"),
-    db: asyncpg.Connection = Depends(get_db)
-):
-    """Bulk data export for large datasets"""
-    # Future: Stream large datasets efficiently
-    return {
-        "message": "Bulk export endpoint ready for GB-scale data",
-        "data_type": data_type,
-        "format": format
-    }
-
-# === PERFORMANCE ENDPOINTS ===
-
-@app.get("/api/performance/stats")
-async def get_performance_stats(db: asyncpg.Connection = Depends(get_db)):
-    """Get API performance statistics"""
-    try:
-        # Database performance metrics
-        db_stats = await db.fetchrow("""
-            SELECT 
-                COUNT(*) as total_nodes,
-                COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as nodes_with_geometry,
-                (SELECT COUNT(*) FROM network_arc) as total_arcs,
-                (SELECT COUNT(*) FROM network_arc WHERE geom IS NOT NULL) as arcs_with_geometry
-            FROM network_node
-        """)
-        
-        return {
-            "database_stats": dict(db_stats),
-            "api_version": "2.0.0",
-            "max_nodes_per_request": 10000,
-            "max_arcs_per_request": 10000,
-            "connection_pool": {
-                "size": db_pool.get_size() if db_pool else 0,
-                "available": db_pool.get_size() - db_pool.get_busy_count() if db_pool else 0
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
