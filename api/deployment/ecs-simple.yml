@@ -1,0 +1,193 @@
+# Simpler CloudFormation template without circular dependencies
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'COEQWAL Network API on ECS Fargate - but simpler'
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the ECS cluster will be created
+  
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets for the ECS service
+  
+  DatabaseUrl:
+    Type: String
+    Description: PostgreSQL connection string
+    NoEcho: true
+  
+  ImageUri:
+    Type: String
+    Description: ECR image URI
+
+Resources:
+  # 1. CloudWatch Log Group (no dependencies)
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/coeqwal-api
+      RetentionInDays: 30
+
+  # 2. IAM Roles (no dependencies)
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+
+  # 3. ECS Cluster (no dependencies)
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: coeqwal-network-api
+
+  # 4. Security Group (no dependencies)
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for COEQWAL API Load Balancer
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP access from internet
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for COEQWAL API ECS tasks
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: HTTP access from load balancer
+
+  # 5. Load Balancer (depends on security group)
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: coeqwal-api-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  # 6. Target Group (no dependencies on other resources)
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: coeqwal-api-targets
+      Port: 8000
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckPath: /api/health
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  # 7. Load Balancer Listener (depends on load balancer and target group)
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # 8. Task Definition (depends on roles and log group)
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: coeqwal-api-task
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Ref ExecutionRole
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: coeqwal-api
+          Image: !Ref ImageUri
+          PortMappings:
+            - ContainerPort: 8000
+              Protocol: tcp
+          Environment:
+            - Name: DATABASE_URL
+              Value: !Ref DatabaseUrl
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f http://localhost:8000/api/health || exit 1"
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 60
+
+  # 9. ECS Service (depends on everything else, created last)
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: coeqwal-api-service
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 2
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+          Subnets: !Ref SubnetIds
+          AssignPublicIp: ENABLED
+      LoadBalancers:
+        - ContainerName: coeqwal-api
+          ContainerPort: 8000
+          TargetGroupArn: !Ref TargetGroup
+      HealthCheckGracePeriodSeconds: 60
+
+Outputs:
+  LoadBalancerUrl:
+    Description: URL of the load balancer
+    Value: !Sub "http://${LoadBalancer.DNSName}"
+  
+  ServiceName:
+    Description: ECS service name
+    Value: !Ref ECSService
+
+  ClusterName:
+    Description: ECS cluster name
+    Value: !Ref ECSCluster

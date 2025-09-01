@@ -102,7 +102,7 @@ jobs:
         run: |
           # Deploy or update the CloudFormation stack
           aws cloudformation deploy \
-            --template-file api/deployment/ecs-fargate-fixed.yml \
+            --template-file api/deployment/ecs-simple.yml \
             --stack-name coeqwal-network-api \
             --parameter-overrides \
               VpcId=${{ secrets.VPC_ID }} \
