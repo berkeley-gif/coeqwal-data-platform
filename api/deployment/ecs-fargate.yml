@@ -70,7 +70,9 @@ Resources:
   # ECS Service
   ECSService:
     Type: AWS::ECS::Service
-    DependsOn: LoadBalancerListener
+    DependsOn: 
+      - LoadBalancerListener
+      - TargetGroup
     Properties:
       ServiceName: coeqwal-api-service
       Cluster: !Ref ECSCluster
