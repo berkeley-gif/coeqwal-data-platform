@@ -1,0 +1,3 @@
+email,display_name,role,is_bootstrap,sync_source,is_active,last_login
+system@coeqwal.local,System,system,true,seed,true,
+jfantauzza@berkeley.edu,Jill Fantauzza,admin,true,seed,true,

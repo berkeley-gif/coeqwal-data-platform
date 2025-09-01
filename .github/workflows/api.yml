@@ -1,0 +1,211 @@
+name: Build and Deploy COEQWAL Network API
+
+on:
+  push:
+    paths:
+      - 'api/coeqwal-api/**'
+      - 'aws-deployment/**'
+      - '.github/workflows/api.yml'
+    branches:
+      - main  # Deploy from main branch
+      - dev   # Also deploy from dev for testing
+
+  # Allow manual deployment
+  workflow_dispatch:
+    inputs:
+      deploy_to_ecs:
+        description: 'Deploy to ECS after building image'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image-uri: ${{ steps.build-image.outputs.image-uri }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR repository if not exists
+        run: |
+          aws ecr create-repository \
+            --repository-name coeqwal-network-api \
+            --region us-west-2 \
+            --image-scanning-configuration scanOnPush=true \
+            || echo "Repository already exists"
+
+      - name: Build, tag, and push API Docker image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: coeqwal-network-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build the production image
+          docker build \
+            -f aws-deployment/Dockerfile.production \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            .
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          
+          # Output the image URI for deployment job
+          echo "image-uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Test image locally
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: coeqwal-network-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Quick smoke test of the built image
+          docker run --rm \
+            -e DATABASE_URL="postgresql://test:test@localhost:5432/test" \
+            $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            python -c "import asyncpg; import fastapi; print('✅ Dependencies OK')"
+
+  deploy-to-ecs:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_ecs == 'true')
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Deploy to ECS
+        env:
+          IMAGE_URI: ${{ needs.build-and-push.outputs.image-uri }}
+        run: |
+          # Deploy or update the CloudFormation stack
+          aws cloudformation deploy \
+            --template-file aws-deployment/ecs-fargate.yml \
+            --stack-name coeqwal-network-api \
+            --parameter-overrides \
+              VpcId=${{ secrets.VPC_ID }} \
+              SubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }} \
+              DatabaseUrl=${{ secrets.DATABASE_URL }} \
+              ImageUri=$IMAGE_URI \
+            --capabilities CAPABILITY_IAM \
+            --region us-west-2
+
+      - name: Get deployment status
+        run: |
+          # Get the load balancer URL
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name coeqwal-network-api \
+            --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerUrl`].OutputValue' \
+            --output text)
+          
+          echo "🎯 API deployed at: $API_URL"
+          echo "📚 API docs: $API_URL/docs"
+          
+          # Wait for service to be healthy
+          echo "⏳ Waiting for service to be healthy..."
+          sleep 60
+          
+          # Test the deployment
+          if curl -f "$API_URL/api/health"; then
+            echo "✅ Deployment successful!"
+            echo "🧪 Test endpoints:"
+            echo "   Health: $API_URL/api/health"
+            echo "   Nodes: $API_URL/api/nodes/optimized?limit=5"
+            echo "   Workshop: $API_URL/api/workshop/status"
+          else
+            echo "❌ Deployment health check failed"
+            exit 1
+          fi
+
+      - name: Run basic integration tests
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name coeqwal-network-api \
+            --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerUrl`].OutputValue' \
+            --output text)
+          
+          echo "🧪 Running integration tests..."
+          
+          # Test health endpoint
+          curl -f "$API_URL/api/health" || exit 1
+          
+          # Test nodes endpoint
+          NODES_RESPONSE=$(curl -s "$API_URL/api/nodes/optimized?limit=5")
+          NODE_COUNT=$(echo $NODES_RESPONSE | jq '.features | length')
+          
+          if [ "$NODE_COUNT" -gt 0 ]; then
+            echo "✅ Nodes endpoint working: $NODE_COUNT nodes returned"
+          else
+            echo "❌ Nodes endpoint failed"
+            exit 1
+          fi
+          
+          # Test workshop readiness
+          curl -f "$API_URL/api/workshop/status" || exit 1
+          
+          echo "🎉 All integration tests passed!"
+
+  # Optional: Performance testing job
+  performance-test:
+    needs: deploy-to-ecs
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Install Apache Bench
+        run: sudo apt-get update && sudo apt-get install -y apache2-utils
+
+      - name: Performance test
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name coeqwal-network-api \
+            --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerUrl`].OutputValue' \
+            --output text)
+          
+          echo "🏃‍♂️ Running performance tests..."
+          
+          # Test with moderate load (simulating workshop)
+          echo "Testing 50 concurrent users..."
+          ab -n 500 -c 50 -g performance-results.tsv "$API_URL/api/nodes/optimized?limit=100"
+          
+          # Check results
+          MEAN_TIME=$(tail -n +2 performance-results.tsv | awk -F'\t' '{sum+=$2; count++} END {print sum/count}')
+          echo "📊 Mean response time: ${MEAN_TIME}ms"
+          
+          # Fail if performance is too slow
+          if (( $(echo "$MEAN_TIME > 1000" | bc -l) )); then
+            echo "❌ Performance test failed: Mean response time ${MEAN_TIME}ms > 1000ms"
+            exit 1
+          else
+            echo "✅ Performance test passed: Mean response time ${MEAN_TIME}ms"
+          fi
