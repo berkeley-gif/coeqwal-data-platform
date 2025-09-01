@@ -218,6 +218,13 @@ async def get_all_nodes(
         nodes = []
         for row in rows:
             geojson = json.loads(row['geojson']) if row['geojson'] else {}
+            # Fix: attributes comes as JSON string, need to parse it
+            attributes = row['attributes']
+            if isinstance(attributes, str):
+                attributes = json.loads(attributes)
+            elif attributes is None:
+                attributes = {}
+            
             nodes.append(NetworkNode(
                 id=row['id'],
                 short_code=row['short_code'],
@@ -229,7 +236,7 @@ async def get_all_nodes(
                 longitude=row['longitude'],
                 hydrologic_region=row['hydrologic_region'],
                 geojson=geojson,
-                attributes=row['attributes'] or {}
+                attributes=attributes
             ))
         
         return nodes
