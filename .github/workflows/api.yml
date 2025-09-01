@@ -1,13 +1,14 @@
 name: Build and Deploy COEQWAL Network API
 
-on:
-  push:
-    paths:
-      - 'api/**'
-      - '.github/workflows/api.yml'
-    branches:
-      - main  # Deploy from main branch
-      - dev   # Also deploy from dev for testing
+# TEMPORARILY DISABLED - TESTING MANUALLY
+# on:
+#   push:
+#     paths:
+#       - 'api/**'
+#       - '.github/workflows/api.yml'
+#     branches:
+#       - main  # Deploy from main branch
+#       - dev   # Also deploy from dev for testing
 
   # Allow manual deployment
   workflow_dispatch:

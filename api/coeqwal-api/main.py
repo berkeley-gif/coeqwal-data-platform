@@ -213,7 +213,7 @@ async def get_all_nodes(
         LIMIT $1
         """
         
-        rows = await conn.fetch(query, *params)
+        rows = await db.fetch(query, *params)
         
         nodes = []
         for row in rows:
@@ -234,8 +234,9 @@ async def get_all_nodes(
         
         return nodes
         
-    finally:
-        await conn.close()
+    except Exception as e:
+        logger.error(f"Database query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
 @app.get("/api/arcs", response_model=List[NetworkArc])
 async def get_all_arcs(
