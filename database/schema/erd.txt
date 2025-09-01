@@ -1555,9 +1555,11 @@ Table network_integration_status {
 Table network_node_type {
   id              int  [pk, increment]
   short_code      text [not null, unique]
-  name            text [not null]
+  name            text
+  common_name     text
   description     text
   model_source_id int
+  source_id       int
   is_active       boolean [not null, default: true]
   created_at      timestamptz [not null, default: `now()`]
   created_by      int  [not null]
@@ -1565,10 +1567,12 @@ Table network_node_type {
   updated_by      int
   Indexes {
     (short_code) [unique]
+    (common_name)
     (model_source_id)
     (is_active, model_source_id)
   }
 }
+Ref: network_node_type.source_id > source.id
 Ref: network_node_type.created_by > developer.id
 Ref: network_node_type.updated_by > developer.id
 Ref: network_node_type.model_source_id > model_source.id
@@ -1577,10 +1581,10 @@ Table network_arc_type {
   id              int  [pk, increment]
   short_code      text [not null, unique]
   name            text [not null]
+  common_name     text
   description     text
   model_source_id int
-  is_cross_model  boolean [default: false]
-  flow_direction  text [default: 'unidirectional']
+  source_id       int
   is_active       boolean [not null, default: true]
   created_at      timestamptz [not null, default: `now()`]
   created_by      int  [not null]
@@ -1588,22 +1592,37 @@ Table network_arc_type {
   updated_by      int
   Indexes {
     (short_code) [unique]
+    (common_name)
     (model_source_id)
-    (is_cross_model)
     (is_active, model_source_id)
   }
 }
 Ref: network_arc_type.created_by > developer.id
 Ref: network_arc_type.updated_by > developer.id
 Ref: network_arc_type.model_source_id > model_source.id
+Ref: network_arc_type.source_id > source.id
 
 Table network_node {
   id                    int    [pk, increment]
   short_code            text   [not null]
+  calsim_id             text
   node_type_id          int    [not null]
   name                  text
   description           text
+  riv_mi                numeric
+  riv_name              text
+  comment               text
+  c2vsim_gw             text
+  c2vsim_sw             text
+  type                  text
+  sub_type              text
+  nrest_gage            text
+  strm_code             text
+  hydrologic_region_id  int
+  latitude              numeric
+  longitude             numeric
   model_source_id       int    [not null]
+  source_id             int    [not null]
   model_node_id         text
   diagram_id            int
   parent_node_id        int
@@ -1617,7 +1636,11 @@ Table network_node {
   updated_by            int
   Indexes {
     (network_version_id, short_code) [unique]
+    (calsim_id)
     (model_source_id, model_node_id) [unique]
+    (latitude, longitude)
+    (type, sub_type)
+    (hydrologic_region_id)
     (diagram_id)
     (node_type_id, model_source_id)
     (parent_node_id)
@@ -1628,6 +1651,8 @@ Table network_node {
   }
 }
 Ref: network_node.node_type_id > network_node_type.id
+Ref: network_node.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
+Ref: network_node.source_id > source.id [delete: restrict, update: cascade]
 Ref: network_node.parent_node_id > network_node.id [delete: set null, update: cascade]
 Ref: network_node.model_source_id > model_source.id
 Ref: network_node.network_version_id > version.id
@@ -1638,14 +1663,24 @@ Ref: network_node.updated_by > developer.id
 Table network_arc {
   id                    int    [pk, increment]
   short_code            text   [not null]
+  calsim_id             text
+  arc_id                text
   arc_type_id           int    [not null]
   name                  text
   description           text
-  model_source_id       int    [not null]
-  model_arc_id          text
-  diagram_id            int
+  type                  text
+  sub_type              text
+  from_node             text
+  to_node               text
+  node_suffix_comment   text
   from_node_id          int
   to_node_id            int    [not null]
+  hydrologic_region_id  int
+  shape_length          numeric
+  model_source_id       int    [not null]
+  source_id             int    [not null]
+  model_arc_id          text
+  diagram_id            int
   is_reversible         boolean [not null, default: false]
   flow_capacity         numeric
   parent_arc_id         int
@@ -1659,7 +1694,12 @@ Table network_arc {
   updated_by            int
   Indexes {
     (network_version_id, short_code) [unique]
+    (calsim_id)
+    (arc_id)
     (model_source_id, model_arc_id) [unique]
+    (type, sub_type)
+    (from_node, to_node)
+    (hydrologic_region_id)
     (diagram_id)
     (arc_type_id, model_source_id)
     (from_node_id, model_source_id)
@@ -1675,6 +1715,8 @@ Table network_arc {
 Ref: network_arc.arc_type_id > network_arc_type.id
 Ref: network_arc.from_node_id > network_node.id [delete: restrict, update: cascade]
 Ref: network_arc.to_node_id > network_node.id [delete: restrict, update: cascade]
+Ref: network_arc.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
+Ref: network_arc.source_id > source.id [delete: restrict, update: cascade]
 Ref: network_arc.parent_arc_id > network_arc.id [delete: set null, update: cascade]
 Ref: network_arc.model_source_id > model_source.id
 Ref: network_arc.network_version_id > version.id

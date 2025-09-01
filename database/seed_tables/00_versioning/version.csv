@@ -1,13 +1,13 @@
-version_family_short_code,version_number,manifest,changelog,is_active,created_at,created_by
-theme,1.0.0,{},Initial theme version,true,,
-scenario,1.0.0,{},Initial scenario version,true,,
-assumption,1.0.0,{},Initial assumption version,true,,
-operation,1.0.0,{},Initial operation version,true,,
-hydroclimate,1.0.0,{},Initial hydroclimate version,true,,
-variable,1.0.0,{},Initial variable version,true,,
-outcome,1.0.0,{},Initial outcome version,true,,
-tier,1.0.0,{},Initial tier version,true,,
-geospatial,1.0.0,{},Initial geospatial version,true,,
-interpretive,1.0.0,{},Initial interpretive version,true,,
-metadata,1.0.0,{},Initial metadata version,true,,
-network,1.0.0,{},Initial network version,true,,
+version_family_short_code,version_number,manifest,changelog,is_active
+theme,1.0.0,{},"Initial theme version",true
+scenario,1.0.0,{},"Initial scenario version",true
+assumption,1.0.0,{},"Initial assumption version",true
+operation,1.0.0,{},"Initial operation version",true
+hydroclimate,1.0.0,{},"Initial hydroclimate version",true
+variable,1.0.0,{},"Initial variable version",true
+outcome,1.0.0,{},"Initial outcome version",true
+tier,1.0.0,{},"Initial tier version",true
+geospatial,1.0.0,{},"Initial geospatial version",true
+interpretive,1.0.0,{},"Initial interpretive version",true
+metadata,1.0.0,{},"Initial metadata version",true
+network,1.0.0,{},"Initial network version",true
