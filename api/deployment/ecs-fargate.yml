@@ -36,8 +36,8 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: coeqwal-api-task
-      Cpu: 1024    # Increased for GB-scale data processing
-      Memory: 2048  # Increased for large query responses
+      Cpu: 512     # 0.5 vCPU - sufficient for API workloads
+      Memory: 1024  # 1GB - adequate for spatial queries
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
@@ -75,7 +75,7 @@ Resources:
       ServiceName: coeqwal-api-service
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref TaskDefinition
-      DesiredCount: 3  # Increased for GB-scale data handling
+      DesiredCount: 2  # Two instances for high availability
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:

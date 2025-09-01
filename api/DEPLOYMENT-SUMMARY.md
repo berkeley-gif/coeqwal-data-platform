@@ -25,11 +25,11 @@
 - **Time series**: Up to **100,000** data points
 - **Bulk exports**: For GB-scale data
 
-### **Infrastructure upgraded for performance (workshops)**
-- **CPU**: 1 vCPU per container (was 0.5)
-- **Memory**: 2GB per container (was 1GB)  
-- **Instances**: 3 base instances (was 2)
-- **Auto-scaling**: Up to 10+ for workshops
+### **Infrastructure (cost-optimized)**
+- **CPU**: 0.5 vCPU per container 
+- **Memory**: 1GB per container  
+- **Instances**: 2 base instances (high availability)
+- **Auto-scaling**: Up to 6 instances for workshops
 
 ### **Endpoints**
 - `/api/scenarios` - For scenario analysis
@@ -67,13 +67,13 @@
 
 ## **Expected costs**
 
-### **Base cost** (~$80-120/month)
-- **ECS Fargate**: 2 instances × 1 vCPU × 2GB = ~$70-90/month
+### **Base cost** (~$40-60/month)
+- **ECS Fargate**: 2 instances × 0.5 vCPU × 1GB = ~$25-35/month
 - **Load balancer**: ~$20/month
 - **Data transfer**: ~$5-10/month
 
-### **Workshop scaling** (+$30-50 for event hours)
-- Auto-scales to 6-10 instances during workshops
+### **Workshop scaling** (+$15-25 for event hours)
+- Auto-scales to 4-6 instances during workshops
 - Returns to 2 instances after traffic drops
 
 ## ✅ **Ready to Deploy**
