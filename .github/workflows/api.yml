@@ -102,8 +102,8 @@ jobs:
         run: |
           # Deploy or update the CloudFormation stack
           aws cloudformation deploy \
-            --template-file api/deployment/ecs-simple.yml \
-            --stack-name coeqwal-network-api \
+            --template-file api/deployment/ecs-minimal.yml \
+            --stack-name coeqwal-network-api-minimal \
             --parameter-overrides \
               VpcId=${{ secrets.VPC_ID }} \
               SubnetIds=${{ secrets.PRIVATE_SUBNET_IDS }} \
