@@ -323,28 +323,28 @@ async def get_node_analysis(
     try:
         # Get upstream nodes
         upstream_query = """
-        SELECT node_id, short_code, name, distance, 'upstream' as direction
+        SELECT u.node_id, n.short_code, n.name, u.distance, 'upstream' as direction
         FROM get_upstream_nodes($1, $2) u
         JOIN network_node n ON u.node_id = n.id
-        ORDER BY distance, short_code
+        ORDER BY u.distance, n.short_code
         """
         upstream_rows = await db.fetch(upstream_query, node_id, max_depth)
         
         # Get downstream nodes  
         downstream_query = """
-        SELECT node_id, short_code, name, distance, 'downstream' as direction
+        SELECT d.node_id, n.short_code, n.name, d.distance, 'downstream' as direction
         FROM get_downstream_nodes($1, $2) d
         JOIN network_node n ON d.node_id = n.id
-        ORDER BY distance, short_code
+        ORDER BY d.distance, n.short_code
         """
         downstream_rows = await db.fetch(downstream_query, node_id, max_depth)
         
         # Get connected arcs
         arcs_query = """
-        SELECT arc_id, short_code, name, direction, 0 as distance
+        SELECT c.arc_id, a.short_code, a.name, c.direction, 0 as distance
         FROM get_connected_arcs($1) c
         JOIN network_arc a ON c.arc_id = a.id
-        ORDER BY direction, short_code
+        ORDER BY c.direction, a.short_code
         """
         arc_rows = await db.fetch(arcs_query, node_id)
         
