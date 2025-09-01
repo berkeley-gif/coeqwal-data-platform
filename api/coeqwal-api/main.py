@@ -144,13 +144,6 @@ class NetworkAnalysis(BaseModel):
     connected_arcs: List[ConnectedElement]
 
 # Database connection
-async def get_db_connection():
-    try:
-        conn = await asyncpg.connect(DATABASE_URL)
-        return conn
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
-
 @app.get("/")
 async def root():
     return {
@@ -252,8 +245,6 @@ async def get_all_arcs(
     db: asyncpg.Connection = Depends(get_db)
 ):
     """Get all network arcs with their spatial data for Mapbox visualization"""
-    
-    conn = await get_db_connection()
     try:
         # Build query with optional filters
         where_clause = "WHERE a.geom IS NOT NULL"
@@ -296,11 +287,18 @@ async def get_all_arcs(
         LIMIT $1
         """
         
-        rows = await conn.fetch(query, *params)
+        rows = await db.fetch(query, *params)
         
         arcs = []
         for row in rows:
             geojson = json.loads(row['geojson']) if row['geojson'] else {}
+            # Fix: attributes comes as JSON string, need to parse it
+            attributes = row['attributes']
+            if isinstance(attributes, str):
+                attributes = json.loads(attributes)
+            elif attributes is None:
+                attributes = {}
+                
             arcs.append(NetworkArc(
                 id=row['id'],
                 short_code=row['short_code'],
@@ -313,22 +311,22 @@ async def get_all_arcs(
                 shape_length=row['shape_length'],
                 hydrologic_region=row['hydrologic_region'],
                 geojson=geojson,
-                attributes=row['attributes'] or {}
+                attributes=attributes
             ))
         
         return arcs
         
-    finally:
-        await conn.close()
+    except Exception as e:
+        logger.error(f"Database query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
 @app.get("/api/nodes/{node_id}/analysis", response_model=NetworkAnalysis)
 async def get_node_analysis(
     node_id: int,
-    max_depth: int = Query(3, description="Maximum depth for network traversal")
+    max_depth: int = Query(3, description="Maximum depth for network traversal"),
+    db: asyncpg.Connection = Depends(get_db)
 ):
     """Get network analysis for a specific node (upstream/downstream connections)"""
-    
-    conn = await get_db_connection()
     try:
         # Get upstream nodes
         upstream_query = """
@@ -337,7 +335,7 @@ async def get_node_analysis(
         JOIN network_node n ON u.node_id = n.id
         ORDER BY distance, short_code
         """
-        upstream_rows = await conn.fetch(upstream_query, node_id, max_depth)
+        upstream_rows = await db.fetch(upstream_query, node_id, max_depth)
         
         # Get downstream nodes  
         downstream_query = """
@@ -346,7 +344,7 @@ async def get_node_analysis(
         JOIN network_node n ON d.node_id = n.id
         ORDER BY distance, short_code
         """
-        downstream_rows = await conn.fetch(downstream_query, node_id, max_depth)
+        downstream_rows = await db.fetch(downstream_query, node_id, max_depth)
         
         # Get connected arcs
         arcs_query = """
@@ -355,7 +353,7 @@ async def get_node_analysis(
         JOIN network_arc a ON c.arc_id = a.id
         ORDER BY direction, short_code
         """
-        arc_rows = await conn.fetch(arcs_query, node_id)
+        arc_rows = await db.fetch(arcs_query, node_id)
         
         # Build response
         upstream_nodes = [
@@ -400,13 +398,13 @@ async def get_node_analysis(
         )
         
     finally:
-        await conn.close()
+        # Connection handled by dependency injection
 
 @app.get("/api/arcs/{arc_id}/analysis", response_model=NetworkAnalysis)
 async def get_arc_analysis(arc_id: int):
     """Get network analysis for a specific arc (connected nodes)"""
     
-    conn = await get_db_connection()
+    # Using dependency injection
     try:
         # Get arc endpoints and their connections
         query = """
@@ -423,7 +421,7 @@ async def get_arc_analysis(arc_id: int):
         WHERE a.id = $1
         """
         
-        arc_row = await conn.fetchrow(query, arc_id)
+        arc_row = await db.fetchrow(query, arc_id)
         if not arc_row:
             raise HTTPException(status_code=404, detail="Arc not found")
         
@@ -460,16 +458,18 @@ async def get_arc_analysis(arc_id: int):
         )
         
     finally:
-        await conn.close()
+        # Connection handled by dependency injection
 
 @app.get("/api/search")
 async def search_network(
     q: str = Query(..., description="Search query for nodes/arcs by name or code"),
+    limit: int = Query(20, description="Maximum results to return"),
+    db: asyncpg.Connection = Depends(get_db) = Query(..., description="Search query for nodes/arcs by name or code"),
     limit: int = Query(20, description="Maximum results to return")
 ):
     """Search network elements by name or code"""
     
-    conn = await get_db_connection()
+    # Using dependency injection
     try:
         search_pattern = f"%{q.lower()}%"
         
@@ -495,8 +495,8 @@ async def search_network(
         LIMIT $2
         """
         
-        node_results = await conn.fetch(node_query, search_pattern, limit // 2)
-        arc_results = await conn.fetch(arc_query, search_pattern, limit // 2)
+        node_results = await db.fetch(node_query, search_pattern, limit // 2)
+        arc_results = await db.fetch(arc_query, search_pattern, limit // 2)
         
         results = []
         for row in node_results:
@@ -520,15 +520,15 @@ async def search_network(
         return {"results": results, "total": len(results)}
         
     finally:
-        await conn.close()
+        # Connection handled by dependency injection
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
     try:
-        conn = await get_db_connection()
-        await conn.fetchval("SELECT 1")
-        await conn.close()
+        # Using dependency injection
+        await db.fetchval("SELECT 1")
+        # Connection handled by dependency injection
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
