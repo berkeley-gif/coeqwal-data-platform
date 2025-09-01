@@ -3,8 +3,7 @@ name: Build and Deploy COEQWAL Network API
 on:
   push:
     paths:
-      - 'api/coeqwal-api/**'
-      - 'aws-deployment/**'
+      - 'api/**'
       - '.github/workflows/api.yml'
     branches:
       - main  # Deploy from main branch
@@ -57,7 +56,7 @@ jobs:
         run: |
           # Build the production image
           docker build \
-            -f aws-deployment/Dockerfile.production \
+            -f api/deployment/Dockerfile.production \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             .
@@ -103,7 +102,7 @@ jobs:
         run: |
           # Deploy or update the CloudFormation stack
           aws cloudformation deploy \
-            --template-file aws-deployment/ecs-fargate.yml \
+            --template-file api/deployment/ecs-fargate.yml \
             --stack-name coeqwal-network-api \
             --parameter-overrides \
               VpcId=${{ secrets.VPC_ID }} \
