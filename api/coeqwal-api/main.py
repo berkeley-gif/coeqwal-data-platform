@@ -159,13 +159,16 @@ async def root():
         }
     }
 
-@app.get("/api/nodes", response_model=List[NetworkNode])
+@app.get("/api/nodes", 
+         response_model=List[NetworkNode],
+         summary="Get network nodes",
+         description="Get CalSim3 network nodes with coordinates and attributes")
 async def get_all_nodes(
     limit: int = Query(1000, le=10000, description="Maximum number of nodes to return"),
-    region: Optional[str] = Query(None, description="Filter by hydrologic region"),
+    region: Optional[str] = Query(None, description="Filter by hydrologic region (SAC, SJR, and others)"),
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Get all network nodes with their spatial data for Mapbox visualization"""
+    """Get all network nodes with their spatial data and attributes"""
     try:
         # Build query with optional filters
         where_clause = "WHERE n.geom IS NOT NULL"
@@ -239,13 +242,16 @@ async def get_all_nodes(
         logger.error(f"Database query failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Database query failed")
 
-@app.get("/api/arcs", response_model=List[NetworkArc])
+@app.get("/api/arcs", 
+         response_model=List[NetworkArc],
+         summary="Get network arcs", 
+         description="Get CalSim3 network arcs with attributes")
 async def get_all_arcs(
     limit: int = Query(1000, le=10000, description="Maximum number of arcs to return"),
-    region: Optional[str] = Query(None, description="Filter by hydrologic region"),
+    region: Optional[str] = Query(None, description="Filter by hydrologic region (SAC, SJR, etc.)"),
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Get all network arcs with their spatial data for Mapbox visualization"""
+    """Get network arcs with spatial data and attributes"""
     try:
         # Build query with optional filters
         where_clause = "WHERE a.geom IS NOT NULL"

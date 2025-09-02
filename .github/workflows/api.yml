@@ -50,4 +50,15 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
           echo "✅ Image pushed to ECR: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          echo "🎯 ECS service will auto-update with new image"
+
+      - name: Update ECS service
+        run: |
+          echo "🔄 Updating ECS service to use new image..."
+          aws ecs update-service \
+            --cluster coeqwal-api \
+            --service coeqwal-api-service \
+            --force-new-deployment \
+            --region us-west-2
+          
+          echo "✅ ECS service update triggered"
+          echo "🎯 API will be updated automatically in 3-5 minutes"
