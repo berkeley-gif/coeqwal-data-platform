@@ -3,9 +3,10 @@ name: Build and push coeqwal-api to ECR
 on:
   push:
     paths:
-      - 'api/coeqwal-api/**'
+      - 'api/**'
+      - '.github/workflows/api.yml'
     branches:
-      - main  # Same as ETL pattern
+      - main
       - dev
 
 jobs:
@@ -41,13 +42,12 @@ jobs:
           ECR_REPOSITORY: coeqwal-network-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          cd api/coeqwal-api
-
-          docker build -f ../deployment/Dockerfile.production -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          # Build from project root (don't cd into subdirectory)
+          docker build -f api/deployment/Dockerfile.production -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
           echo "✅ Image pushed to ECR: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          echo "🎯 Ready for manual ECS deployment via AWS Console"
+          echo "🎯 ECS service will auto-update with new image"

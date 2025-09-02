@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI):
     logger.info("Creating database connection pool...")
     db_pool = await asyncpg.create_pool(
         DATABASE_URL,
-        min_size=5,      # Always keep 5 connections warm
-        max_size=20,     # Scale up to 20 for workshops
+        min_size=5,     # Always keep 5 connections warm
+        max_size=50,    # Scale up to 50 for workshops
         max_queries=50000,
         max_inactive_connection_lifetime=300,
         command_timeout=30
@@ -51,8 +51,8 @@ async def lifespan(app: FastAPI):
     await db_pool.close()
 
 app = FastAPI(
-    title="COEQWAL California Water Network API",
-    description="Interactive API for California water system topology, network analysis, and spatial data visualization",
+    title="COEQWAL API",
+    description="Production API for COEQWAL project",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -140,8 +140,8 @@ class NetworkAnalysis(BaseModel):
 @app.get("/")
 async def root():
     return {
-        "message": "COEQWAL California Water Network API",
-        "description": "Interactive API for California water system topology and network analysis",
+        "message": "COEQWAL API",
+        "description": "Production API for COEQWAL project",
         "version": "2.0.0",
         "data_summary": {
             "nodes": "1,400+ California water network nodes with coordinates",

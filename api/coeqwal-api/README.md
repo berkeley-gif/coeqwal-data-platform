@@ -1,229 +1,191 @@
-# COEQWAL Network Topology API
+# COEQWAL API
 
-FastAPI backend for COEQWAL
+Production FastAPI backend
 
-## Features
 
-- **Spatial Data**: Serves GeoJSON data for 1,400+ nodes and 1,063+ arcs
-- **Network Analysis**: Upstream/downstream traversal using PostgreSQL functions
-- **Interactive**: Click handlers for nodes/arcs with rich metadata
-- **Search**: Find network elements by name or code
-- **CORS Ready**: Configured for Next.js frontend integration
 
-## Quick Start
 
-### 1. Install dependencies
+## Quick start
+- **Base URL**: `https://api.coeqwal.org`
+- **Documentation**: `https://api.coeqwal.org/docs`
+- **Health check**: `https://api.coeqwal.org/api/health`
 
-```bash
-cd api
-pip install -r requirements.txt
-```
 
-### 2. Set environment variables
 
-```bash
-# Set PostgreSQL connection string
-export DATABASE_URL="postgresql://username:password@hostname:port/coeqwal_scenario"
-```
 
-### 3. Run the API
 
-```bash
-# Development
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+## **API endpoints**
 
-# Production
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-### 4. Test the API
-
-Visit: http://localhost:8000/docs for interactive API documentation
-
-## API Endpoints
-
-### Core Data
-- `GET /api/nodes` - Get all network nodes with spatial data
-- `GET /api/arcs` - Get all network arcs with spatial data
+### **Core data**
+- `GET /api/nodes` - Network nodes with coordinates (up to 10,000 per request)
+- `GET /api/arcs` - Network arcs with geometry (up to 10,000 per request)
 - `GET /api/search?q={query}` - Search nodes/arcs by name or code
 
-### Network Analysis
-- `GET /api/nodes/{node_id}/analysis` - Get upstream/downstream connections for a node
-- `GET /api/arcs/{arc_id}/analysis` - Get connected nodes for an arc
+### **Network analysis**
+- `GET /api/nodes/{id}/analysis` - Upstream/downstream connections for any node
+- `GET /api/arcs/{id}/analysis` - Connected nodes for any arc
 
-### Utility
-- `GET /api/health` - Health check
-- `GET /` - API information
+### **Monitoring**
+- `GET /api/health` - Database connectivity and performance metrics
+- `GET /docs` - Interactive API documentation
 
-## Frontend integration
+## **Mapbox integration**
 
-### Next.js Mapbox Example
-
+### **Load network data**
 ```javascript
-// Load all nodes and arcs
-const loadNetworkData = async () => {
-  const [nodesResponse, arcsResponse] = await Promise.all([
-    fetch('http://localhost:8000/api/nodes'),
-    fetch('http://localhost:8000/api/arcs')
-  ]);
-  
-  const nodes = await nodesResponse.json();
-  const arcs = await arcsResponse.json();
-  
-  // Add to Mapbox map
-  map.addSource('nodes', {
-    type: 'geojson',
-    data: {
-      type: 'FeatureCollection',
-      features: nodes.map(node => ({
-        type: 'Feature',
-        geometry: node.geojson,
-        properties: {
-          id: node.id,
-          name: node.name,
-          type: node.node_type,
-          ...node.attributes
-        }
-      }))
-    }
-  });
-  
-  map.addSource('arcs', {
-    type: 'geojson', 
-    data: {
-      type: 'FeatureCollection',
-      features: arcs.map(arc => ({
-        type: 'Feature',
-        geometry: arc.geojson,
-        properties: {
-          id: arc.id,
-          name: arc.name,
-          type: arc.arc_type,
-          length: arc.shape_length,
-          ...arc.attributes
-        }
-      }))
-    }
-  });
-};
+const API_URL = "https://api.coeqwal.org"
 
-// Handle node/arc clicks
+// Load all nodes and arcs for map visualization
+const [nodesResponse, arcsResponse] = await Promise.all([
+  fetch(`${API_URL}/api/nodes`),
+  fetch(`${API_URL}/api/arcs`)
+])
+
+const nodes = await nodesResponse.json()
+const arcs = await arcsResponse.json()
+
+// Add to Mapbox map
+map.addSource('nodes', {
+  type: 'geojson',
+  data: {
+    type: 'FeatureCollection',
+    features: nodes.map(node => ({
+      type: 'Feature',
+      geometry: node.geojson,
+      properties: {
+        id: node.id,
+        name: node.name,
+        type: node.node_type,
+        region: node.hydrologic_region,
+        ...node.attributes
+      }
+    }))
+  }
+})
+```
+
+### **Interactive network analysis**
+```javascript
+// Handle node clicks for network analysis
 map.on('click', 'nodes', async (e) => {
-  const nodeId = e.features[0].properties.id;
+  const nodeId = e.features[0].properties.id
   
-  // Get network analysis
-  const response = await fetch(`http://localhost:8000/api/nodes/${nodeId}/analysis`);
-  const analysis = await response.json();
+  // Get upstream/downstream connections
+  const response = await fetch(`${API_URL}/api/nodes/${nodeId}/analysis`)
+  const analysis = await response.json()
   
-  // Highlight upstream/downstream connections
-  highlightConnections(analysis);
+  // Highlight connected elements
+  highlightConnectedElements(analysis.upstream_nodes, analysis.downstream_nodes)
   
-  // Show popup with details
-  showPopup(e.lngLat, e.features[0].properties, analysis);
+  // Show popup with data attributes
+  showNetworkPopup(e.lngLat, e.features[0].properties, analysis)
 });
 ```
 
-## Response examples
+## **Architecture**
 
-### Node Response
-```json
-{
-  "id": 1,
-  "short_code": "SAC232",
-  "calsim_id": "SAC232", 
-  "name": "Sacramento River",
-  "node_type": "Channel - Stream",
-  "latitude": 40.0829,
-  "longitude": -122.1162,
-  "hydrologic_region": "SAC",
-  "geojson": {
-    "type": "Point",
-    "coordinates": [-122.11621022, 40.08286059]
-  },
-  "attributes": {
-    "riv_mi": 231.83,
-    "riv_name": "Sacramento River",
-    "comment": "Antelope Creek Confluence"
-  }
-}
+### **Production infrastructure**
+```
+Internet → Route 53 (api.coeqwal.org) → Application Load Balancer → ECS Fargate → PostgreSQL RDS
 ```
 
-### Network analysis response
-```json
-{
-  "origin_id": 1,
-  "origin_type": "node",
-  "upstream_nodes": [
-    {
-      "id": 2,
-      "short_code": "SAC236", 
-      "name": "Sacramento River",
-      "element_type": "node",
-      "distance": 1,
-      "direction": "upstream"
-    }
-  ],
-  "downstream_nodes": [
-    {
-      "id": 3,
-      "short_code": "SAC228",
-      "name": "Sacramento River", 
-      "element_type": "node",
-      "distance": 1,
-      "direction": "downstream"
-    }
-  ],
-  "connected_arcs": [
-    {
-      "id": 15,
-      "short_code": "C_SAC232",
-      "name": "Sacramento River",
-      "element_type": "arc",
-      "distance": 0,
-      "direction": "outflow"
-    }
-  ]
-}
+### **Expected performance**
+- **Response time**: 50-300ms for spatial queries
+- **Concurrent users**: 50+ workshop participants supported
+- **Database pool**: 5-50 connections with auto-scaling
+- **Auto-scaling**: ECS tasks scale based on load
+- **Zero cold starts**: Always-on containers
+
+### **Security**
+- **HTTPS/SSL**: TLS 1.3 encryption with wildcard certificate
+- **VPC isolation**: All resources in private network
+- **Security groups**: Controlled access between services
+- **Database security**: Private subnets, restricted access
+
+## **Database schema**
+
+### **Network topology (Ring 1)**
+- **network_node**: 1,402 California water system nodes
+- **network_arc**: 1,061 river/canal connections
+- **Spatial data**: PostGIS geometry with EPSG:4326 coordinates
+- **Metadata**: CalSim attributes, operational data, versioning
+
+### **Supporting tables**
+- **network_node_type**: 29 node classifications
+- **network_arc_type**: 26 arc classifications  
+- **hydrologic_region**: 5 California water regions
+- **Versioning system**: Developer tracking, version management
+
+## **Development**
+
+### **Local development**
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set database connection
+export DATABASE_URL="postgresql://user:pass@host:5432/coeqwal_scenario"
+
+# Run locally
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Configuration
+### **Testing**
+```bash
+# Health check
+curl http://localhost:8000/api/health
 
-Update `api/config.py` to customize:
-- Database connection
-- CORS origins
-- Pagination limits
-- Network traversal depth
-
-## Deployment
-
-### Docker
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Sample data
+curl "http://localhost:8000/api/nodes?limit=5"
+curl "http://localhost:8000/api/nodes/1/analysis"
 ```
 
-### Environment variables
-- `DATABASE_URL`: PostgreSQL connection string
-- `ALLOWED_ORIGINS`: Comma-separated list of frontend origins
+## **Deployment**
 
-## Database functions required
+### **Production deployment**
+- **GitHub Actions**: Automated Docker builds on push to `main`
+- **ECR**: Container registry for image storage
+- **ECS Fargate**: Serverless container orchestration
+- **Application Load Balancer**: Traffic distribution and SSL termination
 
-The API uses these PostgreSQL functions (configured in database):
-- `get_upstream_nodes(node_id, max_depth)` 
-- `get_downstream_nodes(node_id, max_depth)`
-- `get_connected_arcs(node_id)`
+### **Manual updates**
+```bash
+# Update code and deploy
+git add .
+git commit -m "Update API ..."
+git push origin main
 
-## Performance notes
+# Force ECS deployment (if needed)
+# ECS Console → Update service → Force new deployment
+```
 
-- Responses are paginated (default 100, max 1000)
-- Spatial queries use PostGIS indexes
-- Network analysis is limited to reasonable depths (3)
-- Consider caching for production use
+## **Monitoring**
+
+### **CloudWatch integration**
+- **Application logs**: `/ecs/coeqwal-api`
+- **Performance metrics**: Response times via `X-Process-Time` headers
+- **Database monitoring**: Connection pool status
+- **Load balancer metrics**: Request count, error rates
+
+### **Health endpoints**
+- **`/api/health`**: Database connectivity and pool status
+- **`/api/performance/stats`**: Detailed performance metrics
+
+## **Cost**
+
+### **Monthly pperational cost estimate**
+- **ECS Fargate**: ~$25-35 (2 tasks, 0.5 vCPU, 1GB each)
+- **Application Load Balancer**: ~$20
+- **Route 53**: ~$0.50
+- **CloudWatch Logs**: ~$5
+- **Total**: ~$50-60/month
+
+### **Workshop scaling**
+- **Auto-scaling**: Additional ECS tasks during high load
+- **Cost**: +$15-25 for workshop hours
+- **Performance**: Maintains <300ms response times
+
+
+
+
+
