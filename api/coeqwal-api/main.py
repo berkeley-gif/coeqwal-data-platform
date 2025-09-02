@@ -51,8 +51,8 @@ async def lifespan(app: FastAPI):
     await db_pool.close()
 
 app = FastAPI(
-    title="COEQWAL Network API",
-    description="Production API for California water network topology visualization",
+    title="COEQWAL California Water Network API",
+    description="Interactive API for California water system topology, network analysis, and spatial data visualization",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -140,14 +140,22 @@ class NetworkAnalysis(BaseModel):
 @app.get("/")
 async def root():
     return {
-        "message": "COEQWAL Network Topology API",
+        "message": "COEQWAL California Water Network API",
+        "description": "Interactive API for California water system topology and network analysis",
         "version": "2.0.0",
+        "data_summary": {
+            "nodes": "1,400+ California water network nodes with coordinates",
+            "arcs": "1,063+ river and canal connections with geometry",
+            "analysis": "Upstream/downstream network traversal functions"
+        },
         "endpoints": {
+            "health": "/api/health",
             "nodes": "/api/nodes",
             "arcs": "/api/arcs", 
             "node_analysis": "/api/nodes/{node_id}/analysis",
             "arc_analysis": "/api/arcs/{arc_id}/analysis",
-            "search": "/api/search"
+            "search": "/api/search",
+            "documentation": "/docs"
         }
     }
 
