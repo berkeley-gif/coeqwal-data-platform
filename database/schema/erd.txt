@@ -1667,12 +1667,10 @@ Table network_arc {
   arc_id                text
   arc_type_id           int    [not null]
   name                  text
-  description           text
   type                  text
   sub_type              text
   from_node             text
   to_node               text
-  node_suffix_comment   text
   from_node_id          int
   to_node_id            int
   hydrologic_region_id  int
