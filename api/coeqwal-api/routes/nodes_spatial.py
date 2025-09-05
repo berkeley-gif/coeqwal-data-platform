@@ -148,12 +148,14 @@ async def get_node_network(
     node_id: int,
     direction: str = "both",
     max_depth: int = 2,
-    include_arcs: bool = True
+    include_arcs: str = "true"
 ):
     """
     Get upstream/downstream network from a clicked node
     """
     try:
+        # Convert string to boolean
+        include_arcs_bool = include_arcs.lower() in ('true', '1', 'yes')
         # Build direction conditions
         if direction == "upstream":
             arc_condition = "a.to_node_id = $1"
@@ -211,7 +213,7 @@ async def get_node_network(
                 "arcs": []
             }
             
-            if include_arcs and len(nodes) > 1:
+            if include_arcs_bool and len(nodes) > 1:
                 # Get connecting arcs between traversal nodes
                 node_ids = [row["id"] for row in nodes]
                 arc_query = """

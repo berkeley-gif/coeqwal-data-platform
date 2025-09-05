@@ -548,7 +548,7 @@ async def api_get_node_network(
     node_id: int,
     direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
     max_depth: int = Query(2, description="Maximum traversal depth"),
-    include_arcs: bool = Query(True, description="Include arc geometries")
+    include_arcs: str = Query("true", description="Include arc geometries (true/false)")
 ):
     """Get upstream/downstream network from a clicked node"""
     return await get_node_network(db_pool, node_id, direction, max_depth, include_arcs)
