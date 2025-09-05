@@ -17,6 +17,9 @@ import logging
 import time
 from datetime import datetime
 
+# Import our new spatial endpoints
+from routes.nodes_spatial import get_nodes_spatial, get_node_network
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -529,6 +532,26 @@ async def search_network(
     except Exception as e:
         logger.error(f"Search failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Search failed")
+
+# New spatial endpoints
+@app.get("/api/nodes/spatial")
+async def api_get_nodes_spatial(
+    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
+    zoom: int = Query(10, description="Map zoom level"),
+    limit: int = Query(1000, description="Maximum nodes to return")
+):
+    """Get nodes within bounding box with zoom-based priority filtering"""
+    return await get_nodes_spatial(db_pool, bbox, zoom, limit)
+
+@app.get("/api/nodes/{node_id}/network")
+async def api_get_node_network(
+    node_id: int,
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(2, description="Maximum traversal depth"),
+    include_arcs: bool = Query(True, description="Include arc geometries")
+):
+    """Get upstream/downstream network from a clicked node"""
+    return await get_node_network(db_pool, node_id, direction, max_depth, include_arcs)
 
 @app.get("/api/health")
 async def health_check():
