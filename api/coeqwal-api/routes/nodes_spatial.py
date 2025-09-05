@@ -43,13 +43,41 @@ async def get_nodes_spatial(
             nt.name as node_type_name,
             hr.short_code as hydrologic_region,
             ST_AsGeoJSON(n.geom)::jsonb as geometry,
-            n.elevation,
-            n.capacity_taf,
+            n.latitude,
+            n.longitude,
+            n.riv_mi,
+            n.riv_name,
+            
+            -- Precise reservoir identification
+            CASE 
+                WHEN re.id IS NOT NULL THEN true
+                WHEN nt.short_code IN ('STR', 'STR-SIM', 'STR-NSM') THEN true
+                ELSE false 
+            END as is_reservoir,
+            
+            -- Reservoir attributes (only for actual reservoirs)
+            re.capacity_taf,
+            re.operational_purpose,
+            re.associated_river,
+            
+            -- Map category for frontend styling
+            CASE 
+                WHEN re.id IS NOT NULL OR nt.short_code IN ('STR', 'STR-SIM', 'STR-NSM') THEN 'reservoir'
+                WHEN nt.short_code LIKE 'PS%' THEN 'pump_station'
+                WHEN nt.short_code LIKE 'WTP%' THEN 'water_treatment'
+                WHEN nt.short_code = 'WWTP' THEN 'wastewater_treatment'
+                WHEN nt.short_code LIKE 'PR-%' THEN 'project'
+                WHEN nt.short_code LIKE 'S-%' THEN 'source'
+                ELSE 'other'
+            END as map_category,
+            
             -- Count connected arcs for interactivity
             (SELECT COUNT(*) FROM network_arc WHERE from_node_id = n.id OR to_node_id = n.id) as connected_arcs
+            
         FROM network_node n
         LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
         LEFT JOIN hydrologic_region hr ON hr.id = n.hydrologic_region_id
+        LEFT JOIN reservoir_entity re ON re.network_node_id = n.id
         WHERE ST_Intersects(n.geom, ST_MakeEnvelope($1, $2, $3, $4, 4326))
         {type_filter}
         AND n.geom IS NOT NULL
@@ -62,7 +90,7 @@ async def get_nodes_spatial(
                 WHEN nt.short_code LIKE 'S-%' THEN 4
                 ELSE 5
             END,
-            COALESCE(n.capacity_taf, 0) DESC,
+            COALESCE(re.capacity_taf, 0) DESC,
             n.name
         LIMIT $5;
         """
@@ -81,8 +109,21 @@ async def get_nodes_spatial(
                     "node_type_name": row["node_type_name"],
                     "hydrologic_region": row["hydrologic_region"],
                     "geometry": row["geometry"],
-                    "elevation": float(row["elevation"]) if row["elevation"] else None,
+                    "latitude": float(row["latitude"]) if row["latitude"] else None,
+                    "longitude": float(row["longitude"]) if row["longitude"] else None,
+                    "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
+                    "riv_name": row["riv_name"],
+                    
+                    # Reservoir identification and attributes
+                    "is_reservoir": row["is_reservoir"],
                     "capacity_taf": float(row["capacity_taf"]) if row["capacity_taf"] else None,
+                    "operational_purpose": row["operational_purpose"],
+                    "associated_river": row["associated_river"],
+                    
+                    # Map styling
+                    "map_category": row["map_category"],
+                    
+                    # Interactivity
                     "connected_arcs": row["connected_arcs"],
                     "is_interactive": row["connected_arcs"] > 0
                 })
