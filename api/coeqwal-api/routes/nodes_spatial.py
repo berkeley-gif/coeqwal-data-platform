@@ -42,7 +42,7 @@ async def get_nodes_spatial(
             nt.short_code as node_type,
             nt.name as node_type_name,
             hr.short_code as hydrologic_region,
-            ST_AsGeoJSON(n.geom)::jsonb as geometry,
+            ST_AsGeoJSON(n.geom)::json as geometry,
             n.latitude,
             n.longitude,
             n.riv_mi,
@@ -173,7 +173,7 @@ async def get_node_network(
             -- Base: Start with clicked node
             SELECT 
                 n.id, n.short_code, n.name,
-                ST_AsGeoJSON(n.geom)::jsonb as geometry,
+                ST_AsGeoJSON(n.geom)::json as geometry,
                 nt.short_code as node_type,
                 0 as depth,
                 ARRAY[n.id] as path
@@ -186,7 +186,7 @@ async def get_node_network(
             -- Recursive: Follow connected arcs
             SELECT 
                 n.id, n.short_code, n.name,
-                ST_AsGeoJSON(n.geom)::jsonb as geometry,
+                ST_AsGeoJSON(n.geom)::json as geometry,
                 nt.short_code as node_type,
                 nt_prev.depth + 1,
                 nt_prev.path || n.id
@@ -222,7 +222,7 @@ async def get_node_network(
                     a.from_node_id, a.to_node_id,
                     fn.short_code as from_node_code,
                     tn.short_code as to_node_code,
-                    ST_AsGeoJSON(a.geom)::jsonb as geometry,
+                    ST_AsGeoJSON(a.geom)::json as geometry,
                     at.short_code as arc_type
                 FROM network_arc a
                 LEFT JOIN network_node fn ON fn.id = a.from_node_id
