@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 # Import our new spatial endpoints
-from routes.nodes_spatial import get_nodes_spatial, get_node_network
+from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -555,6 +555,15 @@ async def api_get_node_network(
 ):
     """Get upstream/downstream network from a clicked node"""
     return await get_node_network(db_pool, node_id, direction, max_depth, include_arcs)
+
+@app.get("/api/nodes/unfiltered")
+async def api_get_all_nodes_unfiltered(
+    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
+    limit: int = Query(10000, description="Maximum nodes to return"),
+    source_filter: str = Query("all", description="'geopackage', 'network_schematic', or 'all'")
+):
+    """Get ALL nodes within bounding box with NO filtering - for enhanced network testing"""
+    return await get_all_nodes_unfiltered(db_pool, bbox, limit, source_filter)
 
 @app.get("/api/health")
 async def health_check():
