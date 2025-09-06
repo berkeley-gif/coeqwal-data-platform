@@ -19,6 +19,7 @@ from datetime import datetime
 
 # Import our new spatial endpoints
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
+from routes.vast_network_traversal import get_node_network_unlimited
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -550,7 +551,7 @@ async def api_get_nodes_spatial(
 async def api_get_node_network(
     node_id: int,
     direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
-    max_depth: int = Query(2, description="Maximum traversal depth"),
+    max_depth: int = Query(50, description="Maximum traversal depth (50 for vast networks)"),
     include_arcs: str = Query("true", description="Include arc geometries (true/false)")
 ):
     """Get upstream/downstream network from a clicked node"""
@@ -564,6 +565,15 @@ async def api_get_all_nodes_unfiltered(
 ):
     """Get ALL nodes within bounding box with NO filtering - for enhanced network testing"""
     return await get_all_nodes_unfiltered(db_pool, bbox, limit, source_filter)
+
+@app.get("/api/nodes/{node_id}/network/unlimited")
+async def api_get_node_network_unlimited(
+    node_id: int,
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    include_arcs: str = Query("true", description="Include arc geometries (true/false)")
+):
+    """Get COMPLETE upstream/downstream network with NO DEPTH LIMIT - like CalSim3_schematic"""
+    return await get_node_network_unlimited(db_pool, node_id, direction, include_arcs)
 
 @app.get("/api/health")
 async def health_check():

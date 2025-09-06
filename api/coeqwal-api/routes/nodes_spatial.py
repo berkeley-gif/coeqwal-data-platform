@@ -156,7 +156,7 @@ async def get_node_network(
     db_pool: asyncpg.Pool,
     node_id: int,
     direction: str = "both",
-    max_depth: int = 2,
+    max_depth: int = 50,  # basically unlimited network traversal depth
     include_arcs: str = "true"
 ):
     """
