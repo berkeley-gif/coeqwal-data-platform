@@ -177,12 +177,12 @@ async def get_node_network(
             next_node_field = "CASE WHEN a.from_node_id = $1 THEN a.to_node_id ELSE a.from_node_id END"
         
         # Get connected nodes via traversal
+        # Fixed traversal query - remove JSON from recursive CTE
         traversal_query = f"""
         WITH RECURSIVE network_traversal AS (
             -- Base: Start with clicked node
             SELECT 
                 n.id, n.short_code, n.name,
-                ST_AsGeoJSON(n.geom)::json as geometry,
                 nt.short_code as node_type,
                 0 as depth,
                 ARRAY[n.id] as path
@@ -195,7 +195,6 @@ async def get_node_network(
             -- Recursive: Follow connected arcs
             SELECT 
                 n.id, n.short_code, n.name,
-                ST_AsGeoJSON(n.geom)::json as geometry,
                 nt.short_code as node_type,
                 nt_prev.depth + 1,
                 nt_prev.path || n.id
@@ -206,8 +205,13 @@ async def get_node_network(
             WHERE nt_prev.depth < $2
             AND NOT (n.id = ANY(nt_prev.path))  -- Prevent cycles
         )
-        SELECT DISTINCT * FROM network_traversal
-        ORDER BY depth, node_type, name;
+        -- Get geometry after recursion to avoid JSON comparison issues
+        SELECT 
+            nt.id, nt.short_code, nt.name, nt.node_type, nt.depth,
+            ST_AsGeoJSON(n.geom) as geometry
+        FROM network_traversal nt
+        JOIN network_node n ON n.id = nt.id
+        ORDER BY nt.depth, nt.node_type, nt.name;
         """
         
         async with db_pool.acquire() as conn:
