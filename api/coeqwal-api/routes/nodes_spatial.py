@@ -177,7 +177,6 @@ async def get_node_network(
             next_node_field = "CASE WHEN a.from_node_id = $1 THEN a.to_node_id ELSE a.from_node_id END"
         
         # Get connected nodes via traversal
-        # Fixed traversal query - remove JSON from recursive CTE
         traversal_query = f"""
         WITH RECURSIVE network_traversal AS (
             -- Base: Start with clicked node
