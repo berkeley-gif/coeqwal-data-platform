@@ -1609,6 +1609,7 @@ Table network_node {
   node_type_id          int    [not null]
   name                  text
   description           text
+  json_id               text   [note: 'Original JSON schematic ID for traceability']
   riv_mi                numeric
   riv_name              text
   comment               text
@@ -1642,6 +1643,8 @@ Table network_node {
     (type, sub_type)
     (hydrologic_region_id)
     (diagram_id)
+    (json_id)  // For traceability to original schematic
+    (source_id, json_id)  // For filtering enhanced data
     (node_type_id, model_source_id)
     (parent_node_id)
     (integration_status_id)
