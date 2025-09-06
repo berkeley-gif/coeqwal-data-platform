@@ -6,6 +6,7 @@ For COEQWAL FastAPI api
 from fastapi import Query, HTTPException
 from typing import Optional
 import asyncpg
+import json
 
 async def get_nodes_spatial(
     db_pool: asyncpg.Pool,
@@ -100,6 +101,14 @@ async def get_nodes_spatial(
             
             nodes = []
             for row in rows:
+                # Parse geometry JSON string to object
+                geometry = row["geometry"]
+                if isinstance(geometry, str):
+                    try:
+                        geometry = json.loads(geometry)
+                    except (json.JSONDecodeError, TypeError):
+                        geometry = None
+                
                 nodes.append({
                     "id": row["id"],
                     "short_code": row["short_code"],
@@ -108,7 +117,7 @@ async def get_nodes_spatial(
                     "node_type": row["node_type"],
                     "node_type_name": row["node_type_name"],
                     "hydrologic_region": row["hydrologic_region"],
-                    "geometry": row["geometry"],
+                    "geometry": geometry,  # Parsed JSON object
                     "latitude": float(row["latitude"]) if row["latitude"] else None,
                     "longitude": float(row["longitude"]) if row["longitude"] else None,
                     "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
@@ -205,11 +214,22 @@ async def get_node_network(
             # Get traversal nodes
             nodes = await conn.fetch(traversal_query, node_id, max_depth)
             
+            # Parse geometry for nodes
+            parsed_nodes = []
+            for row in nodes:
+                node_dict = dict(row)
+                if isinstance(node_dict["geometry"], str):
+                    try:
+                        node_dict["geometry"] = json.loads(node_dict["geometry"])
+                    except (json.JSONDecodeError, TypeError):
+                        node_dict["geometry"] = None
+                parsed_nodes.append(node_dict)
+            
             result = {
                 "source_node_id": node_id,
                 "direction": direction,
                 "max_depth": max_depth,
-                "nodes": [dict(row) for row in nodes],
+                "nodes": parsed_nodes,
                 "arcs": []
             }
             
@@ -234,7 +254,19 @@ async def get_node_network(
                 """
                 
                 arcs = await conn.fetch(arc_query, node_ids)
-                result["arcs"] = [dict(row) for row in arcs]
+                
+                # Parse geometry for arcs
+                parsed_arcs = []
+                for row in arcs:
+                    arc_dict = dict(row)
+                    if isinstance(arc_dict["geometry"], str):
+                        try:
+                            arc_dict["geometry"] = json.loads(arc_dict["geometry"])
+                        except (json.JSONDecodeError, TypeError):
+                            arc_dict["geometry"] = None
+                    parsed_arcs.append(arc_dict)
+                
+                result["arcs"] = parsed_arcs
             
             return result
             
