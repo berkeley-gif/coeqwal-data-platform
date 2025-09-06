@@ -65,13 +65,16 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "https://your-frontend-domain.com",
-        "https://*.your-frontend-domain.com"
+        "http://localhost:*",
+        "https://coeqwal.org",
+        "https://www.coeqwal.org", 
+        "https://dev.coeqwal.org",
+        "https://staging.coeqwal.org",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    allow_origin_regex=r"https?://localhost:\d+",  # Allow any localhost port
 )
 
 # Dependency for database connections
