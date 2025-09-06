@@ -251,8 +251,7 @@ async def get_node_network(
                 LEFT JOIN network_node fn ON fn.id = a.from_node_id
                 LEFT JOIN network_node tn ON tn.id = a.to_node_id
                 LEFT JOIN network_arc_type at ON at.id = a.arc_type_id
-                WHERE (a.from_node_id = ANY($1) AND a.to_node_id = ANY($1))
-                AND a.geom IS NOT NULL
+                WHERE (a.from_node_id = ANY($1) OR a.to_node_id = ANY($1))
                 ORDER BY a.name;
                 """
                 

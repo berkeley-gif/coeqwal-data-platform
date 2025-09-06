@@ -120,8 +120,7 @@ async def get_node_network_unlimited(
                 LEFT JOIN network_node fn ON fn.id = a.from_node_id
                 LEFT JOIN network_node tn ON tn.id = a.to_node_id
                 LEFT JOIN network_arc_type at ON at.id = a.arc_type_id
-                WHERE a.from_node_id = ANY($1::int[])
-                AND a.to_node_id = ANY($1::int[])
+                WHERE (a.from_node_id = ANY($1::int[]) OR a.to_node_id = ANY($1::int[]))
                 ORDER BY a.short_code;
                 """
                 
