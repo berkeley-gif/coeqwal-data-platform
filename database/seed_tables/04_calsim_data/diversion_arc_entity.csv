@@ -1,0 +1,19 @@
+short_code,name,river_reach,river_mile_start,river_mile_end,bank,area_acres,annual_diversion_taf,hydrologic_region,from_node,to_node
+D_SAC281_02_NA,Non-Project Agricultural Diversion from Sacramento River to 02_NA,Keswick to Bend Bridge,299.0,257.0,Right,800.0,1,SAC,SAC281,02_NA
+D_SAC224_04_NA,Non-Project Agricultural Diversion from Sacramento River to 04_NA1,Bend Bridge to Glenn-Colusa Irrigation District Intake,257.0,207.0,Right,2200.0,1,SAC,SAC224,04_NA
+D_SAC185_08N_NA,Non-Project Agricultural Diversion from Sacramento River to 08N_NA,Glenn-Colusa Irrigation District Intake to Hamilton Bend,207.0,154.0,Right,7200.0,14,SAC,SAC185,08N_NA
+D_SAC146_08S_NA1,Non-Project Agricultural Diversion from Sacramento River to 08S_NA1,Hamilton Bend to Sycamore Slough,154.0,134.0,Right,15600.0,8,SAC,SAC146,08S_NA1
+D_SAC129_08S_NA2,Non-Project Agricultural Diversion from Sacramento River to 08S_NA2,Sycamore Slough to Colusa Basin Drain Outfall,134.0,93.0,Right,,21,SAC,SAC129,08S_NA2
+D_SAC081_21_NA,Non-Project Agricultural Diversion from Sacramento River to 21_NA,Colusa Basin Drain to Sacramento Bypass,93.0,66.0,Right,9700.0,13,SAC,SAC081,21_NA
+D_SAC273_03_NA,Non-Project Agricultural Diversion from Sacramento River to 03_NA,Keswick to Bend Bridge,299.0,257.0,Left,2200.0,5,SAC,SAC273,03_NA
+D_SAC240_05_NA,Non-Project Agricultural Diversion from Sacramento River to 05_NA1,Bend Bridge to Big Chico Creek,257.0,196.0,Left,2400.0,7,SAC,SAC240,05_NA
+D_SAC185_09_NA,Non-Project Agricultural Diversion from Sacramento River to 09_NA,Big Chico Creek to Butte Slough Outfall Gates,196.0,141.0,Left,5300.0,14,SAC,SAC185,09_NA
+D_SAC136_18_NA,Non-Project Agricultural Diversion from Sacramento River to 18_NA,Butte Slough Outfall Gates to Tisdale Weir,141.0,122.0,Left,1800.0,5,SAC,SAC136,18_NA
+D_SAC109_19_NA,Non-Project Agricultural Diversion from Sacramento River to 19_NA2,Tisdale Weir to Feather River,122.0,83.0,Left,0.0,20,SAC,SAC109,19_NA
+D_SAC075_22_NA,Non-Project Agricultural Diversion from Sacramento River to 22_NA,Feather River to American River,83.0,63.0,Left,2200.0,1,SAC,SAC075,22_NA
+D_FTR008_SA,Non-District Agricultural Diversion from Feather River to 16_SA,Sutter Bypass East Levee to Sutter Extension Water District,7.6,37.9,Right,4200.0,3,SAC,FTR008,16_SA
+D_FTR003_SA,Non-District Agricultural Diversion from Feather River to 17S_SA,River mouth to Sutter Bypass East Levee,0.0,7.6,Right,200.0,5,SAC,FTR003,17S_SA
+D_FTR059_12_SA,Non-District Agricultural Diversion from Feather River to 12_SA,Honcut Creek to Fish Barrier Dam,44.8,67.0,Left,2500.0,6,SAC,FTR059,12_SA
+D_FTR045_15N_SA,Non-District Agricultural Diversion from Feather River to 15N_SA,Yuba River to Honcut Creek,27.7,44.8,Left,1900.0,4,SAC,FTR045,15N_SA
+D_FTR028_15S_SA,Non-District Agricultural Diversion from Feather River to 15S_SA,Yuba/Sutter county line to Yuba River,10.8,27.7,Left,1400.0,1,SAC,FTR028,15S_SA
+D_FTR003_22_SA,Non-District Agricultural Diversion from Feather River to 22_SA,River mouth to Yuba/Sutter county line,0.0,10.8,Left,3000.0,7,SAC,FTR003,22_SA1

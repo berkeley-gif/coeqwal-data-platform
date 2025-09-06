@@ -12,7 +12,7 @@ async def get_nodes_spatial(
     db_pool: asyncpg.Pool,
     bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
     zoom: int = Query(10, description="Map zoom level"),
-    limit: int = Query(1000, description="Maximum nodes to return")
+    limit: int = Query(2000, description="Maximum nodes to return")
 ):
     """
     Get nodes within bounding box with zoom-based priority filtering
