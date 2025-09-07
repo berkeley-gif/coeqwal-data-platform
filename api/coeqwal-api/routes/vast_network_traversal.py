@@ -19,16 +19,16 @@ async def get_node_network_unlimited(
         # Convert string to boolean
         include_arcs_bool = include_arcs.lower() in ('true', '1', 'yes')
         
-        # Build direction conditions  
+        # Build direction conditions (matching working nodes_spatial.py pattern)
         if direction == "upstream":
-            arc_condition = "a.to_node_id = nt_prev.id"
+            arc_condition = "a.to_node_id = $1"
             next_node_field = "a.from_node_id"
         elif direction == "downstream":
-            arc_condition = "a.from_node_id = nt_prev.id" 
+            arc_condition = "a.from_node_id = $1" 
             next_node_field = "a.to_node_id"
         else:  # both
-            arc_condition = "(a.from_node_id = nt_prev.id OR a.to_node_id = nt_prev.id)"
-            next_node_field = "CASE WHEN a.from_node_id = nt_prev.id THEN a.to_node_id ELSE a.from_node_id END"
+            arc_condition = "(a.from_node_id = $1 OR a.to_node_id = $1)"
+            next_node_field = "CASE WHEN a.from_node_id = $1 THEN a.to_node_id ELSE a.from_node_id END"
         
         # unlimited depth traversal - PostgreSQL will stop on cycles automatically
         traversal_query = f"""
@@ -52,7 +52,7 @@ async def get_node_network_unlimited(
                 nt_prev.depth + 1,
                 nt_prev.path || n.id
             FROM network_traversal nt_prev
-            JOIN network_arc a ON {arc_condition}
+            JOIN network_arc a ON {arc_condition.replace('$1', 'nt_prev.id')}
             JOIN network_node n ON n.id = {next_node_field}
             LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
             WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
@@ -61,7 +61,7 @@ async def get_node_network_unlimited(
         -- Get geometry after recursion
         SELECT 
             nt.id, nt.short_code, nt.name, nt.node_type, nt.depth,
-            ST_AsGeoJSON(n.geom)::json as geometry,
+            ST_AsGeoJSON(n.geom) as geometry,
             n.latitude, n.longitude,
             (SELECT COUNT(*) FROM network_arc WHERE from_node_id = nt.id OR to_node_id = nt.id) as connected_arcs
         FROM network_traversal nt
@@ -115,7 +115,7 @@ async def get_node_network_unlimited(
                     a.from_node_id, a.to_node_id,
                     fn.short_code as from_node_code, tn.short_code as to_node_code,
                     at.short_code as arc_type,
-                    ST_AsGeoJSON(a.geom)::json as geometry
+                    ST_AsGeoJSON(a.geom) as geometry
                 FROM network_arc a
                 LEFT JOIN network_node fn ON fn.id = a.from_node_id
                 LEFT JOIN network_node tn ON tn.id = a.to_node_id
