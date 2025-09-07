@@ -104,6 +104,75 @@ Table calsim_entity_type {
   Indexes {
     (is_active, type)
   }
+
+// Core Network Topology Table (replaces network_arc and network_node)
+Table network_topology {
+  id integer [pk, increment]
+  short_code varchar [not null, unique, note: "Primary identifier linking to entities, variables, and GIS"]
+  xml_short_code varchar [note: "Original short_code from XML source"]
+  geopackage_short_code varchar [note: "Original short_code from geopackage source"]
+  schematic_type varchar [not null, note: "node or arc"]
+  from_node varchar [note: "Origin node for connectivity (nullable for boundary conditions)"]
+  to_node varchar [note: "Destination node for connectivity (nullable for boundary conditions)"]
+  match_type varchar [note: "Type of matching: exact, xml_only, geopackage_only"]
+  relationship_type varchar [note: "one_to_one, one_to_many_parent, one_to_many_child"]
+  parent_topology_id integer [note: "FK to parent record for hierarchical relationships"]
+  has_gis boolean [note: "Whether spatial data exists"]
+  connectivity_status varchar [note: "connected or unconnected"]
+  arc_type_id integer [note: "FK for arcs only"]
+  node_type_id integer [note: "FK for nodes only"]
+  type varchar [note: "Denormalized type code from geopackage"]
+  subtype varchar [note: "Denormalized subtype code from geopackage"]
+  hydrologic_region_id varchar [note: "FK to hydrologic region"]
+  source_systems text [note: "Array of source systems"]
+  primary_source_id integer [note: "Primary data source FK"]
+  node_classification varchar [note: "physical, logical, boundary (nodes only)"]
+  model_source varchar [note: "Model source identifier"]
+  network_version_id integer [not null, note: "Version tracking"]
+  verification_status varchar [note: "verified, pending, flagged"]
+  data_source varchar [note: "Source of this record"]
+  notes text [note: "Audit trail and additional information"]
+  
+  indexes {
+    short_code [unique]
+    schematic_type
+    (from_node, to_node)
+    connectivity_status
+    type
+    data_source
+  }
+}
+
+// Self-referential relationship for parent-child topology
+Ref: network_topology.parent_topology_id > network_topology.id
+
+// Supporting tables for network topology
+Table network_topology_manual_reviews {
+  id integer [pk, increment]
+  topology_id integer
+  review_type varchar
+  reviewer varchar
+  review_date timestamp
+  decision varchar
+  reasoning text
+  status varchar
+}
+
+Ref: network_topology_manual_reviews.topology_id > network_topology.id
+
+Table network_topology_relationships {
+  id integer [pk, increment]
+  parent_id integer
+  child_id integer
+  relationship_type varchar
+  confidence_score float
+  notes text
+}
+
+Ref: network_topology_relationships.parent_id > network_topology.id
+Ref: network_topology_relationships.child_id > network_topology.id
+
+
 }
 Ref: calsim_entity_type.schematic_type_id > calsim_schematic_type.id
 
@@ -1552,55 +1621,7 @@ Table network_integration_status {
   label      text
 }
 
-Table network_node_type {
-  id              int  [pk, increment]
-  short_code      text [not null, unique]
-  name            text
-  common_name     text
-  description     text
-  model_source_id int
-  source_id       int
-  is_active       boolean [not null, default: true]
-  created_at      timestamptz [not null, default: `now()`]
-  created_by      int  [not null]
-  updated_at      timestamptz
-  updated_by      int
-  Indexes {
-    (short_code) [unique]
-    (common_name)
-    (model_source_id)
-    (is_active, model_source_id)
-  }
-}
-Ref: network_node_type.source_id > source.id
-Ref: network_node_type.created_by > developer.id
-Ref: network_node_type.updated_by > developer.id
-Ref: network_node_type.model_source_id > model_source.id
 
-Table network_arc_type {
-  id              int  [pk, increment]
-  short_code      text [not null, unique]
-  name            text [not null]
-  common_name     text
-  description     text
-  model_source_id int
-  source_id       int
-  is_active       boolean [not null, default: true]
-  created_at      timestamptz [not null, default: `now()`]
-  created_by      int  [not null]
-  updated_at      timestamptz
-  updated_by      int
-  Indexes {
-    (short_code) [unique]
-    (common_name)
-    (model_source_id)
-    (is_active, model_source_id)
-  }
-}
-Ref: network_arc_type.created_by > developer.id
-Ref: network_arc_type.updated_by > developer.id
-Ref: network_arc_type.model_source_id > model_source.id
-Ref: network_arc_type.source_id > source.id
 
 // NETWORK TOPOLOGY SCHEMA
 // 
@@ -1654,8 +1675,8 @@ Table network_topology {
   // SPATIAL AND CLASSIFICATION
   has_gis                boolean   [default: false]
   connectivity_status    text      [default: 'connected', note: 'connected, unconnected - tracks if element participates in connected network']
-  type                   text      [note: 'FK to network_arc_type or network_node_type']
-  subtype                text      [note: 'FK to network_arc_type or network_node_type subtypes']
+  type                   text      [note: 'Type classification from geopackage data']
+  subtype                text      [note: 'Subtype classification from geopackage data']
   hydrologic_region_id   int       
   
   // ENHANCED SOURCE TRACKING: Arrays for multiple sources
@@ -1800,54 +1821,12 @@ Ref: network_topology.schematic_type > calsim_schematic_type.label [delete: rest
 Ref: network_topology_relationships.parent_topology_id > network_topology.id [delete: cascade, update: cascade]
 Ref: network_topology_relationships.child_topology_id > network_topology.id [delete: cascade, update: cascade]
 
-Table network_node_equivalence {
-  node_id            int [not null]
-  equivalent_node_id int [not null]
-  Indexes {
-    (node_id, equivalent_node_id) [pk]
-    (equivalent_node_id, node_id)
-  }
-}
-Ref: network_node_equivalence.node_id > network_node.id [delete: cascade, update: cascade]
-Ref: network_node_equivalence.equivalent_node_id > network_node.id [delete: restrict, update: cascade]
 
-Table network_arc_equivalence {
-  arc_id            int [not null]
-  equivalent_arc_id int [not null]
-  Indexes {
-    (arc_id, equivalent_arc_id) [pk]
-    (equivalent_arc_id, arc_id)
-  }
-}
-Ref: network_arc_equivalence.arc_id > network_arc.id [delete: cascade, update: cascade]
-Ref: network_arc_equivalence.equivalent_arc_id > network_arc.id [delete: restrict, update: cascade]
 
-Table network_node_attributes {
-  id                 int  [pk, increment]
-  node_id            int  [not null]
-  attr_key           text [not null]
-  attr_value         text [not null]
-  data_type          text [not null, default: 'text']
-  network_version_id int  [not null]
-  created_at         timestamptz [not null, default: `now()`]
-  created_by         int  [not null]
-  updated_at         timestamptz
-  updated_by         int
-  Indexes {
-    (node_id, attr_key) [unique]
-    (attr_key)
-    (network_version_id)
-    (node_id)
-  }
-}
-Ref: network_node_attributes.node_id > network_node.id [delete: cascade, update: cascade]
-Ref: network_node_attributes.network_version_id > version.id
-Ref: network_node_attributes.created_by > developer.id
-Ref: network_node_attributes.updated_by > developer.id
 
 Table reservoir_entity {
   id                   int    [pk, increment]
-  network_node_id      int    [not null, unique]
+  network_topology_id      int    [not null, unique]
   short_code           text   [not null, unique]
   name                 text   [not null]
   description          text
@@ -1869,7 +1848,7 @@ Table reservoir_entity {
   updated_at           timestamptz [not null, default: `now()`]
   updated_by           int
   Indexes {
-    (network_node_id) [unique]
+    (network_topology_id) [unique]
     (short_code) [unique]
     (entity_version_id, short_code) [unique]
     (hydrologic_region_id)
@@ -1882,7 +1861,6 @@ Table reservoir_entity {
     (entity_version_id)
   }
 }
-Ref: reservoir_entity.network_node_id      > network_node.id
 Ref: reservoir_entity.entity_type_id       > calsim_entity_type.id
 Ref: reservoir_entity.schematic_type_id    > calsim_schematic_type.id
 Ref: reservoir_entity.hydrologic_region_id > hydrologic_region.id
@@ -1902,7 +1880,7 @@ Ref: reservoir_entity_source_link.source_id > source.id [delete: restrict, updat
 
 Table inflow_entity {
   id                   int    [pk, increment]
-  network_arc_id       int    [not null, unique]
+  network_topology_id       int    [not null, unique]
   short_code           text   [not null, unique]
   name                 text   [not null]
   description          text
@@ -1918,7 +1896,7 @@ Table inflow_entity {
   updated_at           timestamptz [not null, default: `now()`]
   updated_by           int
   Indexes {
-    (network_arc_id) [unique]
+    (network_topology_id) [unique]
     (short_code) [unique]
     (entity_version_id, short_code) [unique]
     (to_node)
@@ -1928,8 +1906,6 @@ Table inflow_entity {
     (schematic_type_id)
   }
 }
-Ref: inflow_entity.network_arc_id       > network_arc.id
-Ref: inflow_entity.to_node_id           > network_node.id
 Ref: inflow_entity.entity_type_id       > calsim_entity_type.id
 Ref: inflow_entity.schematic_type_id    > calsim_schematic_type.id
 Ref: inflow_entity.hydrologic_region_id > hydrologic_region.id
@@ -1949,7 +1925,7 @@ Ref: inflow_entity_source_link.source_id > source.id [delete: restrict, update: 
 
 Table channel_entity {
   id                   int    [pk, increment]
-  network_arc_id       int    [not null, unique]
+  network_topology_id       int    [not null, unique]
   short_code           text   [not null, unique]
   name                 text   [not null]
   description          text
@@ -1974,7 +1950,7 @@ Table channel_entity {
   updated_at           timestamptz [not null, default: `now()`]
   updated_by           int
   Indexes {
-    (network_arc_id) [unique]
+    (network_topology_id) [unique]
     (short_code) [unique]
     (entity_version_id, short_code) [unique]
     (entity_type_id)
@@ -1987,9 +1963,6 @@ Table channel_entity {
     (to_node)
   }
 }
-Ref: channel_entity.network_arc_id       > network_arc.id
-Ref: channel_entity.from_node_id         > network_node.id
-Ref: channel_entity.to_node_id           > network_node.id
 Ref: channel_entity.entity_type_id       > calsim_entity_type.id
 Ref: channel_entity.schematic_type_id    > calsim_schematic_type.id
 Ref: channel_entity.hydrologic_region_id > hydrologic_region.id
@@ -2408,8 +2381,6 @@ Table diversion_arc_entity {
   }
 }
 
-Ref: diversion_arc_entity.from_node_id           > network_node.id
-Ref: diversion_arc_entity.to_node_id             > network_node.id
 Ref: diversion_arc_entity.entity_type_id         > calsim_entity_type.id
 Ref: diversion_arc_entity.schematic_type_id      > calsim_schematic_type.id
 Ref: diversion_arc_entity.hydrologic_region_id   > hydrologic_region.id
