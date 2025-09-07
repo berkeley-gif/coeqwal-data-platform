@@ -2,17 +2,10 @@
 
 Production FastAPI backend
 
-
-
-
 ## Quick start
 - **Base URL**: `https://api.coeqwal.org`
 - **Documentation**: `https://api.coeqwal.org/docs`
 - **Health check**: `https://api.coeqwal.org/api/health`
-
-
-
-
 
 ## **API endpoints**
 
@@ -36,31 +29,31 @@ Production FastAPI backend
 const API_URL = "https://api.coeqwal.org"
 
 // Load all nodes and arcs for map visualization
-const [nodesResponse, arcsResponse] = await Promise.all([
+  const [nodesResponse, arcsResponse] = await Promise.all([
   fetch(`${API_URL}/api/nodes`),
   fetch(`${API_URL}/api/arcs`)
 ])
 
 const nodes = await nodesResponse.json()
 const arcs = await arcsResponse.json()
-
-// Add to Mapbox map
-map.addSource('nodes', {
-  type: 'geojson',
-  data: {
-    type: 'FeatureCollection',
-    features: nodes.map(node => ({
-      type: 'Feature',
-      geometry: node.geojson,
-      properties: {
-        id: node.id,
-        name: node.name,
-        type: node.node_type,
+  
+  // Add to Mapbox map
+  map.addSource('nodes', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: nodes.map(node => ({
+        type: 'Feature',
+        geometry: node.geojson,
+        properties: {
+          id: node.id,
+          name: node.name,
+          type: node.node_type,
         region: node.hydrologic_region,
-        ...node.attributes
-      }
-    }))
-  }
+          ...node.attributes
+        }
+      }))
+    }
 })
 ```
 
@@ -79,7 +72,7 @@ map.on('click', 'nodes', async (e) => {
   
   // Show popup with data attributes
   showNetworkPopup(e.lngLat, e.features[0].properties, analysis)
-});
+})
 ```
 
 ## **Architecture**

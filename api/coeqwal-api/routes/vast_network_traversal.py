@@ -53,7 +53,7 @@ async def get_node_network_unlimited(
                 nt_prev.path || n.id
             FROM network_traversal nt_prev
             JOIN network_arc a ON {arc_condition.replace('$1', 'nt_prev.id')}
-            JOIN network_node n ON n.id = {next_node_field}
+            JOIN network_node n ON n.id = {next_node_field.replace('$1', 'nt_prev.id')}
             LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
             WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
             AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
