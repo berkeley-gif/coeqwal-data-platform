@@ -19,45 +19,97 @@ async def get_node_network_unlimited(
         # Convert string to boolean
         include_arcs_bool = include_arcs.lower() in ('true', '1', 'yes')
         
-        # Build direction conditions - simplified approach
+        # Build the traversal query based on direction
         if direction == "upstream":
-            join_condition = "a.to_node_id = nt_prev.id"
-            next_node_field = "a.from_node_id"
+            traversal_query = """
+            WITH RECURSIVE network_traversal AS (
+                -- Base: Start with clicked node
+                SELECT 
+                    n.id, n.short_code, n.name,
+                    nt.short_code as node_type,
+                    0 as depth,
+                    ARRAY[n.id] as path
+                FROM network_node n
+                LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
+                WHERE n.id = $1
+                
+                UNION ALL
+                
+                -- Recursive: Follow upstream arcs (NO DEPTH LIMIT)
+                SELECT 
+                    n.id, n.short_code, n.name,
+                    nt.short_code as node_type,
+                    nt_prev.depth + 1,
+                    nt_prev.path || n.id
+                FROM network_traversal nt_prev
+                JOIN network_arc a ON a.to_node_id = nt_prev.id
+                JOIN network_node n ON n.id = a.from_node_id
+                LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
+                WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
+                AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
+            )"""
         elif direction == "downstream":
-            join_condition = "a.from_node_id = nt_prev.id" 
-            next_node_field = "a.to_node_id"
+            traversal_query = """
+            WITH RECURSIVE network_traversal AS (
+                -- Base: Start with clicked node
+                SELECT 
+                    n.id, n.short_code, n.name,
+                    nt.short_code as node_type,
+                    0 as depth,
+                    ARRAY[n.id] as path
+                FROM network_node n
+                LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
+                WHERE n.id = $1
+                
+                UNION ALL
+                
+                -- Recursive: Follow downstream arcs (NO DEPTH LIMIT)
+                SELECT 
+                    n.id, n.short_code, n.name,
+                    nt.short_code as node_type,
+                    nt_prev.depth + 1,
+                    nt_prev.path || n.id
+                FROM network_traversal nt_prev
+                JOIN network_arc a ON a.from_node_id = nt_prev.id
+                JOIN network_node n ON n.id = a.to_node_id
+                LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
+                WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
+                AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
+            )"""
         else:  # both
-            join_condition = "(a.from_node_id = nt_prev.id OR a.to_node_id = nt_prev.id)"
-            next_node_field = "CASE WHEN a.from_node_id = nt_prev.id THEN a.to_node_id ELSE a.from_node_id END"
+            traversal_query = """
+            WITH RECURSIVE network_traversal AS (
+                -- Base: Start with clicked node
+                SELECT 
+                    n.id, n.short_code, n.name,
+                    nt.short_code as node_type,
+                    0 as depth,
+                    ARRAY[n.id] as path
+                FROM network_node n
+                LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
+                WHERE n.id = $1
+                
+                UNION ALL
+                
+                -- Recursive: Follow ALL connected arcs (NO DEPTH LIMIT)
+                SELECT 
+                    n.id, n.short_code, n.name,
+                    nt.short_code as node_type,
+                    nt_prev.depth + 1,
+                    nt_prev.path || n.id
+                FROM network_traversal nt_prev
+                JOIN network_arc a ON (a.from_node_id = nt_prev.id OR a.to_node_id = nt_prev.id)
+                JOIN network_node n ON n.id = CASE 
+                    WHEN a.from_node_id = nt_prev.id THEN a.to_node_id 
+                    ELSE a.from_node_id 
+                END
+                LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
+                WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
+                AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
+            )"""
         
-        # unlimited depth traversal - PostgreSQL will stop on cycles automatically
-        traversal_query = f"""
-        WITH RECURSIVE network_traversal AS (
-            -- Base: Start with clicked node
-            SELECT 
-                n.id, n.short_code, n.name,
-                nt.short_code as node_type,
-                0 as depth,
-                ARRAY[n.id] as path
-            FROM network_node n
-            LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
-            WHERE n.id = $1
-            
-            UNION ALL
-            
-            -- Recursive: Follow ALL connected arcs (NO DEPTH LIMIT)
-            SELECT 
-                n.id, n.short_code, n.name,
-                nt.short_code as node_type,
-                nt_prev.depth + 1,
-                nt_prev.path || n.id
-            FROM network_traversal nt_prev
-            JOIN network_arc a ON {join_condition}
-            JOIN network_node n ON n.id = {next_node_field}
-            LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
-            WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
-            AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
-        )
+        # Add the final SELECT to all queries
+        traversal_query += """
         -- Get geometry after recursion
         SELECT 
             nt.id, nt.short_code, nt.name, nt.node_type, nt.depth,
