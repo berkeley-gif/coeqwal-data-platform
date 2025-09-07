@@ -19,16 +19,16 @@ async def get_node_network_unlimited(
         # Convert string to boolean
         include_arcs_bool = include_arcs.lower() in ('true', '1', 'yes')
         
-        # Build direction conditions (matching working nodes_spatial.py pattern)
+        # Build direction conditions - simplified approach
         if direction == "upstream":
-            arc_condition = "a.to_node_id = $1"
+            join_condition = "a.to_node_id = nt_prev.id"
             next_node_field = "a.from_node_id"
         elif direction == "downstream":
-            arc_condition = "a.from_node_id = $1" 
+            join_condition = "a.from_node_id = nt_prev.id" 
             next_node_field = "a.to_node_id"
         else:  # both
-            arc_condition = "(a.from_node_id = $1 OR a.to_node_id = $1)"
-            next_node_field = "CASE WHEN a.from_node_id = $1 THEN a.to_node_id ELSE a.from_node_id END"
+            join_condition = "(a.from_node_id = nt_prev.id OR a.to_node_id = nt_prev.id)"
+            next_node_field = "CASE WHEN a.from_node_id = nt_prev.id THEN a.to_node_id ELSE a.from_node_id END"
         
         # unlimited depth traversal - PostgreSQL will stop on cycles automatically
         traversal_query = f"""
@@ -52,8 +52,8 @@ async def get_node_network_unlimited(
                 nt_prev.depth + 1,
                 nt_prev.path || n.id
             FROM network_traversal nt_prev
-            JOIN network_arc a ON {arc_condition.replace('$1', 'nt_prev.id')}
-            JOIN network_node n ON n.id = {next_node_field.replace('$1', 'nt_prev.id')}
+            JOIN network_arc a ON {join_condition}
+            JOIN network_node n ON n.id = {next_node_field}
             LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
             WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
             AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
@@ -142,4 +142,6 @@ async def get_node_network_unlimited(
             return result
             
     except Exception as e:
+        # Log the actual error for debugging
+        print(f"Unlimited traversal error for node {node_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
