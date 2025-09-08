@@ -155,7 +155,7 @@ Table network_topology {
   stream_code varchar [note: "Normalized stream code (from strm_code field)"]
   hydrologic_region varchar [note: "Normalized hydrologic region (from hr field)"]
   shape_length numeric [note: "Normalized shape length (from shape_leng field)"]
-  data_source varchar [not null, note: "geopackage_arcs or geopackage_nodes"]
+  data_source_id integer [not null, note: "FK to source table - geopackage source"]
   
   indexes {
     short_code [unique]
@@ -174,11 +174,12 @@ Table network_topology {
     (is_active, from_node, to_node) [note: "Active network traversal optimization"]
     stream_code [note: "Stream classification queries"]
     hr [note: "Hydrologic region filtering"]
-    data_source [note: "Source system filtering"]
+    data_source_id [note: "Source system filtering"]
   }
 }
 
-// Network topology is now geopackage-only - no hierarchical relationships needed
+// Foreign key relationships
+Ref: network_topology.data_source_id > source.id [delete: restrict, update: cascade]
 
 // Supporting tables for network topology
 Table network_topology_manual_reviews {
@@ -210,49 +211,35 @@ Ref: network_topology_relationships.child_topology_id > network_topology.id
 Table network_gis {
   id integer [pk, increment]
   short_code varchar [not null, note: "Links to network_topology.short_code"]
-  geometry_role varchar [not null, note: "primary, alternative, detail"]
-  geometry_type varchar [not null, note: "point, linestring, polygon, multipolygon"]
+  geometry_type varchar [not null, note: "point, linestring, multilinestring, polygon, multipolygon"]
   
   // PostGIS spatial data
   geom geometry [not null, note: "PostGIS geometry column with spatial index"]
-  geom_wkt text [note: "WKT representation for backup/export"]
-  srid integer [default: 4326, note: "Spatial Reference System ID"]
-  
-  // Geometric properties
-  area_sq_meters numeric [note: "For polygons - calculated automatically"]
-  length_meters numeric [note: "For linestrings - calculated automatically"]
-  centroid_geom geometry [note: "Calculated centroid for all geometries"]
-  bbox_geom geometry [note: "Bounding box geometry"]
+  geom_wkt text [not null, note: "WKT representation from geopackage source"]
+  srid integer [not null, default: 4326, note: "Spatial Reference System ID"]
   
   // Source and version tracking
-  source_system varchar [not null, note: "geopackage, entity_polygon, calculated, etc."]
-  source_file varchar [note: "Original file name"]
-  source_record_id varchar [note: "Original record ID in source"]
-  network_version_id integer [not null, note: "Version tracking"]
-  data_quality_score numeric [note: "0.00 to 1.00"]
+  source_id integer [not null, note: "FK to source table - geopackage"]
+  model_source_id integer [not null, note: "FK to model_source table - calsim3"]
+  source_record_id varchar [note: "Original record ID from geopackage"]
+  network_version_id integer [not null, default: 1, note: "Version tracking"]
+  data_quality_score numeric [default: 1.0, note: "0.00 to 1.00 - geopackage is high quality"]
   
   // Entity relationships
-  entity_type varchar [note: "reservoir, demand_unit, channel, etc. (for polygons)"]
-  entity_id integer [note: "FK to specific entity table"]
-  topology_id integer [ref: > network_topology.id, note: "Direct link to topology"]
-  
-  // Spatial relationships
-  parent_gis_id integer [ref: > network_gis.id, note: "For hierarchical geometries"]
-  is_primary boolean [default: true, note: "Primary geometry for this short_code"]
-  priority_order integer [default: 1, note: "For multiple geometries per short_code"]
+  entity_type varchar [not null, note: "arc or node"]
+  is_primary boolean [not null, default: true, note: "Primary geometry for this short_code"]
+  priority_order integer [not null, default: 1, note: "For multiple geometries per short_code"]
   
   // Metadata
-  coordinate_precision varchar [note: "high, medium, low"]
-  collection_method varchar [note: "survey, digitized, calculated, imported"]
-  validation_status varchar [default: "pending", note: "validated, pending, flagged"]
-  validation_notes text
+  coordinate_precision varchar [default: "high", note: "high, medium, low"]
+  validation_status varchar [not null, default: "validated", note: "validated, pending, flagged"]
   
-  // Audit trail
+  // Audit trail (operators populate)
   created_at timestamptz [default: `now()`]
-  created_by varchar [default: "system"]
+  created_by integer [note: "FK to developer table"]
   updated_at timestamptz [default: `now()`]
-  updated_by varchar [default: "system"]
-  notes text
+  updated_by integer [note: "FK to developer table"]
+  notes text [note: "Empty but available for future operational notes"]
   
   indexes {
     (short_code, geometry_type, is_primary) [unique]
@@ -270,6 +257,12 @@ Table network_gis {
     // Additional spatial indexes: centroid_geom, bbox_geom
   }
 }
+
+// Foreign key relationships for network_gis
+Ref: network_gis.source_id > source.id [delete: restrict, update: cascade]
+Ref: network_gis.model_source_id > model_source.id [delete: restrict, update: cascade]
+Ref: network_gis.created_by > developer.id [delete: restrict, update: cascade]
+Ref: network_gis.updated_by > developer.id [delete: restrict, update: cascade]
 
 Ref: calsim_entity_type.schematic_type_id > calsim_schematic_type.id
 
