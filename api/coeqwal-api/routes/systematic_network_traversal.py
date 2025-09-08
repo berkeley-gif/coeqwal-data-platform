@@ -141,11 +141,8 @@ async def _pass2_xml_with_geometry(
         print("⚠️ Pass 2: No existing features to connect to")
         return []
     
-    # Convert to SQL array format
-    existing_codes_list = list(existing_codes)
-    placeholders = ','.join(f'${i+2}' for i in range(len(existing_codes_list)))
-    
-    query = f"""
+    # Use ANY() with array parameter instead of IN() with multiple placeholders
+    query = """
     SELECT DISTINCT
         nt.id, nt.short_code, nt.schematic_type,
         nt.from_node, nt.to_node, nt.type, nt.subtype,
@@ -157,25 +154,25 @@ async def _pass2_xml_with_geometry(
     JOIN network_gis ng ON nt.short_code = ng.short_code  -- Must have geometry
     WHERE nt.xml_short_code IS NOT NULL  -- XML element
     AND nt.connectivity_status = 'connected'
-    AND nt.short_code NOT IN ({placeholders})  -- Not already included
+    AND nt.short_code != ALL($2::text[])  -- Not already included
     AND (
         -- Connect to existing network via from_node/to_node
-        nt.from_node IN ({placeholders}) OR
-        nt.to_node IN ({placeholders}) OR
+        nt.from_node = ANY($2::text[]) OR
+        nt.to_node = ANY($2::text[]) OR
         -- Or existing elements connect to this one
         EXISTS (
             SELECT 1 FROM network_topology existing
-            WHERE existing.short_code IN ({placeholders})
+            WHERE existing.short_code = ANY($2::text[])
             AND (existing.from_node = nt.short_code OR existing.to_node = nt.short_code)
         )
     )
     LIMIT 200;  -- Reasonable limit to prevent explosion
     """
     
-    params = [start_code] + existing_codes_list + existing_codes_list + existing_codes_list
+    existing_codes_list = list(existing_codes)
     
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
+        rows = await conn.fetch(query, start_code, existing_codes_list)
     
     features = _convert_rows_to_features(rows)
     print(f"✅ Pass 2: Found {len(features)} XML elements with geometry")
@@ -200,10 +197,8 @@ async def _pass3_xml_without_geometry(
         print("⚠️ Pass 3: No existing features to connect to")
         return []
     
-    existing_codes_list = list(existing_codes)
-    placeholders = ','.join(f'${i+2}' for i in range(len(existing_codes_list)))
-    
-    query = f"""
+    # Use ANY() with array parameter instead of IN() with multiple placeholders
+    query = """
     SELECT DISTINCT
         nt.id, nt.short_code, nt.schematic_type,
         nt.from_node, nt.to_node, nt.type, nt.subtype,
@@ -214,27 +209,27 @@ async def _pass3_xml_without_geometry(
     FROM network_topology nt
     WHERE nt.xml_short_code IS NOT NULL  -- XML element
     AND nt.connectivity_status = 'connected'
-    AND nt.short_code NOT IN ({placeholders})  -- Not already included
+    AND nt.short_code != ALL($2::text[])  -- Not already included
     AND NOT EXISTS (
         SELECT 1 FROM network_gis ng WHERE ng.short_code = nt.short_code
     )  -- No geometry
     AND (
         -- Connect to existing network
-        nt.from_node IN ({placeholders}) OR
-        nt.to_node IN ({placeholders}) OR
+        nt.from_node = ANY($2::text[]) OR
+        nt.to_node = ANY($2::text[]) OR
         EXISTS (
             SELECT 1 FROM network_topology existing
-            WHERE existing.short_code IN ({placeholders})
+            WHERE existing.short_code = ANY($2::text[])
             AND (existing.from_node = nt.short_code OR existing.to_node = nt.short_code)
         )
     )
     LIMIT 100;  -- Smaller limit for logical connections
     """
     
-    params = [start_code] + existing_codes_list + existing_codes_list + existing_codes_list
+    existing_codes_list = list(existing_codes)
     
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
+        rows = await conn.fetch(query, start_code, existing_codes_list)
     
     # For elements without geometry, create a simple point feature at 0,0
     features = []

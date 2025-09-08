@@ -101,7 +101,7 @@ async def suggest_connectivity_improvements(db_pool: asyncpg.Pool) -> Dict[str, 
         SELECT 
             'diversion_to_source' as connection_type,
             COUNT(*) as potential_connections,
-            array_agg(short_code ORDER BY short_code LIMIT 5) as examples
+            array_agg(short_code) as examples
         FROM network_topology d
         WHERE d.short_code LIKE 'D_%'
         AND (d.from_node IS NULL OR d.to_node IS NULL)
@@ -130,7 +130,7 @@ async def suggest_connectivity_improvements(db_pool: asyncpg.Pool) -> Dict[str, 
         SELECT 
             'channel_connections' as connection_type,
             COUNT(*) as potential_connections,
-            array_agg(short_code ORDER BY short_code LIMIT 5) as examples
+            array_agg(short_code) as examples
         FROM network_topology
         WHERE short_code LIKE 'C_%'
         AND (from_node IS NULL OR to_node IS NULL)
