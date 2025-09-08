@@ -16,11 +16,11 @@ async def systematic_network_traversal(
     direction: str = "both"
 ) -> Dict[str, Any]:
     """
-    Systematic three-pass network traversal
-    No depth limits - get the complete network
+    Systematic three-pass network traversal with recursivechaining
+    No depth limits
     """
     
-    # Pass 1: Geopackage-only connections
+    # Pass 1: Geopackage-only connections (recursive)
     print(f"🔍 Pass 1: Geopackage-only connections for {short_code}")
     pass1_features = await _pass1_geopackage_only(db_pool, short_code, direction)
     
@@ -28,7 +28,7 @@ async def systematic_network_traversal(
     print(f"🔍 Pass 2: XML connections with geometry for {short_code}")
     pass2_features = await _pass2_xml_with_geometry(db_pool, short_code, direction, pass1_features)
     
-    # Pass 3: Add XML connections without geometry
+    # Pass 3: Add XML connections without geometry (direct only)
     print(f"🔍 Pass 3: XML connections without geometry for {short_code}")
     pass3_features = await _pass3_xml_without_geometry(db_pool, short_code, direction, pass1_features + pass2_features)
     
@@ -54,7 +54,7 @@ async def systematic_network_traversal(
             "pass1_geopackage": len(pass1_features),
             "pass2_xml_with_geometry": len(pass2_features),
             "pass3_xml_without_geometry": len(pass3_features),
-            "approach": "systematic_three_pass",
+            "approach": "systematic_three_pass_with_chaining",
             "no_depth_limit": True
         }
     }
