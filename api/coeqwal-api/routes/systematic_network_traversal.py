@@ -141,7 +141,7 @@ async def _pass2_xml_with_geometry(
         print("⚠️ Pass 2: No existing features to connect to")
         return []
     
-    # Use ANY() with array parameter instead of IN() with multiple placeholders
+    # Simplify to avoid complex array operations - just find connections to start_code
     query = """
     SELECT DISTINCT
         nt.id, nt.short_code, nt.schematic_type,
@@ -154,25 +154,17 @@ async def _pass2_xml_with_geometry(
     JOIN network_gis ng ON nt.short_code = ng.short_code  -- Must have geometry
     WHERE nt.xml_short_code IS NOT NULL  -- XML element
     AND nt.connectivity_status = 'connected'
-    AND nt.short_code != ALL($2::text[])  -- Not already included
     AND (
-        -- Connect to existing network via from_node/to_node
-        nt.from_node = ANY($2::text[]) OR
-        nt.to_node = ANY($2::text[]) OR
-        -- Or existing elements connect to this one
-        EXISTS (
-            SELECT 1 FROM network_topology existing
-            WHERE existing.short_code = ANY($2::text[])
-            AND (existing.from_node = nt.short_code OR existing.to_node = nt.short_code)
-        )
+        -- Connect directly to start element
+        nt.from_node = $1 OR
+        nt.to_node = $1 OR
+        nt.short_code = $1
     )
-    LIMIT 200;  -- Reasonable limit to prevent explosion
+    LIMIT 100;  -- Reasonable limit
     """
     
-    existing_codes_list = list(existing_codes)
-    
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch(query, start_code, existing_codes_list)
+        rows = await conn.fetch(query, start_code)
     
     features = _convert_rows_to_features(rows)
     print(f"✅ Pass 2: Found {len(features)} XML elements with geometry")
@@ -197,7 +189,7 @@ async def _pass3_xml_without_geometry(
         print("⚠️ Pass 3: No existing features to connect to")
         return []
     
-    # Use ANY() with array parameter instead of IN() with multiple placeholders
+    # Simplify to avoid complex array operations - just find connections to start_code
     query = """
     SELECT DISTINCT
         nt.id, nt.short_code, nt.schematic_type,
@@ -209,27 +201,20 @@ async def _pass3_xml_without_geometry(
     FROM network_topology nt
     WHERE nt.xml_short_code IS NOT NULL  -- XML element
     AND nt.connectivity_status = 'connected'
-    AND nt.short_code != ALL($2::text[])  -- Not already included
     AND NOT EXISTS (
         SELECT 1 FROM network_gis ng WHERE ng.short_code = nt.short_code
     )  -- No geometry
     AND (
-        -- Connect to existing network
-        nt.from_node = ANY($2::text[]) OR
-        nt.to_node = ANY($2::text[]) OR
-        EXISTS (
-            SELECT 1 FROM network_topology existing
-            WHERE existing.short_code = ANY($2::text[])
-            AND (existing.from_node = nt.short_code OR existing.to_node = nt.short_code)
-        )
+        -- Connect directly to start element
+        nt.from_node = $1 OR
+        nt.to_node = $1 OR
+        nt.short_code = $1
     )
-    LIMIT 100;  -- Smaller limit for logical connections
+    LIMIT 50;  -- Smaller limit for logical connections
     """
     
-    existing_codes_list = list(existing_codes)
-    
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch(query, start_code, existing_codes_list)
+        rows = await conn.fetch(query, start_code)
     
     # For elements without geometry, create a simple point feature at 0,0
     features = []
