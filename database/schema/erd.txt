@@ -104,16 +104,34 @@ Table calsim_entity_type {
   Indexes {
     (is_active, type)
   }
+}
 
-// Core Network Topology Table (replaces network_arc and network_node)
+// Core network topology table with integrated node/arc data
 Table network_topology {
   id integer [pk, increment]
   short_code varchar [not null, unique, note: "Primary identifier linking to entities, variables, and GIS"]
   xml_short_code varchar [note: "Original short_code from XML source"]
   geopackage_short_code varchar [note: "Original short_code from geopackage source"]
   schematic_type varchar [not null, note: "node or arc"]
+  
+  // Core connectivity
   from_node varchar [note: "Origin node for connectivity (nullable for boundary conditions)"]
   to_node varchar [note: "Destination node for connectivity (nullable for boundary conditions)"]
+  
+  // Core node data (populated for nodes only)
+  river_mile numeric [note: "River mile location - critical for positioning"]
+  river_name varchar [note: "River/stream name - essential for identification"]
+  node_comment text [note: "Node description - key operational information"]
+  c2vsim_groundwater varchar [note: "C2VSIM groundwater node ID - critical model integration"]
+  c2vsim_surface_water varchar [note: "C2VSIM surface water node ID - critical model integration"]
+  nearest_gage varchar [note: "Nearest stream gage - essential for monitoring"]
+  stream_code varchar [note: "Stream classification code - core data"]
+  
+  // Core arc data (populated for arcs only)
+  arc_name varchar [note: "Arc name - essential for identification"]
+  shape_length numeric [note: "Physical length (meters) - critical for analysis"]
+  
+  // Topology and classification
   match_type varchar [note: "Type of matching: exact, xml_only, geopackage_only"]
   relationship_type varchar [note: "one_to_one, one_to_many_parent, one_to_many_child"]
   parent_topology_id integer [note: "FK to parent record for hierarchical relationships"]
@@ -139,6 +157,9 @@ Table network_topology {
     (from_node, to_node)
     connectivity_status
     type
+    river_name
+    stream_code
+    arc_name
     data_source
   }
 }
@@ -149,7 +170,7 @@ Ref: network_topology.parent_topology_id > network_topology.id
 // Supporting tables for network topology
 Table network_topology_manual_reviews {
   id integer [pk, increment]
-  topology_id integer
+  network_topology_id integer
   review_type varchar
   reviewer varchar
   review_date timestamp
@@ -158,22 +179,80 @@ Table network_topology_manual_reviews {
   status varchar
 }
 
-Ref: network_topology_manual_reviews.topology_id > network_topology.id
+Ref: network_topology_manual_reviews.network_topology_id > network_topology.id
 
 Table network_topology_relationships {
   id integer [pk, increment]
-  parent_id integer
-  child_id integer
+  parent_topology_id integer
+  child_topology_id integer
   relationship_type varchar
   confidence_score float
   notes text
 }
 
-Ref: network_topology_relationships.parent_id > network_topology.id
-Ref: network_topology_relationships.child_id > network_topology.id
+Ref: network_topology_relationships.parent_topology_id > network_topology.id
+Ref: network_topology_relationships.child_topology_id > network_topology.id
 
-
+// Spatial data
+Table network_gis {
+  id integer [pk, increment]
+  short_code varchar [not null, note: "Links to network_topology.short_code"]
+  geometry_role varchar [not null, note: "primary, alternative, detail"]
+  geometry_type varchar [not null, note: "point, linestring, polygon, multipolygon"]
+  
+  // PostGIS spatial data
+  geom geometry [not null, note: "PostGIS geometry column with spatial index"]
+  geom_wkt text [note: "WKT representation for backup/export"]
+  srid integer [default: 4326, note: "Spatial Reference System ID"]
+  
+  // Geometric properties
+  area_sq_meters numeric [note: "For polygons - calculated automatically"]
+  length_meters numeric [note: "For linestrings - calculated automatically"]
+  centroid_geom geometry [note: "Calculated centroid for all geometries"]
+  bbox_geom geometry [note: "Bounding box geometry"]
+  
+  // Source and version tracking
+  source_system varchar [not null, note: "geopackage, entity_polygon, calculated, etc."]
+  source_file varchar [note: "Original file name"]
+  source_record_id varchar [note: "Original record ID in source"]
+  network_version_id integer [not null, note: "Version tracking"]
+  data_quality_score numeric [note: "0.00 to 1.00"]
+  
+  // Entity relationships
+  entity_type varchar [note: "reservoir, demand_unit, channel, etc. (for polygons)"]
+  entity_id integer [note: "FK to specific entity table"]
+  topology_id integer [ref: > network_topology.id, note: "Direct link to topology"]
+  
+  // Spatial relationships
+  parent_gis_id integer [ref: > network_gis.id, note: "For hierarchical geometries"]
+  is_primary boolean [default: true, note: "Primary geometry for this short_code"]
+  priority_order integer [default: 1, note: "For multiple geometries per short_code"]
+  
+  // Metadata
+  coordinate_precision varchar [note: "high, medium, low"]
+  collection_method varchar [note: "survey, digitized, calculated, imported"]
+  validation_status varchar [default: "pending", note: "validated, pending, flagged"]
+  validation_notes text
+  
+  // Audit trail
+  created_at timestamptz [default: `now()`]
+  created_by varchar [default: "system"]
+  updated_at timestamptz [default: `now()`]
+  updated_by varchar [default: "system"]
+  notes text
+  
+  indexes {
+    (short_code, geometry_type, is_primary) [unique]
+    short_code
+    geometry_type
+    source_system
+    topology_id
+    (entity_type, entity_id)
+    network_version_id
+    // Spatial indexes handled by PostGIS: geom, centroid_geom, bbox_geom
+  }
 }
+
 Ref: calsim_entity_type.schematic_type_id > calsim_schematic_type.id
 
 Table hydrologic_region {
@@ -192,7 +271,6 @@ Table hydrologic_region {
 }
 Ref: hydrologic_region.created_by > developer.id [delete: restrict, update: cascade]
 Ref: hydrologic_region.updated_by > developer.id [delete: restrict, update: cascade]
-
 Table unit {
   id              int     [pk, increment]
   short_code      text    [not null, unique]
@@ -1645,181 +1723,18 @@ Table network_integration_status {
 // 7. Comprehensive seed table created (6,778 total network elements)
 // 8. Full audit trails and connectivity tracking implemented
 
-Table network_topology {
-  id                     int       [pk, increment]
-  
-  // CORE IDENTIFICATION: Primary short_code used for all relationships
-  short_code             text      [not null, unique, note: 'Authoritative short_code for this network element']
-  
-  // SCHEMATIC CLASSIFICATION
-  schematic_type         text      [not null, note: 'node or arc - references calsim_schematic_type']
-  
-  // NETWORK CONNECTIVITY (from XML Links)
-  from_node              text      [note: 'Origin node short_code (nullable for boundary/logical nodes)']
-  to_node                text      [note: 'Destination node short_code (nullable for boundary/logical nodes)']
-  
-  // SOURCE RECONCILIATION: Store both original short_codes when they differ
-  xml_short_code         text      [note: 'Original short_code from XML <Text> element']
-  geopackage_short_code  text      [note: 'Original short_code from geopackage (Arc_ID or CalSim_ID)']
-  
-  // MATCHING METHODOLOGY AND AUDIT
-  match_type             text      [not null, default: 'xml_only', note: 'exact, fuzzy_substring, fuzzy_pattern, manual_verified, xml_only, geopackage_only']
-  match_confidence       numeric   [not null, default: 1.0, note: '0.0 to 1.0 confidence score']
-  fuzzy_match_used       boolean   [default: false, note: 'TRUE if any fuzzy matching was applied']
-  fuzzy_match_reasoning  text      [note: 'Detailed explanation of matching logic']
-  
-  // RELATIONSHIP TYPE: Handle 1:1 and 1:many relationships
-  relationship_type      text      [default: 'one_to_one', note: 'one_to_one, one_to_many_parent, one_to_many_child, many_to_one']
-  parent_topology_id     int       [note: 'For child records in 1:many relationships']
-  
-  // SPATIAL AND CLASSIFICATION
-  has_gis                boolean   [default: false]
-  connectivity_status    text      [default: 'connected', note: 'connected, unconnected - tracks if element participates in connected network']
-  type                   text      [note: 'Type classification from geopackage data']
-  subtype                text      [note: 'Subtype classification from geopackage data']
-  hydrologic_region_id   int       
-  
-  // ENHANCED SOURCE TRACKING: Arrays for multiple sources
-  source_systems         text[]    [not null, default: '{}', note: 'Array of source systems like [network_schematic, geopackage, calsim_report]']
-  primary_source_id      int       [note: 'Most authoritative source']
-  
-  // NODE CLASSIFICATION: Physical vs Logical
-  node_classification    text      [note: 'physical, logical, boundary (only for nodes)']
-  
-  // MODEL METADATA
-  model_source           text
-  network_version_id     int       [not null]
-  
-  // DATA QUALITY AND VERIFICATION
-  data_quality_score     numeric   [note: 'Overall data quality assessment (0.0 to 1.0)']
-  verification_status    text      [default: 'unverified', note: 'verified, unverified, flagged, disputed, pending_review, manual_verified']
-  verification_date      timestamptz
-  verified_by            text
-  
-  // FLAGS AND SPECIAL CHARACTERISTICS
-  flags                  text[]    [default: '{}', note: 'Array like [isolated, dead_end, boundary, logical, wtp_connection, demand_unit]']
-  
-  // AUDIT TRAIL
-  created_at             timestamptz [not null, default: `now()`]
-  created_by             text      [default: 'system']
-  updated_at             timestamptz [not null, default: `now()`]
-  updated_by             text
-  
-  // NOTES
-  notes                  text      [note: 'Free-form notes about this network element']
-  
-  Indexes {
-    (short_code) [unique]
-    (xml_short_code)
-    (geopackage_short_code)
-    (source_systems) [type: gin]
-    (match_type)
-    (verification_status)
-    (from_node)
-    (to_node)
-    (flags) [type: gin]
-    (parent_topology_id)
-    (relationship_type)
-    (network_version_id, schematic_type)
-    (hydrologic_region_id)
-    (primary_source_id)
-  }
-}
 
 // Manual review audit table
-Table network_topology_manual_reviews {
-  id                        int       [pk, increment]
-  
-  // What's being reviewed
-  geopackage_short_code     text
-  xml_candidates            text[]    [note: 'Array of potential XML matches']
-  review_type               text      [not null, note: 'missing_match, low_confidence, relationship_clarification']
-  
-  // Review context
-  geopackage_type           text
-  geopackage_name           text
-  schematic_type            text      [note: 'node or arc']
-  
-  // Algorithmic recommendation
-  algorithm_recommendation  text
-  algorithm_confidence      numeric
-  algorithm_reasoning       text
-  
-  // Manual review results
-  manual_decision           text      [note: 'accept_recommendation, select_alternative, create_new_mapping, mark_unmappable, needs_domain_expert']
-  selected_xml_match        text
-  manual_confidence         numeric
-  manual_reasoning          text
-  reviewer_notes            text
-  
-  // Review metadata
-  priority                  text      [default: 'medium', note: 'high, medium, low']
-  review_status             text      [default: 'pending', note: 'pending, in_progress, completed, escalated']
-  assigned_to               text
-  reviewed_by               text
-  reviewed_at               timestamptz
-  
-  // Audit
-  created_at                timestamptz [not null, default: `now()`]
-  created_by                text      [default: 'system']
-  
-  Indexes {
-    (review_status, priority)
-    (assigned_to, review_status)
-    (review_type, schematic_type)
-    (geopackage_short_code)
-  }
-}
 
 // Onetomany relationship tracking table 
 // Handles cases like WTP connections where one geopackage element maps to multiple XML elements
-Table network_topology_relationships {
-  id                        int       [pk, increment]
-  
-  // Parent element (e.g., geopackage WTP node)
-  parent_geopackage_code    text      [not null]
-  parent_topology_id        int       
-  
-  // Child element (e.g., XML diversion node)
-  child_xml_code            text      [not null]
-  child_topology_id         int       
-  
-  // Relationship metadata
-  relationship_type         text      [not null, note: 'wtp_diversion, demand_unit_partition, operational_connection']
-  relationship_strength     numeric   [default: 1.0, note: 'How strong/certain is this relationship']
-  
-  // Context
-  relationship_reasoning    text
-  connection_details        jsonb     [note: 'Flexible storage for relationship-specific data']
-  
-  // Verification
-  verified                  boolean   [default: false]
-  verified_by               text
-  verified_at               timestamptz
-  
-  // Audit
-  created_at                timestamptz [not null, default: `now()`]
-  created_by                text      [default: 'system']
-  
-  Indexes {
-    (parent_geopackage_code)
-    (child_xml_code)
-    (relationship_type)
-    (parent_topology_id)
-    (child_topology_id)
-    (verified)
-  }
-}
 
 // REFERENCES
-Ref: network_topology.parent_topology_id > network_topology.id [delete: set null, update: cascade]
 Ref: network_topology.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
 Ref: network_topology.primary_source_id > source.id [delete: restrict, update: cascade]
 Ref: network_topology.network_version_id > version.id [delete: restrict, update: cascade]
 Ref: network_topology.schematic_type > calsim_schematic_type.label [delete: restrict, update: cascade]
 
-Ref: network_topology_relationships.parent_topology_id > network_topology.id [delete: cascade, update: cascade]
-Ref: network_topology_relationships.child_topology_id > network_topology.id [delete: cascade, update: cascade]
 
 
 
