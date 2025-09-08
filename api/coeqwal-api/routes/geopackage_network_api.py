@@ -155,23 +155,22 @@ async def fast_geopackage_geojson(
         else:
             where_conditions.append("false")  # Return nothing
         
-        # Ultra-fast query using optimized indexes
+        # Simplified query without spatial filtering for debugging
         query = f"""
         SELECT 
             nt.id, nt.short_code, nt.schematic_type, nt.type,
-            nt.river_name, nt.arc_name, nt.river_mile,
+            nt.river_name, nt.arc_name, nt.river_mile, nt.is_active,
             ST_X(ng.geom) as lng, ST_Y(ng.geom) as lat,
             ng.geometry_type
         FROM network_topology nt
         JOIN network_gis ng ON nt.short_code = ng.short_code
         WHERE {' AND '.join(where_conditions)}
-        AND ng.geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)  -- Fast spatial filter
         ORDER BY nt.type, nt.short_code
-        LIMIT $5;
+        LIMIT $1;
         """
         
         async with db_pool.acquire() as conn:
-            rows = await conn.fetch(query, min_lng, min_lat, max_lng, max_lat, limit)
+            rows = await conn.fetch(query, limit)
         
         # Convert to GeoJSON features
         features = []
