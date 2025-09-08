@@ -6,6 +6,12 @@ import json
 import asyncpg
 from fastapi import HTTPException, Query
 from typing import Optional
+import hashlib
+import time
+
+# Simple in-memory cache for spatial queries (5 minute TTL)
+_spatial_cache = {}
+_cache_ttl = 300  # 5 minutes
 
 
 async def get_network_geojson(
@@ -19,12 +25,27 @@ async def get_network_geojson(
     Get network features as GeoJSON for Mapbox display within bounding box
     """
     try:
+        start_time = time.time()
+        
         # Parse bounding box
         bbox_coords = [float(x) for x in bbox.split(',')]
         if len(bbox_coords) != 4:
             raise ValueError("Bounding box must have 4 coordinates")
         
         min_lng, min_lat, max_lng, max_lat = bbox_coords
+        
+        # Create cache key
+        cache_key = hashlib.md5(
+            f"{bbox}_{include_arcs}_{include_nodes}_{limit}".encode()
+        ).hexdigest()
+        
+        # Check cache
+        current_time = time.time()
+        if cache_key in _spatial_cache:
+            cached_data, cache_time = _spatial_cache[cache_key]
+            if current_time - cache_time < _cache_ttl:
+                print(f"⚡ Cache hit for bbox query ({current_time - start_time:.3f}s)")
+                return cached_data
         
         # Build query conditions
         type_conditions = []
@@ -38,31 +59,28 @@ async def get_network_geojson(
         
         type_filter = f"nt.schematic_type IN ({','.join(type_conditions)})"
         
-        # Query for network features within bounding box
+        # ULTRA-FAST query using spatial index and minimal data
+        # Focus on speed over completeness for map display
         query = f"""
         SELECT 
             nt.id,
             nt.short_code,
             nt.schematic_type,
-            nt.from_node,
-            nt.to_node,
             nt.connectivity_status,
             nt.type,
             nt.subtype,
-            nt.river_name,
-            nt.arc_name,
+            COALESCE(nt.river_name, '') as river_name,
+            COALESCE(nt.arc_name, '') as arc_name,
             nt.river_mile,
             nt.shape_length,
             ng.geometry_type,
             ST_AsGeoJSON(ng.geom) as geometry
         FROM network_topology nt
-        JOIN network_gis ng ON nt.short_code = ng.short_code
+        INNER JOIN network_gis ng ON nt.short_code = ng.short_code
         WHERE {type_filter}
-        AND ST_Intersects(
-            ng.geom, 
-            ST_MakeEnvelope($1, $2, $3, $4, 4326)
-        )
         AND nt.connectivity_status = 'connected'
+        AND ng.geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+        ORDER BY nt.id
         LIMIT $5;
         """
         
@@ -108,16 +126,127 @@ async def get_network_geojson(
             }
             features.append(feature)
         
-        return {
+        result = {
             "type": "FeatureCollection",
             "features": features,
             "metadata": {
                 "total_features": len(features),
                 "bbox": bbox_coords,
                 "includes_arcs": include_arcs,
-                "includes_nodes": include_nodes
+                "includes_nodes": include_nodes,
+                "query_time_ms": round((time.time() - start_time) * 1000, 2)
             }
         }
+        
+        # Cache the result
+        _spatial_cache[cache_key] = (result, current_time)
+        
+        # Clean old cache entries (simple cleanup)
+        if len(_spatial_cache) > 100:
+            old_keys = [k for k, (_, t) in _spatial_cache.items() if current_time - t > _cache_ttl]
+            for k in old_keys[:50]:  # Remove oldest 50 entries
+                _spatial_cache.pop(k, None)
+        
+        print(f"🚀 Spatial query completed in {time.time() - start_time:.3f}s")
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+async def get_network_nodes_fast(
+    db_pool: asyncpg.Pool,
+    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
+    limit: int = Query(1000, description="Maximum nodes to return")
+):
+    """
+    ULTRA-FAST nodes-only endpoint for initial map loading
+    Optimized for speed with minimal data transfer
+    """
+    try:
+        start_time = time.time()
+        
+        # Parse bounding box
+        bbox_coords = [float(x) for x in bbox.split(',')]
+        if len(bbox_coords) != 4:
+            raise ValueError("Bounding box must have 4 coordinates")
+        
+        min_lng, min_lat, max_lng, max_lat = bbox_coords
+        
+        # Create cache key
+        cache_key = f"nodes_fast_{hashlib.md5(f'{bbox}_{limit}'.encode()).hexdigest()}"
+        
+        # Check cache
+        current_time = time.time()
+        if cache_key in _spatial_cache:
+            cached_data, cache_time = _spatial_cache[cache_key]
+            if current_time - cache_time < _cache_ttl:
+                print(f"⚡ Fast nodes cache hit ({current_time - start_time:.3f}s)")
+                return cached_data
+        
+        # ULTRA-FAST query - nodes only, minimal fields
+        query = """
+        SELECT 
+            nt.id,
+            nt.short_code,
+            nt.type,
+            nt.subtype,
+            nt.river_name,
+            nt.river_mile,
+            ST_X(ng.geom) as lng,
+            ST_Y(ng.geom) as lat
+        FROM network_topology nt
+        INNER JOIN network_gis ng ON nt.short_code = ng.short_code
+        WHERE nt.schematic_type = 'node'
+        AND nt.connectivity_status = 'connected'
+        AND ng.geometry_type = 'point'
+        AND ng.geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+        ORDER BY nt.id
+        LIMIT $5;
+        """
+        
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch(query, min_lng, min_lat, max_lng, max_lat, limit)
+        
+        # Convert to simplified GeoJSON (much faster than ST_AsGeoJSON)
+        features = []
+        for row in rows:
+            feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(row['lng']), float(row['lat'])]
+                },
+                "properties": {
+                    'id': row['id'],
+                    'short_code': row['short_code'],
+                    'type': 'node',
+                    'element_type': row['type'] or 'CH',
+                    'subtype': row['subtype'],
+                    'river_name': row['river_name'],
+                    'river_mile': float(row['river_mile']) if row['river_mile'] else None,
+                    'display_name': row['river_name'] or row['short_code'],
+                    'connectivity_status': 'connected'
+                }
+            }
+            features.append(feature)
+        
+        result = {
+            "type": "FeatureCollection",
+            "features": features,
+            "metadata": {
+                "total_features": len(features),
+                "bbox": bbox_coords,
+                "query_time_ms": round((time.time() - start_time) * 1000, 2),
+                "api_type": "fast_nodes_only"
+            }
+        }
+        
+        # Cache the result
+        _spatial_cache[cache_key] = (result, current_time)
+        
+        print(f"🚀 Fast nodes query completed in {time.time() - start_time:.3f}s")
+        return result
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

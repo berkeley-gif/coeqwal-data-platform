@@ -6,6 +6,7 @@ For network traversal on Mapbox maps optimizing use of the network_topology tabl
 from fastapi import APIRouter, Query, Path, HTTPException
 from .network_mapbox import (
     get_network_geojson,
+    get_network_nodes_fast,
     traverse_network_geojson, 
     get_network_element_details
 )
@@ -41,6 +42,22 @@ async def api_get_network_geojson(
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await get_network_geojson(db_pool, bbox, include_arcs, include_nodes, limit)
+
+
+@router.get("/nodes/fast")
+async def api_get_network_nodes_fast(
+    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
+    limit: int = Query(1000, description="Maximum nodes to return")
+):
+    """
+    ULTRA-FAST nodes-only endpoint for initial map loading
+    
+    Optimized for speed: nodes only, minimal fields, spatial indexing, caching
+    Example: /api/network/nodes/fast?bbox=-122.5,37.5,-122.0,38.0&limit=1000
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_network_nodes_fast(db_pool, bbox, limit)
 
 
 @router.get("/traverse/{short_code}")
