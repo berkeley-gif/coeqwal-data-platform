@@ -134,7 +134,7 @@ async def traverse_network_geojson(
     Traverse network from a short_code and return GeoJSON for Mapbox visualization
     """
     try:
-        # Build traversal query based on direction
+        # Build enhanced traversal query with multiple connection strategies
         if direction == "upstream":
             traversal_query = """
             WITH RECURSIVE network_traversal AS (
@@ -142,7 +142,7 @@ async def traverse_network_geojson(
                 SELECT 
                     nt.id, nt.short_code, nt.schematic_type,
                     nt.from_node, nt.to_node, nt.connectivity_status,
-                    nt.river_name, nt.arc_name, nt.type,
+                    nt.river_name, nt.arc_name, nt.type, nt.river_mile,
                     0 as depth,
                     ARRAY[nt.short_code] as path
                 FROM network_topology nt
@@ -150,17 +150,27 @@ async def traverse_network_geojson(
                 
                 UNION ALL
                 
-                -- Recursive: Follow upstream connections
+                -- Recursive: Follow upstream connections with enhanced logic
                 SELECT 
                     nt.id, nt.short_code, nt.schematic_type,
                     nt.from_node, nt.to_node, nt.connectivity_status,
-                    nt.river_name, nt.arc_name, nt.type,
+                    nt.river_name, nt.arc_name, nt.type, nt.river_mile,
                     prev.depth + 1,
                     prev.path || nt.short_code
                 FROM network_traversal prev
                 JOIN network_topology nt ON (
+                    -- Direct connectivity
                     nt.to_node = prev.short_code OR 
-                    nt.short_code = prev.from_node
+                    nt.short_code = prev.from_node OR
+                    -- Enhanced: Same river system connectivity
+                    (nt.river_name = prev.river_name AND nt.river_name IS NOT NULL 
+                     AND nt.river_mile IS NOT NULL AND prev.river_mile IS NOT NULL
+                     AND ABS(nt.river_mile - prev.river_mile) <= 10) OR
+                    -- Enhanced: Element type patterns (D_ to node, I_ to node, etc.)
+                    (prev.schematic_type = 'node' AND nt.schematic_type = 'arc' 
+                     AND (nt.short_code LIKE 'D_' || prev.short_code || '%' OR
+                          nt.short_code LIKE 'I_' || prev.short_code || '%' OR
+                          nt.short_code LIKE 'R_' || prev.short_code || '%'))
                 )
                 WHERE prev.depth < $2
                 AND NOT (nt.short_code = ANY(prev.path))
@@ -173,7 +183,7 @@ async def traverse_network_geojson(
                 SELECT 
                     nt.id, nt.short_code, nt.schematic_type,
                     nt.from_node, nt.to_node, nt.connectivity_status,
-                    nt.river_name, nt.arc_name, nt.type,
+                    nt.river_name, nt.arc_name, nt.type, nt.river_mile,
                     0 as depth,
                     ARRAY[nt.short_code] as path
                 FROM network_topology nt
@@ -181,17 +191,27 @@ async def traverse_network_geojson(
                 
                 UNION ALL
                 
-                -- Recursive: Follow downstream connections
+                -- Recursive: Follow downstream connections with enhanced logic
                 SELECT 
                     nt.id, nt.short_code, nt.schematic_type,
                     nt.from_node, nt.to_node, nt.connectivity_status,
-                    nt.river_name, nt.arc_name, nt.type,
+                    nt.river_name, nt.arc_name, nt.type, nt.river_mile,
                     prev.depth + 1,
                     prev.path || nt.short_code
                 FROM network_traversal prev
                 JOIN network_topology nt ON (
+                    -- Direct connectivity
                     nt.from_node = prev.short_code OR 
-                    nt.short_code = prev.to_node
+                    nt.short_code = prev.to_node OR
+                    -- Enhanced: Same river system connectivity (downstream = lower mile)
+                    (nt.river_name = prev.river_name AND nt.river_name IS NOT NULL 
+                     AND nt.river_mile IS NOT NULL AND prev.river_mile IS NOT NULL
+                     AND nt.river_mile <= prev.river_mile AND ABS(nt.river_mile - prev.river_mile) <= 10) OR
+                    -- Enhanced: Element type patterns
+                    (prev.schematic_type = 'node' AND nt.schematic_type = 'arc' 
+                     AND (nt.short_code LIKE 'C_' || prev.short_code OR
+                          nt.short_code LIKE 'D_' || prev.short_code || '%' OR
+                          nt.from_node = prev.short_code))
                 )
                 WHERE prev.depth < $2
                 AND NOT (nt.short_code = ANY(prev.path))
@@ -204,7 +224,7 @@ async def traverse_network_geojson(
                 SELECT 
                     nt.id, nt.short_code, nt.schematic_type,
                     nt.from_node, nt.to_node, nt.connectivity_status,
-                    nt.river_name, nt.arc_name, nt.type,
+                    nt.river_name, nt.arc_name, nt.type, nt.river_mile,
                     0 as depth,
                     ARRAY[nt.short_code] as path
                 FROM network_topology nt
@@ -212,19 +232,36 @@ async def traverse_network_geojson(
                 
                 UNION ALL
                 
-                -- Recursive: Follow all connections
+                -- Recursive: Follow all connections with enhanced logic
                 SELECT 
                     nt.id, nt.short_code, nt.schematic_type,
                     nt.from_node, nt.to_node, nt.connectivity_status,
-                    nt.river_name, nt.arc_name, nt.type,
+                    nt.river_name, nt.arc_name, nt.type, nt.river_mile,
                     prev.depth + 1,
                     prev.path || nt.short_code
                 FROM network_traversal prev
                 JOIN network_topology nt ON (
+                    -- Direct connectivity
                     nt.from_node = prev.short_code OR 
                     nt.to_node = prev.short_code OR
                     nt.short_code = prev.from_node OR
-                    nt.short_code = prev.to_node
+                    nt.short_code = prev.to_node OR
+                    -- Enhanced: Same river system connectivity
+                    (nt.river_name = prev.river_name AND nt.river_name IS NOT NULL 
+                     AND nt.river_mile IS NOT NULL AND prev.river_mile IS NOT NULL
+                     AND ABS(nt.river_mile - prev.river_mile) <= 15) OR
+                    -- Enhanced: CalSim naming patterns
+                    (prev.schematic_type = 'node' AND nt.schematic_type = 'arc' 
+                     AND (nt.short_code LIKE 'C_' || prev.short_code OR
+                          nt.short_code LIKE 'D_' || prev.short_code || '%' OR
+                          nt.short_code LIKE 'I_' || prev.short_code || '%' OR
+                          nt.short_code LIKE 'R_' || prev.short_code || '%')) OR
+                    -- Enhanced: Reverse patterns (arc to node)
+                    (prev.schematic_type = 'arc' AND nt.schematic_type = 'node'
+                     AND (prev.short_code LIKE 'C_' || nt.short_code OR
+                          prev.short_code LIKE 'D_' || nt.short_code || '%' OR
+                          prev.short_code LIKE 'I_' || nt.short_code || '%' OR
+                          prev.short_code LIKE 'R_' || nt.short_code || '%'))
                 )
                 WHERE prev.depth < $2
                 AND NOT (nt.short_code = ANY(prev.path))

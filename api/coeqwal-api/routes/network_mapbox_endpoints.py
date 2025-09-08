@@ -9,6 +9,11 @@ from .network_mapbox import (
     traverse_network_geojson, 
     get_network_element_details
 )
+from .enhanced_network_traversal import (
+    enhanced_network_traversal,
+    get_enhanced_connectivity_stats,
+    get_network_gaps_analysis
+)
 
 router = APIRouter(prefix="/api/network", tags=["network-mapbox"])
 
@@ -67,3 +72,45 @@ async def api_get_network_element_details(
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await get_network_element_details(db_pool, short_code)
+
+
+@router.get("/traverse/{short_code}/enhanced")
+async def api_enhanced_network_traversal(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(8, description="Maximum traversal depth"),
+    include_arcs: bool = Query(True, description="Include connecting arcs in result")
+):
+    """
+    Enhanced network traversal using multiple connectivity strategies
+    
+    Uses direct connections + spatial proximity + river mile sequences + naming patterns
+    Example: /api/network/traverse/SAC273/enhanced?direction=both&max_depth=8
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await enhanced_network_traversal(db_pool, short_code, direction, max_depth, include_arcs)
+
+
+@router.get("/connectivity/stats")
+async def api_get_connectivity_stats():
+    """
+    Get comprehensive network connectivity statistics
+    
+    Example: /api/network/connectivity/stats
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_enhanced_connectivity_stats(db_pool)
+
+
+@router.get("/connectivity/gaps")
+async def api_get_network_gaps():
+    """
+    Analyze network connectivity gaps and suggest improvements
+    
+    Example: /api/network/connectivity/gaps
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_network_gaps_analysis(db_pool)
