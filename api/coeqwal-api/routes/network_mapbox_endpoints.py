@@ -3,7 +3,7 @@ Network API routes optimized for mapbox app
 For network traversal on Mapbox maps optimizing use of the network_topology table
 """
 
-from fastapi import APIRouter, Query, Path
+from fastapi import APIRouter, Query, Path, HTTPException
 from .network_mapbox import (
     get_network_geojson,
     traverse_network_geojson, 
@@ -11,6 +11,14 @@ from .network_mapbox import (
 )
 
 router = APIRouter(prefix="/api/network", tags=["network-mapbox"])
+
+# Global variable to hold db_pool reference, set by main.py
+db_pool = None
+
+def set_db_pool(pool):
+    """Set the database pool - called from main.py after pool creation"""
+    global db_pool
+    db_pool = pool
 
 
 @router.get("/geojson")
@@ -25,6 +33,8 @@ async def api_get_network_geojson(
     
     Example: /api/network/geojson?bbox=-122.5,37.5,-122.0,38.0&include_arcs=true&include_nodes=true
     """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await get_network_geojson(db_pool, bbox, include_arcs, include_nodes, limit)
 
 
@@ -40,6 +50,8 @@ async def api_traverse_network_geojson(
     
     Example: /api/network/traverse/SAC273?direction=downstream&max_depth=5
     """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await traverse_network_geojson(db_pool, short_code, direction, max_depth, include_arcs)
 
 
@@ -52,4 +64,6 @@ async def api_get_network_element_details(
     
     Example: /api/network/element/SAC273
     """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await get_network_element_details(db_pool, short_code)

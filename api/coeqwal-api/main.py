@@ -20,7 +20,7 @@ from datetime import datetime
 # Import our new spatial endpoints
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
 from routes.vast_network_traversal import get_node_network_unlimited
-from routes.network_mapbox_endpoints import router as network_mapbox_router
+from routes.network_mapbox_endpoints import router as network_mapbox_router, set_db_pool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI):
         command_timeout=30
     )
     logger.info(f"Database pool created with {db_pool._queue.qsize()} connections")
+    
+    # Set the database pool for network mapbox router
+    set_db_pool(db_pool)
     
     yield
     
