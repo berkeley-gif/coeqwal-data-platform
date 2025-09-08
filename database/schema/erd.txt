@@ -106,72 +106,79 @@ Table calsim_entity_type {
   }
 }
 
-// Core network topology table with integrated node/arc data
+// Core network topology table, geopackage-only with comprehensive arc and node attributes from geopackage
 Table network_topology {
   id integer [pk, increment]
-  short_code varchar [not null, unique, note: "Primary identifier linking to entities, variables, and GIS"]
-  xml_short_code varchar [note: "Original short_code from XML source"]
-  geopackage_short_code varchar [note: "Original short_code from geopackage source"]
+  short_code varchar [not null, unique, note: "Primary identifier from geopackage Arc_ID/CalSim_ID"]
   schematic_type varchar [not null, note: "node or arc"]
   
-  // Core connectivity
-  from_node varchar [note: "Origin node for connectivity (nullable for boundary conditions)"]
-  to_node varchar [note: "Destination node for connectivity (nullable for boundary conditions)"]
+  // Core connectivity (from geopackage From_Node/To_Node)
+  from_node varchar [note: "Origin node for connectivity (nullable for inflows/boundaries)"]
+  to_node varchar [note: "Destination node for connectivity (nullable for outlets)"]
   
-  // Core node data (populated for nodes only)
-  river_mile numeric [note: "River mile location - critical for positioning"]
-  river_name varchar [note: "River/stream name - essential for identification"]
-  node_comment text [note: "Node description - key operational information"]
-  c2vsim_groundwater varchar [note: "C2VSIM groundwater node ID - critical model integration"]
-  c2vsim_surface_water varchar [note: "C2VSIM surface water node ID - critical model integration"]
-  nearest_gage varchar [note: "Nearest stream gage - essential for monitoring"]
-  stream_code varchar [note: "Stream classification code - core data"]
+  // Visualization control
+  is_active boolean [not null, default: true, note: "Controls network visualization - active elements shown on map"]
+  connectivity_status varchar [not null, note: "connected or unconnected"]
+  has_gis boolean [not null, default: true, note: "All geopackage elements have spatial data"]
+  network_version_id integer [not null, default: 1, note: "Version tracking"]
   
-  // Core arc data (populated for arcs only)
-  arc_name varchar [note: "Arc name - essential for identification"]
-  shape_length numeric [note: "Physical length (meters) - critical for analysis"]
+  // ALL geopackage arc attributes (populated for arcs only)
+  name varchar [note: "Arc name from geopackage NAME field"]
+  calsim_id varchar [note: "CalSim system ID from geopackage"]
+  arc_id varchar [note: "Arc identifier from geopackage Arc_ID"]
+  type varchar [note: "Element type from geopackage Type field"]
+  sub_type varchar [note: "Element subtype from geopackage Sub_Type field"]
+  hr varchar [note: "Hydrologic region code from geopackage HR field"]
+  shape_leng numeric [note: "Shape length from geopackage Shape_Leng field"]
   
-  // Topology and classification
-  match_type varchar [note: "Type of matching: exact, xml_only, geopackage_only"]
-  relationship_type varchar [note: "one_to_one, one_to_many_parent, one_to_many_child"]
-  parent_topology_id integer [note: "FK to parent record for hierarchical relationships"]
-  has_gis boolean [note: "Whether spatial data exists"]
-  connectivity_status varchar [note: "connected or unconnected"]
-  arc_type_id integer [note: "FK for arcs only"]
-  node_type_id integer [note: "FK for nodes only"]
-  type varchar [note: "Denormalized type code from geopackage"]
-  subtype varchar [note: "Denormalized subtype code from geopackage"]
-  hydrologic_region_id varchar [note: "FK to hydrologic region"]
-  source_systems text [note: "Array of source systems"]
-  primary_source_id integer [note: "Primary data source FK"]
-  node_classification varchar [note: "physical, logical, boundary (nodes only)"]
-  model_source varchar [note: "Model source identifier"]
-  network_version_id integer [not null, note: "Version tracking"]
-  verification_status varchar [note: "verified, pending, flagged"]
-  data_source varchar [note: "Source of this record"]
-  notes text [note: "Audit trail and additional information"]
+  // Geopackage node attributes (populated for nodes only)
+  riv_mi numeric [note: "River mile from geopackage Riv_Mi field"]
+  riv_name varchar [note: "River name from geopackage Riv_Name field"]
+  comment text [note: "Node comment from geopackage Comment field"]
+  c2vsim_gw varchar [note: "C2VSIM groundwater ID from geopackage C2VSIM_GW field"]
+  c2vsim_sw varchar [note: "C2VSIM surface water ID from geopackage C2VSIM_SW field"]
+  calsim2_id varchar [note: "CalSim2 ID from geopackage CalSim2_ID field"]
+  nrest_gage varchar [note: "Nearest gage from geopackage Nrest_Gage field"]
+  strm_code varchar [note: "Stream code from geopackage Strm_Code field"]
+  rm_ii varchar [note: "River mile indicator from geopackage RM_II field"]
+  
+  // Derived compatibility fields
+  element_type varchar [note: "Normalized type field (same as type)"]
+  element_subtype varchar [note: "Normalized subtype field (same as sub_type)"]
+  river_name varchar [note: "Normalized river name (from name for arcs, riv_name for nodes)"]
+  river_mile numeric [note: "Normalized river mile (from riv_mi for nodes)"]
+  arc_name varchar [note: "Normalized arc name (from name field)"]
+  node_comment text [note: "Normalized node comment (from comment field)"]
+  c2vsim_groundwater varchar [note: "Normalized C2VSIM GW (from c2vsim_gw field)"]
+  c2vsim_surface_water varchar [note: "Normalized C2VSIM SW (from c2vsim_sw field)"]
+  nearest_gage varchar [note: "Normalized nearest gage (from nrest_gage field)"]
+  stream_code varchar [note: "Normalized stream code (from strm_code field)"]
+  hydrologic_region varchar [note: "Normalized hydrologic region (from hr field)"]
+  shape_length numeric [note: "Normalized shape length (from shape_leng field)"]
+  data_source varchar [not null, note: "geopackage_arcs or geopackage_nodes"]
   
   indexes {
     short_code [unique]
     schematic_type
+    (is_active, schematic_type) [note: "Active elements filtering for visualization"]
     connectivity_status
     (schematic_type, connectivity_status) [note: "Composite index for common filtering"]
-    type [note: "Element type filtering"]
-    (type, subtype) [note: "Element subtype filtering"]
+    type [note: "Element type filtering (CH, D, STR, etc.)"]
+    (type, sub_type) [note: "Element subtype filtering"]
     river_name [note: "River system queries"]
     (river_name, river_mile) [note: "River mile range queries"]
     from_node [note: "Network traversal - upstream"]
     to_node [note: "Network traversal - downstream"] 
     (from_node, to_node) [note: "Bidirectional connectivity"]
     (from_node, to_node, schematic_type) [note: "Traversal performance index"]
-    stream_code
-    arc_name
-    data_source
+    (is_active, from_node, to_node) [note: "Active network traversal optimization"]
+    stream_code [note: "Stream classification queries"]
+    hr [note: "Hydrologic region filtering"]
+    data_source [note: "Source system filtering"]
   }
 }
 
-// Self-referential relationship for parent-child topology
-Ref: network_topology.parent_topology_id > network_topology.id
+// Network topology is now geopackage-only - no hierarchical relationships needed
 
 // Supporting tables for network topology
 Table network_topology_manual_reviews {
