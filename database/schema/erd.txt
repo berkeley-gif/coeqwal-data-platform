@@ -154,10 +154,16 @@ Table network_topology {
   indexes {
     short_code [unique]
     schematic_type
-    (from_node, to_node)
     connectivity_status
-    type
-    river_name
+    (schematic_type, connectivity_status) [note: "Composite index for common filtering"]
+    type [note: "Element type filtering"]
+    (type, subtype) [note: "Element subtype filtering"]
+    river_name [note: "River system queries"]
+    (river_name, river_mile) [note: "River mile range queries"]
+    from_node [note: "Network traversal - upstream"]
+    to_node [note: "Network traversal - downstream"] 
+    (from_node, to_node) [note: "Bidirectional connectivity"]
+    (from_node, to_node, schematic_type) [note: "Traversal performance index"]
     stream_code
     arc_name
     data_source
@@ -243,13 +249,18 @@ Table network_gis {
   
   indexes {
     (short_code, geometry_type, is_primary) [unique]
-    short_code
-    geometry_type
+    short_code [note: "Fast JOIN with network_topology"]
+    geometry_type [note: "Point vs linestring filtering"]
     source_system
     topology_id
     (entity_type, entity_id)
     network_version_id
-    // Spatial indexes handled by PostGIS: geom, centroid_geom, bbox_geom
+    // CRITICAL SPATIAL INDEXES (PostGIS GIST)
+    geom [type: gist, note: "PRIMARY spatial index - fixes 17s API responses"]
+    (geom, geometry_type) [type: gist, note: "Composite spatial + type index"]
+    geom [type: gist, where: "geometry_type = 'point'", note: "Point-only spatial index"]
+    geom [type: gist, where: "geometry_type IN ('linestring', 'multilinestring')", note: "Line-only spatial index"]
+    // Additional spatial indexes: centroid_geom, bbox_geom
   }
 }
 

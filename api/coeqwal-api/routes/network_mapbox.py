@@ -60,12 +60,14 @@ async def get_network_geojson(
         type_filter = f"nt.schematic_type IN ({','.join(type_conditions)})"
         
         # ULTRA-FAST query using spatial index and minimal data
-        # Focus on speed over completeness for map display
+        # Include from_node/to_node for arc properties
         query = f"""
         SELECT 
             nt.id,
             nt.short_code,
             nt.schematic_type,
+            nt.from_node,
+            nt.to_node,
             nt.connectivity_status,
             nt.type,
             nt.subtype,
@@ -90,41 +92,52 @@ async def get_network_geojson(
                 min_lng, min_lat, max_lng, max_lat, limit
             )
         
-        # Convert to GeoJSON
+        # Convert to GeoJSON with error handling
         features = []
         for row in rows:
-            geometry = json.loads(row['geometry']) if row['geometry'] else None
+            try:
+                geometry = json.loads(row['geometry']) if row['geometry'] else None
+                
+                # Create feature properties with safe access
+                properties = {
+                    'id': row['id'],
+                    'short_code': row['short_code'],
+                    'type': row['schematic_type'],
+                    'connectivity_status': row['connectivity_status'],
+                    'element_type': row['type'] if row['type'] else '',
+                    'subtype': row['subtype'] if row['subtype'] else ''
+                }
+            except Exception as e:
+                print(f"Error processing row {row.get('short_code', 'unknown')}: {e}")
+                continue
             
-            # Create feature properties
-            properties = {
-                'id': row['id'],
-                'short_code': row['short_code'],
-                'type': row['schematic_type'],
-                'connectivity_status': row['connectivity_status'],
-                'element_type': row['type'],
-                'subtype': row['subtype']
-            }
-            
-            # Add type-specific properties
-            if row['schematic_type'] == 'node':
-                properties.update({
-                    'river_name': row['river_name'],
-                    'river_mile': float(row['river_mile']) if row['river_mile'] else None
-                })
-            elif row['schematic_type'] == 'arc':
-                properties.update({
-                    'arc_name': row['arc_name'],
-                    'shape_length': float(row['shape_length']) if row['shape_length'] else None,
-                    'from_node': row['from_node'],
-                    'to_node': row['to_node']
-                })
-            
-            feature = {
-                "type": "Feature",
-                "geometry": geometry,
-                "properties": properties
-            }
-            features.append(feature)
+            # Add type-specific properties with safe access
+            try:
+                if row['schematic_type'] == 'node':
+                    properties.update({
+                        'river_name': row['river_name'] if row['river_name'] else '',
+                        'river_mile': float(row['river_mile']) if row['river_mile'] else None,
+                        'display_name': row['river_name'] if row['river_name'] else row['short_code']
+                    })
+                elif row['schematic_type'] == 'arc':
+                    properties.update({
+                        'arc_name': row['arc_name'] if row['arc_name'] else '',
+                        'shape_length': float(row['shape_length']) if row['shape_length'] else None,
+                        'from_node': row['from_node'] if row['from_node'] else '',
+                        'to_node': row['to_node'] if row['to_node'] else '',
+                        'display_name': row['arc_name'] if row['arc_name'] else f"{row['from_node'] or ''} → {row['to_node'] or ''}"
+                    })
+                
+                feature = {
+                    "type": "Feature",
+                    "geometry": geometry,
+                    "properties": properties
+                }
+                features.append(feature)
+                
+            except Exception as e:
+                print(f"Error processing properties for {row.get('short_code', 'unknown')}: {e}")
+                continue
         
         result = {
             "type": "FeatureCollection",
