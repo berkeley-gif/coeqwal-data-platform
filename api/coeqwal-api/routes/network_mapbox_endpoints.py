@@ -15,6 +15,19 @@ from .enhanced_network_traversal import (
     get_enhanced_connectivity_stats,
     get_network_gaps_analysis
 )
+from .advanced_connectivity_strategies import (
+    advanced_network_traversal,
+    get_connectivity_diagnostics
+)
+from .logical_connectivity_strategies import (
+    logical_network_traversal,
+    get_logical_connectivity_stats
+)
+from .graph_based_connectivity import (
+    graph_based_network_traversal,
+    xml_first_with_physical_priority
+)
+from .simple_network_traversal import simple_network_traversal
 
 router = APIRouter(prefix="/api/network", tags=["network-mapbox"])
 
@@ -131,3 +144,121 @@ async def api_get_network_gaps():
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await get_network_gaps_analysis(db_pool)
+
+
+@router.get("/traverse/{short_code}/advanced")
+async def api_advanced_network_traversal(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(10, description="Maximum traversal depth"),
+    include_arcs: bool = Query(True, description="Include connecting arcs in result")
+):
+    """
+    ADVANCED network traversal using 6 comprehensive connectivity strategies
+    
+    Strategies: direct connections, CalSim patterns, river miles, stream codes, infrastructure, spatial
+    Example: /api/network/traverse/SAC273/advanced?direction=both&max_depth=10
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await advanced_network_traversal(db_pool, short_code, direction, max_depth, include_arcs)
+
+
+@router.get("/connectivity/diagnostics/{short_code}")
+async def api_get_connectivity_diagnostics(
+    short_code: str = Path(..., description="Short code of network element to diagnose")
+):
+    """
+    Get comprehensive connectivity diagnostics for a specific element
+    
+    Shows direct, pattern, river, and spatial connection counts
+    Example: /api/network/connectivity/diagnostics/SAC273
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_connectivity_diagnostics(db_pool, short_code)
+
+
+@router.get("/traverse/{short_code}/logical")
+async def api_logical_network_traversal(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(10, description="Maximum traversal depth"),
+    include_arcs: bool = Query(True, description="Include connecting arcs in result")
+):
+    """
+    LOGICAL network traversal focusing on meaningful water system connections
+    
+    Avoids spatial proximity, focuses on: direct connections, CalSim patterns, 
+    river flow logic, infrastructure relationships, water balance areas
+    Example: /api/network/traverse/SAC273/logical?direction=both&max_depth=10
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await logical_network_traversal(db_pool, short_code, direction, max_depth, include_arcs)
+
+
+@router.get("/connectivity/logical/stats")
+async def api_get_logical_connectivity_stats():
+    """
+    Get logical connectivity statistics (non-spatial analysis)
+    
+    Example: /api/network/connectivity/logical/stats
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_logical_connectivity_stats(db_pool)
+
+
+@router.get("/traverse/{short_code}/graph")
+async def api_graph_based_network_traversal(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(10, description="Maximum traversal depth"),
+    include_arcs: bool = Query(True, description="Include connecting arcs in result")
+):
+    """
+    MATHEMATICAL graph-based network traversal using graph theory
+    
+    Clean systematic approach: builds adjacency graph, uses BFS traversal
+    Example: /api/network/traverse/SAC273/graph?direction=both&max_depth=10
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await graph_based_network_traversal(db_pool, short_code, direction, max_depth, include_arcs)
+
+
+@router.get("/traverse/{short_code}/xml-comprehensive")
+async def api_xml_first_with_physical_priority(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(8, description="Maximum traversal depth")
+):
+    """
+    XML-COMPREHENSIVE connectivity strategy (CORRECTED APPROACH)
+    
+    XML provides comprehensive connectivity (~6,000 elements), geopackage provides physical attributes
+    This addresses the core issue: geopackage has incomplete connectivity, XML fills the gaps
+    Example: /api/network/traverse/SAC273/xml-comprehensive?direction=both&max_depth=8
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await xml_first_with_physical_priority(db_pool, short_code, direction, max_depth)
+
+
+@router.get("/traverse/{short_code}/simple")
+async def api_simple_network_traversal(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(5, description="Maximum traversal depth")
+):
+    """
+    SIMPLE network traversal for map visualization
+    
+    Clean, straightforward approach using existing from_node/to_node connectivity
+    No complex algorithms - just follow the direct connections
+    Example: /api/network/traverse/SAC273/simple?direction=both&max_depth=5
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await simple_network_traversal(db_pool, short_code, direction, max_depth)
