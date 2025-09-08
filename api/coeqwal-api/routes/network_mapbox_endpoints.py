@@ -12,7 +12,6 @@ from .network_mapbox import (
 )
 from .simple_network_traversal import simple_network_traversal
 from .connectivity_diagnostics import diagnose_connectivity_problems, suggest_connectivity_improvements
-from .intelligent_network_traversal import intelligent_network_traversal
 from .systematic_network_traversal import systematic_network_traversal
 
 router = APIRouter(prefix="/api/network", tags=["network-mapbox"])
@@ -132,24 +131,6 @@ async def api_connectivity_suggestions():
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await suggest_connectivity_improvements(db_pool)
-
-
-@router.get("/traverse/{short_code}/intelligent")
-async def api_intelligent_network_traversal(
-    short_code: str = Path(..., description="Short code of network element to start traversal from"),
-    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
-    max_depth: int = Query(8, description="Maximum traversal depth")
-):
-    """
-    INTELLIGENT network traversal using multiple strategies
-    
-    Combines direct connections + naming patterns + river sequences + proximity
-    Much better connectivity than simple approach
-    Example: /api/network/traverse/SAC273/intelligent?direction=both&max_depth=8
-    """
-    if not db_pool:
-        raise HTTPException(status_code=500, detail="Database pool not initialized")
-    return await intelligent_network_traversal(db_pool, short_code, direction, max_depth)
 
 
 @router.get("/traverse/{short_code}/systematic")
