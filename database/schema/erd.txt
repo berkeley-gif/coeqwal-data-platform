@@ -159,22 +159,19 @@ Table network_topology {
   
   indexes {
     short_code [unique]
-    schematic_type
     (is_active, schematic_type) [note: "Active elements filtering for visualization"]
-    connectivity_status
-    (schematic_type, connectivity_status) [note: "Composite index for common filtering"]
-    type [note: "Element type filtering (CH, D, STR, etc.)"]
-    (type, sub_type) [note: "Element subtype filtering"]
-    river_name [note: "River system queries"]
-    (river_name, river_mile) [note: "River mile range queries"]
-    from_node [note: "Network traversal - upstream"]
-    to_node [note: "Network traversal - downstream"] 
     (from_node, to_node) [note: "Bidirectional connectivity"]
-    (from_node, to_node, schematic_type) [note: "Traversal performance index"]
     (is_active, from_node, to_node) [note: "Active network traversal optimization"]
-    stream_code [note: "Stream classification queries"]
+    type [note: "Element type filtering (CH, D, STR, etc.)"]
+    connectivity_status [note: "Connection status filtering"]
+    (river_name, river_mile) [note: "River mile range queries"]
     hr [note: "Hydrologic region filtering"]
     data_source_id [note: "Source system filtering"]
+    // CONNECTIVITY-OPTIMIZED INDEXES
+    (to_node, is_active) [where: "connectivity_status = 'connected'", note: "Upstream traversal optimization"]
+    (from_node, is_active) [where: "connectivity_status = 'connected'", note: "Downstream traversal optimization"]
+    (is_active, connectivity_status) [note: "Active connected elements"]
+    (type, is_active) [where: "type = 'STR'", note: "Reservoir queries optimization"]
   }
 }
 
@@ -242,19 +239,16 @@ Table network_gis {
   notes text [note: "Empty but available for future operational notes"]
   
   indexes {
-    (short_code, geometry_type, is_primary) [unique]
     short_code [note: "Fast JOIN with network_topology"]
     geometry_type [note: "Point vs linestring filtering"]
-    source_system
-    topology_id
-    (entity_type, entity_id)
-    network_version_id
-    // CRITICAL SPATIAL INDEXES (PostGIS GIST)
-    geom [type: gist, note: "PRIMARY spatial index - fixes 17s API responses"]
-    (geom, geometry_type) [type: gist, note: "Composite spatial + type index"]
-    geom [type: gist, where: "geometry_type = 'point'", note: "Point-only spatial index"]
-    geom [type: gist, where: "geometry_type IN ('linestring', 'multilinestring')", note: "Line-only spatial index"]
-    // Additional spatial indexes: centroid_geom, bbox_geom
+    entity_type [note: "Arc vs node filtering"]
+    source_id [note: "Source system filtering"]
+    // CRITICAL SPATIAL INDEXES (PostGIS GIST) 
+    geom [type: gist, note: "PRIMARY spatial index for map queries"]
+    geom [type: gist, where: "geometry_type = 'point'", note: "Point-only spatial index for nodes"]
+    geom [type: gist, where: "geometry_type IN ('linestring', 'multilinestring')", note: "Line-only spatial index for arcs"]
+    // FAST API INDEXES
+    (short_code, geometry_type, is_primary) [note: "Fast GIS lookups"]
   }
 }
 
