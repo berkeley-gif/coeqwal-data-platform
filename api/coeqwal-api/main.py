@@ -20,6 +20,7 @@ from datetime import datetime
 # Import our new spatial endpoints
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
 from routes.vast_network_traversal import get_node_network_unlimited
+from routes.network_mapbox_endpoints import router as network_mapbox_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +61,9 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+# Include Mapbox network router
+app.include_router(network_mapbox_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)

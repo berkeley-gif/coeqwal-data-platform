@@ -1,0 +1,55 @@
+"""
+Network API routes optimized for mapbox app
+For network traversal on Mapbox maps optimizing use of the network_topology table
+"""
+
+from fastapi import APIRouter, Query, Path
+from .network_mapbox import (
+    get_network_geojson,
+    traverse_network_geojson, 
+    get_network_element_details
+)
+
+router = APIRouter(prefix="/api/network", tags=["network-mapbox"])
+
+
+@router.get("/geojson")
+async def api_get_network_geojson(
+    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
+    include_arcs: bool = Query(True, description="Include arc geometries"),
+    include_nodes: bool = Query(True, description="Include node geometries"), 
+    limit: int = Query(5000, description="Maximum features to return")
+):
+    """
+    Get network features as GeoJSON for Mapbox display
+    
+    Example: /api/network/geojson?bbox=-122.5,37.5,-122.0,38.0&include_arcs=true&include_nodes=true
+    """
+    return await get_network_geojson(db_pool, bbox, include_arcs, include_nodes, limit)
+
+
+@router.get("/traverse/{short_code}")
+async def api_traverse_network_geojson(
+    short_code: str = Path(..., description="Short code of network element to start traversal from"),
+    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(10, description="Maximum traversal depth"),
+    include_arcs: bool = Query(True, description="Include connecting arcs in result")
+):
+    """
+    Traverse network from a short_code and return GeoJSON for Mapbox visualization
+    
+    Example: /api/network/traverse/SAC273?direction=downstream&max_depth=5
+    """
+    return await traverse_network_geojson(db_pool, short_code, direction, max_depth, include_arcs)
+
+
+@router.get("/element/{short_code}")
+async def api_get_network_element_details(
+    short_code: str = Path(..., description="Short code of network element")
+):
+    """
+    Get detailed information about a specific network element
+    
+    Example: /api/network/element/SAC273
+    """
+    return await get_network_element_details(db_pool, short_code)
