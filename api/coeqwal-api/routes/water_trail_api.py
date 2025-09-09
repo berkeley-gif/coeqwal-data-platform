@@ -149,28 +149,37 @@ async def get_water_trail_from_reservoir(
     
     # Filter by trail type
     if trail_type == "infrastructure":
-        # Focus on key infrastructure nodes
+        # Focus on key infrastructure nodes - be more inclusive
         filtered_features = []
         for feature in trail_features:
             code = feature["properties"]["short_code"]
             element_type = feature["properties"]["element_type"]
+            feature_type = feature["properties"]["type"]
             
             # Always include key infrastructure
             if code in KEY_INFRASTRUCTURE_CODES:
                 filtered_features.append(feature)
-            # Include reservoirs, pumps, treatment plants
+            # Include ALL reservoirs, pumps, treatment plants
             elif element_type in ["STR", "PS", "WTP", "WWTP"]:
                 filtered_features.append(feature)
-            # Include major river nodes (every 5th)
-            elif element_type == "CH" and trail_data["nodes"].index(code) % 5 == 0:
+            # Include more river nodes for better connectivity visualization
+            elif element_type == "CH":
+                try:
+                    node_index = trail_data["nodes"].index(code)
+                    # Include every 3rd river node (more than every 5th)
+                    if node_index % 3 == 0:
+                        filtered_features.append(feature)
+                except (ValueError, IndexError):
+                    # If not in trail nodes list, include anyway if it's a major river
+                    if any(river in (feature["properties"].get("river_name", "") or "") 
+                           for river in ["Sacramento River", "San Joaquin River", "American River", "Feather River"]):
+                        filtered_features.append(feature)
+            # Include ALL arcs to show connectivity
+            elif feature_type == "arc":
                 filtered_features.append(feature)
-            # Include connecting arcs between infrastructure
-            elif feature["properties"]["type"] == "arc":
-                from_node = feature["properties"].get("from_node", "")
-                to_node = feature["properties"].get("to_node", "")
-                if (from_node in KEY_INFRASTRUCTURE_CODES or 
-                    to_node in KEY_INFRASTRUCTURE_CODES):
-                    filtered_features.append(feature)
+            # Include other key infrastructure types
+            elif element_type in ["D", "OM", "NP", "PR"]:
+                filtered_features.append(feature)
         
         trail_features = filtered_features
     
@@ -233,6 +242,18 @@ async def get_major_reservoir_trails(
             print(f"Error getting trail for {reservoir}: {e}")
             continue
     
+    # If we don't have enough features, add more key infrastructure
+    if len(all_features) < 50:
+        print(f"Adding more infrastructure - only have {len(all_features)} features")
+        additional_features = await _get_additional_key_infrastructure(db_pool)
+        
+        # Avoid duplicates
+        existing_codes = {f["properties"]["short_code"] for f in all_features}
+        new_features = [f for f in additional_features if f["properties"]["short_code"] not in existing_codes]
+        
+        all_features.extend(new_features)
+        print(f"Added {len(new_features)} additional infrastructure features")
+    
     return {
         "type": "FeatureCollection",
         "features": all_features,
@@ -242,9 +263,91 @@ async def get_major_reservoir_trails(
             "trail_systems": len(trail_summaries),
             "trail_summaries": trail_summaries,
             "approach": "california_water_system_overview",
-            "foundation": "hardcoded_major_pathways"
+            "foundation": "hardcoded_major_pathways_with_fallback"
         }
     }
+
+
+async def _get_additional_key_infrastructure(
+    db_pool: asyncpg.Pool
+) -> List[Dict[str, Any]]:
+    """Get additional key infrastructure when hardcoded trails are too sparse"""
+    
+    query = """
+    SELECT 
+        nt.id, nt.short_code, nt.schematic_type, nt.type, nt.sub_type,
+        nt.from_node, nt.to_node, nt.river_name, nt.arc_name,
+        nt.hydrologic_region,
+        ST_AsGeoJSON(ng.geom) as geometry,
+        ng.geometry_type
+    FROM network_topology nt
+    LEFT JOIN network_gis ng ON nt.short_code = ng.short_code
+    WHERE nt.is_active = true
+    AND (
+        nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR
+        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River')) OR
+        nt.short_code IN ('SAC000', 'SAC043', 'SAC083', 'SJRE', 'SJRW', 'MDOTA')
+    )
+    ORDER BY 
+        CASE nt.type 
+            WHEN 'STR' THEN 1 
+            WHEN 'PS' THEN 2 
+            WHEN 'WTP' THEN 3 
+            WHEN 'WWTP' THEN 4 
+            ELSE 5 
+        END,
+        nt.short_code
+    LIMIT 100;
+    """
+    
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(query)
+    
+    features = []
+    for row in rows:
+        try:
+            geometry = json.loads(row['geometry']) if row['geometry'] else None
+            if not geometry:
+                continue
+            
+            properties = {
+                'id': row['id'],
+                'short_code': row['short_code'],
+                'type': row['schematic_type'],
+                'element_type': row['type'],
+                'subtype': row['sub_type'],
+                'connectivity_status': 'connected',
+                'trail_element': True,
+                'hydrologic_region': row['hydrologic_region'],
+                'is_additional_infrastructure': True
+            }
+            
+            if row['schematic_type'] == 'node':
+                properties.update({
+                    'river_name': row['river_name'],
+                    'display_name': row['river_name'] or row['short_code'],
+                    'infrastructure_type': _get_infrastructure_type(row['type']),
+                    'is_key_infrastructure': row['short_code'] in KEY_INFRASTRUCTURE_CODES
+                })
+            elif row['schematic_type'] == 'arc':
+                properties.update({
+                    'arc_name': row['arc_name'],
+                    'from_node': row['from_node'],
+                    'to_node': row['to_node'],
+                    'display_name': row['arc_name'] or f"{row['from_node']} → {row['to_node']}"
+                })
+            
+            features.append({
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": properties
+            })
+            
+        except Exception as e:
+            print(f"Error processing additional infrastructure {row.get('short_code', 'unknown')}: {e}")
+            continue
+    
+    return features
 
 
 async def _get_nearby_infrastructure(
