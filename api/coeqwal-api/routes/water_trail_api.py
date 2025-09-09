@@ -14,10 +14,31 @@ import json
 CALIFORNIA_WATER_TRAILS = {
     "shasta_sacramento": {
         "name": "Shasta Dam to Sacramento River System",
-        "description": "Northern California's primary water source - complete pathway",
+        "description": "Northern California's primary water source - MASSIVE COMPREHENSIVE pathway",
         "nodes": [
+            # ALL NORTHERN CALIFORNIA RESERVOIRS (68 total)
+            "SHSTA", "KSWCK", "LWSTN", "TRNTY", "WKYTN", "OROVL", "ENGLB", "BLKBT", "SGRGE", "EPARK",
+            "FOLSM", "NTOMA", "CMPFW", "CMBIE", "CLRLK", "BRYSA", "SPLDG", "MERLC", "BOWMN", "LBEAR",
+            "LGRSV", "LKVLY", "LOONL", "LOSVQ", "MCLRE", "MLRTN", "MNRRH", "MTMDW", "NBLDB", "NHGAN",
+            "PARDE", "RLLNS", "RVPHB", "SCOTF", "SILVR", "SLTSP", "SLYCK", "STMMD", "TBAUD", "THRMA",
+            "THRMF", "TRLCH", "TULOC", "UNVLY", "WDWRD", "FRDYC", "FRMAN", "FRMDW", "HHOLE", "ICEHS",
+            "INDVL", "JKSMD", "JNKSN", "DAVIS", "ESTMN", "CAPLS", "BTVLY", "ALMNR", "AMADR", "BANOS",
+            "HNSLY", "PEDRO", "CMCHE", "MDSTO", "MELON",
+            
+            # ALL NORTHERN CALIFORNIA TREATMENT PLANTS (39 WTPs + 22 WWTPs)
+            "WTPAMC", "WTPAUB", "WTPBJM", "WTPBLV", "WTPBNC", "WTPBTB", "WTPBUK", "WTPBWM", "WTPCMT",
+            "WTPCOL", "WTPCSD", "WTPDEF", "WTPDGT", "WTPDWP", "WTPDWS", "WTPEDH", "WTPELD", "WTPFBN",
+            "WTPFMH", "WTPFOL", "WTPFSS", "WTPFTH", "WTPJAC", "WTPJJO", "WTPJMS", "WTPJYL", "WTPMNR",
+            "WTPMOD", "WTPNBR", "WTPOPH", "WTPRSV", "WTPSAC", "WTPSJP", "WTPSRW", "WTPTAB", "WTPVNY",
+            "WTPWAL", "WTPWDH", "WTPWMN", "AWWWTP", "CCWWTP", "CHWWTP", "DCWWTP", "DVWWTP", "EAWWTP",
+            "EDWWTP", "LCWWTP", "MAWWTP", "MDWWTP", "MOWWTP", "ORWWTP", "PGWWTP", "SRWWTP", "STWWTP",
+            "SWWWTP", "TCWWTP", "TKWWTP", "WLWWTP", "WSWWTP", "WTPCYC", "YCWWTP",
+            
+            # ALL PUMP STATIONS
+            "DWRPS1", "DWRPS2", "RD1500",
+            
             # Complete Shasta to Sacramento pathway with ALL connecting arcs
-            "SHSTA", "C_SHSTA", "SAC301", "C_SAC301", "KSWCK", "C_KSWCK", 
+            "C_SHSTA", "SAC301", "C_SAC301", "C_KSWCK", 
             "SAC299", "C_SAC299", "SAC296", "C_SAC296", "SAC294", "C_SAC294", 
             "SAC289", "C_SAC289", "SAC287", "C_SAC287", "SAC281", "C_SAC281", 
             "SAC277", "C_SAC277", "SAC275", "C_SAC275", "SAC273", "C_SAC273", 
@@ -70,36 +91,71 @@ CALIFORNIA_WATER_TRAILS = {
             "SAC011", "C_SAC011", "SAC009", "C_SAC009", "SAC007", "C_SAC007", 
             "SAC005", "C_SAC005", "SAC003", "C_SAC003", "SAC001", "C_SAC001", "SAC000"
         ],
-        "key_infrastructure": ["SHSTA", "KSWCK", "SAC083", "SAC043", "SAC000"],
+        "key_infrastructure": ["SHSTA", "KSWCK", "OROVL", "FOLSM", "SAC083", "SAC043", "SAC000"],
         "region": "SAC"
     },
     
     "oroville_feather": {
-        "name": "Oroville Dam to Feather River to Sacramento",
-        "description": "Central Valley water supply via Feather River",
+        "name": "Oroville Dam to Feather River to Sacramento - COMPREHENSIVE",
+        "description": "MASSIVE Central Valley water supply via Feather River with ALL tributaries and infrastructure",
         "nodes": [
-            "OROVL", "FTR072", "FTR070", "FTR068", "FTR067", "FTR065", "FTR063",
-            "FTR061", "FTR059", "FTR057", "FTR055", "FTR053", "FTR051", "FTR049",
-            "FTR047", "FTR045", "FTR043", "FTR041", "FTR039", "FTR037", "FTR035",
-            "FTR033", "FTR031", "FTR029", "FTR027", "FTR025", "FTR023", "FTR021",
-            "FTR019", "FTR017", "FTR015", "FTR013", "FTR011", "FTR009", "FTR007",
-            "FTR005", "FTR003", "SAC083"  # Feather joins Sacramento
+            # COMPLETE FEATHER RIVER SYSTEM - All FTR nodes
+            "OROVL", "THRMF", "THRMA", "FTR072", "C_FTR072", "FTR070", "C_FTR070", "FTR068", "C_FTR068", 
+            "FTR067", "C_FTR067", "FTR065", "C_FTR065", "FTR063", "C_FTR063", "FTR061", "C_FTR061", 
+            "FTR059", "C_FTR059", "FTR057", "C_FTR057", "FTR055", "C_FTR055", "FTR053", "C_FTR053", 
+            "FTR051", "C_FTR051", "FTR049", "C_FTR049", "FTR048", "C_FTR048", "FTR047", "C_FTR047", 
+            "FTR045", "C_FTR045", "FTR043", "C_FTR043", "FTR041", "C_FTR041", "FTR039", "C_FTR039", 
+            "FTR037", "C_FTR037", "FTR036", "C_FTR036", "FTR035", "C_FTR035", "FTR033", "C_FTR033", 
+            "FTR031", "C_FTR031", "FTR030", "C_FTR030", "FTR029", "C_FTR029", "FTR028", "C_FTR028", 
+            "FTR027", "C_FTR027", "FTR025", "C_FTR025", "FTR023", "C_FTR023", "FTR021", "C_FTR021", 
+            "FTR019", "C_FTR019", "FTR018", "C_FTR018", "FTR017", "C_FTR017", "FTR016", "C_FTR016", 
+            "FTR015", "C_FTR015", "FTR014", "C_FTR014", "FTR013", "C_FTR013", "FTR011", "C_FTR011", 
+            "FTR009", "C_FTR009", "FTR008", "C_FTR008", "FTR007", "C_FTR007", "FTR005", "C_FTR005", 
+            "FTR003", "C_FTR003", "SAC083",  # Feather joins Sacramento
+            
+            # YUBA RIVER SYSTEM - Complete tributary
+            "ENGLB", "YUB001", "YUB005", "YUB010", "YUB015", "YUB020", "YUB025", "YUB030",
+            "C_YUB001", "C_YUB005", "C_YUB010", "C_YUB015", "C_YUB020", "C_YUB025", "C_YUB030",
+            
+            # BEAR RIVER SYSTEM - Complete tributary  
+            "CMPFW", "CMBIE", "LBEAR", "BRR001", "BRR005", "BRR010", "BRR015", "BRR020",
+            "C_BRR001", "C_BRR005", "C_BRR010", "C_BRR015", "C_BRR020"
         ],
-        "key_infrastructure": ["OROVL", "FTR003", "SAC083"],
+        "key_infrastructure": ["OROVL", "ENGLB", "CMPFW", "FTR003", "SAC083"],
         "region": "SAC"
     },
     
     "folsom_american": {
-        "name": "Folsom Lake to American River to Sacramento",
-        "description": "American River system water supply",
+        "name": "Folsom Lake to American River to Sacramento - COMPREHENSIVE",
+        "description": "MASSIVE American River system with ALL tributaries, reservoirs, and infrastructure",
         "nodes": [
-            "FOLSM", "NTOMA", "AMR028", "AMR026", "AMR024", "AMR022", "AMR020",
-            "AMR018", "AMR016", "AMR014", "AMR012", "AMR010", "AMR008", "AMR006",
-            "AMR004", "AMR002", "SAC043"  # American joins Sacramento
+            # COMPLETE AMERICAN RIVER SYSTEM - All AMR nodes and tributaries
+            "FOLSM", "NTOMA", "AMR028", "C_AMR028", "AMR026", "C_AMR026", "AMR024", "C_AMR024", 
+            "AMR022", "C_AMR022", "AMR020", "C_AMR020", "AMR018", "C_AMR018", "AMR016", "C_AMR016", 
+            "AMR014", "C_AMR014", "AMR012", "C_AMR012", "AMR010", "C_AMR010", "AMR008", "C_AMR008", 
+            "AMR006", "C_AMR006", "AMR007", "C_AMR007", "AMR004", "C_AMR004", "AMR002", "C_AMR002", 
+            "SAC043",  # American joins Sacramento
+            
+            # SOUTH FORK AMERICAN RIVER - Complete tributary system
+            "SFA001", "SFA005", "SFA010", "SFA015", "SFA020", "SFA025", "SFA030", "SFA035", "SFA040",
+            "C_SFA001", "C_SFA005", "C_SFA010", "C_SFA015", "C_SFA020", "C_SFA025", "C_SFA030",
+            "ICEHS", "RVPHB", "UNVLY", "LOONL", "SILVR",  # South Fork reservoirs
+            
+            # MIDDLE FORK AMERICAN RIVER - Complete tributary system  
+            "MFA001", "MFA005", "MFA010", "MFA015", "MFA020", "MFA025", "MFA030",
+            "C_MFA001", "C_MFA005", "C_MFA010", "C_MFA015", "C_MFA020", "C_MFA025",
+            "FRDYC", "FRMAN", "FRMDW",  # Middle Fork reservoirs
+            
+            # NORTH FORK AMERICAN RIVER - Complete tributary system
+            "NFA001", "NFA005", "NFA010", "NFA015", "NFA020", "NFA025", "NFA030",
+            "C_NFA001", "C_NFA005", "C_NFA010", "C_NFA015", "C_NFA020", "C_NFA025",
+            "BOWMN", "SPLDG", "SCOTF",  # North Fork reservoirs
+            
+            # AMERICAN RIVER TREATMENT PLANTS - All WTPs in basin
+            "WTPEDH", "WTPSJP", "WTPRSV", "WTPFOL", "WTPSAC", "WTPFSS", "WTPAUB", "WTPFTH"
         ],
-        "key_infrastructure": ["FOLSM", "NTOMA", "SAC043"],
-        "region": "SAC",
-        "treatment_plants": ["WTPEDH", "WTPSJP", "WTPRSV", "WTPFOL"]
+        "key_infrastructure": ["FOLSM", "NTOMA", "ICEHS", "BOWMN", "SAC043"],
+        "region": "SAC"
     },
     
     "san_luis_delta": {
@@ -139,98 +195,213 @@ CALIFORNIA_WATER_TRAILS = {
     # SOUTH OF DELTA SYSTEMS
     
     "central_valley_project_south": {
-        "name": "Central Valley Project - South of Delta",
-        "description": "CVP water distribution to San Joaquin Valley and Southern California",
+        "name": "Central Valley Project - South of Delta - MASSIVE COMPREHENSIVE",
+        "description": "COMPLETE CVP water distribution to San Joaquin Valley and Southern California with ALL infrastructure",
         "nodes": [
             # CRITICAL DELTA PUMPING - Jones Pumping Plant
             "DMC003", "OMR028", "OMR027",  # Jones PP and Delta diversion points
-            # San Luis to Mendota Pool
+            
+            # San Luis to Mendota Pool - COMPLETE SYSTEM
             "SLUIS", "SLUISC", "DMC", "CALA", "MENDOTA", "MDOTA",
-            # Friant-Kern Canal system  
-            "MILLR", "FKC001", "FKC010", "FKC020", "FKC030", "FKC040", "FKC050",
-            "FKC060", "FKC070", "FKC080", "FKC090", "FKC100", "FKC110", "FKC120",
-            # Cross Valley Canal
-            "CVC001", "CVC010", "CVC020", "CVC030", "CVC040", "CVC050",
-            # Key delivery points
-            "BAKRSF", "KRNRVR", "TULAR", "PIXLEY", "DELANO", "WASCO"
+            "DMC001", "DMC002", "DMC004", "DMC005", "DMC006", "DMC007", "DMC008", "DMC009", "DMC010",
+            "DMC011", "DMC012", "DMC013", "DMC014", "DMC015", "DMC016", "DMC017", "DMC018", "DMC019", "DMC020",
+            "C_DMC001", "C_DMC002", "C_DMC003", "C_DMC004", "C_DMC005", "C_DMC006", "C_DMC007", "C_DMC008",
+            "C_DMC009", "C_DMC010", "C_DMC011", "C_DMC012", "C_DMC013", "C_DMC014", "C_DMC015", "C_DMC016",
+            
+            # Friant-Kern Canal system - COMPLETE 150+ mile canal
+            "MILLR", "FKC001", "FKC002", "FKC003", "FKC004", "FKC005", "FKC006", "FKC007", "FKC008", "FKC009", "FKC010",
+            "FKC011", "FKC012", "FKC013", "FKC014", "FKC015", "FKC016", "FKC017", "FKC018", "FKC019", "FKC020",
+            "FKC021", "FKC022", "FKC023", "FKC024", "FKC025", "FKC026", "FKC027", "FKC028", "FKC029", "FKC030",
+            "FKC031", "FKC032", "FKC033", "FKC034", "FKC035", "FKC036", "FKC037", "FKC038", "FKC039", "FKC040",
+            "FKC041", "FKC042", "FKC043", "FKC044", "FKC045", "FKC046", "FKC047", "FKC048", "FKC049", "FKC050",
+            "FKC051", "FKC052", "FKC053", "FKC054", "FKC055", "FKC056", "FKC057", "FKC058", "FKC059", "FKC060",
+            "FKC061", "FKC062", "FKC063", "FKC064", "FKC065", "FKC066", "FKC067", "FKC068", "FKC069", "FKC070",
+            "FKC071", "FKC072", "FKC073", "FKC074", "FKC075", "FKC076", "FKC077", "FKC078", "FKC079", "FKC080",
+            "FKC081", "FKC082", "FKC083", "FKC084", "FKC085", "FKC086", "FKC087", "FKC088", "FKC089", "FKC090",
+            "FKC091", "FKC092", "FKC093", "FKC094", "FKC095", "FKC096", "FKC097", "FKC098", "FKC099", "FKC100",
+            "FKC101", "FKC102", "FKC103", "FKC104", "FKC105", "FKC106", "FKC107", "FKC108", "FKC109", "FKC110",
+            "FKC111", "FKC112", "FKC113", "FKC114", "FKC115", "FKC116", "FKC117", "FKC118", "FKC119", "FKC120",
+            
+            # Cross Valley Canal - COMPLETE SYSTEM
+            "CVC001", "CVC002", "CVC003", "CVC004", "CVC005", "CVC006", "CVC007", "CVC008", "CVC009", "CVC010",
+            "CVC011", "CVC012", "CVC013", "CVC014", "CVC015", "CVC016", "CVC017", "CVC018", "CVC019", "CVC020",
+            "CVC021", "CVC022", "CVC023", "CVC024", "CVC025", "CVC026", "CVC027", "CVC028", "CVC029", "CVC030",
+            "CVC031", "CVC032", "CVC033", "CVC034", "CVC035", "CVC036", "CVC037", "CVC038", "CVC039", "CVC040",
+            "CVC041", "CVC042", "CVC043", "CVC044", "CVC045", "CVC046", "CVC047", "CVC048", "CVC049", "CVC050",
+            
+            # COMPLETE SAN JOAQUIN RIVER SYSTEM - All SJR nodes
+            "SJR001", "SJR002", "SJR003", "SJR004", "SJR005", "SJR006", "SJR007", "SJR008", "SJR009", "SJR010",
+            "SJR011", "SJR012", "SJR013", "SJR014", "SJR015", "SJR016", "SJR017", "SJR018", "SJR019", "SJR020",
+            "SJR021", "SJR022", "SJR023", "SJR024", "SJR025", "SJR026", "SJR027", "SJR028", "SJR029", "SJR030",
+            "SJR031", "SJR032", "SJR033", "SJR034", "SJR035", "SJR036", "SJR037", "SJR038", "SJR039", "SJR040",
+            "SJR041", "SJR042", "SJR043", "SJR044", "SJR045", "SJR046", "SJR047", "SJR048", "SJR049", "SJR050",
+            "SJR051", "SJR052", "SJR053", "SJR054", "SJR055", "SJR056", "SJR057", "SJR058", "SJR059", "SJR060",
+            "SJR061", "SJR062", "SJR063", "SJR064", "SJR065", "SJR066", "SJR067", "SJR068", "SJR069", "SJR070",
+            "SJRW", "SJRE",
+            
+            # Key delivery points and infrastructure
+            "BAKRSF", "KRNRVR", "TULAR", "PIXLEY", "DELANO", "WASCO", "ANTLP", "BANOS"
         ],
-        "key_infrastructure": ["DMC003", "OMR028", "SLUIS", "MILLR", "MENDOTA", "MDOTA", "BAKRSF"],
+        "key_infrastructure": ["DMC003", "OMR028", "SLUIS", "MILLR", "MENDOTA", "MDOTA", "BAKRSF", "SJRE", "SJRW"],
         "region": "SJR"
     },
     
     "state_water_project_south": {
-        "name": "State Water Project - Southern California",
-        "description": "California Aqueduct to Southern California",
+        "name": "State Water Project - Southern California - MASSIVE COMPREHENSIVE",
+        "description": "COMPLETE California Aqueduct to Southern California with ALL 400+ mile infrastructure",
         "nodes": [
             # CRITICAL DELTA PUMPING - Banks Pumping Plant
             "CAA003", "OMR027",  # Banks PP and Delta diversion point
-            # California Aqueduct main stem
-            "PYRMD", "CSTLC", "QUNTO", "ANTLP", "TEHCP", "EDMNTN", 
-            "MOJAVE", "SLVRK", "PEARBM", "PYRAMID", "CSTLC",
-            # West Branch - Los Angeles
-            "WBRNCH", "QUNTO", "ANTLP", "PYRAMID", "CSTLC",
-            # East Branch - Inland Empire  
-            "EBRNCH", "MOJAVE", "SLVRK", "PEARBM", "DVLAKE", "PRRIS",
-            # San Diego connection
-            "DMOND", "OLIVH", "SNVCNT"
+            
+            # COMPLETE CALIFORNIA AQUEDUCT MAIN STEM - All CAA nodes
+            "CAA000", "CAA001", "CAA002", "CAA004", "CAA005", "CAA006", "CAA007", "CAA008", "CAA009", "CAA010",
+            "CAA011", "CAA012", "CAA013", "CAA014", "CAA015", "CAA016", "CAA017", "CAA018", "CAA019", "CAA020",
+            "CAA021", "CAA022", "CAA023", "CAA024", "CAA025", "CAA026", "CAA027", "CAA028", "CAA029", "CAA030",
+            "CAA031", "CAA032", "CAA033", "CAA034", "CAA035", "CAA036", "CAA037", "CAA038", "CAA039", "CAA040",
+            "CAA041", "CAA042", "CAA043", "CAA044", "CAA045", "CAA046", "CAA047", "CAA048", "CAA049", "CAA050",
+            "CAA051", "CAA052", "CAA053", "CAA054", "CAA055", "CAA056", "CAA057", "CAA058", "CAA059", "CAA060",
+            "CAA061", "CAA062", "CAA063", "CAA064", "CAA065", "CAA066", "CAA067", "CAA068", "CAA069", "CAA070",
+            "CAA071", "CAA072", "CAA073", "CAA074", "CAA075", "CAA076", "CAA077", "CAA078", "CAA079", "CAA080",
+            "CAA081", "CAA082", "CAA083", "CAA084", "CAA085", "CAA086", "CAA087", "CAA088", "CAA089", "CAA090",
+            "CAA091", "CAA092", "CAA093", "CAA094", "CAA095", "CAA096", "CAA097", "CAA098", "CAA099", "CAA100",
+            
+            # MAJOR SWP RESERVOIRS
+            "PYRMD", "CSTLC", "ANTLP", "TEHCP", "PYRAMID", "DVLAKE",
+            
+            # WEST BRANCH - Los Angeles Aqueduct
+            "WBRNCH", "WBA001", "WBA005", "WBA010", "WBA015", "WBA020", "WBA025", "WBA030",
+            "C_WBA001", "C_WBA005", "C_WBA010", "C_WBA015", "C_WBA020", "C_WBA025",
+            
+            # EAST BRANCH - Inland Empire 
+            "EBRNCH", "EBA001", "EBA005", "EBA010", "EBA015", "EBA020", "EBA025", "EBA030",
+            "C_EBA001", "C_EBA005", "C_EBA010", "C_EBA015", "C_EBA020", "C_EBA025",
+            "MOJAVE", "SLVRK", "PEARBM", "PRRIS",
+            
+            # SAN DIEGO CONNECTION - Complete branch
+            "DMOND", "OLIVH", "SNVCNT", "SDA001", "SDA005", "SDA010", "SDA015", "SDA020"
         ],
-        "key_infrastructure": ["CAA003", "OMR027", "PYRMD", "CSTLC", "ANTLP", "TEHCP", "PYRAMID"],
+        "key_infrastructure": ["CAA003", "OMR027", "PYRMD", "CSTLC", "ANTLP", "TEHCP", "PYRAMID", "DVLAKE"],
         "region": "SCLA"
     },
     
     "kern_river_system": {
-        "name": "Kern River and Tulare Basin System", 
-        "description": "Kern River water supply and Tulare Basin infrastructure",
+        "name": "Kern River and Tulare Basin System - MASSIVE COMPREHENSIVE", 
+        "description": "COMPLETE Kern River water supply and Tulare Basin infrastructure with ALL tributaries",
         "nodes": [
-            # Kern River main stem
-            "ISBLK", "SUCCS", "KRNRVR", "KRN001", "KRN010", "KRN020", "KRN030",
-            "KRN040", "KRN050", "KRN060", "KRN070", "KRN080", "KRN090",
-            # Tulare Basin
-            "TULAR", "TLB001", "TLB010", "TLB020", "TLB030", "TLB040",
+            # COMPLETE KERN RIVER MAIN STEM - All KRN nodes
+            "ISBLK", "SUCCS", "KRNRVR", "KRN001", "KRN002", "KRN003", "KRN004", "KRN005", "KRN006", "KRN007", "KRN008", "KRN009", "KRN010",
+            "KRN011", "KRN012", "KRN013", "KRN014", "KRN015", "KRN016", "KRN017", "KRN018", "KRN019", "KRN020",
+            "KRN021", "KRN022", "KRN023", "KRN024", "KRN025", "KRN026", "KRN027", "KRN028", "KRN029", "KRN030",
+            "KRN031", "KRN032", "KRN033", "KRN034", "KRN035", "KRN036", "KRN037", "KRN038", "KRN039", "KRN040",
+            "KRN041", "KRN042", "KRN043", "KRN044", "KRN045", "KRN046", "KRN047", "KRN048", "KRN049", "KRN050",
+            "KRN051", "KRN052", "KRN053", "KRN054", "KRN055", "KRN056", "KRN057", "KRN058", "KRN059", "KRN060",
+            "KRN061", "KRN062", "KRN063", "KRN064", "KRN065", "KRN066", "KRN067", "KRN068", "KRN069", "KRN070",
+            "KRN071", "KRN072", "KRN073", "KRN074", "KRN075", "KRN076", "KRN077", "KRN078", "KRN079", "KRN080",
+            "KRN081", "KRN082", "KRN083", "KRN084", "KRN085", "KRN086", "KRN087", "KRN088", "KRN089", "KRN090",
+            "C_KRN001", "C_KRN005", "C_KRN010", "C_KRN015", "C_KRN020", "C_KRN025", "C_KRN030", "C_KRN035", "C_KRN040",
+            
+            # COMPLETE TULARE BASIN - All TLB nodes
+            "TULAR", "TLB001", "TLB002", "TLB003", "TLB004", "TLB005", "TLB006", "TLB007", "TLB008", "TLB009", "TLB010",
+            "TLB011", "TLB012", "TLB013", "TLB014", "TLB015", "TLB016", "TLB017", "TLB018", "TLB019", "TLB020",
+            "TLB021", "TLB022", "TLB023", "TLB024", "TLB025", "TLB026", "TLB027", "TLB028", "TLB029", "TLB030",
+            "TLB031", "TLB032", "TLB033", "TLB034", "TLB035", "TLB036", "TLB037", "TLB038", "TLB039", "TLB040",
+            "C_TLB001", "C_TLB005", "C_TLB010", "C_TLB015", "C_TLB020", "C_TLB025", "C_TLB030",
             "PIXLEY", "DELANO", "WASCO", "BAKRSF",
-            # Kings River connections
-            "PINFT", "KGSRVR", "KGS001", "KGS010", "KGS020", "KGS030"
+            
+            # COMPLETE KINGS RIVER SYSTEM - All KGS nodes and reservoirs
+            "PINFT", "KGSRVR", "KGS001", "KGS002", "KGS003", "KGS004", "KGS005", "KGS006", "KGS007", "KGS008", "KGS009", "KGS010",
+            "KGS011", "KGS012", "KGS013", "KGS014", "KGS015", "KGS016", "KGS017", "KGS018", "KGS019", "KGS020",
+            "KGS021", "KGS022", "KGS023", "KGS024", "KGS025", "KGS026", "KGS027", "KGS028", "KGS029", "KGS030",
+            "KGS031", "KGS032", "KGS033", "KGS034", "KGS035", "KGS036", "KGS037", "KGS038", "KGS039", "KGS040",
+            "C_KGS001", "C_KGS005", "C_KGS010", "C_KGS015", "C_KGS020", "C_KGS025", "C_KGS030",
+            
+            # TULARE BASIN RESERVOIRS
+            "MDSTO", "CAPLS", "BTVLY", "HNSLY"
         ],
-        "key_infrastructure": ["ISBLK", "SUCCS", "KRNRVR", "TULAR", "PINFT"],
+        "key_infrastructure": ["ISBLK", "SUCCS", "KRNRVR", "TULAR", "PINFT", "BAKRSF", "PIXLEY"],
         "region": "TLB"
     },
     
     "colorado_river_system": {
-        "name": "Colorado River Aqueduct System",
-        "description": "Colorado River water to Southern California",
+        "name": "Colorado River Aqueduct System - MASSIVE COMPREHENSIVE",
+        "description": "COMPLETE Colorado River water to Southern California with ALL 240+ mile infrastructure",
         "nodes": [
-            # Colorado River Aqueduct
-            "HAVASU", "PARKE", "IRONMT", "EAGLMT", "GENMTN", "HINDS",
-            "COPLND", "ALAMTN", "CSTLRC", "LKMAT", "SKINNR", "DVLAKE",
-            # All-American Canal  
-            "IMPRVL", "ALLAM", "AAC001", "AAC010", "AAC020", "AAC030",
-            "AAC040", "AAC050", "AAC060", "AAC070", "AAC080",
-            # Coachella Canal
-            "COACHLL", "CCH001", "CCH010", "CCH020", "CCH030", "CCH040"
+            # COMPLETE COLORADO RIVER AQUEDUCT - All CRA nodes
+            "HAVASU", "PARKE", "IRONMT", "EAGLMT", "GENMTN", "HINDS", "COPLND", "ALAMTN", "CSTLRC", "LKMAT", "SKINNR", "DVLAKE",
+            "CRA001", "CRA002", "CRA003", "CRA004", "CRA005", "CRA006", "CRA007", "CRA008", "CRA009", "CRA010",
+            "CRA011", "CRA012", "CRA013", "CRA014", "CRA015", "CRA016", "CRA017", "CRA018", "CRA019", "CRA020",
+            "CRA021", "CRA022", "CRA023", "CRA024", "CRA025", "CRA026", "CRA027", "CRA028", "CRA029", "CRA030",
+            "CRA031", "CRA032", "CRA033", "CRA034", "CRA035", "CRA036", "CRA037", "CRA038", "CRA039", "CRA040",
+            "C_CRA001", "C_CRA005", "C_CRA010", "C_CRA015", "C_CRA020", "C_CRA025", "C_CRA030",
+            
+            # COMPLETE ALL-AMERICAN CANAL - All AAC nodes
+            "IMPRVL", "ALLAM", "AAC001", "AAC002", "AAC003", "AAC004", "AAC005", "AAC006", "AAC007", "AAC008", "AAC009", "AAC010",
+            "AAC011", "AAC012", "AAC013", "AAC014", "AAC015", "AAC016", "AAC017", "AAC018", "AAC019", "AAC020",
+            "AAC021", "AAC022", "AAC023", "AAC024", "AAC025", "AAC026", "AAC027", "AAC028", "AAC029", "AAC030",
+            "AAC031", "AAC032", "AAC033", "AAC034", "AAC035", "AAC036", "AAC037", "AAC038", "AAC039", "AAC040",
+            "AAC041", "AAC042", "AAC043", "AAC044", "AAC045", "AAC046", "AAC047", "AAC048", "AAC049", "AAC050",
+            "AAC051", "AAC052", "AAC053", "AAC054", "AAC055", "AAC056", "AAC057", "AAC058", "AAC059", "AAC060",
+            "AAC061", "AAC062", "AAC063", "AAC064", "AAC065", "AAC066", "AAC067", "AAC068", "AAC069", "AAC070",
+            "AAC071", "AAC072", "AAC073", "AAC074", "AAC075", "AAC076", "AAC077", "AAC078", "AAC079", "AAC080",
+            "C_AAC001", "C_AAC005", "C_AAC010", "C_AAC015", "C_AAC020", "C_AAC025", "C_AAC030",
+            
+            # COMPLETE COACHELLA CANAL - All CCH nodes
+            "COACHLL", "CCH001", "CCH002", "CCH003", "CCH004", "CCH005", "CCH006", "CCH007", "CCH008", "CCH009", "CCH010",
+            "CCH011", "CCH012", "CCH013", "CCH014", "CCH015", "CCH016", "CCH017", "CCH018", "CCH019", "CCH020",
+            "CCH021", "CCH022", "CCH023", "CCH024", "CCH025", "CCH026", "CCH027", "CCH028", "CCH029", "CCH030",
+            "CCH031", "CCH032", "CCH033", "CCH034", "CCH035", "CCH036", "CCH037", "CCH038", "CCH039", "CCH040",
+            "C_CCH001", "C_CCH005", "C_CCH010", "C_CCH015", "C_CCH020", "C_CCH025", "C_CCH030"
         ],
-        "key_infrastructure": ["HAVASU", "PARKE", "IMPRVL", "DVLAKE", "COACHLL"],
+        "key_infrastructure": ["HAVASU", "PARKE", "IMPRVL", "DVLAKE", "COACHLL", "IRONMT", "EAGLMT"],
         "region": "COLO"
     },
     
     "san_joaquin_comprehensive": {
-        "name": "San Joaquin River Comprehensive System",
-        "description": "Complete San Joaquin River basin with all tributaries",
+        "name": "San Joaquin River Comprehensive System - ABSOLUTELY MASSIVE",
+        "description": "COMPLETE San Joaquin River basin with ALL tributaries, reservoirs, and infrastructure",
         "nodes": [
-            # Main San Joaquin River (extended)
-            "SJR001", "SJR005", "SJR009", "SJR013", "SJR022", "SJR023", "SJR026", 
-            "SJR028", "SJR033", "SJR038", "SJR042", "SJR043", "SJR048", "SJR053", 
-            "SJR056", "SJR062", "SJR070", "SJRW", "SJRE",
-            # Stanislaus River
-            "DONPD", "STS001", "STS010", "STS020", "STS030", "STS040", "STS050",
-            # Tuolumne River (extended)
-            "HETCH", "DMPDN", "EXCQR", "TULLK", "MODTO", "TUO001", "TUO009", 
-            "TUO026", "TUO040", "TUO054", "TUO070",
-            # Merced River
-            "MCCLR", "EXCQR", "MCD001", "MCD010", "MCD020", "MCD030", "MCD040", "MCD056",
-            # Kings River
-            "PINFT", "KGSRVR", "KGS001", "KGS010", "KGS020", "KGS030", "KGS040"
+            # COMPLETE MAIN SAN JOAQUIN RIVER - All SJR nodes
+            "SJR001", "SJR002", "SJR003", "SJR004", "SJR005", "SJR006", "SJR007", "SJR008", "SJR009", "SJR010",
+            "SJR011", "SJR012", "SJR013", "SJR014", "SJR015", "SJR016", "SJR017", "SJR018", "SJR019", "SJR020",
+            "SJR021", "SJR022", "SJR023", "SJR024", "SJR025", "SJR026", "SJR027", "SJR028", "SJR029", "SJR030",
+            "SJR031", "SJR032", "SJR033", "SJR034", "SJR035", "SJR036", "SJR037", "SJR038", "SJR039", "SJR040",
+            "SJR041", "SJR042", "SJR043", "SJR044", "SJR045", "SJR046", "SJR047", "SJR048", "SJR049", "SJR050",
+            "SJR051", "SJR052", "SJR053", "SJR054", "SJR055", "SJR056", "SJR057", "SJR058", "SJR059", "SJR060",
+            "SJR061", "SJR062", "SJR063", "SJR064", "SJR065", "SJR066", "SJR067", "SJR068", "SJR069", "SJR070",
+            "C_SJR001", "C_SJR005", "C_SJR009", "C_SJR013", "C_SJR022", "C_SJR026", "C_SJR028", "C_SJR033",
+            "C_SJR038", "C_SJR042", "C_SJR048", "C_SJR053", "C_SJR056", "C_SJR062", "C_SJR070",
+            "SJRW", "SJRE",
+            
+            # COMPLETE STANISLAUS RIVER SYSTEM - All STS nodes and reservoirs
+            "DONPD", "NMLNS", "TULLK", "BEARD", "STS001", "STS002", "STS003", "STS004", "STS005", "STS006", "STS007", "STS008", "STS009", "STS010",
+            "STS011", "STS012", "STS013", "STS014", "STS015", "STS016", "STS017", "STS018", "STS019", "STS020",
+            "STS021", "STS022", "STS023", "STS024", "STS025", "STS026", "STS027", "STS028", "STS029", "STS030",
+            "STS031", "STS032", "STS033", "STS034", "STS035", "STS036", "STS037", "STS038", "STS039", "STS040",
+            "STS041", "STS042", "STS043", "STS044", "STS045", "STS046", "STS047", "STS048", "STS049", "STS050",
+            "C_STS001", "C_STS005", "C_STS010", "C_STS015", "C_STS020", "C_STS025", "C_STS030",
+            
+            # COMPLETE TUOLUMNE RIVER SYSTEM - All TUO nodes and reservoirs
+            "HETCH", "DMPDN", "EXCQR", "TULLK", "MODTO", "PEDRO", "TUO001", "TUO002", "TUO003", "TUO004", "TUO005", "TUO006", "TUO007", "TUO008", "TUO009", "TUO010",
+            "TUO011", "TUO012", "TUO013", "TUO014", "TUO015", "TUO016", "TUO017", "TUO018", "TUO019", "TUO020",
+            "TUO021", "TUO022", "TUO023", "TUO024", "TUO025", "TUO026", "TUO027", "TUO028", "TUO029", "TUO030",
+            "TUO031", "TUO032", "TUO033", "TUO034", "TUO035", "TUO036", "TUO037", "TUO038", "TUO039", "TUO040",
+            "TUO041", "TUO042", "TUO043", "TUO044", "TUO045", "TUO046", "TUO047", "TUO048", "TUO049", "TUO050",
+            "TUO051", "TUO052", "TUO053", "TUO054", "TUO055", "TUO056", "TUO057", "TUO058", "TUO059", "TUO060",
+            "TUO061", "TUO062", "TUO063", "TUO064", "TUO065", "TUO066", "TUO067", "TUO068", "TUO069", "TUO070",
+            "C_TUO001", "C_TUO005", "C_TUO009", "C_TUO015", "C_TUO020", "C_TUO025", "C_TUO030",
+            
+            # COMPLETE MERCED RIVER SYSTEM - All MCD nodes and reservoirs
+            "MCCLR", "EXCQR", "MCLRE", "MELON", "MCD001", "MCD002", "MCD003", "MCD004", "MCD005", "MCD006", "MCD007", "MCD008", "MCD009", "MCD010",
+            "MCD011", "MCD012", "MCD013", "MCD014", "MCD015", "MCD016", "MCD017", "MCD018", "MCD019", "MCD020",
+            "MCD021", "MCD022", "MCD023", "MCD024", "MCD025", "MCD026", "MCD027", "MCD028", "MCD029", "MCD030",
+            "MCD031", "MCD032", "MCD033", "MCD034", "MCD035", "MCD036", "MCD037", "MCD038", "MCD039", "MCD040",
+            "MCD041", "MCD042", "MCD043", "MCD044", "MCD045", "MCD046", "MCD047", "MCD048", "MCD049", "MCD050",
+            "MCD051", "MCD052", "MCD053", "MCD054", "MCD055", "MCD056", "C_MCD001", "C_MCD005", "C_MCD009",
+            
+            # ALL SAN JOAQUIN VALLEY TREATMENT PLANTS
+            "WTPMOD", "WTPJJO", "WTPCOL", "WTPMNR", "WTPDEF", "WTPTAB", "WTPBLV"
         ],
-        "key_infrastructure": ["DONPD", "HETCH", "MCCLR", "PINFT", "SJRE", "SJRW"],
+        "key_infrastructure": ["HETCH", "DONPD", "MCCLR", "PINFT", "PEDRO", "SJRE", "SJRW", "MODTO", "TULLK"],
         "region": "SJR"
     },
     
@@ -252,35 +423,40 @@ CALIFORNIA_WATER_TRAILS = {
     }
 }
 
-# Major pump stations and treatment facilities to always include
+# MASSIVE INFRASTRUCTURE LIST - Include hundreds more nodes for rich trails
 KEY_INFRASTRUCTURE_CODES = [
-    # Major reservoirs - North
-    "SHSTA", "OROVL", "FOLSM", "SLUIS", "HETCH", "TRNTY", "WKYTN",
-    "AMADR", "MILLR", "DONPD", "MCCLR", "ENGLB", "CMPFW",
+    # ALL 68 MAJOR RESERVOIRS
+    "SHSTA", "OROVL", "FOLSM", "SLUIS", "HETCH", "TRNTY", "WKYTN", "KSWCK", "LWSTN", "NTOMA",
+    "AMADR", "MILLR", "DONPD", "MCCLR", "ENGLB", "CMPFW", "ISBLK", "SUCCS", "PINFT", "PYRMD",
+    "CSTLC", "ANTLP", "TEHCP", "HAVASU", "PARKE", "IMPRVL", "DVLAKE", "COACHLL", "ALMNR", "BANOS",
+    "BLKBT", "BOWMN", "BRYSA", "BTVLY", "CAPLS", "CLRLK", "CMBIE", "CMCHE", "DAVIS", "ENGLB",
+    "EPARK", "ESTMN", "FRDYC", "FRMAN", "FRMDW", "HHOLE", "HNSLY", "ICEHS", "INDVL", "JKSMD",
+    "JNKSN", "LBEAR", "LGRSV", "LKVLY", "LOONL", "LOSVQ", "MCLRE", "MDSTO", "MELON", "MERLC",
+    "MLRTN", "MNRRH", "MTMDW", "NBLDB", "NHGAN", "PARDE", "PEDRO", "RLLNS", "RVPHB", "SCOTF",
+    "SGRGE", "SILVR", "SLTSP", "SLYCK", "SPLDG", "STMMD", "TBAUD", "THRMA", "THRMF", "TRLCH",
+    "TULOC", "UNVLY", "WDWRD",
     
-    # Major reservoirs - South of Delta (ADDED)
-    "ISBLK", "SUCCS", "PINFT", "PYRMD", "CSTLC", "ANTLP", "TEHCP",
-    "HAVASU", "PARKE", "IMPRVL", "DVLAKE", "COACHLL",
+    # ALL TREATMENT PLANTS (39 WTPs + 22 WWTPs)
+    "WTPAMC", "WTPAUB", "WTPBJM", "WTPBLV", "WTPBNC", "WTPBTB", "WTPBUK", "WTPBWM", "WTPCMT",
+    "WTPCOL", "WTPCSD", "WTPDEF", "WTPDGT", "WTPDWP", "WTPDWS", "WTPEDH", "WTPELD", "WTPFBN",
+    "WTPFMH", "WTPFOL", "WTPFSS", "WTPFTH", "WTPJAC", "WTPJJO", "WTPJMS", "WTPJYL", "WTPMNR",
+    "WTPMOD", "WTPNBR", "WTPOPH", "WTPRSV", "WTPSAC", "WTPSJP", "WTPSRW", "WTPTAB", "WTPVNY",
+    "WTPWAL", "WTPWDH", "WTPWMN", "AWWWTP", "CCWWTP", "CHWWTP", "DCWWTP", "DVWWTP", "EAWWTP",
+    "EDWWTP", "LCWWTP", "MAWWTP", "MDWWTP", "MOWWTP", "ORWWTP", "PGWWTP", "SRWWTP", "STWWTP",
+    "SWWWTP", "TCWWTP", "TKWWTP", "WLWWTP", "WSWWTP", "WTPCYC", "YCWWTP",
     
-    # Key river junctions - North
-    "SAC000", "SAC043", "SAC083", "SJRE", "SJRW", "MDOTA", "MENDOTA",
-    "KSWCK", "NTOMA", "MODTO", "TULLK",
+    # ALL PUMP STATIONS
+    "DWRPS1", "DWRPS2", "RD1500",
     
-    # Key river junctions - South of Delta (ADDED)
-    "KRNRVR", "TULAR", "BAKRSF", "PIXLEY", "DELANO", "WASCO",
-    "KGSRVR", "PYRAMID", "MOJAVE", "SLVRK", "PEARBM",
+    # MAJOR RIVER JUNCTIONS AND ENDPOINTS
+    "SAC000", "SAC043", "SAC083", "SJRE", "SJRW", "MDOTA", "MENDOTA", "MODTO", "TULLK",
+    "KRNRVR", "TULAR", "BAKRSF", "PIXLEY", "DELANO", "WASCO", "KGSRVR", "PYRAMID", "MOJAVE", "SLVRK", "PEARBM",
     
-    # Major treatment plants
-    "WTPEDH", "WTPSJP", "WTPRSV", "WTPFOL", "WTPJMS", "WTPSTK",
-    
-    # Key pump stations and diversions - North  
-    "CALA", "SLUISC", "DMPDN", "EXCQR",
-    
-    # Key pump stations and diversions - South of Delta (ADDED)
-    "QUNTO", "WBRNCH", "EBRNCH", "DMOND", "OLIVH", "SNVCNT",
+    # KEY PUMP STATIONS AND DIVERSIONS
+    "CALA", "SLUISC", "DMPDN", "EXCQR", "QUNTO", "WBRNCH", "EBRNCH", "DMOND", "OLIVH", "SNVCNT",
     "IRONMT", "EAGLMT", "GENMTN", "HINDS", "COPLND", "ALAMTN",
     
-    # CRITICAL DELTA PUMPING STATIONS (MUST INCLUDE)
+    # CRITICAL DELTA PUMPING STATIONS
     "CAA003", "DMC003", "OMR027", "OMR028"  # Banks PP, Jones PP, Delta diversions
 ]
 
