@@ -162,15 +162,17 @@ async def get_water_trail_from_reservoir(
     max_depth: int = 6
 ) -> Dict[str, Any]:
     """
-    Get a curated water trail from a major reservoir using hardcoded pathways
-    Much more reliable than dynamic connectivity computation
+    Get a comprehensive water trail from a major reservoir using hybrid approach:
+    1. Start with hardcoded backbone pathway (if available)
+    2. Dynamically expand to include ALL connected infrastructure
+    This ensures complete connectivity while maintaining curated major pathways
     """
     
     # Find which trail this reservoir belongs to
     trail_data = None
     for trail_key, trail_info in CALIFORNIA_WATER_TRAILS.items():
         if reservoir_short_code in trail_info["nodes"]:
-            trail_data = trail_info
+            trail_data = trail_info.copy()  # Make a copy to avoid modifying original
             trail_data["trail_key"] = trail_key
             break
     
@@ -185,6 +187,25 @@ async def get_water_trail_from_reservoir(
             "region": "UNKNOWN",
             "trail_key": "fallback"
         }
+    
+    # HYBRID APPROACH: Expand hardcoded trails with all connected infrastructure
+    # This addresses the sparseness issue by including tributaries, diversions, etc.
+    if trail_data["trail_key"] != "fallback":
+        print(f"🔄 Expanding {trail_data['name']} with connected infrastructure...")
+        expanded_nodes = await _expand_trail_with_connected_infrastructure(
+            db_pool, 
+            trail_data["nodes"], 
+            reservoir_short_code,
+            max_depth=4  # Reasonable depth for connected infrastructure
+        )
+        
+        # Combine hardcoded backbone with expanded infrastructure
+        all_trail_nodes = list(set(trail_data["nodes"] + expanded_nodes))
+        trail_data["nodes"] = all_trail_nodes
+        trail_data["expansion_added"] = len(expanded_nodes)
+        trail_data["total_nodes"] = len(all_trail_nodes)
+        
+        print(f"✅ Trail expansion: {len(trail_data['nodes']) - len(expanded_nodes)} backbone + {len(expanded_nodes)} connected = {len(all_trail_nodes)} total")
     
     # Get trail elements with geometry
     trail_features = await _get_trail_geojson(db_pool, trail_data["nodes"])
@@ -207,21 +228,31 @@ async def get_water_trail_from_reservoir(
     # No filtering - show the complete water pathway for each system
     # This will create proper connected trails instead of sparse nodes
     
+    # Build comprehensive metadata including expansion info
+    metadata = {
+        "start_reservoir": reservoir_short_code,
+        "trail_name": trail_data["name"],
+        "trail_description": trail_data["description"],
+        "trail_type": trail_type,
+        "trail_key": trail_data["trail_key"],
+        "region": trail_data["region"],
+        "total_features": len(trail_features),
+        "full_trail_size": len(trail_data["nodes"]),
+        "approach": "hybrid_hardcoded_plus_expansion" if trail_data["trail_key"] != "fallback" else "dynamic_connectivity",
+        "foundation": "network_topology_comprehensive_connectivity"
+    }
+    
+    # Add expansion statistics if this was an expanded trail
+    if "expansion_added" in trail_data:
+        metadata["expansion_added"] = trail_data["expansion_added"]
+        metadata["total_nodes"] = trail_data["total_nodes"]
+        metadata["backbone_nodes"] = trail_data["total_nodes"] - trail_data["expansion_added"]
+        metadata["expansion_ratio"] = round(trail_data["expansion_added"] / trail_data["total_nodes"], 2) if trail_data["total_nodes"] > 0 else 0
+    
     return {
         "type": "FeatureCollection",
         "features": trail_features,
-        "metadata": {
-            "start_reservoir": reservoir_short_code,
-            "trail_name": trail_data["name"],
-            "trail_description": trail_data["description"],
-            "trail_type": trail_type,
-            "trail_key": trail_data["trail_key"],
-            "region": trail_data["region"],
-            "total_features": len(trail_features),
-            "full_trail_size": len(trail_data["nodes"]),
-            "approach": "hardcoded_california_water_trails",
-            "foundation": "network_topology_csv_analysis"
-        }
+        "metadata": metadata
     }
 
 
@@ -246,8 +277,9 @@ async def get_major_reservoir_trails(
     
     for reservoir in all_major_reservoirs:
         try:
+            # Use expanded trail approach for comprehensive connectivity
             trail_data = await get_water_trail_from_reservoir(
-                db_pool, reservoir, trail_type, max_depth=4
+                db_pool, reservoir, trail_type, max_depth=5  # Slightly higher for overview
             )
             
             # Add trail system metadata to features
@@ -255,19 +287,35 @@ async def get_major_reservoir_trails(
                 feature["properties"]["trail_system"] = trail_data["metadata"]["trail_key"]
                 feature["properties"]["trail_name"] = trail_data["metadata"]["trail_name"]
                 feature["properties"]["region"] = trail_data["metadata"]["region"]
+                
+                # Mark expanded infrastructure for frontend styling
+                if "expansion_added" in trail_data["metadata"]:
+                    feature["properties"]["is_expanded_infrastructure"] = True
             
             all_features.extend(trail_data["features"])
             
-            trail_summaries.append({
+            # Enhanced trail summary with expansion info
+            summary = {
                 "reservoir": reservoir,
                 "trail_key": trail_data["metadata"]["trail_key"],
                 "trail_name": trail_data["metadata"]["trail_name"],
                 "region": trail_data["metadata"]["region"],
                 "features": len(trail_data["features"])
-            })
+            }
+            
+            # Add expansion statistics if available
+            if "expansion_added" in trail_data["metadata"]:
+                summary["backbone_nodes"] = trail_data["metadata"]["total_nodes"] - trail_data["metadata"]["expansion_added"]
+                summary["expanded_nodes"] = trail_data["metadata"]["expansion_added"]
+                summary["expansion_ratio"] = round(trail_data["metadata"]["expansion_added"] / trail_data["metadata"]["total_nodes"], 2)
+            
+            trail_summaries.append(summary)
+            
+            print(f"✅ {reservoir}: {len(trail_data['features'])} features" + 
+                  (f" (expanded: +{trail_data['metadata'].get('expansion_added', 0)})" if "expansion_added" in trail_data["metadata"] else ""))
             
         except Exception as e:
-            print(f"Error getting trail for {reservoir}: {e}")
+            print(f"❌ Error getting expanded trail for {reservoir}: {e}")
             continue
     
     # CRITICAL: Deduplicate features by short_code before returning
@@ -413,6 +461,89 @@ async def _get_additional_key_infrastructure(
             continue
     
     return features
+
+
+async def _expand_trail_with_connected_infrastructure(
+    db_pool: asyncpg.Pool,
+    backbone_nodes: List[str],
+    primary_reservoir: str,
+    max_depth: int = 4
+) -> List[str]:
+    """
+    Expand hardcoded trail backbone with ALL connected infrastructure
+    This finds tributaries, diversions, pump stations, treatment plants, etc.
+    that connect to the main trail pathway
+    """
+    
+    if not backbone_nodes:
+        return []
+    
+    # Build parameterized query for all backbone nodes
+    placeholders = ','.join(f'${i+1}' for i in range(len(backbone_nodes)))
+    
+    query = f"""
+    WITH RECURSIVE connected_infrastructure AS (
+        -- Start from all backbone nodes
+        SELECT nt.short_code, 0 as depth, 'backbone' as source_type
+        FROM network_topology nt 
+        WHERE nt.short_code IN ({placeholders})
+        AND nt.is_active = true
+        
+        UNION ALL
+        
+        -- Find all infrastructure connected to backbone or previously found nodes
+        SELECT nt.short_code, ci.depth + 1, 
+               CASE 
+                   WHEN nt.type IN ('STR', 'PS', 'WTP', 'WWTP') THEN 'key_infrastructure'
+                   WHEN nt.type = 'D' THEN 'delivery'
+                   WHEN nt.type = 'CH' AND nt.river_name IS NOT NULL THEN 'named_channel'
+                   ELSE 'other_infrastructure'
+               END as source_type
+        FROM connected_infrastructure ci
+        JOIN network_topology nt ON (
+            nt.from_node = ci.short_code OR nt.to_node = ci.short_code OR
+            ci.short_code = nt.from_node OR ci.short_code = nt.to_node
+        )
+        WHERE ci.depth < $1
+        AND nt.is_active = true
+        AND nt.short_code NOT IN (
+            SELECT short_code FROM connected_infrastructure
+        )
+        -- Include all infrastructure types for comprehensive trails
+        AND nt.type IN ('STR', 'PS', 'WTP', 'WWTP', 'CH', 'D', 'OM', 'NP', 'PR', 'RFS')
+    )
+    SELECT DISTINCT short_code, source_type
+    FROM connected_infrastructure 
+    WHERE source_type != 'backbone'  -- Don't return backbone nodes we already have
+    ORDER BY 
+        CASE source_type
+            WHEN 'key_infrastructure' THEN 1
+            WHEN 'delivery' THEN 2  
+            WHEN 'named_channel' THEN 3
+            ELSE 4
+        END,
+        short_code;
+    """
+    
+    # Add max_depth as the first parameter, then all backbone nodes
+    params = [max_depth] + backbone_nodes
+    
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
+    
+    expanded_nodes = [row["short_code"] for row in rows]
+    
+    # Log expansion details for debugging
+    infrastructure_counts = {}
+    for row in rows:
+        source_type = row["source_type"]
+        infrastructure_counts[source_type] = infrastructure_counts.get(source_type, 0) + 1
+    
+    print(f"🔍 Infrastructure expansion from {primary_reservoir}:")
+    for infra_type, count in infrastructure_counts.items():
+        print(f"  • {infra_type}: {count} elements")
+    
+    return expanded_nodes
 
 
 async def _get_nearby_infrastructure(
