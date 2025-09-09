@@ -259,10 +259,10 @@ def _get_progression_level(trail_type: str) -> Dict[str, Any]:
         },
         "enhanced": {
             "level": 2, 
-            "description": "Detailed pathways (like Pass 2: XML with geometry)",
+            "description": "Core infrastructure + major rivers - fast loading",
             "data_quality": "high",
             "coverage": "detailed",
-            "expected_features": "400-800"
+            "expected_features": "200-500"
         },
         "comprehensive": {
             "level": 3,
@@ -323,11 +323,8 @@ async def _get_key_infrastructure_with_geometry(
     WHERE nt.is_active = true
     AND ng.geom IS NOT NULL  -- Only with geometry
     AND (
-        nt.type IN ('STR', 'PS', 'WTP', 'WWTP', 'CH', 'DD', 'DA') OR  -- More infrastructure types
-        (nt.type = 'CH' AND nt.river_name IS NOT NULL) OR  -- All named rivers, not just 4
-        nt.short_code LIKE 'SAC%' OR nt.short_code LIKE 'SJR%' OR  -- Major river systems
-        nt.short_code LIKE 'AMR%' OR nt.short_code LIKE 'FTR%' OR
-        nt.short_code LIKE 'TUO%' OR nt.short_code LIKE 'MER%'
+        nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR  -- Core infrastructure types only
+        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River'))  -- Major rivers only
     )
     ORDER BY 
         CASE nt.type 
@@ -336,12 +333,10 @@ async def _get_key_infrastructure_with_geometry(
             WHEN 'WTP' THEN 3 
             WHEN 'WWTP' THEN 4 
             WHEN 'CH' THEN 5
-            WHEN 'DD' THEN 6
-            WHEN 'DA' THEN 7
-            ELSE 8 
+            ELSE 6 
         END,
         nt.short_code
-    LIMIT 800;  -- Higher limit for more features
+    LIMIT 500;  -- Reasonable limit for enhanced level
     """
     
     return await _execute_infrastructure_query(db_pool, query, "enhanced_infrastructure")
