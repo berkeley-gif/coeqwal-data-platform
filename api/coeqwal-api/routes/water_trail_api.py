@@ -134,24 +134,130 @@ CALIFORNIA_WATER_TRAILS = {
         ],
         "key_infrastructure": ["TRNTY", "WKYTN", "KSWCK"],
         "region": "SAC"
+    },
+    
+    # SOUTH OF DELTA SYSTEMS - These were missing and causing sparse coverage
+    
+    "central_valley_project_south": {
+        "name": "Central Valley Project - South of Delta",
+        "description": "CVP water distribution to San Joaquin Valley and Southern California",
+        "nodes": [
+            # San Luis to Mendota Pool
+            "SLUIS", "SLUISC", "DMC", "CALA", "MENDOTA", "MDOTA",
+            # Friant-Kern Canal system  
+            "MILLR", "FKC001", "FKC010", "FKC020", "FKC030", "FKC040", "FKC050",
+            "FKC060", "FKC070", "FKC080", "FKC090", "FKC100", "FKC110", "FKC120",
+            # Cross Valley Canal
+            "CVC001", "CVC010", "CVC020", "CVC030", "CVC040", "CVC050",
+            # Key delivery points
+            "BAKRSF", "KRNRVR", "TULAR", "PIXLEY", "DELANO", "WASCO"
+        ],
+        "key_infrastructure": ["SLUIS", "MILLR", "MENDOTA", "MDOTA", "BAKRSF"],
+        "region": "SJR"
+    },
+    
+    "state_water_project_south": {
+        "name": "State Water Project - Southern California",
+        "description": "California Aqueduct to Southern California",
+        "nodes": [
+            # California Aqueduct main stem
+            "PYRMD", "CSTLC", "QUNTO", "ANTLP", "TEHCP", "EDMNTN", 
+            "MOJAVE", "SLVRK", "PEARBM", "PYRAMID", "CSTLC",
+            # West Branch - Los Angeles
+            "WBRNCH", "QUNTO", "ANTLP", "PYRAMID", "CSTLC",
+            # East Branch - Inland Empire  
+            "EBRNCH", "MOJAVE", "SLVRK", "PEARBM", "DVLAKE", "PRRIS",
+            # San Diego connection
+            "DMOND", "OLIVH", "SNVCNT"
+        ],
+        "key_infrastructure": ["PYRMD", "CSTLC", "ANTLP", "TEHCP", "PYRAMID"],
+        "region": "SCLA"
+    },
+    
+    "kern_river_system": {
+        "name": "Kern River and Tulare Basin System", 
+        "description": "Kern River water supply and Tulare Basin infrastructure",
+        "nodes": [
+            # Kern River main stem
+            "ISBLK", "SUCCS", "KRNRVR", "KRN001", "KRN010", "KRN020", "KRN030",
+            "KRN040", "KRN050", "KRN060", "KRN070", "KRN080", "KRN090",
+            # Tulare Basin
+            "TULAR", "TLB001", "TLB010", "TLB020", "TLB030", "TLB040",
+            "PIXLEY", "DELANO", "WASCO", "BAKRSF",
+            # Kings River connections
+            "PINFT", "KGSRVR", "KGS001", "KGS010", "KGS020", "KGS030"
+        ],
+        "key_infrastructure": ["ISBLK", "SUCCS", "KRNRVR", "TULAR", "PINFT"],
+        "region": "TLB"
+    },
+    
+    "colorado_river_system": {
+        "name": "Colorado River Aqueduct System",
+        "description": "Colorado River water to Southern California",
+        "nodes": [
+            # Colorado River Aqueduct
+            "HAVASU", "PARKE", "IRONMT", "EAGLMT", "GENMTN", "HINDS",
+            "COPLND", "ALAMTN", "CSTLRC", "LKMAT", "SKINNR", "DVLAKE",
+            # All-American Canal  
+            "IMPRVL", "ALLAM", "AAC001", "AAC010", "AAC020", "AAC030",
+            "AAC040", "AAC050", "AAC060", "AAC070", "AAC080",
+            # Coachella Canal
+            "COACHLL", "CCH001", "CCH010", "CCH020", "CCH030", "CCH040"
+        ],
+        "key_infrastructure": ["HAVASU", "PARKE", "IMPRVL", "DVLAKE", "COACHLL"],
+        "region": "COLO"
+    },
+    
+    "san_joaquin_comprehensive": {
+        "name": "San Joaquin River Comprehensive System",
+        "description": "Complete San Joaquin River basin with all tributaries",
+        "nodes": [
+            # Main San Joaquin River (extended)
+            "SJR001", "SJR005", "SJR009", "SJR013", "SJR022", "SJR023", "SJR026", 
+            "SJR028", "SJR033", "SJR038", "SJR042", "SJR043", "SJR048", "SJR053", 
+            "SJR056", "SJR062", "SJR070", "SJRW", "SJRE",
+            # Stanislaus River
+            "DONPD", "STS001", "STS010", "STS020", "STS030", "STS040", "STS050",
+            # Tuolumne River (extended)
+            "HETCH", "DMPDN", "EXCQR", "TULLK", "MODTO", "TUO001", "TUO009", 
+            "TUO026", "TUO040", "TUO054", "TUO070",
+            # Merced River
+            "MCCLR", "EXCQR", "MCD001", "MCD010", "MCD020", "MCD030", "MCD040", "MCD056",
+            # Kings River
+            "PINFT", "KGSRVR", "KGS001", "KGS010", "KGS020", "KGS030", "KGS040"
+        ],
+        "key_infrastructure": ["DONPD", "HETCH", "MCCLR", "PINFT", "SJRE", "SJRW"],
+        "region": "SJR"
     }
 }
 
 # Major pump stations and treatment facilities to always include
 KEY_INFRASTRUCTURE_CODES = [
-    # Major reservoirs
+    # Major reservoirs - North
     "SHSTA", "OROVL", "FOLSM", "SLUIS", "HETCH", "TRNTY", "WKYTN",
     "AMADR", "MILLR", "DONPD", "MCCLR", "ENGLB", "CMPFW",
     
-    # Key river junctions
+    # Major reservoirs - South of Delta (ADDED)
+    "ISBLK", "SUCCS", "PINFT", "PYRMD", "CSTLC", "ANTLP", "TEHCP",
+    "HAVASU", "PARKE", "IMPRVL", "DVLAKE", "COACHLL",
+    
+    # Key river junctions - North
     "SAC000", "SAC043", "SAC083", "SJRE", "SJRW", "MDOTA", "MENDOTA",
     "KSWCK", "NTOMA", "MODTO", "TULLK",
+    
+    # Key river junctions - South of Delta (ADDED)
+    "KRNRVR", "TULAR", "BAKRSF", "PIXLEY", "DELANO", "WASCO",
+    "KGSRVR", "PYRAMID", "MOJAVE", "SLVRK", "PEARBM",
     
     # Major treatment plants
     "WTPEDH", "WTPSJP", "WTPRSV", "WTPFOL", "WTPJMS", "WTPSTK",
     
-    # Key pump stations and diversions
-    "CALA", "SLUISC", "DMPDN", "EXCQR"
+    # Key pump stations and diversions - North  
+    "CALA", "SLUISC", "DMPDN", "EXCQR",
+    
+    # Key pump stations and diversions - South of Delta (ADDED)
+    "QUNTO", "WBRNCH", "EBRNCH", "DMOND", "OLIVH", "SNVCNT",
+    "IRONMT", "EAGLMT", "GENMTN", "HINDS", "COPLND", "ALAMTN"
 ]
 
 
