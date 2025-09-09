@@ -9,6 +9,10 @@ from .geopackage_network_api import (
     geopackage_network_traversal,
     fast_geopackage_geojson
 )
+from .water_trail_api import (
+    get_water_trail_from_reservoir,
+    get_major_reservoir_trails
+)
 
 router = APIRouter(prefix="/api/network", tags=["clean-geopackage-network"])
 
@@ -226,3 +230,42 @@ async def api_search_network_elements(
             "foundation": "clean_geopackage_ring1"
         }
     }
+
+
+@router.get("/trail/{reservoir_short_code}")
+async def api_get_water_trail(
+    reservoir_short_code: str = Path(..., description="Short code of reservoir to start trail from"),
+    trail_type: str = Query("infrastructure", description="Trail type: infrastructure, river_system, treatment_chain"),
+    max_depth: int = Query(6, description="Maximum trail depth")
+):
+    """
+    WATER TRAIL - Connect the dots approach for legible network visualization
+    
+    Instead of showing all 2,930 nodes (visual blob), shows curated water trail
+    Trail types:
+    - infrastructure: STR, PS, WTP, WWTP + major river junctions (recommended)
+    - river_system: Follow river miles and named waterways
+    - treatment_chain: Focus on water treatment pathway
+    
+    Example: /api/network/trail/FOLSM?trail_type=infrastructure&max_depth=6
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_water_trail_from_reservoir(db_pool, reservoir_short_code, trail_type, max_depth)
+
+
+@router.get("/trails/overview")
+async def api_get_major_reservoir_trails(
+    trail_type: str = Query("infrastructure", description="Trail type: infrastructure, river_system, treatment_chain")
+):
+    """
+    CALIFORNIA WATER TRAILS OVERVIEW
+    
+    Shows trails for all major reservoirs - gives overview of California water system
+    Much more legible than showing all nodes - focuses on key infrastructure pathways
+    
+    Example: /api/network/trails/overview?trail_type=infrastructure
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_major_reservoir_trails(db_pool, trail_type)
