@@ -136,7 +136,7 @@ CALIFORNIA_WATER_TRAILS = {
         "region": "SAC"
     },
     
-    # SOUTH OF DELTA SYSTEMS - These were missing and causing sparse coverage
+    # SOUTH OF DELTA SYSTEMS
     
     "central_valley_project_south": {
         "name": "Central Valley Project - South of Delta",
