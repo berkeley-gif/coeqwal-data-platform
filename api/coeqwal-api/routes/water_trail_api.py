@@ -324,7 +324,8 @@ async def _get_key_infrastructure_with_geometry(
     AND ng.geom IS NOT NULL  -- Only with geometry
     AND (
         nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR  -- Core infrastructure types only
-        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River'))  -- Major rivers only
+        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River')) OR  -- Major rivers
+        (nt.type = 'CH' AND nt.short_code LIKE 'SJR%')  -- All San Joaquin River channels
     )
     ORDER BY 
         CASE nt.type 
