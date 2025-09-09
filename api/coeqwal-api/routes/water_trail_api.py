@@ -100,16 +100,19 @@ async def get_water_trail_from_reservoir(
     Like the 3-pass traversal: geopackage -> xml+geometry -> xml+logical
     """
     
-    # Select trail level based on type
-    if trail_type == "foundation":
+    # Select trail level based on type - handle both old and new parameter values
+    if trail_type in ["foundation"]:
         trails = FOUNDATION_TRAILS
         description_suffix = "Foundation level - most reliable connections"
-    elif trail_type == "enhanced":
+    elif trail_type in ["enhanced"]:
         trails = ENHANCED_TRAILS  
         description_suffix = "Enhanced level - detailed pathways"
-    else:  # complete
+    elif trail_type in ["complete"]:
         trails = ENHANCED_TRAILS  # Use enhanced as base for complete
         description_suffix = "Complete level - comprehensive infrastructure"
+    else:  # Default for old "infrastructure" parameter
+        trails = ENHANCED_TRAILS
+        description_suffix = "Enhanced level - detailed pathways (default)"
     
     # Find matching trail
     matching_trail = None
@@ -171,16 +174,19 @@ async def get_major_reservoir_trails(
     foundation -> enhanced -> complete (like the 3-pass system)
     """
     
-    # Select trail level
-    if trail_type == "foundation":
+    # Select trail level - handle both old and new parameter values
+    if trail_type in ["foundation"]:
         trails = FOUNDATION_TRAILS
         description = "Foundation level - reliable backbone connections"
-    elif trail_type == "enhanced": 
+    elif trail_type in ["enhanced"]: 
         trails = ENHANCED_TRAILS
         description = "Enhanced level - detailed river pathways"
-    else:  # complete
+    elif trail_type in ["complete"]:
         trails = ENHANCED_TRAILS
         description = "Complete level - comprehensive infrastructure network"
+    else:  # Default for old "infrastructure" parameter
+        trails = ENHANCED_TRAILS
+        description = "Enhanced level - detailed river pathways (default)"
     
     # Get top 9 reservoirs for context
     top_reservoirs = await _get_top_9_reservoirs(db_pool)
@@ -419,7 +425,41 @@ async def _get_trail_geojson(
     ORDER BY nt.type, nt.short_code;
     """
     
-    return await _execute_infrastructure_query(db_pool, query, "trail_backbone")
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(query, trail_nodes)
+    
+    features = []
+    for row in rows:
+        try:
+            geometry = json.loads(row['geometry']) if row['geometry'] else None
+            if not geometry:
+                continue
+                
+            feature = {
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": {
+                    "id": row['id'],
+                    "short_code": row['short_code'],
+                    "schematic_type": row['schematic_type'],
+                    "type": row['type'],
+                    "sub_type": row['sub_type'],
+                    "from_node": row['from_node'],
+                    "to_node": row['to_node'],
+                    "river_name": row['river_name'],
+                    "arc_name": row['arc_name'],
+                    "hydrologic_region": row['hydrologic_region'],
+                    "geometry_type": row['geometry_type'],
+                    "source": "trail_backbone"
+                }
+            }
+            features.append(feature)
+            
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Error processing geometry for {row.get('short_code', 'unknown')}: {e}")
+            continue
+    
+    return features
 
 
 def _deduplicate_features(features: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
