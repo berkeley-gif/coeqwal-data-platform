@@ -107,9 +107,12 @@ async def get_water_trail_from_reservoir(
     elif trail_type in ["enhanced"]:
         trails = ENHANCED_TRAILS  
         description_suffix = "Enhanced level - detailed pathways"
+    elif trail_type in ["comprehensive"]:
+        trails = ENHANCED_TRAILS
+        description_suffix = "Comprehensive level - extensive trail coverage"
     elif trail_type in ["complete"]:
         trails = ENHANCED_TRAILS  # Use enhanced as base for complete
-        description_suffix = "Complete level - comprehensive infrastructure"
+        description_suffix = "Complete level - all infrastructure"
     else:  # Default for old "infrastructure" parameter
         trails = ENHANCED_TRAILS
         description_suffix = "Enhanced level - detailed pathways (default)"
@@ -140,6 +143,10 @@ async def get_water_trail_from_reservoir(
     if trail_type == "enhanced":
         # Add key infrastructure (like Pass 2: XML with geometry)
         additional_features = await _get_key_infrastructure_with_geometry(db_pool)
+        
+    elif trail_type == "comprehensive":
+        # Add comprehensive infrastructure (more than enhanced, less than complete)
+        additional_features = await _get_comprehensive_infrastructure(db_pool)
         
     elif trail_type == "complete":
         # Add ALL infrastructure (like Pass 3: Complete coverage)
@@ -181,9 +188,12 @@ async def get_major_reservoir_trails(
     elif trail_type in ["enhanced"]: 
         trails = ENHANCED_TRAILS
         description = "Enhanced level - detailed river pathways"
+    elif trail_type in ["comprehensive"]:
+        trails = ENHANCED_TRAILS
+        description = "Comprehensive level - extensive trail coverage"
     elif trail_type in ["complete"]:
         trails = ENHANCED_TRAILS
-        description = "Complete level - comprehensive infrastructure network"
+        description = "Complete level - all infrastructure network"
     else:  # Default for old "infrastructure" parameter
         trails = ENHANCED_TRAILS
         description = "Enhanced level - detailed river pathways (default)"
@@ -206,6 +216,10 @@ async def get_major_reservoir_trails(
     if trail_type == "enhanced":
         # Add key infrastructure with geometry
         additional_features = await _get_key_infrastructure_with_geometry(db_pool)
+        
+    elif trail_type == "comprehensive":
+        # Add comprehensive infrastructure (more than enhanced)
+        additional_features = await _get_comprehensive_infrastructure(db_pool)
         
     elif trail_type == "complete":
         # Add ALL infrastructure (unlimited)
@@ -248,14 +262,21 @@ def _get_progression_level(trail_type: str) -> Dict[str, Any]:
             "description": "Detailed pathways (like Pass 2: XML with geometry)",
             "data_quality": "high",
             "coverage": "detailed",
-            "expected_features": "200-800"
+            "expected_features": "400-800"
+        },
+        "comprehensive": {
+            "level": 3,
+            "description": "Extensive trail coverage - sweet spot for legibility",
+            "data_quality": "comprehensive",
+            "coverage": "extensive",
+            "expected_features": "800-1500"
         },
         "complete": {
-            "level": 3,
-            "description": "Comprehensive infrastructure (like Pass 3: Complete coverage)",
-            "data_quality": "comprehensive",
+            "level": 4,
+            "description": "All infrastructure (like Pass 3: Complete coverage)",
+            "data_quality": "complete",
             "coverage": "full",
-            "expected_features": "800-2000+"
+            "expected_features": "1500-3000+"
         }
     }
     
@@ -302,8 +323,11 @@ async def _get_key_infrastructure_with_geometry(
     WHERE nt.is_active = true
     AND ng.geom IS NOT NULL  -- Only with geometry
     AND (
-        nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR
-        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River'))
+        nt.type IN ('STR', 'PS', 'WTP', 'WWTP', 'CH', 'DD', 'DA') OR  -- More infrastructure types
+        (nt.type = 'CH' AND nt.river_name IS NOT NULL) OR  -- All named rivers, not just 4
+        nt.short_code LIKE 'SAC%' OR nt.short_code LIKE 'SJR%' OR  -- Major river systems
+        nt.short_code LIKE 'AMR%' OR nt.short_code LIKE 'FTR%' OR
+        nt.short_code LIKE 'TUO%' OR nt.short_code LIKE 'MER%'
     )
     ORDER BY 
         CASE nt.type 
@@ -311,13 +335,65 @@ async def _get_key_infrastructure_with_geometry(
             WHEN 'PS' THEN 2 
             WHEN 'WTP' THEN 3 
             WHEN 'WWTP' THEN 4 
-            ELSE 5 
+            WHEN 'CH' THEN 5
+            WHEN 'DD' THEN 6
+            WHEN 'DA' THEN 7
+            ELSE 8 
         END,
         nt.short_code
-    LIMIT 500;  -- Reasonable limit for enhanced level
+    LIMIT 800;  -- Higher limit for more features
     """
     
     return await _execute_infrastructure_query(db_pool, query, "enhanced_infrastructure")
+
+
+async def _get_comprehensive_infrastructure(
+    db_pool: asyncpg.Pool
+) -> List[Dict[str, Any]]:
+    """
+    Comprehensive level: More than enhanced, but still legible
+    Sweet spot between enhanced (800) and complete (unlimited)
+    """
+    
+    query = """
+    SELECT 
+        nt.id, nt.short_code, nt.schematic_type, nt.type, nt.sub_type,
+        nt.from_node, nt.to_node, nt.river_name, nt.arc_name,
+        nt.hydrologic_region,
+        ST_AsGeoJSON(ng.geom) as geometry,
+        ng.geometry_type
+    FROM network_topology nt
+    LEFT JOIN network_gis ng ON nt.short_code = ng.short_code
+    WHERE nt.is_active = true
+    AND ng.geom IS NOT NULL  -- Only with geometry for visualization
+    AND (
+        nt.type IN ('STR', 'PS', 'WTP', 'WWTP', 'CH', 'DD', 'DA', 'D') OR  -- ALL infrastructure types
+        (nt.type = 'CH' AND nt.river_name IS NOT NULL) OR  -- All named rivers
+        nt.short_code LIKE 'SAC%' OR nt.short_code LIKE 'SJR%' OR  -- Major river systems
+        nt.short_code LIKE 'AMR%' OR nt.short_code LIKE 'FTR%' OR
+        nt.short_code LIKE 'TUO%' OR nt.short_code LIKE 'MER%' OR
+        nt.short_code LIKE 'KER%' OR nt.short_code LIKE 'KNG%' OR  -- More river systems
+        nt.short_code LIKE 'STA%' OR nt.short_code LIKE 'MOK%' OR
+        nt.short_code LIKE 'CAA%' OR nt.short_code LIKE 'DMC%' OR  -- Major aqueducts/canals
+        nt.short_code LIKE 'CRA%' OR nt.short_code LIKE 'FKC%'
+    )
+    ORDER BY 
+        CASE nt.type 
+            WHEN 'STR' THEN 1 
+            WHEN 'PS' THEN 2 
+            WHEN 'WTP' THEN 3 
+            WHEN 'WWTP' THEN 4 
+            WHEN 'CH' THEN 5
+            WHEN 'DD' THEN 6
+            WHEN 'DA' THEN 7
+            WHEN 'D' THEN 8
+            ELSE 9 
+        END,
+        nt.short_code
+    LIMIT 1500;  -- More than enhanced (800) but still manageable
+    """
+    
+    return await _execute_infrastructure_query(db_pool, query, "comprehensive_infrastructure")
 
 
 async def _get_all_infrastructure_unlimited(
@@ -338,10 +414,10 @@ async def _get_all_infrastructure_unlimited(
     FROM network_topology nt
     LEFT JOIN network_gis ng ON nt.short_code = ng.short_code
     WHERE nt.is_active = true
+    AND ng.geom IS NOT NULL  -- Only features with geometry for visualization
     AND (
-        nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR
-        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River')) OR
-        nt.short_code IN ('SAC000', 'SAC043', 'SAC083', 'SJRE', 'SJRW', 'MDOTA')
+        nt.type IN ('STR', 'PS', 'WTP', 'WWTP', 'CH', 'DD', 'DA', 'D') OR  -- ALL infrastructure types
+        nt.schematic_type IN ('node', 'arc')  -- Include all schematic elements
     )
     ORDER BY 
         CASE nt.type 
@@ -349,10 +425,14 @@ async def _get_all_infrastructure_unlimited(
             WHEN 'PS' THEN 2 
             WHEN 'WTP' THEN 3 
             WHEN 'WWTP' THEN 4 
-            ELSE 5 
+            WHEN 'CH' THEN 5
+            WHEN 'DD' THEN 6
+            WHEN 'DA' THEN 7
+            WHEN 'D' THEN 8
+            ELSE 9 
         END,
         nt.short_code;
-    -- NO LIMIT - this was the key fix!
+    -- NO LIMIT - comprehensive coverage!
     """
     
     return await _execute_infrastructure_query(db_pool, query, "complete_infrastructure")
