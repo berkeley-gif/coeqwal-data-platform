@@ -142,6 +142,8 @@ CALIFORNIA_WATER_TRAILS = {
         "name": "Central Valley Project - South of Delta",
         "description": "CVP water distribution to San Joaquin Valley and Southern California",
         "nodes": [
+            # CRITICAL DELTA PUMPING - Jones Pumping Plant
+            "DMC003", "OMR028", "OMR027",  # Jones PP and Delta diversion points
             # San Luis to Mendota Pool
             "SLUIS", "SLUISC", "DMC", "CALA", "MENDOTA", "MDOTA",
             # Friant-Kern Canal system  
@@ -152,7 +154,7 @@ CALIFORNIA_WATER_TRAILS = {
             # Key delivery points
             "BAKRSF", "KRNRVR", "TULAR", "PIXLEY", "DELANO", "WASCO"
         ],
-        "key_infrastructure": ["SLUIS", "MILLR", "MENDOTA", "MDOTA", "BAKRSF"],
+        "key_infrastructure": ["DMC003", "OMR028", "SLUIS", "MILLR", "MENDOTA", "MDOTA", "BAKRSF"],
         "region": "SJR"
     },
     
@@ -160,6 +162,8 @@ CALIFORNIA_WATER_TRAILS = {
         "name": "State Water Project - Southern California",
         "description": "California Aqueduct to Southern California",
         "nodes": [
+            # CRITICAL DELTA PUMPING - Banks Pumping Plant
+            "CAA003", "OMR027",  # Banks PP and Delta diversion point
             # California Aqueduct main stem
             "PYRMD", "CSTLC", "QUNTO", "ANTLP", "TEHCP", "EDMNTN", 
             "MOJAVE", "SLVRK", "PEARBM", "PYRAMID", "CSTLC",
@@ -170,7 +174,7 @@ CALIFORNIA_WATER_TRAILS = {
             # San Diego connection
             "DMOND", "OLIVH", "SNVCNT"
         ],
-        "key_infrastructure": ["PYRMD", "CSTLC", "ANTLP", "TEHCP", "PYRAMID"],
+        "key_infrastructure": ["CAA003", "OMR027", "PYRMD", "CSTLC", "ANTLP", "TEHCP", "PYRAMID"],
         "region": "SCLA"
     },
     
@@ -228,6 +232,23 @@ CALIFORNIA_WATER_TRAILS = {
         ],
         "key_infrastructure": ["DONPD", "HETCH", "MCCLR", "PINFT", "SJRE", "SJRW"],
         "region": "SJR"
+    },
+    
+    "delta_pumping_system": {
+        "name": "Delta Pumping System - Banks and Jones",
+        "description": "Critical Delta export pumping infrastructure for State Water Project and Central Valley Project",
+        "nodes": [
+            # Delta diversion and pumping infrastructure
+            "OMR027", "OMR028",  # Old/Middle River diversion points
+            "CAA003",  # Harvey O. Banks Pumping Plant (State Water Project)
+            "DMC003",  # C.W. "Bill" Jones Pumping Plant (Central Valley Project)
+            # Immediate downstream connections
+            "CAA000", "CAA005", "DMC007", "DMC000",
+            # Delta outflow and inflow points
+            "SJRW", "SJRE", "SAC000"
+        ],
+        "key_infrastructure": ["CAA003", "DMC003", "OMR027", "OMR028"],
+        "region": "DELTA"
     }
 }
 
@@ -257,7 +278,10 @@ KEY_INFRASTRUCTURE_CODES = [
     
     # Key pump stations and diversions - South of Delta (ADDED)
     "QUNTO", "WBRNCH", "EBRNCH", "DMOND", "OLIVH", "SNVCNT",
-    "IRONMT", "EAGLMT", "GENMTN", "HINDS", "COPLND", "ALAMTN"
+    "IRONMT", "EAGLMT", "GENMTN", "HINDS", "COPLND", "ALAMTN",
+    
+    # CRITICAL DELTA PUMPING STATIONS (MUST INCLUDE)
+    "CAA003", "DMC003", "OMR027", "OMR028"  # Banks PP, Jones PP, Delta diversions
 ]
 
 
