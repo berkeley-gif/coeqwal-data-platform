@@ -14,21 +14,63 @@ import json
 CALIFORNIA_WATER_TRAILS = {
     "shasta_sacramento": {
         "name": "Shasta Dam to Sacramento River System",
-        "description": "Northern California's primary water source",
+        "description": "Northern California's primary water source - complete pathway",
         "nodes": [
-            "SHSTA", "SAC301", "KSWCK", "SAC299", "SAC296", "SAC294", "SAC289", 
-            "SAC287", "SAC281", "SAC277", "SAC275", "SAC273", "SAC271", "SAC269",
-            "SAC267", "SAC265", "SAC261", "SAC259", "SAC255", "SAC251", "SAC247",
-            "SAC243", "SAC239", "SAC235", "SAC232", "SAC228", "SAC224", "SAC218",
-            "SAC214", "SAC207", "SAC196", "SAC193", "SAC185", "SAC182", "SAC178",
-            "SAC174", "SAC168", "SAC162", "SAC159", "SAC154", "SAC148", "SAC141",
-            "SAC134", "SAC129", "SAC125", "SAC122", "SAC119", "SAC115", "SAC111",
-            "SAC107", "SAC103", "SAC099", "SAC095", "SAC091", "SAC087", "SAC083",
-            "SAC079", "SAC075", "SAC071", "SAC067", "SAC063", "SAC059", "SAC055",
-            "SAC051", "SAC047", "SAC043", "SAC039", "SAC035", "SAC031", "SAC027",
-            "SAC023", "SAC019", "SAC015", "SAC011", "SAC007", "SAC003", "SAC000"
+            # Complete Shasta to Sacramento pathway with ALL connecting arcs
+            "SHSTA", "C_SHSTA", "SAC301", "C_SAC301", "KSWCK", "C_KSWCK", 
+            "SAC299", "C_SAC299", "SAC296", "C_SAC296", "SAC294", "C_SAC294", 
+            "SAC289", "C_SAC289", "SAC287", "C_SAC287", "SAC281", "C_SAC281", 
+            "SAC277", "C_SAC277", "SAC275", "C_SAC275", "SAC273", "C_SAC273", 
+            "SAC271", "C_SAC271", "SAC269", "C_SAC269", "SAC267", "C_SAC267", 
+            "SAC265", "C_SAC265", "SAC263", "C_SAC263", "SAC261", "C_SAC261", 
+            "SAC259", "C_SAC259", "SAC257", "C_SAC257", "SAC255", "C_SAC255", 
+            "SAC253", "C_SAC253", "SAC251", "C_SAC251", "SAC249", "C_SAC249", 
+            "SAC247", "C_SAC247", "SAC245", "C_SAC245", "SAC243", "C_SAC243", 
+            "SAC241", "C_SAC241", "SAC239", "C_SAC239", "SAC237", "C_SAC237", 
+            "SAC235", "C_SAC235", "SAC233", "C_SAC233", "SAC232", "C_SAC232", 
+            "SAC230", "C_SAC230", "SAC228", "C_SAC228", "SAC226", "C_SAC226", 
+            "SAC224", "C_SAC224", "SAC222", "C_SAC222", "SAC220", "C_SAC220", 
+            "SAC218", "C_SAC218", "SAC216", "C_SAC216", "SAC214", "C_SAC214", 
+            "SAC212", "C_SAC212", "SAC210", "C_SAC210", "SAC208", "C_SAC208", 
+            "SAC207", "C_SAC207", "SAC205", "C_SAC205", "SAC203", "C_SAC203", 
+            "SAC201", "C_SAC201", "SAC199", "C_SAC199", "SAC197", "C_SAC197", 
+            "SAC196", "C_SAC196", "SAC194", "C_SAC194", "SAC193", "C_SAC193", 
+            "SAC191", "C_SAC191", "SAC189", "C_SAC189", "SAC187", "C_SAC187", 
+            "SAC185", "C_SAC185", "SAC184", "C_SAC184", "SAC182", "C_SAC182", 
+            "SAC180", "C_SAC180", "SAC178", "C_SAC178", "SAC176", "C_SAC176", 
+            "SAC174", "C_SAC174", "SAC172", "C_SAC172", "SAC170", "C_SAC170", 
+            "SAC168", "C_SAC168", "SAC166", "C_SAC166", "SAC164", "C_SAC164", 
+            "SAC162", "C_SAC162", "SAC160", "C_SAC160", "SAC159", "C_SAC159", 
+            "SAC157", "C_SAC157", "SAC155", "C_SAC155", "SAC154", "C_SAC154", 
+            "SAC152", "C_SAC152", "SAC150", "C_SAC150", "SAC148", "C_SAC148", 
+            "SAC146", "C_SAC146", "SAC144", "C_SAC144", "SAC143", "C_SAC143", 
+            "SAC141", "C_SAC141", "SAC139", "C_SAC139", "SAC137", "C_SAC137", 
+            "SAC135", "C_SAC135", "SAC134", "C_SAC134", "SAC132", "C_SAC132", 
+            "SAC130", "C_SAC130", "SAC129", "C_SAC129", "SAC127", "C_SAC127", 
+            "SAC125", "C_SAC125", "SAC124", "C_SAC124", "SAC122", "C_SAC122", 
+            "SAC120", "C_SAC120", "SAC119", "C_SAC119", "SAC117", "C_SAC117", 
+            "SAC115", "C_SAC115", "SAC113", "C_SAC113", "SAC111", "C_SAC111", 
+            "SAC109", "C_SAC109", "SAC107", "C_SAC107", "SAC105", "C_SAC105", 
+            "SAC103", "C_SAC103", "SAC101", "C_SAC101", "SAC099", "C_SAC099", 
+            "SAC097", "C_SAC097", "SAC095", "C_SAC095", "SAC093", "C_SAC093", 
+            "SAC091", "C_SAC091", "SAC089", "C_SAC089", "SAC087", "C_SAC087", 
+            "SAC085", "C_SAC085", "SAC083", "C_SAC083", "SAC081", "C_SAC081", 
+            "SAC079", "C_SAC079", "SAC077", "C_SAC077", "SAC075", "C_SAC075", 
+            "SAC073", "C_SAC073", "SAC071", "C_SAC071", "SAC069", "C_SAC069", 
+            "SAC067", "C_SAC067", "SAC065", "C_SAC065", "SAC063", "C_SAC063", 
+            "SAC061", "C_SAC061", "SAC059", "C_SAC059", "SAC057", "C_SAC057", 
+            "SAC055", "C_SAC055", "SAC053", "C_SAC053", "SAC051", "C_SAC051", 
+            "SAC050", "C_SAC050", "SAC048", "C_SAC048", "SAC047", "C_SAC047", 
+            "SAC045", "C_SAC045", "SAC043", "C_SAC043", "SAC041", "C_SAC041", 
+            "SAC039", "C_SAC039", "SAC037", "C_SAC037", "SAC035", "C_SAC035", 
+            "SAC033", "C_SAC033", "SAC031", "C_SAC031", "SAC030", "C_SAC030", 
+            "SAC029", "C_SAC029", "SAC027", "C_SAC027", "SAC025", "C_SAC025", 
+            "SAC023", "C_SAC023", "SAC021", "C_SAC021", "SAC019", "C_SAC019", 
+            "SAC017", "C_SAC017", "SAC015", "C_SAC015", "SAC013", "C_SAC013", 
+            "SAC011", "C_SAC011", "SAC009", "C_SAC009", "SAC007", "C_SAC007", 
+            "SAC005", "C_SAC005", "SAC003", "C_SAC003", "SAC001", "C_SAC001", "SAC000"
         ],
-        "key_infrastructure": ["SHSTA", "KSWCK", "SAC000"],
+        "key_infrastructure": ["SHSTA", "KSWCK", "SAC083", "SAC043", "SAC000"],
         "region": "SAC"
     },
     
@@ -147,41 +189,9 @@ async def get_water_trail_from_reservoir(
     # Get trail elements with geometry
     trail_features = await _get_trail_geojson(db_pool, trail_data["nodes"])
     
-    # Filter by trail type
-    if trail_type == "infrastructure":
-        # Focus on key infrastructure nodes - be more inclusive
-        filtered_features = []
-        for feature in trail_features:
-            code = feature["properties"]["short_code"]
-            element_type = feature["properties"]["element_type"]
-            feature_type = feature["properties"]["type"]
-            
-            # Always include key infrastructure
-            if code in KEY_INFRASTRUCTURE_CODES:
-                filtered_features.append(feature)
-            # Include ALL reservoirs, pumps, treatment plants
-            elif element_type in ["STR", "PS", "WTP", "WWTP"]:
-                filtered_features.append(feature)
-            # Include more river nodes for better connectivity visualization
-            elif element_type == "CH":
-                try:
-                    node_index = trail_data["nodes"].index(code)
-                    # Include every 3rd river node (more than every 5th)
-                    if node_index % 3 == 0:
-                        filtered_features.append(feature)
-                except (ValueError, IndexError):
-                    # If not in trail nodes list, include anyway if it's a major river
-                    if any(river in (feature["properties"].get("river_name", "") or "") 
-                           for river in ["Sacramento River", "San Joaquin River", "American River", "Feather River"]):
-                        filtered_features.append(feature)
-            # Include ALL arcs to show connectivity
-            elif feature_type == "arc":
-                filtered_features.append(feature)
-            # Include other key infrastructure types
-            elif element_type in ["D", "OM", "NP", "PR"]:
-                filtered_features.append(feature)
-        
-        trail_features = filtered_features
+    # Include ALL connectivity for complete trail visualization
+    # No filtering - show the complete water pathway for each system
+    # This will create proper connected trails instead of sparse nodes
     
     return {
         "type": "FeatureCollection",
@@ -213,10 +223,14 @@ async def get_major_reservoir_trails(
     all_features = []
     trail_summaries = []
     
-    # Get trail for each major reservoir system
-    major_reservoirs = ["SHSTA", "OROVL", "FOLSM", "SLUIS", "HETCH", "TRNTY"]
+    # Get top 9 reservoirs by capacity + major system reservoirs
+    top_reservoirs = await _get_top_9_reservoirs(db_pool)
+    major_system_reservoirs = ["SHSTA", "OROVL", "FOLSM", "SLUIS", "HETCH", "TRNTY", "WKYTN", "AMADR", "MILLR"]
     
-    for reservoir in major_reservoirs:
+    # Combine and deduplicate
+    all_major_reservoirs = list(set(top_reservoirs + major_system_reservoirs))
+    
+    for reservoir in all_major_reservoirs:
         try:
             trail_data = await get_water_trail_from_reservoir(
                 db_pool, reservoir, trail_type, max_depth=4
@@ -266,6 +280,26 @@ async def get_major_reservoir_trails(
             "foundation": "hardcoded_major_pathways_with_fallback"
         }
     }
+
+
+async def _get_top_9_reservoirs(db_pool: asyncpg.Pool) -> List[str]:
+    """Get top 9 reservoirs by capacity"""
+    
+    query = """
+    SELECT nt.short_code
+    FROM network_topology nt
+    LEFT JOIN reservoir_entity re ON nt.short_code = re.short_code
+    WHERE nt.type = 'STR'
+    AND nt.is_active = true
+    AND re.capacity_taf IS NOT NULL
+    ORDER BY re.capacity_taf DESC
+    LIMIT 9;
+    """
+    
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(query)
+    
+    return [row["short_code"] for row in rows]
 
 
 async def _get_additional_key_infrastructure(
