@@ -189,6 +189,20 @@ async def get_water_trail_from_reservoir(
     # Get trail elements with geometry
     trail_features = await _get_trail_geojson(db_pool, trail_data["nodes"])
     
+    # Deduplicate features by short_code (in case hardcoded trails have duplicates)
+    seen_codes = set()
+    deduplicated_features = []
+    
+    for feature in trail_features:
+        short_code = feature["properties"]["short_code"]
+        if short_code not in seen_codes:
+            seen_codes.add(short_code)
+            deduplicated_features.append(feature)
+    
+    if len(deduplicated_features) < len(trail_features):
+        print(f"Individual trail deduplication: {len(trail_features)} → {len(deduplicated_features)} features")
+        trail_features = deduplicated_features
+    
     # Include ALL connectivity for complete trail visualization
     # No filtering - show the complete water pathway for each system
     # This will create proper connected trails instead of sparse nodes
@@ -256,12 +270,29 @@ async def get_major_reservoir_trails(
             print(f"Error getting trail for {reservoir}: {e}")
             continue
     
-    # If we don't have enough features, add more key infrastructure
+    # CRITICAL: Deduplicate features by short_code before returning
+    # Multiple trail systems can include the same infrastructure (e.g., KSWCK, SAC083)
+    # This was causing React key errors in the frontend
+    seen_codes = set()
+    deduplicated_features = []
+    
+    for feature in all_features:
+        short_code = feature["properties"]["short_code"]
+        if short_code not in seen_codes:
+            seen_codes.add(short_code)
+            deduplicated_features.append(feature)
+        else:
+            print(f"Deduplicating {short_code} - appears in multiple trail systems")
+    
+    print(f"Deduplication: {len(all_features)} → {len(deduplicated_features)} features")
+    all_features = deduplicated_features
+    
+    # If we don't have enough features after deduplication, add more key infrastructure
     if len(all_features) < 50:
         print(f"Adding more infrastructure - only have {len(all_features)} features")
         additional_features = await _get_additional_key_infrastructure(db_pool)
         
-        # Avoid duplicates
+        # Avoid duplicates (check against already deduplicated features)
         existing_codes = {f["properties"]["short_code"] for f in all_features}
         new_features = [f for f in additional_features if f["properties"]["short_code"] not in existing_codes]
         
