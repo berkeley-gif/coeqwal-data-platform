@@ -266,10 +266,10 @@ def _get_progression_level(trail_type: str) -> Dict[str, Any]:
         },
         "comprehensive": {
             "level": 3,
-            "description": "Extensive trail coverage - sweet spot for legibility",
+            "description": "More infrastructure - fast loading",
             "data_quality": "comprehensive",
             "coverage": "extensive",
-            "expected_features": "800-1500"
+            "expected_features": "400-600"
         },
         "complete": {
             "level": 4,
@@ -367,15 +367,9 @@ async def _get_comprehensive_infrastructure(
     WHERE nt.is_active = true
     AND ng.geom IS NOT NULL  -- Only with geometry for visualization
     AND (
-        nt.type IN ('STR', 'PS', 'WTP', 'WWTP', 'CH', 'DD', 'DA', 'D') OR  -- ALL infrastructure types
-        (nt.type = 'CH' AND nt.river_name IS NOT NULL) OR  -- All named rivers
-        nt.short_code LIKE 'SAC%' OR nt.short_code LIKE 'SJR%' OR  -- Major river systems
-        nt.short_code LIKE 'AMR%' OR nt.short_code LIKE 'FTR%' OR
-        nt.short_code LIKE 'TUO%' OR nt.short_code LIKE 'MER%' OR
-        nt.short_code LIKE 'KER%' OR nt.short_code LIKE 'KNG%' OR  -- More river systems
-        nt.short_code LIKE 'STA%' OR nt.short_code LIKE 'MOK%' OR
-        nt.short_code LIKE 'CAA%' OR nt.short_code LIKE 'DMC%' OR  -- Major aqueducts/canals
-        nt.short_code LIKE 'CRA%' OR nt.short_code LIKE 'FKC%'
+        nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR  -- Just the core infrastructure types
+        (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River')) OR  -- Only 4 major rivers
+        nt.short_code IN ('SAC000', 'SAC043', 'SAC083', 'SAC301', 'SJRE', 'SJRW', 'MDOTA', 'AMR002', 'FTR003')  -- Key junction points
     )
     ORDER BY 
         CASE nt.type 
@@ -384,13 +378,10 @@ async def _get_comprehensive_infrastructure(
             WHEN 'WTP' THEN 3 
             WHEN 'WWTP' THEN 4 
             WHEN 'CH' THEN 5
-            WHEN 'DD' THEN 6
-            WHEN 'DA' THEN 7
-            WHEN 'D' THEN 8
-            ELSE 9 
+            ELSE 6 
         END,
         nt.short_code
-    LIMIT 1500;  -- More than enhanced (800) but still manageable
+    LIMIT 600;  -- Much smaller limit for performance
     """
     
     return await _execute_infrastructure_query(db_pool, query, "comprehensive_infrastructure")
