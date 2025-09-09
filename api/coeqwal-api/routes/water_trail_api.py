@@ -325,7 +325,16 @@ async def _get_key_infrastructure_with_geometry(
     AND (
         nt.type IN ('STR', 'PS', 'WTP', 'WWTP') OR  -- Core infrastructure types only
         (nt.type = 'CH' AND nt.river_name IN ('Sacramento River', 'San Joaquin River', 'American River', 'Feather River')) OR  -- Major rivers
-        (nt.type = 'CH' AND nt.short_code LIKE 'SJR%')  -- All San Joaquin River channels
+        (nt.type = 'CH' AND nt.short_code LIKE 'SJR%') OR  -- All San Joaquin River channels
+        -- DELTA NEXUS COVERAGE - Sacramento/Stockton/Delta region
+        (nt.type = 'CH' AND nt.short_code LIKE 'SAC%') OR  -- All Sacramento River channels
+        (nt.type = 'CH' AND nt.short_code LIKE 'OMR%') OR  -- Old/Middle River (Delta channels)
+        (nt.type = 'CH' AND nt.short_code LIKE 'MOK%') OR  -- Mokelumne River system
+        (nt.type = 'CH' AND nt.short_code LIKE 'CAA%') OR  -- California Aqueduct (Delta connection)
+        (nt.type = 'CH' AND nt.short_code LIKE 'DMC%') OR  -- Delta-Mendota Canal
+        (nt.type IN ('DD', 'DA', 'D') AND nt.short_code LIKE 'D_%') OR  -- Delta diversions
+        -- Key Delta infrastructure nodes
+        nt.short_code IN ('SJRW', 'SJRE', 'MDOTA', 'CACWD', 'BANKS', 'JONES', 'CVPIA', 'EXPORT')
     )
     ORDER BY 
         CASE nt.type 
