@@ -6,6 +6,12 @@ on:
       - 'etl/coeqwal-etl/**'
     branches:
       - dev  # change to main when ready
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual build'
+        required: false
+        default: 'Manual rebuild'
 
 jobs:
   build-and-push:
