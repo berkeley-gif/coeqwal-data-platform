@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'etl/coeqwal-etl/**'
+      - '.github/workflows/etl.yml'
     branches:
       - dev  # change to main when ready
   workflow_dispatch:
