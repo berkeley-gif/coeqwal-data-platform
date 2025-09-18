@@ -164,6 +164,10 @@ if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
     if [[ -n "${TARGET_LOCAL:-}" ]]; then
       echo "[INFO] Validating reference CSV against ${VALIDATION_TARGET} CSV..."
       if [[ -f /app/python-code/validate_csvs.py ]]; then
+        # Detailed validation reports
+        VALIDATION_JSON_LOCAL="${WORKDIR}/validation_summary.json"
+        VALIDATION_CSV_LOCAL="${WORKDIR}/validation_mismatches.csv"
+        
         set +e
         VAL_OUT="$(
           python /app/python-code/validate_csvs.py \
@@ -171,13 +175,16 @@ if [[ -n "${VALIDATION_REF_CSV_KEY}" ]]; then
             --file "${TARGET_LOCAL}" \
             --abs-tol "${ABS_TOL}" \
             --rel-tol "${REL_TOL}" \
+            --out-json "${VALIDATION_JSON_LOCAL}" \
+            --out-csv "${VALIDATION_CSV_LOCAL}" \
+            --verbose \
             2>&1
         )"
         VAL_RC=$?
         set -e
         if [[ ${VAL_RC} -eq 0 ]]; then
           VALIDATION_RESULT="passed"
-          VALIDATION_SUMMARY="Reference CSV matched (${VALIDATION_TARGET})."
+          VALIDATION_SUMMARY="Reference CSV matched (${VALIDATION_TARGET}). Detailed reports generated."
           echo "[INFO] Validation PASSED."
         else
           VALIDATION_RESULT="failed"
@@ -205,12 +212,28 @@ VALIDATION_SUMMARY_JSON=$(python -c 'import json,sys; print(json.dumps(sys.stdin
 
 # ----------------------------- Upload outputs ----------------------------
 CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
+VALIDATION_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/validation/"
 SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv"
 CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
 MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
 
+# Upload main CSV outputs
 [[ -f "${SV_CSV_LOCAL}"  ]] && aws s3 cp "${SV_CSV_LOCAL}"  "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
 [[ -f "${CAL_CSV_LOCAL}" ]] && aws s3 cp "${CAL_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${CAL_CSV_KEY}" || CAL_CSV_KEY=""
+
+# Upload validation reports
+VALIDATION_JSON_KEY=""
+VALIDATION_CSV_KEY=""
+if [[ -f "${VALIDATION_JSON_LOCAL:-}" ]]; then
+  VALIDATION_JSON_KEY="${VALIDATION_DIR}${SCENARIO_ID}_validation_summary.json"
+  aws s3 cp "${VALIDATION_JSON_LOCAL}" "s3://${ZIP_BUCKET}/${VALIDATION_JSON_KEY}"
+  echo "[INFO] Uploaded validation summary: s3://${ZIP_BUCKET}/${VALIDATION_JSON_KEY}"
+fi
+if [[ -f "${VALIDATION_CSV_LOCAL:-}" ]]; then
+  VALIDATION_CSV_KEY="${VALIDATION_DIR}${SCENARIO_ID}_validation_mismatches.csv"
+  aws s3 cp "${VALIDATION_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${VALIDATION_CSV_KEY}"
+  echo "[INFO] Uploaded validation mismatches: s3://${ZIP_BUCKET}/${VALIDATION_CSV_KEY}"
+fi
 
 # ----------------------------- Compute final status ----------------------
 SV_DETECTED=$([[ -n "${SV_PATH}" ]] && echo true || echo false)
@@ -250,7 +273,11 @@ cat > "${WORKDIR}/manifest.json" <<MF
     "reference_csv_key": "${VALIDATION_REF_CSV_KEY}",
     "target": "${VALIDATION_TARGET}",
     "result": "${VALIDATION_RESULT}",
-    "summary": ${VALIDATION_SUMMARY_JSON}
+    "summary": ${VALIDATION_SUMMARY_JSON},
+    "detailed_reports": {
+      "summary_json_key": "${VALIDATION_JSON_KEY}",
+      "mismatches_csv_key": "${VALIDATION_CSV_KEY}"
+    }
   },
   "variable_sample_b_parts": {
     "sv_input": "${SV_B_SAMPLE}",
