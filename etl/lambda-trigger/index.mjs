@@ -62,8 +62,6 @@ export async function handler(event) {
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: sourceKey }));
 
     // --- Try to find a peer csv in ready/ ---
-    // 1) exact stem match: ready/<stem>.csv
-    // 2) else any csv starting with the scenario prefix: ready/s####_*.csv (choose newest)
     let validationCsvReadyKey = await findPeerCsv(bucket, stem, scenarioId);
 
     // If found, move csv to scenario/<id>/verify/
@@ -160,7 +158,7 @@ export async function handler(event) {
  * Find a peer csv sitting in ready/ that matches the uploaded ZIP.
  * Preference order:
  *   1) ready/<zip_stem>.csv      (exact match)
- *   2) newest ready/<scenarioId>_*.csv
+ *   2) newest ready/*<scenarioId>*.csv (broader pattern)
  * Returns the key under ready/ (string) or '' if none.
  */
 async function findPeerCsv(bucket, zipStem, scenarioId) {
@@ -173,8 +171,8 @@ async function findPeerCsv(bucket, zipStem, scenarioId) {
     // ignore 404
   }
 
-  // List any ready/s####_*.csv and pick the newest
-  const prefix = `ready/${scenarioId}_`;
+  // List any ready/*s####*.csv and pick the newest
+  const prefix = `ready/`;
   let candidates = [];
   let ContinuationToken = undefined;
   do {
@@ -184,7 +182,7 @@ async function findPeerCsv(bucket, zipStem, scenarioId) {
       ContinuationToken,
     }));
     (res.Contents || []).forEach(obj => {
-      if (obj.Key?.toLowerCase().endsWith('.csv')) {
+      if (obj.Key?.toLowerCase().endsWith('.csv') && obj.Key.includes(scenarioId)) {
         candidates.push({ key: obj.Key, last: obj.LastModified ? new Date(obj.LastModified).getTime() : 0 });
       }
     });

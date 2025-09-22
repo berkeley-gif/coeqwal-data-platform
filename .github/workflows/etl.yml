@@ -4,8 +4,15 @@ on:
   push:
     paths:
       - 'etl/coeqwal-etl/**'
+      - '.github/workflows/etl.yml'
     branches:
       - dev  # change to main when ready
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Manual build'
+        required: false
+        default: 'Manual rebuild'
 
 jobs:
   build-and-push:
