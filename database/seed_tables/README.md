@@ -1,105 +1,84 @@
 # Database Seed Data
 
-This directory contains CSV files and scripts to populate lookup tables and initial data.
+CSV files and scripts for populating the COEQWAL PostgreSQL database with foundational data.
 
-## 📁 File Organization
+## 📁 Directory Organization
 
 ```
 seed_tables/
-├── 00_versioning/          # Versioning system
-│   ├── user.csv
-│   ├── version.csv
-│   ├── version_family.csv
-│   └── domain_family_map.csv
-├── 01_infrastructure/       # Core system tables
-│   ├── hydrologic_region.csv
-│   ├── unit.csv
-│   ├── source.csv
-│   ├── spatial_scale.csv
-│   └── temporal_scale.csv
-├── 02_entity_system/        # CalSim entity framework
+├── 00_versioning/          # Core versioning system (✅ loaded)
+│   ├── developer.csv       # System and user accounts (2 records)
+│   ├── version_family.csv  # Version domains (13 families)
+│   ├── version.csv         # Version instances (13 versions)
+│   └── domain_family_map.csv # Table-to-family mappings (35 mappings)
+├── 01_infrastructure/      # Reference data (✅ loaded)
+│   ├── hydrologic_region.csv # Water basins (5 regions)
+│   ├── unit.csv            # Measurement units (5 units)
+│   ├── source.csv          # Data sources (8 sources)
+│   ├── spatial_scale.csv   # Geographic scales (11 scales)
+│   └── temporal_scale.csv  # Time scales (8 scales)
+├── 02_entity_system/       # Entity types (✅ loaded)
 │   ├── calsim_entity_type.csv
-│   ├── calsim_schematic_type.csv
-│   └── variable_type.csv
-├── 03_outcome_framework/    # Outcome and measurement tables
-│   ├── outcome_category.csv
-│   └── statistic_type.csv
-├── 04_calsim_data/         # CalSim entity and variable data
-│   ├── reservoir_entity.csv
-│   ├── reservoir_variables.csv
-│   ├── inflow_entity.csv
-│   ├── inflow_variables.csv
-│   ├── channel_entities.csv
-│   ├── channel_variables.csv
-│   ├── entity_source_links.csv
-│   └── create_entity_source_links.py
-├── 05_themes_scenarios/    # Research themes and scenarios (empty)
-├── 06_assumptions_operations/  # Policy assumptions and operational rules
-│   ├── assumption_category.csv
-│   ├── assumption_definition.csv
-│   ├── operation_category.csv
-│   ├── operation_definition.csv
-│   └── README.md
-├── 07_hydroclimate/        # Hydroclimate data
-│   └── hydroclimate.csv
-└── README.md               # This file
+│   ├── calsim_schematic_type.csv (2 records)
+│   ├── network_*_type.csv  # Network classification
+│   └── variable_type.csv   (3 records)
+├── 04_calsim_data/        # Major CalSim data (✅ loaded)
+│   ├── network_topology.csv    # 3,518 network elements
+│   ├── network_node.csv        # 7,742 nodes
+│   ├── network_arc.csv         # 6,965 arcs
+│   ├── network_gis.csv         # 2,463 spatial features
+│   ├── reservoir_entity.csv    # 63 reservoirs
+│   ├── du_agriculture_entity.csv # 144 ag demand units
+│   ├── du_urban_entity.csv     # 106 urban demand units
+│   └── du_refuge_entity.csv    # 18 wildlife refuges
+├── 05_themes_scenarios/    # Research framework
+├── 06_assumptions_operations/
+└── 07_hydroclimate/       
 ```
 
-## 🔄 Loading Order
+## 🔄 Loading status
 
-Seed data must be loaded in dependency order:
+### ✅ Successfully Loaded Categories:
+1. **00_versioning/** - Core versioning system (13 families, 35 mappings)
+2. **01_infrastructure/** - Reference data (5 regions, 8 sources, scales)
+3. **02_entity_system/** - Entity types and classifications
+4. **04_calsim_data/** - Major network and entity data (14,000+ records)
 
-1. **Infrastructure** - Core lookup tables
-2. **Entity System** - CalSim framework tables  
-3. **Outcome Framework** - Measurement and statistics
-4. **CalSim Data** - Your organized channel, inflow, reservoir data
-5. **Themes & Scenarios** - Research framework data
-6. **Assumptions & Operations** - Policy assumptions and operational rules
-7. **Hydroclimate** - Climate and hydrology data
+### 🔄 Partially Loaded:
+5. **05_themes_scenarios/** - Research framework
+6. **06_assumptions_operations/** - Policy framework  
+7. **07_hydroclimate/** - Climate data
 
-## 🚀 Usage
+## 🚀 Database Management
 
+### Audit Your Database
 ```bash
-# Load all seed data
-python database/seed_tables/load_seeds.py
+# Run comprehensive database audit via Lambda
+export DATABASE_URL="postgresql://username:password@your-rds-endpoint:5432/coeqwal_scenario"
+aws lambda invoke --function-name coeqwal-database-audit response.json
+cat response.json
 
-# Load specific category
-python database/seed_tables/load_seeds.py --category infrastructure
-
-# Reset and reload
-python database/seed_tables/load_seeds.py --reset
+# Download detailed reports
+aws s3 cp s3://coeqwal-model-run/database_audits/audit_YYYYMMDD_HHMMSS.json .
+aws s3 cp s3://coeqwal-model-run/database_audits/tables_summary_YYYYMMDD_HHMMSS.csv .
 ```
 
-## 📝 CSV Format
 
-All CSV files should:
-- Use UTF-8 encoding
-- Include headers in first row
-- Use consistent null representation (empty string or NULL)
-- Follow naming convention: `table_name.csv`
 
-## 🔗 Relationships
 
-The loading script automatically handles foreign key relationships by loading in the correct order.
+### Network topology system
+- **3,518 network elements** in core topology
+- **7,742 nodes** with spatial coordinates
+- **6,965 arcs** with connectivity data
+- **2,463 GIS features** with PostGIS geometry
 
-## 🎯 Key Files in 04_calsim_data
+### Entity system  
+- **63 reservoirs** with capacity and operational data
+- **144 agricultural demand units** with acreage and diversions
+- **106 urban demand units** with community data
+- **18 wildlife refuges** with habitat information
 
-The CalSim data directory contains the main entity and variable tables:
-
-### **Entity Tables**
-- `reservoir_entity.csv` - Reservoir entities with physical characteristics
-- `inflow_entity.csv` - Inflow points where water enters the system  
-- `channel_entities.csv` - Channel/stream/canal segments
-
-### **Variable Tables**
-- `reservoir_variables.csv` - Storage and operational variables
-- `inflow_variables.csv` - Inflow rate variables (I_*)
-- `channel_variables.csv` - Flow variables (C_*, UI_*, MF_*)
-
-### **Source Tracking**
-- `entity_source_links.csv` - Links entities to their data sources
-- `create_entity_source_links.py` - Script to generate source links
-
-### **Migration Scripts**
-- `migrate_complete_data.py` - Complete data migration script
-- `migrate_all_data.py` - Alternative migration approach 
+### Versioning & audit
+- **13 version families** covering all data domains
+- **developers** tracked
+- **24 tables** with full audit trails

@@ -3,7 +3,7 @@
 # Batch entrypoint for COEQWAL ETL
 # - Downloads ZIP from S3, unzips, classifies DSS files
 # - Converts DSS -> CSV (SV + CalSim output)
-# - (Optional) Validates against a reference CSV if provided by trigger Lambda
+# - (Optional) Validates against a reference CSV if provided in the S3 bucket
 # - Uploads CSVs + manifest to S3
 # - Updates DynamoDB status
 
