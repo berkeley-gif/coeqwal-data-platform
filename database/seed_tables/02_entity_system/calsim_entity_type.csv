@@ -1,10 +1,10 @@
-type,schematic_type_label,description,key_dynamic,is_active
+type,network_entity_type,description,key_dynamic,is_active
 reservoir,node,Reservoir or lake for water storage,storage levels,true
 channel,arc,River channel or canal for water conveyance,flow amounts and rates,true
 inflow,arc,Rim flow to reservoirs,inflow amounts and rates,true
-demand_unit_agriculture,node,Water delivery district,delivery patterns,true
-demand_unit_urban,node,Water delivery district,delivery patterns,true
-demand_unit_environmental,node,Water delivery district,delivery patterns,true
+demand_unit_agriculture,node,Agriculture water delivery district,delivery patterns,true
+demand_unit_urban,node,Community water delivery district,delivery patterns,true
+demand_unit_refuge,node,Federal wetlands water delivery district,delivery patterns,true
 groundwater,node,Groundwater aquifer,groundwater volume levels,true
 salinity_node,node,Delta salinity node,salinity,true
 delta_outflow,arc,Delta outflow,Delta outflow,true

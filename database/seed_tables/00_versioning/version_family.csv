@@ -10,4 +10,4 @@ tier,Tier,Tier definitions and classification systems,true
 geospatial,Geospatial,Geographic and spatial data definitions,true
 interpretive,Interpretive,Analysis and interpretive frameworks,true
 metadata,Metadata,Data metadata and documentation,true
-network,Network,CalSim network topology and connectivity,true
+network,Network,CalSim network topology and connectivity,trueentity,Entity,Entity version family for tracking entity data versions,true

@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 """
 COEQWAL DSS -> CSV converter
-- Works in AWS Batch container environment
-- Structured logging to stdout (CloudWatch friendly)
-- Raises errors so Batch can retry
 """
 from __future__ import annotations
 
@@ -35,7 +32,6 @@ log = logging.getLogger("dss_to_csv")
 
 
 class DSSProcessor:
-    """Enhanced DSS to CSV processor that handles multiple DSS file types."""
 
     def __init__(
         self,
@@ -100,7 +96,7 @@ class DSSProcessor:
                     if re.match(r"^[A-Z0-9_]+$", c):  # CalSim entity names
                         calsim_output_indicators += 1
 
-                    # SV input patterns (approximate; tune for real data)
+                    # SV input patterns
                     if re.match(r"^SV", a):
                         sv_input_indicators += 1
                     if re.match(r"^(INITIAL|INPUT|STATE)$", d):
@@ -117,7 +113,6 @@ class DSSProcessor:
             dss.close()
 
     def process_dss_file(self, dss_file_path: str, output_csv_path: str) -> Dict[str, int]:
-        """Main processing method. Returns metrics dict."""
         log.info("Starting DSS->CSV conversion")
         log.info("Input DSS: %s", dss_file_path)
         log.info("Output CSV: %s", output_csv_path)
@@ -351,7 +346,7 @@ def _default_csv_name(dss_path: str) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Enhanced DSS to CSV converter supporting multiple DSS file types"
+        description="DSS to CSV converter"
     )
     parser.add_argument("--dss", type=str, required=True, help="Path to input DSS file")
     parser.add_argument("--csv", type=str, help="Path to output CSV file")

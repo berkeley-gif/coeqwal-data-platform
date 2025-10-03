@@ -1,0 +1,17 @@
+# Virtual environment
+venv/
+__pycache__/
+
+# Log files
+*.log
+pdf_scraper.log
+
+# Input and output directories
+pdf/
+extracted_tables/
+test_*/
+*_output/
+
+# OS files
+.DS_Store
+Thumbs.db
