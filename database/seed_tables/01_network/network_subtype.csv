@@ -1,0 +1,28 @@
+id,short_code,label,description,network_entity_type_id,type_id,model_source_id,source_id,is_active
+1,BP,Bypass,Bypass or alternate route,1,1,1,4,true
+2,CH,Channel,Channel or stream,1,1,1,4,true
+3,CL,Canal,Constructed canal,1,1,1,4,true
+4,HIS,Historical,Historical or legacy connection,1,3,1,4,true
+5,IM,Import,Imported water,1,6,1,4,true
+6,LI,Lateral inflow,Lateral inflow,1,6,1,4,true
+7,NA,Not applicable,Not applicable,1,1,1,4,true
+8,NS,Non-simulated,Non-simulated connection,1,1,1,4,true
+9,PRP,Pre-project,Pre-project condition,1,3,1,4,true
+10,ST,Stream,Natural stream or river,1,1,1,4,true
+11,A,Agricultural,Agricultural demand,2,14,1,4,true
+12,BYP,Bypass,Bypass or flood control,2,11,1,4,true
+13,CNL,Canal,Canal junction or node,2,11,1,4,true
+14,GWO,Groundwater outflow,Groundwater discharge point,2,11,1,4,true
+15,NA,Not applicable,Not applicable,2,11,1,4,true
+16,NSM,Non-simulated,Not simulated in model,2,12,1,4,true
+17,OMD,Off-model diversion,External diversion,2,16,1,4,true
+18,OMDD,Off-model Delta depletion,External Delta depletion,2,16,1,4,true
+19,OMR,Off-model return,External return flow,2,16,1,4,true
+20,PRP,Pre-project,Pre-project condition,2,19,1,4,true
+21,R,Refuge,Refuge demand,2,14,1,4,true
+22,Reservoir,Reservoir,Reservoir,2,18,1,2,true
+23,SG,Stream gage,Stream flow measurement station,2,11,1,4,true
+24,SIM,Simulated,Simulated in model,2,12,1,4,true
+25,STM,Stream,Natural stream node,2,11,1,4,true
+26,U,Urban,Urban demand,2,14,1,4,true
+27,X,Unknown,Unknown subtype (external?),2,11,1,4,true

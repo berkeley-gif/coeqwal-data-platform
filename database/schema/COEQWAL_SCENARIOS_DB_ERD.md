@@ -19,17 +19,110 @@ ENTITY LAYER (Management/Operational)
 
 ## **📊 NETWORK LAYER TABLES**
 
-### **1. network (Master Registry)**
+### **🏷️ NETWORK TYPE HIERARCHY (Clean 3-Tier System)**
+
+#### **Tier 1: network_entity_type (Top Level)**
+```
+Table: network_entity_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- "arc", "node", "null", "unimpaired_flows"
+├── label                VARCHAR NOT NULL           -- "Arc", "Node", "None", "Unimpaired Flows"
+├── description          TEXT                       -- Purpose description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Indexes:
+├── idx_network_entity_type_short_code
+└── idx_network_entity_type_active
+```
+
+#### **Tier 2: Type table (unified arc + node types)**
+```
+Table: network_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- "CH", "CT", "D", "STR", etc.
+├── label                VARCHAR NOT NULL           -- "Channel", "Cross transfer", "Storage", etc.
+├── description          TEXT
+├── network_entity_type_id INTEGER NOT NULL         -- FK → network_entity_type.id (1=arc, 2=node)
+├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (calsim3)
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (21 total):
+├── IDs 1-10: Arc types (CH, CT, D, DA, DD, IN, RT, SP, SR, NULL)
+└── IDs 11-21: Node types (CH, NP, OM, PR, PS, RFS, S, STR, WTP, WWTP, X)
+
+Indexes:
+├── idx_network_type_short_code
+├── idx_network_type_entity_type
+└── idx_network_type_active
+```
+
+#### **Tier 3: Subtype table (unified Arc + node subtypes)**
+```
+Table: network_subtype
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- "ST", "CL", "RES", "A", "STM", etc.
+├── label                VARCHAR NOT NULL           -- "Stream", "Canal", "Reservoir", "Agricultural", etc.
+├── description          TEXT
+├── network_entity_type_id INTEGER NOT NULL         -- FK → network_entity_type.id (1=arc, 2=node)
+├── type_id              INTEGER NOT NULL           -- FK → network_type.id (parent type)
+├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (calsim3)
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (27 total):
+├── IDs 1-10: Arc subtypes (BP, CH, CL, HIS, IM, LI, NA, NS, PRP, ST)
+└── IDs 11-27: Node subtypes (A, BYP, CNL, GWO, NA, NSM, OMD, OMR, PRP, R, Reservoir, SG, SIM, STM, U, X)
+
+Indexes:
+├── idx_network_subtype_short_code
+├── idx_network_subtype_entity_type
+├── idx_network_subtype_master_type
+└── idx_network_subtype_active
+```
+
+#### **Helper Views**
+```
+View: v_network_arc_types_complete
+├── Combines all arc type hierarchy levels
+├── Shows: full_code, type_code, type_name, subtype_code, subtype_name
+└── Ordered by type_code, subtype_code
+
+View: v_network_node_types_complete  
+├── Combines all node type hierarchy levels
+├── Shows: full_code, type_code, type_name, subtype_code, subtype_name
+└── Ordered by type_code, subtype_code
+```
+
+### **1. network (master registry)**
 ```
 Table: network
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           VARCHAR UNIQUE NOT NULL    -- "AMR006", "C_AMR006"
-├── entity_type_id       INTEGER NOT NULL           -- FK → entity_type.id (arc/node)
-├── model_list           INTEGER[]                  -- Array of model_source.id
-├── source_list          INTEGER[]                  -- Array of source.id  
-├── has_gis              BOOLEAN DEFAULT FALSE
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (fundamental)
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── short_code           VARCHAR UNIQUE NOT NULL    -- "AMR006", "C_AMR006", "UNIMP_OROV"
+├── name                 VARCHAR                    -- Display name from geopackage, CalSim manual, or other sources
+├── description          TEXT                       -- Description from XML schematic or other sources
+├── comment              TEXT                       -- Additional notes or source comments
+├── entity_type_id       INTEGER                    -- FK → network_entity_type.id (arc=1, node=2, null=3, unimpaired_flows=4)
+├── type_id              INTEGER                    -- FK → network_type.id (master type lookup)
+├── subtype_id           INTEGER                    -- FK → network_subtype.id (master subtype lookup)
+├── model_list           INTEGER[]                  -- Array of model_source.id (e.g., {1} for CalSim3)
+├── source_list          INTEGER[]                  -- Array of source.id (e.g., {1,4,5} for manual+geopackage+XML)
+├── has_gis              BOOLEAN DEFAULT FALSE      -- Spatial data available
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (1=SAC, 2=SJR, 3=DELTA, 4=TL, 5=CC)
+├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family, default=12)
+├── attribute_source     JSONB                      -- Granular source attribution (see below)
 ├── created_at           TIMESTAMP DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
@@ -44,9 +137,21 @@ Constraints:
 Indexes:
 ├── idx_network_short_code
 ├── idx_network_entity_type  
+├── idx_network_type_subtype (type_id, subtype_id)
 ├── idx_network_source_list (GIN)
 ├── idx_network_model_list (GIN)
-└── idx_network_has_gis
+├── idx_network_has_gis
+├── idx_network_hydrologic_region
+└── idx_network_attribute_source (GIN)
+
+Sample attribute_source JSONB:
+{
+  "name": {"source": "calsim_manual", "table": "reservoirs_Table_4-1"},
+  "type_id": {"source": "geopackage", "column": "Type"},
+  "subtype_id": {"source": "geopackage", "column": "Sub_Type"},
+  "description": {"source": "xml_schematic", "element": "Text"},
+  "hydrologic_region_id": {"source": "geopackage", "column": "HR"}
+}
 ```
 
 ### **2. network_gis (Multi-precision spatial data)**
