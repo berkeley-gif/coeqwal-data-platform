@@ -89,7 +89,7 @@ Values (27 total):
 Indexes:
 ├── idx_network_subtype_short_code
 ├── idx_network_subtype_entity_type
-├── idx_network_subtype_master_type
+├── idx_network_subtype_type_code
 └── idx_network_subtype_active
 ```
 
@@ -115,14 +115,13 @@ Table: network
 ├── description          TEXT                       -- Description from XML schematic or other sources
 ├── comment              TEXT                       -- Additional notes or source comments
 ├── entity_type_id       INTEGER                    -- FK → network_entity_type.id (arc=1, node=2, null=3, unimpaired_flows=4)
-├── type_id              INTEGER                    -- FK → network_type.id (master type lookup)
-├── subtype_id           INTEGER                    -- FK → network_subtype.id (master subtype lookup)
+├── type_id              INTEGER                    -- FK → network_type.id
+├── subtype_ids          INTEGER[]                  -- Array of network_subtype.id values (e.g., {25,23})
 ├── model_list           INTEGER[]                  -- Array of model_source.id (e.g., {1} for CalSim3)
-├── source_list          INTEGER[]                  -- Array of source.id (e.g., {1,4,5} for manual+geopackage+XML)
+├── source_list          INTEGER[]                  -- Array of source.id (e.g., {1,4,8,9} for report+geopackage+schematic+manual)
 ├── has_gis              BOOLEAN DEFAULT FALSE      -- Spatial data available
 ├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (1=SAC, 2=SJR, 3=DELTA, 4=TL, 5=CC)
 ├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family, default=12)
-├── attribute_source     JSONB                      -- Granular source attribution (see below)
 ├── created_at           TIMESTAMP DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
@@ -135,26 +134,49 @@ Constraints:
 └── FK validation functions for arrays
 
 Indexes:
-├── idx_network_short_code
+├── idx_network_short_code (UNIQUE)
 ├── idx_network_entity_type  
-├── idx_network_type_subtype (type_id, subtype_id)
+├── idx_network_type_id
+├── idx_network_subtype_ids (GIN)                      -- Array index for subtype queries
 ├── idx_network_source_list (GIN)
 ├── idx_network_model_list (GIN)
 ├── idx_network_has_gis
-├── idx_network_hydrologic_region
-└── idx_network_attribute_source (GIN)
+└── idx_network_hydrologic_region
 
-Sample attribute_source JSONB:
-{
-  "name": {"source": "calsim_manual", "table": "reservoirs_Table_4-1"},
-  "type_id": {"source": "geopackage", "column": "Type"},
-  "subtype_id": {"source": "geopackage", "column": "Sub_Type"},
-  "description": {"source": "xml_schematic", "element": "Text"},
-  "hydrologic_region_id": {"source": "geopackage", "column": "HR"}
-}
+Query examples:
+```sql
+-- Find all streams (requires JOIN for readable results)
+SELECT n.*, nt.short_code as type_name, array_agg(ns.short_code) as subtype_names
+FROM network n
+JOIN network_type nt ON n.type_id = nt.id
+LEFT JOIN network_subtype ns ON ns.id = ANY(n.subtype_ids)
+WHERE 25 = ANY(n.subtype_ids)  -- STM subtype_id
+GROUP BY n.id, nt.short_code;
+
+-- Find all gauges (monitoring classification)
+SELECT * FROM network WHERE 23 = ANY(subtype_ids);  -- SG subtype_id
+
+-- Find stream gauges (dual purpose) 
+SELECT * FROM network WHERE subtype_ids @> array[25, 23];  -- STM + SG
+
+-- Find any gauge (active or discontinued)
+SELECT * FROM network WHERE subtype_ids && array[23, 28];  -- SG or SG_DISC
+
+-- Find nodes with multiple subtypes
+SELECT * FROM network WHERE array_length(subtype_ids, 1) > 1;
 ```
 
-### **2. network_gis (Multi-precision spatial data)**
+**Multi-subtype classification:**
+The `subtype_ids INTEGER[]` column supports multiple subtype classifications per element:
+- **Functional subtypes**: 25=STM (stream), 13=CNL (canal), 12=BYP (bypass) - operational role
+- **Monitoring subtypes**: 23=SG (stream gauge), 28=SG_DISC (discontinued gauge) - monitoring equipment
+- **Example combinations**: `{25,23}` (stream with active gauge), `{13,23}` (canal with gauge)
+- **Multi-source**: Preserves both geopackage (functional) and schematic (visual/monitoring) classifications
+- **Queries**: Use array operators with integer IDs, JOIN for readable labels
+
+```
+
+### **2. network_gis (multi-precision-level spatial data)**
 ```
 Table: network_gis
 ├── id                   SERIAL PRIMARY KEY
