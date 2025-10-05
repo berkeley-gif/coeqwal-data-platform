@@ -9,7 +9,7 @@ id,short_code,label,description,network_entity_type_id,model_source_id,source_id
 8,SP,Spillway,Spillway flow,1,1,4,true
 9,SR,Surface runoff,Surface runoff flow,1,1,4,true
 10,NULL,No Type,No type specified,1,1,4,true
-11,CH,Channel,Channel junctions and stream nodes,2,1,4,true
+11,CH_NODE,Channel node,Channel junctions and conveyance nodes,2,1,4,true
 12,NP,Non-project,Non-project services,2,1,4,true
 13,OM,Off-model,Off-model,2,1,4,true
 14,PR,Project,Project districts,2,1,4,true
