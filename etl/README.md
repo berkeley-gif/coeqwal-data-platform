@@ -4,7 +4,7 @@ Automated DSS file processing pipeline that extracts CSV data from CalSim model 
 
 ---
 
-## 🚀 AWS production deployment
+## AWS production deployment
 
 ### Architecture
 **AWS-Native pipeline** for automated processing:
@@ -57,7 +57,7 @@ s3://coeqwal-model-run/scenario/{scenario_short_code}/
 
 ---
 
-## 💻 Local development & processing
+## Local development & processing
 
 ### Prerequisites
 - Docker installed and running on your machine

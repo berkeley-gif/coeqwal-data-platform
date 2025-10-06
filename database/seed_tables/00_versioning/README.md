@@ -2,7 +2,7 @@
 
 The COEQWAL database implements a comprehensive versioning system for controlled evolution of schemas and data. 
 
-## 📁 Directory contents
+## Directory contents
 
 ```
 00_versioning/
@@ -194,7 +194,7 @@ When updating from old schema:
 4. **Validate referential integrity**
 5. **Update version mappings**
 
-## 🚀 Status
+## Status
 
 The versioning system is fully operational with:
 - 13 version families covering all domains
