@@ -1,7 +1,7 @@
 # PDF table scraper dependencies
 # Text-based extraction
 
-# Core PDF processing (lightweight)
+# Core PDF processing
 pdfplumber>=0.10.0            # Text-based PDF table extraction
 PyMuPDF>=1.23.0               # Fast PDF processing and text extraction
 

@@ -24,7 +24,7 @@ PostgreSQL database audit that runs on AWS Lambda and saves detailed reports to 
 - Record counts to verify successful uploads
 - Missing or incomplete tables
 
-## 🚀 Setup process
+## Setup process
 
 ### 1. Build dependencies layer
 
@@ -37,7 +37,7 @@ docker run --rm -v "$(pwd)":/output lambda-layer-builder
 
 # Check layer file
 ls -la lambda-layer.zip
-du -h lambda-layer.zip  # Should be ~40MB
+du -h lambda-layer.zip # Should be ~40MB
 ```
 
 ### 2. Create Lambda layer in AWS Console
@@ -63,8 +63,8 @@ du -h lambda-layer.zip  # Should be ~40MB
 3. **Timeout**: 5 minutes
 4. **Memory**: 512 MB
 5. **Environment variables**:
-   - `DATABASE_URL`: PostgreSQL connection string
-   - `S3_BUCKET`: `coeqwal-model-run`
+- `DATABASE_URL`: PostgreSQL connection string
+- `S3_BUCKET`: `coeqwal-model-run`
 6. **VPC**: Same VPC as database (`vpc-0ea4c7c730a13c52d`)
 7. **Subnets**: Database subnets (private1 + private2)
 8. **Security group**: `sg-04667c3a432b7e844` (default)
@@ -83,7 +83,7 @@ aws lambda invoke --function-name coeqwal-database-audit response.json
 cat response.json
 ```
 
-## 📊 Output and analysis
+## Output and analysis
 
 The audit generates two comprehensive files in S3:
 
@@ -108,8 +108,8 @@ aws s3 cp s3://coeqwal-model-run/database_audits/audit_20250922_215626.json audi
 aws s3 cp s3://coeqwal-model-run/database_audits/tables_summary_20250922_215626.csv tables_summary.csv
 
 # Quick analysis commands
-head -20 tables_summary.csv  # Table overview
-cat audit_detailed.json | python3 -m json.tool | head -50  # Detailed structure
+head -20 tables_summary.csv # Table overview
+cat audit_detailed.json | python3 -m json.tool | head -50 # Detailed structure
 
 # Show tables with most records
 cat tables_summary.csv | sort -t',' -k3 -nr | head -10
@@ -119,19 +119,19 @@ cat audit_detailed.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for vf in data['versioning_system']['version_families']:
-    print(f\"{vf['short_code']}: {vf['label']} ({'ACTIVE' if vf['is_active'] else 'INACTIVE'})\")
+print(f\"{vf['short_code']}: {vf['label']} ({'ACTIVE' if vf['is_active'] else 'INACTIVE'})\")
 "
 ```
 
 ## 💰 Cost
 
 AWS Lambda pricing (us-west-2):
-- **Requests**: $0.20 per 1M requests  
+- **Requests**: $0.20 per 1M requests
 - **Duration**: $0.0000166667 per GB-second
 
 **Estimated cost per audit run**: ~$0.01 (1 penny)
 
-## 🔧 Manual invocation
+## Manual invocation
 
 ```bash
 # Basic invocation (in AWS CloudShell)
@@ -142,7 +142,7 @@ cat response.json
 aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
 ```
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### Import errors (psycopg2, pandas)
 - **Check layer**: Ensure `coeqwal-db-audit-dependencies` layer is attached
@@ -161,8 +161,7 @@ aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 resp
 ### Decimal serialization errors
 The code handles PostgreSQL decimal types automatically.
 
-## 📈 Example audit results
-
+## Example audit results
 
 ```bash
 # Get the comprehensive analysis

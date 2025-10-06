@@ -2,24 +2,24 @@
 
 A comprehensive backend system for COEQWAL scenario data and analytics.
 
-## 🏗️ Repository Structure
+## Repository Structure
 
 ```
 coeqwal-backend/
-├── 📊 database/
-│   ├── schema/              # ERD and table definitions
-│   ├── seed_tables/         # Initial data for lookup tables  
-│   └── utils/               # Currently db audit lambdas
-├── 🔄 etl/
-│   ├── coeqwal-etl/         # DSS extraction and validation
-│   └── lambda-trigger/      # AWS lambda trigger on model-run upload
+├── database/
+│ ├── schema/ # ERD and table definitions
+│ ├── seed_tables/ # Initial data for lookup tables
+│ └── utils/ # Currently db audit lambdas
+├── etl/
+│ ├── coeqwal-etl/ # DSS extraction and validation
+│ └── lambda-trigger/ # AWS lambda trigger on model-run upload
 ├── 🌐 api/
-│   └── coeqwal-api/         # FastAPI and web services
-├── ⚙️ config/
-│   └── environments/        # Centralized config management (underused currently)
+│ └── coeqwal-api/ # FastAPI and web services
+├── config/
+│ └── environments/ # Centralized config management (underused currently)
 ```
 
-## 🚀 Quick start
+## Quick start
 
 ### Prerequisites
 - Docker Desktop
@@ -29,7 +29,7 @@ coeqwal-backend/
 ### Architecture
 This system runs primarily in **Docker containers** and **AWS services**:
 - **ETL**: AWS Batch jobs using Docker images
-- **API**: Can run locally or in containers  
+- **API**: Can run locally or in containers
 - **Database**: PostgreSQL RDS on AWS
 - **Triggers**: AWS Lambda functions
 
@@ -39,7 +39,7 @@ This system runs primarily in **Docker containers** and **AWS services**:
 cd etl/coeqwal-etl/
 docker build -t coeqwal-etl .
 
-# Lambda Audit  
+# Lambda Audit
 cd database/utils/db_audit_lambda/
 docker build --platform linux/amd64 -t lambda-layer-builder .
 
