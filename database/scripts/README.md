@@ -14,7 +14,7 @@ database/scripts/
     └── db_audit_lambda/
 ```
 
-## Execution wnvironments
+## Execution environments
 
 ### **Local development**
 ```bash
@@ -36,7 +36,7 @@ psql postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-
 aws lambda invoke --function-name coeqwal-database-audit response.json --region us-west-2
 ```
 
-## Data processing dcripts
+## Data processing scripts
 
 ### **create_network_seeds_from_sources.py**
 **Purpose**: Generate normalized network seed files from authoritative geopackage sources
