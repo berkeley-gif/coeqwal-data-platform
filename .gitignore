@@ -42,8 +42,14 @@ pip-wheel-metadata/
 !.env.example  # Keep a template
 
 # Local data and processing directories
-/data
-!/data/raw/csv_from_CalSim_report_pdf
+# Allow specific CSV directory from CalSim report
+!/data/raw/csv_from_CalSim_report_pdf/
+!/data/raw/csv_from_CalSim_report_pdf/**
+# Ignore everything else in data
+/data/*
+!/data/raw/
+/data/raw/*
+!/data/raw/csv_from_CalSim_report_pdf/
 /dss_processing
 
 # IDE and editor junk

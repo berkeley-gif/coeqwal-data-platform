@@ -1,0 +1,63 @@
+demand_unit,agency,provider,gw,sw,point_of_diversion
+50_PA1,Banta-Carbona ID,CVP,1,1,"Delta-Mendota Canal, San Joaquin River West Side ID CVP • • Delta-Mendota Canal"
+50_PA2,Byron-Bethany ID (excluding former Plainview ID service area),N/A,0,1,Clifton Court Forebay
+60N_NA1,Jackson Valley ID,N/A,1,1,"Pardee Reservoir via Lake Amador, Jackson Creek"
+60N_NA2,"Omochumne-Hartnell WD, Clay WD, Galt ID",N/A,1,1,Folsom South Canal
+60N_NA3,North San Joaquin WCD,N/A,1,1,Mokelumne River
+60N_NA4,"Woodbridge ID, Woodbridge Users Association",N/A,1,1,Mokelumne River
+60N_NA5,"Non-district, riparian diverters",N/A,1,1,N/A
+60S_NA1,Non-district east,N/A,1,0,N/A
+60S_NA2,Non-district west,N/A,1,0,N/A
+60S_PA1,Stockton East WD CVP,Reclamation,1,1,"Calaveras River, Stanislaus River at Goodwin Dam"
+60S_PA2,Central San Joaquin WCD,CVP,1,1,"Stanislaus River at Goodwin Dam, Littlejohns Creek"
+61_NA1,Non-district east,N/A,1,0,N/A
+61_NA2,Modesto ID,N/A,1,1,Modesto Reservoir Stanislaus River at Goodwin Dam
+61_NA3,"Non-district, Tuolumne River riparian right bank diverters",N/A,1,1,Tuolumne River
+61_NA4,"Non-district, Stanislaus River riparian diverters",N/A,1,1,Stanislaus River
+61_NA5,"Non-district, San Joaquin River riparian diverters between Tuolumne and Stanislaus rivers",N/A,1,1,"San Joaquin River, Modesto ID and Oakdale ID South return flows"
+61_NA6,"Non-district, San Joaquin River riparian diverters downstream from Stanislaus River confluence",N/A,1,1,San Joaquin River
+61_PA1,Oakdale ID north,CVP,1,1,Stanislaus River at Goodwin Diversion Dam
+61_PA2,Oakdale ID south,CVP,1,1,Stanislaus River at Goodwin Diversion Dam
+61_PA3,South San Joaquin ID,CVP,1,1,Stanislaus River at Goodwin Diversion Dam
+62_NA1,Non-district east,N/A,1,0,N/A
+62_NA2,"Non-district, Merced River riparian right bank diverters",N/A,1,1,Merced River
+62_NA3,Turlock ID,N/A,1,1,Tuolumne River at La Grange Dam
+62_NA4,"Non-district, Tuolumne River riparian left bank diverters",N/A,1,1,Tuolumne River
+62_NA5,"Non-district, San Joaquin River riparian diverters between Merced and Tuolumne rivers",N/A,1,1,San Joaquin River
+62_NA6,"Merced ID (3.5% of total, north of Merced River)",N/A,1,1,Merced River at Crocker-Huffman Dam
+63_NA1,Non-district east,N/A,1,0,N/A
+63_NA2,"Non-district, Merced riparian left bank diverters",N/A,1,1,Merced River
+63_NA3,"Merced ID (96.5% of total, south of Merced River)",N/A,1,1,Merced River at Crocker-Huffman Dam
+63_NA4,"Non-district West, Plainsburg ID, La Grande-Athlone WD, Turner Island WD, Stevinson WD, Merced River riparian diverters",N/A,1,1,"San Joaquin River, Merced River"
+63_NA5,El Nido ID,Merced ID,1,1,"Merced River, Deadman Creek"
+64_NA1,Non-district east,N/A,1,0,N/A
+64_NA2,Non-district west,N/A,1,1,"San Joaquin at Gravelly Ford, Fresno River, Chowchilla WD and Madera ID return flows"
+64_PA1,"Madera ID, Madera WD",CVP,1,1,"Madera Canal, Fresno River"
+64_PA2,Chowchilla WD,CVP,1,1,"Madera Canal, Chowchilla River"
+64_PA3,"Gravelly Ford WD, Root Creek WD",CVP,1,1,"San Joaquin at Gravelly Ford, Madera Canal"
+64_XA,Columbia Canal Company,CVP,1,1,Mendota Pool
+71_NA1,Non-district San Joaquin River riparian diverters (Orestimba Creek to Del Puerto Creek),N/A,1,1,San Joaquin River
+71_NA2,El Solyo WD and non-district San Joaquin River riparian diverters (Del Puerto Creek to Vernalis),N/A,1,1,San Joaquin River
+71_NA3,Non-district,N/A,1,0,N/A
+71_PA1,Hospital WD,CVP,1,1,Delta-Mendota Canal
+71_PA2,West Stanislaus ID,CVP,1,1,Delta-Mendota Canal
+71_PA3,Kern Cañon WD,CVP,1,1,Delta-Mendota Canal
+71_PA4,Patterson ID,CVP,1,1,"Delta-Mendota Canal, San Joaquin River"
+71_PA5,"Del Puerto WD, Salado WD, Orestimba WD, Sunflower WD",CVP,1,1,Delta-Mendota Canal
+71_PA6,"Davis WD, Foothill WD, Mustang WD, Quinto WD, Romero WD, Centinella WD",CVP,1,1,Delta-Mendota Canal
+71_PA7,Oak Flat WD,SWP,1,1,California Aqueduct
+71_PA8,Byron-Bethany ID (area which was formerly Plainview ID),CVP,1,1,"Clifton Court, Delta-Mendota Canal"
+72_NA1,Non-district San Joaquin River riparian diverters (Mud Slough to Orestimba Creek),N/A,1,1,San Joaquin River
+72_NA2,Non-district,N/A,1,0,N/A
+72_PA,Laguna WD,CVP,1,1,Central California ID Main Canal
+72_XA1,San Luis Canal Company,CVP,1,1,"Delta-Mendota Canal, San Joaquin River at Sack Dam"
+72_XA2,Central California ID south,CVP,1,1,Delta-Mendota Canal and Mendota Pool
+72_XA3,Central California ID north,CVP,1,1,Delta-Mendota Canal
+73_NA,Non-district,N/A,1,0,N/A
+73_PA1,San Luis WD north,CVP,1,1,"California Aqueduct, Delta-Mendota Canal"
+73_PA2,"Eagle Field WD, Mercy Springs WD, Oro Loma WD",CVP,1,1,Delta-Mendota Canal
+73_PA3,Pacheco WD,CVP,1,1,"Delta-Mendota Canal Panoche WD CVP • • California Aqueduct, Delta-Mendota Canal San Luis WD south CVP • • California Aqueduct"
+73_XA,Firebaugh Canal WD,CVP,1,1,"Delta-Mendota Canal, Mendota Pool"
+90_PA1,"Westlands WD Priority Area I, DD No. 2",CVP,1,1,California Aqueduct
+90_PA2,"Westlands WD Priority Area II, DD No. 1, No. 3",CVP,1,1,"California Aqueduct, Coalinga Canal"
+91_PA,"Coelho Family Trust, Fresno Slough WD, James ID, RD 1606, Tranquility ID, Tranquility PUD",CVP,1,1,Mendota Pool

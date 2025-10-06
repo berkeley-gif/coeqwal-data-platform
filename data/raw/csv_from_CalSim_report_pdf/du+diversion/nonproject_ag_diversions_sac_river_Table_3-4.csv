@@ -1,0 +1,13 @@
+demand_unit,diversion_arc,river_reach,river_mile_start,river_mile_end,bank,area_acres,annual_diversion_taf,table_id
+02_NA,D_SAC281_02_NA,Keswick to Bend Bridge,299.0,257.0,Right,800.0,1,Table 3-4
+04_NA1,D_SAC224_04_NA,Bend Bridge to Glenn-Colusa Irrigation District Intake,257.0,207.0,Right,2200.0,1,Table 3-4
+08N_NA,D_SAC185_08N_NA,Glenn-Colusa Irrigation District Intake to Hamilton Bend,207.0,154.0,Right,7200.0,14,Table 3-4
+08S_NA1,D_SAC146_08S_NA1,Hamilton Bend to Sycamore Slough,154.0,134.0,Right,15600.0,8,Table 3-4
+08S_NA2,D_SAC129_08S_NA2,Sycamore Slough to Colusa Basin Drain Outfall,134.0,93.0,Right,,21,Table 3-4
+21_NA,D_SAC081_21_NA,Colusa Basin Drain to Sacramento Bypass,93.0,66.0,Right,9700.0,13,Table 3-4
+03_NA,D_SAC273_03_NA,Keswick to Bend Bridge,299.0,257.0,Left,2200.0,5,Table 3-4
+05_NA1,D_SAC240_05_NA,Bend Bridge to Big Chico Creek,257.0,196.0,Left,2400.0,7,Table 3-4
+09_NA,D_SAC185_09_NA,Big Chico Creek to Butte Slough Outfall Gates,196.0,141.0,Left,5300.0,14,Table 3-4
+18_NA,D_SAC136_18_NA,Butte Slough Outfall Gates to Tisdale Weir,141.0,122.0,Left,1800.0,5,Table 3-4
+19_NA2,D_SAC109_19_NA,Tisdale Weir to Feather River,122.0,83.0,Left,0.0,20,Table 3-4
+22_NA,D_SAC075_22_NA,Feather River to American River,83.0,63.0,Left,2200.0,1,Table 3-4

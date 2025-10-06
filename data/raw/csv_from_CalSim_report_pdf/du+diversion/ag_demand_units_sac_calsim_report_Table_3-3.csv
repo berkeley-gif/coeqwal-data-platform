@@ -1,0 +1,83 @@
+demand_unit,agency,provider,gw,sw,point_of_diversion
+02_NA,Non-district,N/A,1,1,"Cottonwood Creek, Sacramento River"
+02_SA,"Anderson-Cottonwood ID, misc. settlement contractors",CVP,1,1,Sacramento River
+02_PA,Clear Creek CSD,CVP,1,1,Whiskeytown Lake
+03_NA,Non-district,N/A,1,1,"Cow Creek, Battle Creek, Sacramento River"
+03_SA,"Anderson-Cottonwood ID, misc. settlement contractors",CVP,1,1,Sacramento River
+03_PA,Bella Vista WD,CVP,1,1,Sacramento River via Wintu Pumping Plant
+04_NA,Non-district including misc. settlement contractors,N/A,1,1,"Elder Creek, Thomes Creek, Sacramento River"
+04_PA1,"Corning WD, Proberta WD, Thomes Creek WD",CVP,1,1,Corning Canal
+04_PA2,Kirkwood WD,CVP,1,1,Tehama-Colusa Canal
+05_NA,"Los Molinos MWC, non-district including misc.",CVP,1,1,"Antelope Creek, Mill Creek, Deer Creek, Sacramento River"
+06_NA,Non-district,N/A,1,0,N/A
+06_PA,Orland Unit WUA,Reclamation,1,1,"Stony Creek, via North and South canals"
+07N_NA,Non-district,N/A,1,0,N/A
+07N_PA,"Glide WD, Holthouse WD (65% of total), Kanawha WD, Orland- Artois WD",CVP,1,1,Tehama-Colusa Canal
+07S_NA,Non-district,N/A,1,0,N/A
+CVP,,N/A,1,1,Tehama-Colusa Canal
+08N_NA,Non-district,N/A,1,1,Sacramento River
+08N_PA,Colusa Drain MWC (8% of total),CVP,1,1,Colusa Basin Drain
+08N_SA1,"Maxwell ID (5% of total), Princeton-Codora-Glenn ID, Provident ID, misc. settlement contractors",CVP,1,1,Sacramento River
+08N_SA2,Glenn-Colusa ID (55% of total),CVP,1,1,Glenn-Colusa Canal
+08S_NA1,Non-district,N/A,1,1,Sacramento River
+08S_NA2,Non-district,N/A,1,1,Sacramento River
+08S_PA,Colusa Drain MWC (70% of total),CVP,1,1,Colusa Basin Drain
+08S_SA1,"Maxwell ID (95% of total), Sycamore Family Trust, misc. settlement contractors",CVP,1,1,"Sacramento River, Colusa Basin Drain CalSim 3 Main Report"
+08S_SA2,Glenn-Colusa ID (45% of total),CVP,1,1,Glenn-Colusa Canal
+08S_SA3,"RD 108, River Garden Farms, misc. settlement contractors",CVP,1,1,Sacramento River
+09_NA,"Llano Seco Ranch (formerly Parrot Ranch), Dayton MWC, non- district",N/A,1,1,"Sacramento River, Butte Creek"
+09_SA1,Pacific Realty Associates (formerly M&T Chico Ranch),CVP,1,1,"Sacramento River, Butte Creek"
+09_SA2,"RD 1004, Carter MWC, Jack Baber, misc. settlement contractors",CVP,1,1,"Sacramento River, Butte Creek"
+10_NA,"Rancho Esquon, Durham MWC, non-district",N/A,1,1,Butte Creek
+11_NA,"Sutter Butte MWC, non-district",N/A,1,1,"DWR Pump Station No. 2, Sutter Bypass"
+11_SA1,Western Canal WD,SWP,1,1,Thermalito Afterbay via Western Canal and PG&E lateral
+11_SA2,Richvale ID,SWP,1,1,Thermalito Afterbay via Richvale and Sutter-Butte canals
+11_SA3,"Biggs-West Gridley WD, Butte WD",SWP,1,1,Thermalito Afterbay via Sutter-Butte Canal
+11_SA4,Sutter Extension WD,SWP,1,1,Thermalito Afterbay via Sutter-Butte Canal and Sunset Pumps
+12_NA,Non-district,N/A,1,1,Irrigation return flow from South Feather Water and Power Agency
+12_SA,Misc. FRSA diverters,N/A,0,1,Feather River
+13_NA,"South Feather Water and Power Agency, Yuba County WD",N/A,1,1,"South Fork Feather, Lost Creek Non-district N/A • - N/A"
+14_NA,Browns Valley ID,Browns Valley ID,1,1,"Yuba River, French Dry Creek"
+15N_NA1,Non-district,N/A,1,0,N/A
+15N_NA2,"Cordua ID, Hallwood ID, Ramirez WD",Yuba WA,1,1,Lower Yuba River at Daguerre Point Dam
+15N_SA,Misc. FRSA diverters,N/A,0,1,Feather River
+15S_SA,"Plumas MWC, misc. FRSA diverters",SWP,1,1,Feather River
+15S_NA1,Non-district,N/A,1,0,N/A
+15S_NA2,"Brophy WD, Dry Creek MWC, South Yuba WD, Wheatland WD",Yuba WA,1,1,Lower Yuba River at Daguerre Point Dam
+16_NA1,Non-district,N/A,1,0,N/A
+16_NA2,Non-district,N/A,1,0,East Borrow Canal Chapter 3: Demand Units August 2022 – 3-11 Table 3-3. Agricultural Demand Units in Sacramento River Hydrologic Region (contd.) Demand Unit Water District or Agency Water Provider Water Source
+16_PA,Feather WD,CVP,1,1,Feather River
+16_SA,"Garden Highway MWC, Tudor ID, Oswald WD, misc. FRSA diverters",SWP,1,1,Feather River
+17N_NA,Non-district,N/A,1,0,N/A
+17S_NA,Non-district,N/A,1,1,"Butte Slough, Wadsworth Canal Sutter Bypass-Butte Slough WUA N/A • • Sutter Bypass"
+17S_SA,Misc. FRSA diverters and minor settlement contractors,N/A,1,1,Feather River
+18_NA,"Butte Slough Irrigation Company, Sutter Butte MWC, non- district",N/A,1,1,"Butte Creek, Sutter Bypass"
+18_SA,"Meridian Farms WC, Lomo Cold Storage, Sutter MWC (5%), Tisdale IDC, misc. settlement contractors",CVP,1,1,Sacramento River
+19_SA,"Bardis et al., Pelger MWC, Sutter MWC (95% of total), misc. settlement contractors",CVP,1,1,Sacramento River
+20_NA1,Yolo County FC&WCD,N/A,1,1,Cache Creek at Capay Diversion Dam
+20_NA2,Non-district,N/A,1,0,N/A
+20_PA,"University of California, Davis",Solano County WA,1,1,Putah South Canal
+21_NA,Non-district,N/A,1,1,Sacramento River
+21_PA,Colusa Drain MWC (22% of total),CVP,1,1,Knights Landing Ridge Cut
+21_SA,"Conaway Conservancy Group, misc. settlement contractors",N/A,1,1,"Sacramento River, Cache Creek, Yolo Bypass"
+22_NA,Non-district,N/A,1,1,Sacramento River
+22_SA1,"Natomas Central MWC, Pleasant Grove-Verona MWC, misc. settlement contractors",CVP,1,1,"Sacramento River, Cross-Canal"
+22_SA2,Misc. FRSA diverters,N/A,0,1,Feather River
+23_NA,"Camp Far West ID, South Sutter WD, non-district",South Sutter WD,1,1,Bear River
+24_NA1,Nevada ID,Nevada ID,1,1,"Combie Canal, Auburn Ravine"
+24_NA2,"Placer County WA Zone 5, non-district",Placer County WA,1,1,Auburn Ravine
+24_NA3,Placer County WA Zone 1,Placer County WA,1,1,"Lower Boardman Canal, South Canal"
+25_NA,"North Delta WA, non-district",N/A,1,1,Delta channels including Barker Slough
+25_PA1,Solano ID (77% of total),Reclamation,1,1,Putah Creek CalSim 3 Main Report
+25_PA2,Maine Prairie WD,Reclamation,1,1,Putah South Canal
+26N_NA,Non-district,N/A,1,0,N/A
+26S_NA,Non-district,N/A,1,0,N/A
+CULOS,Miscellaneous agriculture in upper Feather River watershed,N/A,0,1,Feather River
+GDPUD_NA,Georgetown Divide PUD,N/A,0,1,"Stumpy Meadows Reservoir, Pilot Creek"
+LCCWD,Little Last Chance ID,N/A,0,1,Little Last Chance Creek
+NIDBR_NA,,Nevada ID,0,1,"Combie Reservoir, Bear River"
+NIDDC_NA1,,Nevada ID,0,1,"Scott Flat Reservoir, Deer Creek"
+NIDDC_NA2,,Nevada ID,0,1,"Scott Flat Reservoir, Deer Creek"
+NIDDC_NA3,,Nevada ID,0,1,Wolf Creek
+PUTAH,Miscellaneous agriculture in upper Putah Creek watershed,N/A,0,1,Putah Creek
+SIDSH,Solano ID (23% of total),Solano County WA,1,1,Putah South Canal

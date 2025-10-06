@@ -1,0 +1,8 @@
+demand_unit,diversion_arc,river_reach,river_mile_start,river_mile_end,bank,area_acres,annual_diversion_taf,table_id
+11_SA1,None,Sutter Extension Water District to Fish Barrier Dam,37.9,67.0,Right,5300,0,Table 3-5
+16_SA,D_FTR008_SA,Sutter Bypass East Levee to Sutter Extension Water District,7.6,37.9,Right,4200,3,Table 3-5
+17S_SA,D_FTR003_SA,River mouth to Sutter Bypass East Levee,0.0,7.6,Right,200,5,Table 3-5
+12_SA,D_FTR059_12_SA,Honcut Creek to Fish Barrier Dam,44.8,67.0,Left,2500,6,Table 3-5
+15N_SA,D_FTR045_15N_SA,Yuba River to Honcut Creek,27.7,44.8,Left,1900,4,Table 3-5
+15S_SA,D_FTR028_15S_SA,Yuba/Sutter county line to Yuba River,10.8,27.7,Left,1400,1,Table 3-5
+22_SA,D_FTR003_22_SA,River mouth to Yuba/Sutter county line,0.0,10.8,Left,3000,7,Table 3-5
