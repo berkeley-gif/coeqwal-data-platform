@@ -1,0 +1,6 @@
+short_code,full_name,canonical_group,is_active
+TAF,thousand acre-feet,volume,true
+CFS,cubic feet per second,flow,true
+acres,acres,area,true
+mm,millimeters,length,true
+km,kilometers,length,true

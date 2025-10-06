@@ -1,6 +1,6 @@
 # COEQWAL API deployment guide
 
-## **Directory Structure **
+## **Directory structure **
 
 ```
 coeqwal-backend/
@@ -21,19 +21,19 @@ coeqwal-backend/
 
 ## **Parallel CI/CD pipelines**
 
-### **ETL Pipeline**
+### **ETL pipeline**
 ```yaml
 Trigger: etl/coeqwal-etl/** changes
 Action: Build -> Push to ECR -> AWS Batch Jobs
 ```
 
-### **API Pipeline** (New)
+### **API pipeline** (New)
 ```yaml
 Trigger: api/coeqwal-api/** changes  
 Action: Build -> Push to ECR -> Deploy to ECS Fargate
 ```
 
-## **Quick Deployment**
+## **Deployment**
 
 ### **1. Set GitHub secrets**
 Secrets added (in addition to ETL secrets):
@@ -70,9 +70,8 @@ git push origin main
 - **Auto-scaling**: 2-10 ECS instances based on load
 - **Always-on**: Zero cold starts
 
-## 🧪 **Basic Tests**
+## 🧪 **Basic tests**
 
-### **Basic Tests**
 ```bash
 # Get API URL from CloudFormation outputs
 API_URL=$(aws cloudformation describe-stacks \
@@ -130,8 +129,6 @@ aws ec2 describe-security-groups --group-ids sg-your-rds-security-group
 
 ## **Frontend integration**
 
-Next.js apps can now use:
-
 ```javascript
 // Load network data
 const nodes = await fetch(`${API_URL}/api/nodes`);
@@ -143,12 +140,12 @@ const analysis = await fetch(`${API_URL}/api/nodes/${nodeId}/analysis`);
 
 ## **Monitoring**
 
-### **CloudWatch Metrics**
-- **ECS Service**: CPU, Memory, Task count
-- **Load Balancer**: Request count, Response time, Error rate
+### **CloudWatch metrics**
+- **ECS service**: CPU, Memory, Task count
+- **Load balancer**: Request count, Response time, Error rate
 - **Database**: Connection count, Query performance
 
-### **Custom Metrics**
-- **API Response Times**: Via `X-Process-Time` headers
-- **Workshop Readiness**: Via `/api/workshop/status`
-- **Database Pool**: Via `/api/health`
+### **Custom metrics**
+- **API response times**: Via `X-Process-Time` headers
+- **Workshop readiness**: Via `/api/workshop/status`
+- **Database pool**: Via `/api/health`

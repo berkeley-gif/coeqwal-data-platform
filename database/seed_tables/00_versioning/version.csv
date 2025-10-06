@@ -11,3 +11,4 @@ geospatial,1.0.0,{},"Initial geospatial version",true
 interpretive,1.0.0,{},"Initial interpretive version",true
 metadata,1.0.0,{},"Initial metadata version",true
 network,1.0.0,{},"Initial network version",true
+entity,1.0.0,{},"Initial entity version for demand units and traditional entities",true

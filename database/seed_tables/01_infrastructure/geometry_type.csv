@@ -1,5 +1,0 @@
-short_code,label,description,is_active
-POINT,Point,Single coordinate,true
-LINESTRING,LineString,Linear feature,true
-POLYGON,Polygon,Area polygon,true
-MULTIPOLYGON,MultiPolygon,Multiple polygons,true

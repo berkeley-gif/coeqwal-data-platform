@@ -1,0 +1,808 @@
+// NETWORK & ENTITY LAYER ERD
+// Complete ERD based on NETWORK_ENTITY_ERD_REVIEW design
+// Two-layer architecture thus far: Network (infrastructure) + Entity (management)
+
+// ============================================================================
+// LOOKUP TABLES
+// ============================================================================
+
+Table developer {
+  id           int       [pk, increment]
+  email        text      [unique]
+  name         text
+  display_name text      [not null]
+  affiliation  text
+  role         text
+  aws_sso_user_id  text  [unique]
+  aws_sso_username text  [unique]
+  is_bootstrap boolean   [not null, default: false]
+  sync_source  text      [default: 'manual']
+  is_active    boolean   [not null, default: true]
+  last_login   timestamptz
+  created_at   timestamptz [not null, default: `now()`]
+  updated_at   timestamptz [not null, default: `now()`]
+  
+  Indexes {
+    (email) [unique]
+    (aws_sso_user_id) [unique]
+    (aws_sso_username) [unique]
+    (role, is_active)
+    (is_bootstrap, is_active)
+    (sync_source, is_active)
+  }
+}
+
+Table source {
+  id          int     [pk, increment]
+  short_code  text    [not null, unique]
+  label       text    [not null]
+  description text
+  is_active   boolean [not null, default: true]
+  created_at  timestamptz [not null, default: `now()`]
+  created_by  int      [not null]
+  updated_at  timestamptz [not null, default: `now()`]
+  updated_by  int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table model_source {
+  id          int     [pk, increment]
+  short_code  text    [not null, unique]
+  label       text    [not null]
+  description text
+  is_active   boolean [not null, default: true]
+  created_at  timestamptz [not null, default: `now()`]
+  created_by  int      [not null]
+  updated_at  timestamptz [not null, default: `now()`]
+  updated_by  int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table version_family {
+  id          int     [pk, increment]
+  short_code  text    [not null, unique]
+  label       text    [not null]
+  description text
+  is_active   boolean [not null, default: true]
+  created_at  timestamptz [not null, default: `now()`]
+  created_by  int      [not null]
+  updated_at  timestamptz [not null, default: `now()`]
+  updated_by  int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table version {
+  id                int     [pk, increment]
+  version_family_id int     [not null]
+  version_number    text    [not null]
+  manifest          jsonb   [default: '{}']
+  changelog         text
+  is_active         boolean [not null, default: false]
+  created_at        timestamptz [not null, default: `now()`]
+  created_by        int     [not null]
+  updated_at        timestamptz [not null, default: `now()`]
+  updated_by        int     [not null]
+  
+  Indexes {
+    (version_family_id, version_number) [unique]
+    (version_family_id, is_active)
+    (is_active)
+  }
+}
+
+Table network_entity_type {
+  id         int  [pk, increment]
+  short_code text [not null, unique, note: "arc, node, null"]
+  label      text [not null, note: "Arc, Node, None"]
+  description text
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+
+Table hydrologic_region {
+  id         int  [pk, increment]
+  short_code text [not null, unique]
+  label      text [not null]
+  description text
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table network_arc_type {
+  id         int  [pk, increment]
+  short_code text [not null, unique]
+  label      text [not null]
+  description text
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table network_node_type {
+  id         int  [pk, increment]
+  short_code text [not null, unique]
+  label      text [not null]
+  description text
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table network_arc_subtype {
+  id         int  [pk, increment]
+  short_code text [not null, unique]
+  label      text [not null]
+  description text
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table network_node_subtype {
+  id         int  [pk, increment]
+  short_code text [not null, unique]
+  label      text [not null]
+  description text
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (is_active, short_code)
+  }
+}
+
+Table calsim_entity_type {
+  id                     int   [pk, increment]
+  type                   text  [not null, unique]
+  network_entity_type_id int   [note: "FK to network_entity_type - indicates infrastructure mapping"]
+  description            text
+  key_dynamic            text
+  is_active              boolean [default: true]
+  
+  Indexes {
+    (is_active, type)
+    (network_entity_type_id)
+  }
+}
+
+Table variable {
+  id         int  [pk, increment]
+  short_code text [not null, unique]
+  label      text [not null]
+  description text
+  variable_type_id int [not null]
+  is_active  boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  created_by int [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (variable_type_id)
+    (is_active, short_code)
+  }
+}
+
+// ============================================================================
+// NETWORK LAYER TABLES (Infrastructure/Physical)
+// ============================================================================
+
+Table network {
+  id                   int      [pk, increment]
+  short_code           text     [not null, unique, note: "AMR006, C_AMR006"]
+  entity_type_id       int      [not null, note: "FK to network_entity_type - arc/node/null classification"]
+  model_list           int[]    [not null, note: "Array of model_source.id"]
+  source_list          int[]    [not null, note: "Array of source.id"]
+  has_gis              boolean  [default: false]
+  hydrologic_region_id int      [note: "FK to hydrologic_region - fundamental property"]
+  network_version_id   int      [not null, note: "FK to version - network family"]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (entity_type_id)
+    source_list [type: gin]
+    model_list [type: gin]
+    (has_gis)
+    (hydrologic_region_id)
+    (network_version_id)
+  }
+}
+
+Table network_gis {
+  id                       int      [pk, increment]
+  network_id               int      [not null, note: "FK to network"]
+  precision_level          text     [not null, note: "precise, mapping_efficient, regional"]
+  geom_wkt                 text     [not null, note: "Primary geometry storage"]
+  srid                     int      [default: 4326]
+  geom                     geometry [note: "Computed PostGIS geometry - STORED"]
+  center_latitude          numeric  [note: "Computed arc midpoint ON line - STORED"]
+  center_longitude         numeric  [note: "Computed arc midpoint ON line - STORED"]
+  estimated_accuracy_meters numeric [note: "Accuracy estimate in meters"]
+  source_id                int      [not null]
+  network_version_id       int      [not null]
+  created_at               timestamptz [not null, default: `now()`]
+  created_by               int      [not null]
+  updated_at               timestamptz [not null, default: `now()`]
+  updated_by               int      [not null]
+  
+  Indexes {
+    (network_id)
+    (precision_level)
+    (network_id, precision_level)
+    geom [type: gist]
+    (source_id)
+  }
+}
+
+Table network_arc_attribute {
+  id                   int      [pk, increment]
+  network_id           int      [not null]
+  name                 text     [note: "Arc name"]
+  calsim_id_stream     text     [note: "Stream/canal identifier - not unique"]
+  arc_id_short_code    text     [note: "Arc identifier - in most cases matches network.short_code"]
+  type_id              int      [note: "FK to network_arc_type"]
+  sub_type_id          int      [note: "FK to network_arc_subtype"]
+  shape_length         numeric  [note: "Arc length in meters"]
+  attribute_source     jsonb    [not null, note: "Source attribution with column details"]
+  network_version_id   int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (network_id)
+    attribute_source [type: gin]
+    (type_id)
+    (type_id, sub_type_id)
+    (calsim_id_stream)
+    (arc_id_short_code)
+  }
+}
+
+Table network_node_attribute {
+  id                   int      [pk, increment]
+  network_id           int      [not null]
+  calsim_id            text     [note: "CalSim node identifier"]
+  riv_mi               numeric  [note: "River mile"]
+  riv_name             text     [note: "River name"]
+  comment              text     [note: "Node comment"]
+  c2vsim_gw            text     [note: "C2VSIM groundwater ID"]
+  c2vsim_sw            text     [note: "C2VSIM surface water ID"]
+  type_id              int      [note: "FK to network_node_type"]
+  sub_type_id          int      [note: "FK to network_node_subtype"]
+  nrest_gage           text     [note: "Nearest gage"]
+  strm_code            text     [note: "Stream code"]
+  rm_ii                text     [note: "River mile indicator"]
+  attribute_source     jsonb    [not null, note: "Source attribution with column details"]
+  network_version_id   int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (network_id)
+    attribute_source [type: gin]
+    (type_id)
+    (type_id, sub_type_id)
+    (calsim_id)
+  }
+}
+
+Table network_physical_connectivity {
+  id                   int      [pk, increment]
+  arc_network_id       int      [not null, note: "FK to network - connecting arc"]
+  from_node_network_id int      [not null, note: "FK to network - origin node"]
+  to_node_network_id   int      [not null, note: "FK to network - destination node"]
+  source_id            int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (arc_network_id)
+    (from_node_network_id)
+    (to_node_network_id)
+    (source_id)
+  }
+}
+
+Table network_operational_connectivity {
+  id                   int      [pk, increment]
+  from_network_id      int      [not null]
+  to_network_id        int      [not null]
+  via_arc_network_id   int      [note: "FK to network - connecting arc if applicable"]
+  source_id            int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (from_network_id)
+    (to_network_id)
+    (via_arc_network_id)
+    (source_id)
+  }
+}
+
+Table network_computational_connectivity {
+  id                   int      [pk, increment]
+  from_network_id      int      [not null]
+  to_network_id        int      [not null]
+  equation_name        text     [note: "continuityAMR006"]
+  wresl_context_list   jsonb    [not null, note: "Array of file/context pairs"]
+  source_id            int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (from_network_id)
+    (to_network_id)
+    wresl_context_list [type: gin]
+    (equation_name)
+    (source_id)
+  }
+}
+
+Table network_variable {
+  id                   int      [pk, increment]
+  network_id           int      [not null]
+  variable_id          int      [not null]
+  variable_role        text     [note: "flow, storage, diversion, return"]
+  units                text
+  source_id            int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (network_id)
+    (variable_id)
+    (network_id, variable_id, variable_role) [unique]
+  }
+}
+
+Table network_source_attribution {
+  id         int      [pk, increment]
+  network_id int      [not null]
+  source_id  int      [not null]
+  note       text
+  created_at timestamptz [not null, default: `now()`]
+  created_by int      [not null]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by int      [not null]
+  
+  Indexes {
+    (network_id)
+    (source_id)
+    (network_id, source_id) [unique]
+  }
+}
+
+// ============================================================================
+// TIER SYSTEM TABLES
+// ============================================================================
+
+Table tier_definition {
+  id               int      [pk, increment]
+  short_code       text     [not null, unique, note: "community_water, agricultural_revenue, etc."]
+  label            text     [not null, note: "Community Water Systems, Agricultural Revenue"]
+  description      text
+  tier_category    text[]   [note: "Multiple categories allowed - water_supply, environmental, economic"]
+  measurement_unit text     [note: "acre_feet, people_served, temperature_f"]
+  is_active        boolean  [default: true]
+  tier_version_id  int      [not null]
+  created_at       timestamptz [not null, default: `now()`]
+  created_by       int
+  updated_at       timestamptz [not null, default: `now()`]
+  updated_by       int
+  
+  Indexes {
+    (short_code) [unique]
+    tier_category [type: gin]
+    (is_active)
+    (tier_version_id)
+  }
+}
+
+Table variable_tier {
+  id                   int      [pk, increment]
+  variable_id          int      [not null, note: "FK to variable"]
+  tier_definition_id   int      [not null, note: "FK to tier_definition"]
+  tier_value           numeric  [note: "Value in base unit"]
+  base_unit            text     [not null, note: "TAF, CFS, people, temperature_f - authoritative unit"]
+  supported_unit_list  text[]   [note: "Units this can be converted to"]
+  note                 text
+  tier_version_id      int      [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (variable_id)
+    (tier_definition_id)
+    (base_unit)
+    supported_unit_list [type: gin]
+    (variable_id, tier_definition_id) [unique]
+  }
+}
+
+// ============================================================================
+// ENTITY LAYER TABLES (Management/Operational)
+// ============================================================================
+
+Table channel_entity {
+  id                   int      [pk, increment]
+  network_arc_id       int      [not null, note: "FK to network"]
+  short_code           text     [not null, unique]
+  name                 text
+  description          text
+  subtype              text
+  entity_type_id       int      [not null, note: "FK to calsim_entity_type"]
+  boundary_condition   text
+  from_node            text
+  to_node_id           int      [note: "FK to network - entity-specific reference"]
+  length_m             numeric
+  entity_version_id    int      [not null, note: "FK to version - entity family"]
+  attribute_source     jsonb    [not null, note: "Source attribution with column details"]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (network_arc_id)
+    (entity_type_id)
+    (subtype)
+    (entity_type_id, subtype)
+    (to_node_id)
+    (entity_version_id)
+  }
+}
+
+Table reservoir_entity {
+  id                   int      [pk, increment]
+  network_node_id      int      [not null, note: "FK to network"]
+  short_code           text     [not null, unique]
+  name                 text
+  description          text
+  associated_river     text
+  entity_type_id       int      [not null, note: "FK to calsim_entity_type"]
+  capacity_taf         numeric
+  dead_pool_taf        numeric
+  surface_area_acres   numeric
+  operational_purpose  text
+  entity_version_id    int      [not null, note: "FK to version - entity family"]
+  attribute_source     jsonb    [not null, note: "Source attribution with column details"]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (network_node_id)
+    (entity_type_id)
+    (operational_purpose)
+    (entity_version_id)
+  }
+}
+
+Table inflow_entity {
+  id                   int      [pk, increment]
+  network_arc_id       int      [not null, note: "FK to network - inflow arc"]
+  short_code           text     [not null, unique]
+  name                 text
+  description          text
+  to_node_id           int      [note: "FK to network - entity-specific reference"]
+  entity_type_id       int      [not null, note: "FK to calsim_entity_type"]
+  entity_version_id    int      [not null, note: "FK to version - entity family"]
+  attribute_source     jsonb    [not null, note: "Source attribution with column details"]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (short_code) [unique]
+    (network_arc_id)
+    (entity_type_id)
+    (to_node_id)
+    (entity_version_id)
+  }
+}
+
+Table du_urban_entity {
+  id                   int      [pk, increment]
+  du_id                text     [not null, unique, note: "Demand unit identifier"]
+  network_node_id      int      [not null, note: "FK to network - service location"]
+  wba_id               text
+  du_class             text     [default: 'Urban']
+  total_acre           numeric
+  polygon_count        int      [default: 1]
+  community_agency     text     [note: "Urban specific"]
+  gw                   text     [note: "Urban specific"]
+  sw                   text     [note: "Urban specific"]
+  point_of_diversion   text     [note: "Urban specific"]
+  entity_type_id       int      [not null, note: "FK to calsim_entity_type"]
+  entity_version_id    int      [not null, note: "FK to version - entity family"]
+  attribute_source     jsonb    [not null, note: "Source attribution with column details"]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (du_id) [unique]
+    (network_node_id) [unique, note: "Multiple urban DUs can NOT reference same network node"]
+    (entity_type_id)
+    (community_agency)
+    (du_class)
+    (entity_version_id)
+  }
+}
+
+Table du_agriculture_entity {
+  id                   int      [pk, increment]
+  du_id                text     [not null, unique]
+  network_node_id      int      [not null]
+  wba_id               text
+  du_class             text     [default: 'Agriculture']
+  total_acre           numeric
+  polygon_count        int      [default: 1]
+  crop_type            text     [note: "Agriculture specific"]
+  irrigation_method    text     [note: "Agriculture specific"]
+  water_right_type     text     [note: "Agriculture specific"]
+  entity_type_id       int      [not null]
+  entity_version_id    int      [not null]
+  attribute_source     jsonb    [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (du_id) [unique]
+    (network_node_id)
+    (entity_type_id)
+    (crop_type)
+    (irrigation_method)
+    (entity_version_id)
+  }
+}
+
+Table du_refuge_entity {
+  id                   int      [pk, increment]
+  du_id                text     [not null, unique]
+  network_node_id      int      [not null]
+  wba_id               text
+  du_class             text     [default: 'Refuge']
+  total_acre           numeric
+  polygon_count        int      [default: 1]
+  refuge_or_wildlife_area text  [note: "Refuge specific"]
+  managed_by           text     [note: "Refuge specific"]
+  provider             text     [note: "Refuge specific"]
+  habitat_type         text     [note: "Refuge specific"]
+  entity_type_id       int      [not null]
+  entity_version_id    int      [not null]
+  attribute_source     jsonb    [not null]
+  created_at           timestamptz [not null, default: `now()`]
+  created_by           int      [not null]
+  updated_at           timestamptz [not null, default: `now()`]
+  updated_by           int      [not null]
+  
+  Indexes {
+    (du_id) [unique]
+    (network_node_id)
+    (entity_type_id)
+    (managed_by)
+    (habitat_type)
+    (entity_version_id)
+  }
+}
+
+// ============================================================================
+// FOREIGN KEY RELATIONSHIPS
+// ============================================================================
+
+// Network layer relationships
+Ref: network.entity_type_id > network_entity_type.id
+Ref: network.hydrologic_region_id > hydrologic_region.id
+Ref: network.network_version_id > version.id
+Ref: network.created_by > developer.id
+Ref: network.updated_by > developer.id
+
+Ref: network_gis.network_id > network.id [delete: cascade]
+Ref: network_gis.source_id > source.id
+Ref: network_gis.network_version_id > version.id
+Ref: network_gis.created_by > developer.id
+Ref: network_gis.updated_by > developer.id
+
+Ref: network_arc_attribute.network_id > network.id [delete: cascade]
+Ref: network_arc_attribute.type_id > network_arc_type.id
+Ref: network_arc_attribute.sub_type_id > network_arc_subtype.id
+Ref: network_arc_attribute.network_version_id > version.id
+Ref: network_arc_attribute.created_by > developer.id
+Ref: network_arc_attribute.updated_by > developer.id
+
+Ref: network_node_attribute.network_id > network.id [delete: cascade]
+Ref: network_node_attribute.type_id > network_node_type.id
+Ref: network_node_attribute.sub_type_id > network_node_subtype.id
+Ref: network_node_attribute.network_version_id > version.id
+Ref: network_node_attribute.created_by > developer.id
+Ref: network_node_attribute.updated_by > developer.id
+
+Ref: network_physical_connectivity.arc_network_id > network.id
+Ref: network_physical_connectivity.from_node_network_id > network.id
+Ref: network_physical_connectivity.to_node_network_id > network.id
+Ref: network_physical_connectivity.source_id > source.id
+Ref: network_physical_connectivity.created_by > developer.id
+Ref: network_physical_connectivity.updated_by > developer.id
+
+Ref: network_operational_connectivity.from_network_id > network.id
+Ref: network_operational_connectivity.to_network_id > network.id
+Ref: network_operational_connectivity.via_arc_network_id > network.id
+Ref: network_operational_connectivity.source_id > source.id
+Ref: network_operational_connectivity.created_by > developer.id
+Ref: network_operational_connectivity.updated_by > developer.id
+
+Ref: network_computational_connectivity.from_network_id > network.id
+Ref: network_computational_connectivity.to_network_id > network.id
+Ref: network_computational_connectivity.source_id > source.id
+Ref: network_computational_connectivity.created_by > developer.id
+Ref: network_computational_connectivity.updated_by > developer.id
+
+Ref: network_variable.network_id > network.id [delete: cascade]
+Ref: network_variable.variable_id > variable.id
+Ref: network_variable.source_id > source.id
+Ref: network_variable.created_by > developer.id
+Ref: network_variable.updated_by > developer.id
+
+Ref: network_source_attribution.network_id > network.id [delete: cascade]
+Ref: network_source_attribution.source_id > source.id
+Ref: network_source_attribution.created_by > developer.id
+Ref: network_source_attribution.updated_by > developer.id
+
+// Tier system relationships
+Ref: tier_definition.tier_version_id > version.id
+Ref: tier_definition.created_by > developer.id
+Ref: tier_definition.updated_by > developer.id
+
+Ref: variable_tier.variable_id > variable.id
+Ref: variable_tier.tier_definition_id > tier_definition.id
+Ref: variable_tier.tier_version_id > version.id
+Ref: variable_tier.created_by > developer.id
+Ref: variable_tier.updated_by > developer.id
+
+// Entity layer relationships
+Ref: channel_entity.network_arc_id > network.id
+Ref: channel_entity.to_node_id > network.id
+Ref: channel_entity.entity_type_id > calsim_entity_type.id
+Ref: channel_entity.entity_version_id > version.id
+Ref: channel_entity.created_by > developer.id
+Ref: channel_entity.updated_by > developer.id
+
+Ref: reservoir_entity.network_node_id > network.id
+Ref: reservoir_entity.entity_type_id > calsim_entity_type.id
+Ref: reservoir_entity.entity_version_id > version.id
+Ref: reservoir_entity.created_by > developer.id
+Ref: reservoir_entity.updated_by > developer.id
+
+Ref: inflow_entity.network_arc_id > network.id
+Ref: inflow_entity.to_node_id > network.id
+Ref: inflow_entity.entity_type_id > calsim_entity_type.id
+Ref: inflow_entity.entity_version_id > version.id
+Ref: inflow_entity.created_by > developer.id
+Ref: inflow_entity.updated_by > developer.id
+
+Ref: du_urban_entity.network_node_id > network.id
+Ref: du_urban_entity.entity_type_id > calsim_entity_type.id
+Ref: du_urban_entity.entity_version_id > version.id
+Ref: du_urban_entity.created_by > developer.id
+Ref: du_urban_entity.updated_by > developer.id
+
+Ref: du_agriculture_entity.network_node_id > network.id
+Ref: du_agriculture_entity.entity_type_id > calsim_entity_type.id
+Ref: du_agriculture_entity.entity_version_id > version.id
+Ref: du_agriculture_entity.created_by > developer.id
+Ref: du_agriculture_entity.updated_by > developer.id
+
+Ref: du_refuge_entity.network_node_id > network.id
+Ref: du_refuge_entity.entity_type_id > calsim_entity_type.id
+Ref: du_refuge_entity.entity_version_id > version.id
+Ref: du_refuge_entity.created_by > developer.id
+Ref: du_refuge_entity.updated_by > developer.id
+
+// Lookup table relationships
+Ref: source.created_by > developer.id
+Ref: source.updated_by > developer.id
+Ref: model_source.created_by > developer.id
+Ref: model_source.updated_by > developer.id
+Ref: version_family.created_by > developer.id
+Ref: version_family.updated_by > developer.id
+Ref: version.version_family_id > version_family.id
+Ref: version.created_by > developer.id
+Ref: version.updated_by > developer.id
+Ref: entity_type.created_by > developer.id
+Ref: entity_type.updated_by > developer.id
+Ref: hydrologic_region.created_by > developer.id
+Ref: hydrologic_region.updated_by > developer.id
+Ref: network_arc_type.created_by > developer.id
+Ref: network_arc_type.updated_by > developer.id
+Ref: network_node_type.created_by > developer.id
+Ref: network_node_type.updated_by > developer.id
+Ref: network_arc_subtype.created_by > developer.id
+Ref: network_arc_subtype.updated_by > developer.id
+Ref: network_node_subtype.created_by > developer.id
+Ref: network_node_subtype.updated_by > developer.id
+Ref: network_entity_type.created_by > developer.id
+Ref: network_entity_type.updated_by > developer.id
+Ref: calsim_entity_type.network_entity_type_id > network_entity_type.id
+

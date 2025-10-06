@@ -41,6 +41,10 @@ pip-wheel-metadata/
 .env.*
 !.env.example  # Keep a template
 
+# Local data and processing directories
+/data
+/dss_processing
+
 # IDE and editor junk
 .vscode/
 .idea/

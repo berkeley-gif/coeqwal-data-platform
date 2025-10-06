@@ -1,0 +1,9 @@
+short_code,label,description,is_active
+daily,Daily,Daily,true
+weekly,Weekly,Weekly,true
+monthly,Monthly,Monthly,true
+seasonal,Seasonal,"Seasonal",true
+flow_seasonal,Flow-seasonal,"Flow-based seasonal periods",true
+annual,Annual,Annual,true
+por,Period of record,period of record,true
+long_term,Long-term,Long-term planning horizon,true

@@ -1,7 +1,0 @@
-code,name,description,is_percentile
-MEAN,Mean,Average value,false
-MEDIAN,Median,50th percentile,false
-MIN,Minimum,Minimum value,false
-MAX,Maximum,Maximum value,false
-P10,10th percentile,Lower bound (10%),true
-P90,90th percentile,Upper bound (90%),true

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AWS Lambda Database Audit Function
+AWS Lambda database audit function
 ==================================
 PostgreSQL database audit that saves results to S3
 """
