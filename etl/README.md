@@ -50,9 +50,9 @@ s3://coeqwal-model-run/ready/
 #### 3. Results storage
 ```
 s3://coeqwal-model-run/scenario/{scenario_short_code}/
-├── csv/                    # Extracted CSV files
-├── validation/             # Validation reports (JSON + CSV)
-└── {scenario_short_code}_manifest.json     # Processing summary
+├── csv/ # Extracted CSV files
+├── validation/ # Validation reports (JSON + CSV)
+└── {scenario_short_code}_manifest.json # Processing summary
 ```
 
 ---
@@ -97,16 +97,16 @@ docker run --platform linux/amd64 -v ./dss_processing:/data --entrypoint python 
 ```
 ---
 
-## 📊 Validation framework
+## Validation framework
 
 ### Tolerance parameters
 - **Absolute tolerance (`abs_tol`)**: Maximum allowed absolute difference between values
-  - Example: `abs_tol=1e-6` means values must be within ±0.000001 units
-  - Used for values close to zero where relative comparison isn't meaningful
-  
+- Example: `abs_tol=1e-6` means values must be within ±0.000001 units
+- Used for values close to zero where relative comparison isn't meaningful
+
 - **Relative tolerance (`rel_tol`)**: Maximum allowed relative difference as a fraction
-  - Example: `rel_tol=1e-6` means values must be within 0.0001% of each other
-  - Used for larger values where proportional differences matter more
+- Example: `rel_tol=1e-6` means values must be within 0.0001% of each other
+- Used for larger values where proportional differences matter more
 
 ### Validation logic
 Values are considered equal if:
@@ -123,7 +123,7 @@ np.isclose(value1, value2, atol=abs_tol, rtol=rel_tol, equal_nan=True)
 
 ---
 
-## 🔧 Technical details
+## Technical details
 
 ### DSS library
 Uses `pydsstools` with `heclib.a` (Linux static library) for reading HEC-DSS files.

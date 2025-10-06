@@ -2,7 +2,7 @@
 
 This directory contains utility scripts and tools for the COEQWAL web backend.
 
-## 🔧 Available tools
+## Available tools
 
 ### PDF Table Scraper
 **Location**: `pdf_scraper/`
