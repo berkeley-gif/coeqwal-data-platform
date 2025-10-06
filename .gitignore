@@ -43,6 +43,7 @@ pip-wheel-metadata/
 
 # Local data and processing directories
 /data
+!/data/raw/csv_from_CalSim_report_pdf
 /dss_processing
 
 # IDE and editor junk
