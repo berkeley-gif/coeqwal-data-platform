@@ -1,25 +1,309 @@
-# 🏗️ NETWORK & ENTITY LAYER ERD
+# 🏗️ COEQWAL SCENARIOS DATABASE ERD
 
-## **🎯 ARCHITECTURE OVERVIEW**
+## **ARCHITECTURE OVERVIEW**
 
-### **Two-Layer Design:**
+### **Database Layer Structure:**
 ```
-NETWORK LAYER (Infrastructure/Physical)
+00_VERSIONING SYSTEM
+├── Version families and instances
+├── Developer management and SSO
+├── Domain-to-version mappings
+└── Purpose: track all data versions and changes
+
+01_LOOKUP TABLES (reference data)
+├── Geographic regions and scales
+├── Data sources and model sources  
+├── Units, statistics, and geometry types
+└── Purpose: provide consistent reference values
+
+NETWORK LAYER (infrastructure/physical)
 ├── Master registry of all physical network elements
 ├── Spatial data and engineering attributes
 ├── Multi-source connectivity (geopackage, XML, CalSim)
-└── Purpose: "What exists physically and how is it connected?"
+└── Purpose: what exists physically and how is it connected?
 
-ENTITY LAYER (Management/Operational)  
+ENTITY LAYER (management/operational)  
 ├── Management and operational perspectives on network elements
-├── Multiple entity roles can reference same network element
-├── Business logic and operational attributes
-└── Purpose: "How are network elements used and managed?"
+└── Purpose: how are network elements used and managed?
 ```
 
-## **📊 NETWORK LAYER TABLES**
+## **00_VERSIONING SYSTEM TABLES**
 
-### **🏷️ NETWORK TYPE HIERARCHY (Clean 3-Tier System)**
+### **1. version_family (version categories)**
+```
+Table: version_family
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "theme", "scenario", "network", "entity", etc.
+├── label                TEXT                       -- "Theme", "Scenario", "Network", "Entity", etc.
+├── description          TEXT                       -- Purpose description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (13 total):
+├── theme: Research themes and storylines
+├── scenario: Water management scenarios
+├── assumption: Scenario assumptions and parameters
+├── operation: Operational policies and rules
+├── hydroclimate: Hydroclimate conditions and projections
+├── variable: CalSim model variables and definitions
+├── outcome: Outcome categories and measurement systems
+├── tier: Tier definitions and classification systems
+├── geospatial: Geographic and spatial data definitions
+├── interpretive: Analysis and interpretive frameworks
+├── metadata: Data metadata and documentation
+├── network: CalSim network topology and connectivity
+└── entity: Entity version family for tracking entity data versions
+
+Indexes:
+└── version_family_short_code_key (short_code) -- For version family lookups
+```
+
+### **2. version (version instances)**
+```
+Table: version
+├── id                   SERIAL PRIMARY KEY
+├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id
+├── version_number       TEXT                       -- "1.0.0" (semantic versioning)
+├── manifest             JSONB                      -- Version metadata
+├── changelog            TEXT                       -- Change description
+├── is_active            BOOLEAN DEFAULT FALSE      -- Only one active per family
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Constraints:
+├── UNIQUE(version_family_id, version_number)
+└── Business rule: Only one active version per family
+
+Indexes:
+├── version_version_family_id_version_number_key (version_family_id, version_number)
+└── idx_version_family (version_family_id) -- FK performance
+```
+
+### **3. developer (audits)**
+```
+Table: developer
+├── id                   SERIAL PRIMARY KEY
+├── email                TEXT UNIQUE                -- "jfantauzza@berkeley.edu"
+├── name                 TEXT                       -- "Jill"
+├── display_name         TEXT NOT NULL              -- "Jill Fantauzza"
+├── affiliation          TEXT                       -- Organization
+├── role                 TEXT                       -- "admin", "user", "system"
+├── aws_sso_user_id      TEXT                       -- AWS SSO integration (optional)
+├── aws_sso_username     TEXT UNIQUE                -- AWS SSO username (primary SSO identifier)
+├── is_bootstrap         BOOLEAN DEFAULT FALSE      -- System bootstrap user
+├── sync_source          TEXT DEFAULT 'manual'      -- "manual", "sso", "seed"
+├── is_active            BOOLEAN DEFAULT TRUE
+├── last_login           TIMESTAMP WITH TIME ZONE
+├── created_at           TIMESTAMP DEFAULT NOW()
+└── updated_at           TIMESTAMP DEFAULT NOW()
+```
+
+### **4. domain_family_map (Table-to-Version Mapping)**
+```
+Table: domain_family_map
+├── schema_name          TEXT NOT NULL              -- "public"
+├── table_name           TEXT NOT NULL              -- Table name
+├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id
+└── note                 TEXT                       -- Purpose note
+
+Records: 35 mappings
+```
+
+## **01_LOOKUP TABLES**
+
+### **1. hydrologic_region**
+```
+Table: hydrologic_region
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "SAC", "SJR", "DELTA", "TULARE", "SOCAL", "EXTERNAL"
+├── label                TEXT                       -- "Sacramento River Basin", etc.
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (6 total):
+├── SAC: Sacramento River Basin
+├── SJR: San Joaquin River Basin  
+├── DELTA: Sacramento–San Joaquin Delta
+├── TULARE: Tulare Basin
+├── SOCAL: Southern California
+└── EXTERNAL: External areas
+
+Indexes:
+└── hydrologic_region_short_code_key (short_code) -- For region lookups
+```
+
+### **2. source (data sources)**
+```
+Table: source
+├── id                   SERIAL PRIMARY KEY
+├── source               TEXT UNIQUE NOT NULL       -- "calsim_report", "geopackage", etc.
+├── description          TEXT                       -- Source description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (9 total):
+├── calsim_report: CalSim-3 report final.pdf
+├── james_gilbert: James Gilbert
+├── calsim_variables: CalSim variables from output and sv data
+├── geopackage: CalSim3_GeoSchematic_20221227_COEQWAL_Revisions2024_corrected.gpkg
+├── trend_report: Variables extracted from Gilbert team trend reports
+├── metadata: Scenario metadata
+├── cvm_docs: Central Valley Model documentation
+├── network_schematic: Network schematic
+└── manual: Manual insertion
+```
+
+### **3. model_source**
+```
+Table: model_source
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "calsim3"
+├── name                 TEXT UNIQUE NOT NULL       -- "CalSim3"
+├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id (variable family)
+├── description          TEXT                       -- Model description
+├── contact              TEXT                       -- Contact information
+├── notes                TEXT                       -- Additional notes
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (1 total):
+└── calsim3: California Central Valley water system allocation simulation model
+```
+
+### **4. geometry_type (GIS)**
+```
+Table: geometry_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "point", "linestring", "polygon", "multipolygon"
+├── label                TEXT                       -- "Point", "LineString", etc.
+├── description          TEXT                       -- Geometry description
+└── is_active            BOOLEAN DEFAULT TRUE
+
+Values (4 total):
+├── point: Point geometry
+├── linestring: LineString geometry
+├── polygon: Polygon geometry
+└── multipolygon: MultiPolygon geometry
+```
+
+### **5. spatial_scale (geographic scales)**
+```
+Table: spatial_scale
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "system_wide", "regional", "basin", etc.
+├── label                TEXT                       -- "System-wide", "Regional", etc.
+├── description          TEXT                       -- Scale description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (11 total):
+├── system_wide: Entire CalSim system
+├── regional: Hydrologic region
+├── basin: Watershed or hydrologic basin
+└── ... (8 more scales)
+```
+
+### **6. temporal_scale (time scales)**
+```
+Table: temporal_scale
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "daily", "weekly", "monthly", etc.
+├── label                TEXT NOT NULL              -- "Daily", "Weekly", etc.
+├── description          TEXT                       -- Scale description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (8 total):
+├── daily: Daily
+├── weekly: Weekly
+├── monthly: Monthly
+└── ... (5 more scales)
+```
+
+### **7. statistic_type**
+```
+Table: statistic_type
+├── id                   SERIAL PRIMARY KEY
+├── code                 TEXT UNIQUE NOT NULL       -- "MEAN", "MEDIAN", "MIN", "MAX", etc.
+├── name                 TEXT NOT NULL              -- "Mean", "Median", etc.
+├── description          TEXT                       -- Statistic description
+├── is_percentile        BOOLEAN DEFAULT FALSE      -- Whether this is a percentile measure
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (6 total):
+├── MEAN: Mean (Average value)
+├── MEDIAN: Median (50th percentile)
+├── MIN: Minimum (Minimum value)
+└── ... (3 more statistics)
+```
+
+### **8. unit**
+```
+Table: unit
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "TAF", "CFS", "acres", etc.
+├── full_name            TEXT                       -- "thousand acre-feet", etc.
+├── canonical_group      TEXT                       -- "volume", "flow", "area", etc.
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (5 total):
+├── TAF: thousand acre-feet (volume)
+├── CFS: cubic feet per second (flow)
+├── acres: acres (area)
+└── ... (2 more units)
+```
+
+## **DATABASE FUNCTIONS**
+
+### **Helper functions**
+```sql
+-- Get current operator for audit fields
+FUNCTION coeqwal_current_operator() RETURNS INTEGER
+├── Tries to find developer by database user or email
+├── Falls back to admin account (ID 2: jfantauzza@berkeley.edu)
+└── Used in DEFAULT values for created_by/updated_by
+
+-- Get active version for a family  
+FUNCTION get_active_version(family_id INTEGER) RETURNS INTEGER
+├── Returns the active version ID for a version family
+└── Used for default version references
+
+-- Network analysis functions (todo: refine with new network schemat)
+FUNCTION get_connected_arcs(node_id INTEGER) RETURNS SETOF RECORD
+FUNCTION get_downstream_nodes(node_id INTEGER) RETURNS SETOF RECORD  
+FUNCTION get_upstream_nodes(node_id INTEGER) RETURNS SETOF RECORD
+└── Advanced network connectivity analysis
+```
+
+## **NETWORK TABLES**
+
+### **NETWORK TYPE HIERARCHY**
 
 #### **Tier 1: network_entity_type (Top Level)**
 ```
@@ -65,7 +349,7 @@ Indexes:
 └── idx_network_type_active
 ```
 
-#### **Tier 3: Subtype table (unified Arc + node subtypes)**
+#### **Tier 3: Subtype table (unified arc + node subtypes)**
 ```
 Table: network_subtype
 ├── id                   SERIAL PRIMARY KEY
@@ -93,7 +377,7 @@ Indexes:
 └── idx_network_subtype_active
 ```
 
-#### **Helper Views**
+#### **Views**
 ```
 View: v_network_arc_types_complete
 ├── Combines all arc type hierarchy levels

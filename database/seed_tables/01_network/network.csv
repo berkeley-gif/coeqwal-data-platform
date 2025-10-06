@@ -623,7 +623,7 @@ CHECKSIPH,,Check/Siphon End of Repayment Reach 2A,,,,{},{1},{8},false,,12
 CHERRY,,Cherry Creek Local Inflow,,,,{},{1},{8},false,,12
 CHILI,,Chili Bar Reservoir,,,,{},{1},{8},false,,12
 CHINQUAPIN,,Chinquapin Creek,,,,{},{1},{8},false,,12
-CHIPPS,,,Post NDO node for CCWD diversion at Mallard Slough,2,11,{15},{1},"{8,4}",true,1,12
+CHIPPS,,,Post NDO node for CCWD diversion at Mallard Slough,2,11,{30},{1},"{8,4,9}",true,1,12
 CHOWCHILLA,,Chowchilla River,,,,{},{1},{8},false,,12
 CHRISMAN,,Chrisman Pumping Plant,,,,{},{1},{8},false,,12
 CHW006,Chowchilla River,,C2VSIM node.,2,11,"{25,23}",{1},"{8,4}",true,2,12
@@ -4289,7 +4289,7 @@ OAK020,,,,2,11,"{13,23}",{1},"{8,4}",true,2,12
 OAKDALE,,Oakdale Portal,,,,{},{1},{8},false,,12
 OGN004,Oregon Creek,,Oregon Creek Below Log Cabin Dam near Camptonville - USGS 11409400,2,11,{23},{1},"{8,4}",true,1,12
 OGN005,Oregon Creek,,YCWA Log Cabin Dam/Camptonville Tunnel Intake,2,11,"{25,23}",{1},"{8,4}",true,1,12
-OHWWTP,,,,,,{},{1},{8},false,,12
+OHWWTP,,,,2,20,{15},{1},"{8,9}",false,,12
 OID,,OID Main Canal,,,,{},{1},{8},false,,12
 OMR,,,Net Delta Depletion - Old and Middle Rivers,2,13,{18},{1},{4},true,1,12
 OMR002,Old/Middle Rivers,,,2,11,"{25,23}",{1},"{8,4}",true,1,12
@@ -6001,7 +6001,7 @@ WTPBWM,,,Bowman Water Treatment Plant,2,19,{15},{1},{4},true,1,12
 WTPCMT,,,Cement Hill Water Treatment Plant,2,19,{15},{1},{4},true,1,12
 WTPCOL,,,Coloma Water Treatment Plant,2,19,{15},{1},{4},true,1,12
 WTPCSD,,,Clear Creek CSD WTP,2,19,{15},{1},{4},true,1,12
-WTPCYC,,,Yuba City Water Treatment Plant,2,20,{15},{1},{4},true,1,12
+WTPCYC,,,Yuba City Water Treatment Plant,2,19,{15},{1},"{4,9}",true,1,12
 WTPDEF,,,City of Vacaville Diatamaceous Earth Water Treatment Plant,2,19,{15},{1},{4},true,1,12
 WTPDGT,,,Nick C. DeGroot Water Treatment Plant,2,19,{15},{1},{4},true,2,12
 WTPDWP,,,Proposed Woodland-Davis Project Water Treatment Plant,2,19,{20},{1},{4},true,1,12

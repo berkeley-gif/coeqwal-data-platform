@@ -28,3 +28,4 @@ id,short_code,label,description,network_entity_type_id,type_id,model_source_id,s
 27,X,Unknown,Unknown subtype (external?),2,11,1,4,true
 28,SG_DISC,Stream gage (discontinued),Discontinued stream flow measurement station,2,11,1,5,true
 29,RF_SPLIT,Return flow split,Return flow distribution node (diffuse drainage networks),2,16,1,5,true
+30,SAL,Salinity monitoring,Salinity monitoring station,2,11,1,9,true
