@@ -1,0 +1,10 @@
+short_code,name,description,tier_type,tier_count,is_active
+CWS_DEL,Community water system deliveries,"Water delivered to community water systems for residential, commercial, and industrial use",multi_value,4,True
+AG_REV,Agricultural revenue,Impact on agricultural production and revenue,multi_value,4,True
+ENV_FLOWS,Environmental flows,"Water allocated to support ecosystem health, wildlife habitats, and environmental protection",multi_value,4,True
+DELTA_ECO,Delta ecology,"Ecological responses to flow, measured by direct indicators (SAV growth, salinity, turbidity, microhabitat availability)",single_value,1,True
+FW_DELTA_USES,Freshwater for in-Delta uses,"How often water in the western Delta is fresh enough for in-Delta uses",single_value,1,True
+FW_EXP,Freshwater for Delta exports,"Frequency with which water at Delta pumps (Banks and Jones) meets salinity thresholds for drinking water",single_value,1,True
+RES_STOR,Reservoir storage,"Amount of water stored in California's major reservoir systems each spring",multi_value,4,True
+GW_STOR,Groundwater storage,Amount of water stored in underground aquifer systems,multi_value,4,True
+WRC_SALMON_AB,Salmon abundance,Population levels of Winter-run Chinook salmon in the Sacramento River,single_value,1,True

@@ -273,6 +273,151 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
+### **9. watersheds (watershed regions)**
+
+```
+Table: watersheds
+├── id                              SERIAL PRIMARY KEY
+├── short_code                      VARCHAR UNIQUE NOT NULL    -- Watershed identifier (UPPER_AMERICAN, SAC_RIVER)
+├── name                            VARCHAR NOT NULL           -- Full watershed name (Upper American River Watershed)
+├── description                     TEXT                       -- Watershed description
+├── hydrologic_region_short_code    VARCHAR                    -- Connection to hydrologic regions (SAC, SJR)
+├── is_active                       BOOLEAN DEFAULT TRUE
+├── created_at                      TIMESTAMP DEFAULT NOW()
+├── created_by                      INTEGER NOT NULL           -- FK → developer.id
+├── updated_at                      TIMESTAMP DEFAULT NOW()
+└── updated_by                      INTEGER NOT NULL           -- FK → developer.id
+
+Records: 9 watersheds from CalSim report
+
+Foreign keys:
+├── Ref: watersheds.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: watersheds.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── watersheds_short_code_key (short_code) -- Unique constraint
+└── idx_watersheds_hydrologic_region (hydrologic_region_short_code) -- Region lookups
+
+Values (9 total):
+├── BEAR_RIVER: Bear River Watershed
+├── SAC_RIVER: Sacramento River Hydrologic Region
+├── SAN_JOAQUIN: San Joaquin River Hydrologic Region
+├── UPPER_AMERICAN: Upper American River Watershed
+├── UPPER_FEATHER: Upper Feather River Watershed
+├── UPPER_MOKELUMNE: Upper Mokelumne River Watershed
+├── UPPER_STANISLAUS: Upper Stanislaus River
+├── UPPER_TUOLUMNE: Upper Tuolumne River Watershed
+└── YUBA_RIVER: Yuba River Watershed
+```
+
+---
+
+## **10_TIER LAYER**
+
+### **1. tier_definition**
+
+```
+Table: tier_definition
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Tier identifier (ENV_FLOWS, DELTA_ECO, etc.)
+├── name                 VARCHAR NOT NULL           -- Display name (Environmental flows, Delta ecology)
+├── description          TEXT                       -- Detailed description of the indicator
+├── tier_type            VARCHAR NOT NULL           -- 'multi_value' or 'single_value'
+├── tier_count           INTEGER NOT NULL           -- Number of tier values (1 or 4)
+├── tier_version_id      INTEGER NOT NULL DEFAULT 8 -- FK → version.id (tier family)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+
+Records: 9 tier indicators
+
+Foreign keys:
+├── Ref: tier_definition.tier_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: tier_definition.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: tier_definition.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── tier_definition_pkey (id) -- Primary key
+├── tier_definition_short_code_key (short_code) -- Unique constraint
+├── idx_tier_definition_tier_type (tier_type) -- Type filtering
+├── idx_tier_definition_version (tier_version_id) -- Version lookups
+└── idx_tier_definition_active (is_active) -- Active status filtering
+
+Constraints:
+├── tier_type CHECK (tier_type IN ('multi_value', 'single_value'))
+└── tier_count CHECK (tier_count IN (1, 4))
+
+Values (9 total):
+├── ENV_FLOWS: Environmental flows (multi_value, 4 tiers)
+├── RES_STOR: Reservoir storage (multi_value, 4 tiers)
+├── GW_STOR: Groundwater storage (multi_value, 4 tiers)
+├── DELTA_ECO: Delta ecology (single_value, 1 tier)
+├── FW_DELTA_USES: Freshwater for in-Delta uses (single_value, 1 tier)
+├── FW_EXP: Freshwater for Delta exports (single_value, 1 tier)
+├── WRC_SALMON_AB: Salmon abundance (single_value, 1 tier)
+├── CWS_DEL: Community water system deliveries (multi_value, future)
+└── AG_REV: Agricultural revenue (multi_value, future)
+```
+
+### **2. tier_result (tier values by scenario)**
+
+```
+Table: tier_result
+├── id                   SERIAL PRIMARY KEY
+├── scenario_short_code  VARCHAR NOT NULL           -- Scenario identifier (s0011, s0020, s0021)
+├── tier_short_code      VARCHAR NOT NULL           -- FK → tier_definition.short_code
+├── tier_1_value         INTEGER                    -- Count in Tier 1 (best performance)
+├── tier_2_value         INTEGER                    -- Count in Tier 2 (good performance)
+├── tier_3_value         INTEGER                    -- Count in Tier 3 (moderate performance)
+├── tier_4_value         INTEGER                    -- Count in Tier 4 (poor performance)
+├── norm_tier_1          NUMERIC(5,3)               -- Normalized Tier 1 (0-1 scale for D3)
+├── norm_tier_2          NUMERIC(5,3)               -- Normalized Tier 2 (0-1 scale for D3)
+├── norm_tier_3          NUMERIC(5,3)               -- Normalized Tier 3 (0-1 scale for D3)
+├── norm_tier_4          NUMERIC(5,3)               -- Normalized Tier 4 (0-1 scale for D3)
+├── total_value          INTEGER                    -- Sum of tier values (for multi-value)
+├── single_tier_level    INTEGER                    -- Single tier level 1-4 (for single-value)
+├── tier_version_id      INTEGER NOT NULL DEFAULT 8 -- FK → version.id (tier family)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+
+Records: 21 tier results (3 scenarios × 7 indicators)
+
+Foreign keys:
+├── Ref: tier_result.tier_short_code > tier_definition.short_code [delete: restrict, update: cascade]
+├── Ref: tier_result.tier_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: tier_result.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: tier_result.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── tier_result_pkey (id) -- Primary key
+├── tier_result_scenario_short_code_tier_short_code_tier_versio_key (scenario_short_code, tier_short_code, tier_version_id) -- Unique constraint
+├── idx_tier_result_scenario (scenario_short_code) -- Scenario lookups
+├── idx_tier_result_tier (tier_short_code) -- Tier lookups
+├── idx_tier_result_scenario_tier (scenario_short_code, tier_short_code) -- Combined lookups
+├── idx_tier_result_version (tier_version_id) -- Version lookups
+└── idx_tier_result_active (is_active) -- Active status filtering
+
+Constraints:
+├── Mutual exclusion: (tier_1_value IS NOT NULL AND single_tier_level IS NULL) OR (tier_1_value IS NULL AND single_tier_level IS NOT NULL)
+└── Tier level bounds: single_tier_level BETWEEN 1 AND 4 OR single_tier_level IS NULL
+
+D3 Visualization Data:
+├── Multi-value tiers: Use norm_tier_1 through norm_tier_4 (pre-calculated 0-1 scale)
+├── Single-value tiers: Use single_tier_level (1-4)
+├── Color scheme: Tier 1=#2cc83b, Tier 2=#2064d4, Tier 3=#f89740, Tier 4=#f96262
+└── Comparable bar charts enabled through normalization
+
+Sample data:
+├── ENV_FLOWS s0011: [0,5,12,0] → normalized [0, 0.294, 0.706, 0]
+├── GW_STOR s0020: [7,14,15,6] → normalized [0.167, 0.333, 0.357, 0.143]
+└── DELTA_ECO s0011: single_tier_level = 4
+```
+
 ## **DATABASE FUNCTIONS**
 
 ### **Helper functions**
@@ -391,6 +536,145 @@ Table: network
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+```
+
+### **2. network_arc (arc-specific physical attributes)**
+
+```
+Table: network_arc
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Arc identifier (FK reference to network.short_code)
+├── network_id           INTEGER NOT NULL           -- FK → network.id
+├── river                VARCHAR                    -- River identifier for watershed connection (AMR, CCH, ELD)
+├── from_node            VARCHAR                    -- From node identifier
+├── to_node              VARCHAR                    -- To node identifier  
+├── shape_length_m       NUMERIC                    -- Arc length in meters
+├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (CalSim3)
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
+├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Records: 2,118 arcs from geopackage
+
+Foreign Keys:
+├── Ref: network_arc.network_id > network.id [delete: cascade, update: cascade]
+├── Ref: network_arc.model_source_id > model_source.id [delete: restrict, update: cascade]
+├── Ref: network_arc.source_id > source.id [delete: restrict, update: cascade]
+├── Ref: network_arc.network_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: network_arc.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: network_arc.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── network_arc_short_code_key (short_code) -- Unique constraint
+├── idx_network_arc_network_id (network_id) -- FK performance
+├── idx_network_arc_river (river) -- For watershed lookups
+└── idx_network_arc_connectivity (from_node, to_node) -- Connectivity queries
+
+Note: shape_length_m units are meters
+```
+
+### **3. river_watershed (river-to-watershed mapping)**
+
+```
+Table: river_watershed
+├── id                    SERIAL PRIMARY KEY
+├── river_prefix          VARCHAR UNIQUE NOT NULL    -- River identifier (AMR, CCH, ELD, etc.)
+├── river_name            VARCHAR NOT NULL           -- Full river name (American River, Cache Creek)
+├── watershed_short_code  VARCHAR NOT NULL           -- FK reference to watersheds.short_code
+├── source_id             INTEGER DEFAULT 1          -- FK → source.id (CalSim report)
+├── network_version_id    INTEGER NOT NULL           -- FK → version.id (network family)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMP DEFAULT NOW()
+├── created_by            INTEGER NOT NULL           -- FK → developer.id
+├── updated_at            TIMESTAMP DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL           -- FK → developer.id
+
+Records: 268 river-watershed mappings from CalSim report
+Note: No model_source_id - rivers/watersheds are geographic features, not model-specific
+
+Foreign keys:
+├── Ref: river_watershed.watershed_short_code > watersheds.short_code [delete: restrict, update: cascade]
+├── Ref: river_watershed.source_id > source.id [delete: restrict, update: cascade]
+├── Ref: river_watershed.network_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: river_watershed.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: river_watershed.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── river_watershed_river_prefix_key (river_prefix) -- Unique constraint
+└── idx_river_watershed_watershed (watershed_short_code) -- Watershed lookups
+
+
+Values (268 total, 259 unique prefixes):
+├── AMR → SAC_RIVER (American River → Sacramento River Hydrologic Region)
+├── CCH → SAC_RIVER (Cache Creek → Sacramento River Hydrologic Region)
+├── ELD → UPPER_AMERICAN (Eldorado → Upper American River Watershed)
+├── SFA → UPPER_AMERICAN (South Fork American → Upper American River Watershed)
+├── TRN → SAN_JOAQUIN (Tuolumne River → San Joaquin River Hydrologic Region)
+└── ... (263 more river mappings)
+
+Distribution by watershed:
+├── SAC_RIVER: 86 rivers
+├── SAN_JOAQUIN: 56 rivers
+├── UPPER_AMERICAN: 44 rivers
+├── UPPER_FEATHER: 26 rivers
+├── YUBA_RIVER: 17 rivers
+├── UPPER_STANISLAUS: 16 rivers
+├── UPPER_TUOLUMNE: 11 rivers
+├── UPPER_MOKELUMNE: 10 rivers
+└── BEAR_RIVER: 2 rivers
+```
+
+### **4. network_node (node-specific physical attributes)**
+
+```
+Table: network_node
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Node identifier (matches network.short_code)
+├── riv_mi               NUMERIC                    -- River mile location
+├── c2vsim_gw            VARCHAR                    -- C2VSIM groundwater connection
+├── c2vsim_sw            VARCHAR                    -- C2VSIM surface water connection
+├── nrest_gage           VARCHAR                    -- Nearest stream gauge
+├── strm_code            VARCHAR                    -- Stream/river code (links to river_watershed)
+├── rm_ii                VARCHAR                    -- River mile II designation
+├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (CalSim3)
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
+├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Records: 1,400 nodes from geopackage
+
+Foreign keys:
+├── Ref: network_node.strm_code > river_watershed.river_prefix [delete: restrict, update: cascade]
+├── Ref: network_node.model_source_id > model_source.id [delete: restrict, update: cascade]
+├── Ref: network_node.source_id > source.id [delete: restrict, update: cascade]
+├── Ref: network_node.network_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: network_node.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: network_node.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── network_node_short_code_key (short_code) -- Unique constraint
+└── idx_network_node_strm_code (strm_code) -- River system lookups
+
+Top stream codes by node count:
+├── SAC: 89 nodes (Sacramento River)
+├── SJR: 64 nodes (San Joaquin River)
+├── DMC: 24 nodes (Delta-Mendota Canal)
+├── FTR: 24 nodes (Feather River)
+├── CAA: 22 nodes (California Aqueduct)
+├── MCD: 18 nodes (Mokelumne River)
+├── BRR: 16 nodes (Bear River)
+└── ... (229 more stream codes)
+
+Note: strm_code links nodes to river systems via river_watershed.river_prefix
 ```
 
 Query examples:

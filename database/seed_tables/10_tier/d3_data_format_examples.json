@@ -1,0 +1,69 @@
+{
+  "description": "D3 Tier Chart Data Format Examples",
+  "note": "Backend should provide data in these formats for D3 visualization",
+  
+  "multi_value_tier_example": {
+    "outcome": "Environmental flows",
+    "scenario": "s0011",
+    "tier_type": "multi_value",
+    "tiers": [
+      { "label": "Tier 1", "color": "#2cc83b", "value": 0 },
+      { "label": "Tier 2", "color": "#2064d4", "value": 5 },
+      { "label": "Tier 3", "color": "#f89740", "value": 12 },
+      { "label": "Tier 4", "color": "#f96262", "value": 0 }
+    ],
+    "total_value": 17,
+    "normalized_values": [0, 0.29, 0.71, 0]
+  },
+
+  "single_value_tier_example": {
+    "outcome": "Delta ecology",
+    "scenario": "s0011", 
+    "tier_type": "single_value",
+    "single_tier_level": 4,
+    "display_color": "#f96262"
+  },
+
+  "multi_scenario_comparison": {
+    "outcome": "Reservoir storage",
+    "scenarios": {
+      "s0011": {
+        "tiers": [
+          { "label": "Tier 1", "color": "#2cc83b", "value": 0 },
+          { "label": "Tier 2", "color": "#2064d4", "value": 3 },
+          { "label": "Tier 3", "color": "#f89740", "value": 5 },
+          { "label": "Tier 4", "color": "#f96262", "value": 0 }
+        ],
+        "total_value": 8,
+        "normalized_values": [0, 0.375, 0.625, 0]
+      },
+      "s0020": {
+        "tiers": [
+          { "label": "Tier 1", "color": "#2cc83b", "value": 0 },
+          { "label": "Tier 2", "color": "#2064d4", "value": 3 },
+          { "label": "Tier 3", "color": "#f89740", "value": 4 },
+          { "label": "Tier 4", "color": "#f96262", "value": 1 }
+        ],
+        "total_value": 8,
+        "normalized_values": [0, 0.375, 0.5, 0.125]
+      }
+    }
+  },
+
+  "api_endpoint_examples": {
+    "get_tier_data": "/api/tiers/{scenario_id}/{tier_short_code}",
+    "get_all_scenario_tiers": "/api/scenarios/{scenario_id}/tiers",
+    "compare_scenarios": "/api/tiers/compare?scenarios=s0011,s0020,s0021&tier=ENV_FLOWS"
+  },
+
+  "sql_query_for_d3_format": "SELECT scenario_short_code, tier_short_code, tier_1_value, tier_2_value, tier_3_value, tier_4_value, total_value, single_tier_level FROM tier_result WHERE scenario_short_code = 's0011' AND tier_short_code = 'ENV_FLOWS'",
+
+  "normalization_formula": "normalized_value = tier_value / total_value (for multi-value tiers only)",
+
+  "color_scheme": {
+    "tier_1": "#2cc83b",
+    "tier_2": "#2064d4", 
+    "tier_3": "#f89740",
+    "tier_4": "#f96262"
+  }
+}

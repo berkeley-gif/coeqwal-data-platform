@@ -1,4 +1,4 @@
-short_code,calsim_id,arc_id,arc_type_id,name,description,type,sub_type,from_node_id,to_node_id,hydrologic_region_id,shape_length,model_source_id,source_id,is_reversible,flow_capacity,parent_arc_id,integration_status_id,network_version_id,is_active,connectivity_status,has_gis
+short_code,river,arc_id,arc_type_id,name,description,type,sub_type,from_node_id,to_node_id,hydrologic_region_id,shape_length,model_source_id,source_id,is_reversible,flow_capacity,parent_arc_id,integration_status_id,network_version_id,is_active,connectivity_status,has_gis
 C_AMR006,AMR,C_AMR006,8.0,American River,,CH,ST,,,1,4037.69911216368,1,4,,,,1,12,True,connected,True
 C_CCH075,CCH,C_CCH075,8.0,Cache Creek,,CH,ST,,,1,26668.5136743961,1,4,,,,1,12,True,connected,True
 C_ELD012,ELD,C_ELD012,8.0,Elder Creek,,CH,ST,,,1,11265.4079514507,1,4,,,,1,12,True,connected,True

@@ -1,0 +1,10 @@
+short_code,name,description,hydrologic_region_short_code,is_active
+BEAR_RIVER,Bear River Watershed,Bear River Watershed watershed,SJR,True
+SAC_RIVER,Sacramento River Hydrologic Region,Sacramento River Hydrologic Region watershed,SAC,True
+SAN_JOAQUIN,San Joaquin River Hydrologic Region,San Joaquin River Hydrologic Region watershed,SJR,True
+UPPER_AMERICAN,Upper American River Watershed,Upper American River Watershed watershed,SJR,True
+UPPER_FEATHER,Upper Feather River Watershed,Upper Feather River Watershed watershed,SJR,True
+UPPER_MOKELUMNE,Upper Mokelumne River Watershed,Upper Mokelumne River Watershed watershed,SJR,True
+UPPER_STANISLAUS,Upper Stanislaus River,Upper Stanislaus River watershed,SJR,True
+UPPER_TUOLUMNE,Upper Tuolumne River Watershed,Upper Tuolumne River Watershed watershed,SJR,True
+YUBA_RIVER,Yuba River Watershed,Yuba River Watershed watershed,SJR,True

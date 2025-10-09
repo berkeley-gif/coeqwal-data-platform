@@ -1,9 +1,0 @@
-short_code,label,description,is_active
-output,output,"Standard CalSim model output variables (flows, diversions, storage)",true
-control,control,Operational control indicators and binary flags,true
-decision,decision,Model decision variables and optimization targets,true
-state,state,State variables including storage zones and bookkeeping accounts,true
-input,input,External inputs and boundary conditions,true
-intermediate,intermediate,Calculated intermediate values used in model logic,true
-aggregate,aggregate,"Variables that sum or combine multiple reservoir/system components",true
-index,index,Index,true

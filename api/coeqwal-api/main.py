@@ -21,6 +21,7 @@ from datetime import datetime
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
 from routes.vast_network_traversal import get_node_network_unlimited
 from routes.clean_network_endpoints import router as network_mapbox_router, set_db_pool
+from routes.tier_endpoints import router as tier_router, set_db_pool as set_tier_db_pool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +53,9 @@ async def lifespan(app: FastAPI):
     # Set the database pool for network mapbox router
     set_db_pool(db_pool)
     
+    # Set the database pool for tier router
+    set_tier_db_pool(db_pool)
+    
     yield
     
     # Shutdown
@@ -67,6 +71,9 @@ app = FastAPI(
 
 # Include Mapbox network router
 app.include_router(network_mapbox_router)
+
+# Include tier endpoints
+app.include_router(tier_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
