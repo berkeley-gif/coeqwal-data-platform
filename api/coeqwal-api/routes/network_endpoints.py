@@ -5,10 +5,11 @@ Optimized for fast downloads and connectivity
 
 from fastapi import APIRouter, Query, Path, HTTPException
 import json
-from .geopackage_network_api import (
-    geopackage_network_traversal,
-    fast_geopackage_geojson
-)
+# TODO: Import geopackage_network_api when available
+# from .geopackage_network_api import (
+#     geopackage_network_traversal,
+#     fast_geopackage_geojson
+# )
 from .water_trail_api import (
     get_water_trail_from_reservoir,
     get_major_reservoir_trails
@@ -45,7 +46,8 @@ async def api_fast_geopackage_geojson(
     """
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
-    return await fast_geopackage_geojson(db_pool, bbox, include_arcs, include_nodes, limit)
+    # TODO: Implement when geopackage_network_api is available
+    raise HTTPException(status_code=501, detail="Fast GeoJSON endpoint not yet implemented")
 
 
 @router.get("/traverse/{short_code}/geopackage")
@@ -60,7 +62,8 @@ async def api_geopackage_network_traversal(
     """
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
-    return await geopackage_network_traversal(db_pool, short_code, direction, max_depth)
+    # TODO: Implement when geopackage_network_api is available
+    raise HTTPException(status_code=501, detail="Geopackage network traversal not yet implemented")
 
 
 @router.get("/reservoirs/top9")

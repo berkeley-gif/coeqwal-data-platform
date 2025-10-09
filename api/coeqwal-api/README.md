@@ -18,6 +18,12 @@ Production FastAPI backend
 - `GET /api/nodes/{id}/analysis` - Upstream/downstream connections for any node
 - `GET /api/arcs/{id}/analysis` - Connected nodes for any arc
 
+### **Tier data**
+- `GET /api/tiers/definitions` - Tier definitions for tooltip content
+- `GET /api/tiers/list` - Complete tier definitions with metadata
+- `GET /api/tiers/scenarios/{scenario_id}/tiers/{tier_code}` - Specific tier data for D3 visualization
+- `GET /api/tiers/scenarios/{scenario_id}/tiers` - All tier data for a scenario
+
 ### **Monitoring**
 - `GET /api/health` - Database connectivity and performance metrics
 - `GET /docs` - Interactive API documentation
@@ -131,6 +137,10 @@ curl http://localhost:8000/api/health
 # Sample data
 curl "http://localhost:8000/api/nodes?limit=5"
 curl "http://localhost:8000/api/nodes/1/analysis"
+
+# Tier data
+curl "http://localhost:8000/api/tiers/definitions"
+curl "http://localhost:8000/api/tiers/scenarios/s0011/tiers/ENV_FLOWS"
 ```
 
 ## **Deployment**
