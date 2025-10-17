@@ -347,8 +347,3 @@ async def get_scenario_tier_summary(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-<<<<<<< HEAD
-
-||||||| e790095
-=======
->>>>>>> dev
