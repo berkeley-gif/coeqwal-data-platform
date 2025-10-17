@@ -5,18 +5,19 @@ Optimized for fast downloads and connectivity
 
 from fastapi import APIRouter, Query, Path, HTTPException
 import json
-from .geopackage_network_api import (
-    geopackage_network_traversal,
-    fast_geopackage_geojson
-)
-from .water_trail_api import (
-    get_water_trail_from_reservoir,
-    get_major_reservoir_trails
-)
-from .simple_trail_api import (
-    get_california_water_infrastructure,
-    get_reservoir_water_trail
-)
+# TODO: Re-enable these imports when modules are available
+# from .geopackage_network_api import (
+#     geopackage_network_traversal,
+#     fast_geopackage_geojson
+# )
+# from .water_trail_api import (
+#     get_water_trail_from_reservoir,
+#     get_major_reservoir_trails
+# )
+# from .simple_trail_api import (
+#     get_california_water_infrastructure,
+#     get_reservoir_water_trail
+# )
 
 router = APIRouter(prefix="/api/network", tags=["clean-geopackage-network"])
 
