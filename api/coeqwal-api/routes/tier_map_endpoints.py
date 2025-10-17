@@ -87,22 +87,22 @@ async def get_tier_map_data(
                 WHEN tl.location_type = 'reservoir' AND tl.location_id IN ('SLUIS_CVP', 'SLUIS_SWP') THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM reservoirs 
-                     WHERE short_code = 'SLUIS')
+                     WHERE calsim_short_code = 'SLUIS')
                 -- Regular reservoir lookup
                 WHEN tl.location_type = 'reservoir' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM reservoirs 
-                     WHERE short_code = tl.location_id)
+                     WHERE calsim_short_code = tl.location_id)
                 -- WBA (aquifer) lookup
                 WHEN tl.location_type = 'wba' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM wba 
-                     WHERE short_code = tl.location_id)
+                     WHERE wba_id = tl.location_id)
                 -- Compliance station lookup
                 WHEN tl.location_type = 'compliance_station' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM compliance_stations 
-                     WHERE short_code = tl.location_id)
+                     WHERE station_code = tl.location_id)
                 -- Network node lookup
                 WHEN tl.location_type = 'node' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
