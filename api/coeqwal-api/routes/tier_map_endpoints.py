@@ -93,6 +93,11 @@ async def get_tier_map_data(
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM reservoirs 
                      WHERE calsim_short_code = tl.location_id)
+                -- Region lookup (DELTA, SAC) - uses WBA table
+                WHEN tl.location_type = 'region' THEN
+                    (SELECT ST_AsGeoJSON(geom)::jsonb 
+                     FROM wba 
+                     WHERE wba_id = tl.location_id)
                 -- WBA (aquifer) lookup
                 WHEN tl.location_type = 'wba' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
@@ -104,7 +109,7 @@ async def get_tier_map_data(
                      FROM compliance_stations 
                      WHERE station_code = tl.location_id)
                 -- Network node lookup
-                WHEN tl.location_type = 'node' THEN
+                WHEN tl.location_type = 'network_node' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM network_gis 
                      WHERE short_code = tl.location_id 
@@ -114,8 +119,9 @@ async def get_tier_map_data(
             CASE 
                 WHEN tl.location_type = 'reservoir' THEN 'Reservoir'
                 WHEN tl.location_type = 'wba' THEN 'Aquifer'
+                WHEN tl.location_type = 'region' THEN 'Region'
                 WHEN tl.location_type = 'compliance_station' THEN 'Compliance Station'
-                WHEN tl.location_type = 'node' THEN 'Environmental Flow'
+                WHEN tl.location_type = 'network_node' THEN 'Environmental Flow'
                 ELSE tl.location_type
             END as location_type_display
         FROM tier_locations tl
