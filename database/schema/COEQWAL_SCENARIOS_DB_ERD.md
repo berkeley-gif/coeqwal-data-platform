@@ -361,7 +361,54 @@ Values (9 total):
 └── AG_REV: Agricultural revenue (multi_value, future)
 ```
 
-### **2. tier_result (tier values by scenario)**
+### **2. tier_location_result (tier values by location)**
+
+```
+Table: tier_location_result
+├── id                      SERIAL PRIMARY KEY
+├── scenario_short_code     VARCHAR NOT NULL           -- Scenario identifier (s0011, s0020, s0021)
+├── tier_short_code         VARCHAR NOT NULL           -- FK → tier_definition.short_code
+├── location_type           VARCHAR NOT NULL           -- 'network_node', 'wba', 'reservoir', 'compliance_station', 'region'
+├── location_id             VARCHAR NOT NULL           -- ID in respective table (e.g., SAC232, 08N, SHSTA, JP, DELTA)
+├── location_name           VARCHAR                    -- Display name for map tooltip
+├── tier_level              INTEGER                    -- 1, 2, 3, or 4 (tier assignment for this location)
+├── tier_value              INTEGER                    -- Optional: count or value at this location (usually 1)
+├── display_order           INTEGER DEFAULT 1          -- For consistent map marker ordering
+├── tier_version_id         INTEGER NOT NULL DEFAULT 8 -- FK → version.id (tier family)
+├── created_at              TIMESTAMP DEFAULT NOW()
+├── created_by              INTEGER NOT NULL           -- FK → developer.id
+├── updated_at              TIMESTAMP DEFAULT NOW()
+└── updated_by              INTEGER NOT NULL           -- FK → developer.id
+
+Foreign Keys:
+├── Ref: tier_location_result.tier_short_code > tier_definition.short_code [delete: restrict, update: cascade]
+├── Ref: tier_location_result.tier_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: tier_location_result.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: tier_location_result.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── tier_location_result_unique (scenario_short_code, tier_short_code, location_id, tier_version_id)
+├── idx_tier_location_scenario (scenario_short_code)
+├── idx_tier_location_tier (tier_short_code)
+├── idx_tier_location_type (location_type)
+├── idx_tier_location_level (tier_level)
+└── idx_tier_location_combined (scenario_short_code, tier_short_code)
+
+Constraints:
+├── location_type CHECK (location_type IN ('network_node', 'wba', 'reservoir', 'compliance_station', 'region'))
+└── tier_level CHECK (tier_level BETWEEN 1 AND 4 OR tier_level IS NULL)
+
+Location Type Reference:
+├── 'network_node' → network.short_code (ENV_FLOWS, FW_EXP evaluation points)
+├── 'wba' → wba.wba_id (GW_STOR aquifer polygons)
+├── 'reservoir' → reservoirs.calsim_short_code (RES_STOR lake polygons)  
+├── 'compliance_station' → compliance_stations.station_code (FW_DELTA_USES monitoring)
+└── 'region' → hydrologic_region.short_code (DELTA_ECO, WRC_SALMON_AB regional)
+
+Example: ENV_FLOWS s0011 has 17 location records (one per evaluation node) with tier_levels 2-3
+```
+
+### **3. tier_result (aggregated tier values by scenario)**
 
 ```
 Table: tier_result
@@ -531,11 +578,39 @@ Table: network
 ├── source_list          INTEGER[]                  -- Array of source.id (e.g., {1,4,8,9} for report+geopackage+schematic+manual)
 ├── has_gis              BOOLEAN DEFAULT FALSE      -- Spatial data available
 ├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (1=SAC, 2=SJR, 3=DELTA, 4=TL, 5=CC)
+├── riv_sys              VARCHAR                    -- River system name from geopackage (e.g., "Sacramento River", "San Joaquin River")
+├── strm_code            VARCHAR                    -- Stream code from geopackage (e.g., "SAC", "SJR", "DMC")
 ├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family, default=12)
 ├── created_at           TIMESTAMP DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Records: 6,908 total (2,610 arcs + 4,298 nodes)
+Data sources: XML schematic (6,466) + geopackage nodes (1,548) + geopackage arcs (2,619)
+
+Foreign Keys:
+├── Ref: network.entity_type_id > network_entity_type.id [delete: restrict, update: cascade]
+├── Ref: network.type_id > network_type.id [delete: restrict, update: cascade]
+├── Ref: network.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
+├── Ref: network.network_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: network.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: network.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── network_short_code_key (short_code) -- Unique constraint (PRIMARY for lookups)
+├── idx_network_entity_type (entity_type_id) -- Filter by arcs vs nodes
+├── idx_network_type (type_id) -- Type filtering
+├── idx_network_source_list (source_list) USING GIN -- Multi-source queries
+├── idx_network_model_list (model_list) USING GIN -- Multi-model queries
+├── idx_network_has_gis (has_gis) -- Filter for spatial data availability
+├── idx_network_hydrologic_region (hydrologic_region_id) -- Regional queries
+├── idx_network_strm_code (strm_code) -- Stream code lookups
+└── idx_network_version (network_version_id) -- Version filtering
+
+Constraints:
+├── model_list CHECK (array_length(model_list, 1) > 0) -- At least one model
+└── source_list CHECK (array_length(source_list, 1) > 0) -- At least one source
 
 ```
 
@@ -544,8 +619,8 @@ Table: network
 ```
 Table: network_arc
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           VARCHAR UNIQUE NOT NULL    -- Arc identifier (FK reference to network.short_code)
-├── network_id           INTEGER NOT NULL           -- FK → network.id
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Arc identifier (matches network.short_code for safety)
+├── network_id           INTEGER NOT NULL           -- FK → network.id (populated during DB load via short_code lookup)
 ├── river                VARCHAR                    -- River identifier for watershed connection (AMR, CCH, ELD)
 ├── from_node            VARCHAR                    -- From node identifier
 ├── to_node              VARCHAR                    -- To node identifier  
@@ -634,7 +709,8 @@ Distribution by watershed:
 ```
 Table: network_node
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           VARCHAR UNIQUE NOT NULL    -- Node identifier (matches network.short_code)
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Node identifier (matches network.short_code for safety)
+├── network_id           INTEGER NOT NULL           -- FK → network.id (populated during DB load via short_code lookup)
 ├── riv_mi               NUMERIC                    -- River mile location
 ├── c2vsim_gw            VARCHAR                    -- C2VSIM groundwater connection
 ├── c2vsim_sw            VARCHAR                    -- C2VSIM surface water connection
@@ -705,7 +781,8 @@ SELECT * FROM network WHERE array_length(subtype_ids, 1) > 1;
 ```
 Table: network_gis
 ├── id                   SERIAL PRIMARY KEY
-├── network_id           INTEGER NOT NULL           -- FK → network.id
+├── short_code           VARCHAR NOT NULL           -- Network element identifier (matches network.short_code for safety)
+├── network_id           INTEGER NOT NULL           -- FK → network.id (populated during DB load via short_code lookup)
 ├── precision_level      VARCHAR NOT NULL           -- "precise", "mapping_efficient", "regional"
 ├── geom_wkt             TEXT NOT NULL              -- Primary geometry storage
 ├── srid                 INTEGER DEFAULT 4326
