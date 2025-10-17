@@ -150,7 +150,7 @@ async def get_tier_map_data(
                 tier_name = row['tier_name']
                 tier_type = row['tier_type']
             
-            # Parse geometry (comes from PostGIS as JSON, may need parsing)
+            # Parse geometry (comes from PostGIS as JSON)
             geometry = row['geometry']
             if isinstance(geometry, str):
                 geometry = json.loads(geometry)
