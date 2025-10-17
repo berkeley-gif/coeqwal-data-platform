@@ -22,6 +22,7 @@ from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_no
 from routes.vast_network_traversal import get_node_network_unlimited
 from routes.clean_network_endpoints import router as network_mapbox_router, set_db_pool
 from routes.tier_endpoints import router as tier_router, set_db_pool as set_tier_db_pool
+from routes.tier_map_endpoints import router as tier_map_router, set_db_pool as set_tier_map_db_pool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
