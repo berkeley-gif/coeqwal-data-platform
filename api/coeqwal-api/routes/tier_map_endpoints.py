@@ -112,8 +112,7 @@ async def get_tier_map_data(
                 WHEN tl.location_type = 'network_node' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM network_gis 
-                     WHERE short_code = tl.location_id 
-                     AND geometry_type_id = 1)  -- 1 = POINT
+                     WHERE short_code = tl.location_id)
                 ELSE NULL
             END as geometry,
             CASE 
