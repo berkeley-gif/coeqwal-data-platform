@@ -17,11 +17,9 @@ import logging
 import time
 from datetime import datetime
 
-# Import our new spatial endpoints
+# Import our spatial endpoints
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
 from routes.vast_network_traversal import get_node_network_unlimited
-# TODO: Fix clean_network_endpoints missing module dependencies before re-enabling
-# from routes.clean_network_endpoints import router as network_mapbox_router, set_db_pool
 from routes.tier_endpoints import router as tier_router, set_db_pool as set_tier_db_pool
 from routes.tier_map_endpoints import router as tier_map_router, set_db_pool as set_tier_map_db_pool
 
@@ -52,10 +50,6 @@ async def lifespan(app: FastAPI):
     )
     logger.info(f"Database pool created with {db_pool._queue.qsize()} connections")
     
-    # Set the database pool for network mapbox router
-    # TODO: Re-enable when clean_network_endpoints is fixed
-    # set_db_pool(db_pool)
-    
     # Set the database pool for tier router
     set_tier_db_pool(db_pool)
     
@@ -74,10 +68,6 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
-
-# Include Mapbox network router
-# TODO: Re-enable when clean_network_endpoints is fixed
-# app.include_router(network_mapbox_router)
 
 # Include tier endpoints
 app.include_router(tier_router)
