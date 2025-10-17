@@ -19,19 +19,11 @@ from datetime import datetime
 
 # Import our new spatial endpoints
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
-from routes.network_traversal import get_node_network_unlimited
-from routes.network_endpoints import router as network_mapbox_router, set_db_pool
+from routes.vast_network_traversal import get_node_network_unlimited
+# TODO: Fix clean_network_endpoints missing module dependencies before re-enabling
+# from routes.clean_network_endpoints import router as network_mapbox_router, set_db_pool
 from routes.tier_endpoints import router as tier_router, set_db_pool as set_tier_db_pool
 from routes.tier_map_endpoints import router as tier_map_router, set_db_pool as set_tier_map_db_pool
-
-# S3 integration (only available in AWS environment)
-try:
-    import boto3
-    from botocore.exceptions import ClientError
-    S3_AVAILABLE = True
-except ImportError:
-    S3_AVAILABLE = False
-    logger.warning("boto3 not available - S3 features disabled")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,21 +31,9 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@host:port/db")
-S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
-AWS_REGION = os.getenv("AWS_REGION", "us-west-2")
 
 # Database connection pool
 db_pool = None
-
-# S3 client (initialized in AWS environment)
-s3_client = None
-if S3_AVAILABLE:
-    try:
-        s3_client = boto3.client('s3', region_name=AWS_REGION)
-        logger.info("S3 client initialized successfully")
-    except Exception as e:
-        logger.warning(f"S3 client initialization failed: {e}")
-        s3_client = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -73,7 +53,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Database pool created with {db_pool._queue.qsize()} connections")
     
     # Set the database pool for network mapbox router
-    set_db_pool(db_pool)
+    # TODO: Re-enable when clean_network_endpoints is fixed
+    # set_db_pool(db_pool)
     
     # Set the database pool for tier router
     set_tier_db_pool(db_pool)
@@ -95,12 +76,13 @@ app = FastAPI(
 )
 
 # Include Mapbox network router
-app.include_router(network_mapbox_router)
+# TODO: Re-enable when clean_network_endpoints is fixed
+# app.include_router(network_mapbox_router)
 
 # Include tier endpoints
 app.include_router(tier_router)
 
-# Include tier map visualization endpoints
+# Include tier map endpoints
 app.include_router(tier_map_router)
 
 # Middleware for performance
@@ -186,22 +168,6 @@ class NetworkAnalysis(BaseModel):
     downstream_nodes: List[ConnectedElement]
     connected_arcs: List[ConnectedElement]
 
-class ScenarioFile(BaseModel):
-    filename: str
-    size_bytes: Optional[int] = None
-    last_modified: Optional[str] = None
-
-class ScenarioFiles(BaseModel):
-    zip: Optional[ScenarioFile] = None
-    output_csv: Optional[ScenarioFile] = None
-    sv_csv: Optional[ScenarioFile] = None
-
-class Scenario(BaseModel):
-    scenario_id: str
-    title: Optional[str] = None
-    description: Optional[str] = None
-    files: ScenarioFiles
-
 @app.get("/")
 async def root():
     return {
@@ -220,8 +186,6 @@ async def root():
             "node_analysis": "/api/nodes/{node_id}/analysis",
             "arc_analysis": "/api/arcs/{arc_id}/analysis",
             "search": "/api/search",
-            "scenarios": "/scenarios",
-            "download": "/download?scenario={id}&type={type}",
             "documentation": "/docs"
         }
     }
@@ -634,131 +598,6 @@ async def api_get_node_network_unlimited(
 ):
     """Get COMPLETE upstream/downstream network with NO DEPTH LIMIT - like CalSim3_schematic"""
     return await get_node_network_unlimited(db_pool, node_id, direction, include_arcs)
-
-def get_s3_file_info(bucket: str, key: str) -> Optional[ScenarioFile]:
-    """Get file information from S3"""
-    if not s3_client:
-        logger.debug(f"S3 client not available, skipping file check for {key}")
-        return None
-        
-    try:
-        response = s3_client.head_object(Bucket=bucket, Key=key)
-        filename = key.split('/')[-1]
-        return ScenarioFile(
-            filename=filename,
-            size_bytes=response.get('ContentLength'),
-            last_modified=response.get('LastModified').isoformat() if response.get('LastModified') else None
-        )
-    except ClientError as e:
-        if e.response['Error']['Code'] == '404':
-            logger.debug(f"S3 file not found: {key}")
-            return None
-        logger.error(f"Error checking S3 file {key}: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error checking S3 file {key}: {e}")
-        return None
-
-@app.get("/scenarios", response_model=Dict[str, List[Scenario]])
-async def get_scenarios_list(db: asyncpg.Connection = Depends(get_db)):
-    """Get all scenarios with their available files (matches frontend expectation)"""
-    try:
-        # Get scenarios from database
-        query = """
-        SELECT scenario_id, short_code, title, description
-        FROM scenario
-        WHERE is_active = TRUE
-        ORDER BY scenario_id
-        """
-        
-        rows = await db.fetch(query)
-        scenarios = []
-        
-        for row in rows:
-            scenario_id = row['scenario_id']
-            
-            # Check for files in S3 (based on ETL pipeline structure)
-            zip_key = f"scenario/{scenario_id}/run/{scenario_id}_coeqwal_run.zip"
-            output_csv_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv"
-            sv_csv_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_sv_input.csv"
-            
-            # Get file info from S3 (or None if S3 not available/files don't exist)
-            zip_file = get_s3_file_info(S3_BUCKET, zip_key)
-            output_csv_file = get_s3_file_info(S3_BUCKET, output_csv_key)
-            sv_csv_file = get_s3_file_info(S3_BUCKET, sv_csv_key)
-            
-            # Include scenario if it has at least one file, or if S3 is not available (for development)
-            if zip_file or output_csv_file or sv_csv_file or not s3_client:
-                # If S3 is not available, create placeholder files for development
-                if not s3_client:
-                    zip_file = ScenarioFile(filename=f"{scenario_id}_coeqwal_run.zip")
-                    output_csv_file = ScenarioFile(filename=f"{scenario_id}_coeqwal_calsim_output.csv")
-                    sv_csv_file = ScenarioFile(filename=f"{scenario_id}_coeqwal_sv_input.csv")
-                
-                scenario = Scenario(
-                    scenario_id=scenario_id,
-                    title=row['title'],
-                    description=row['description'],
-                    files=ScenarioFiles(
-                        zip=zip_file,
-                        output_csv=output_csv_file,
-                        sv_csv=sv_csv_file
-                    )
-                )
-                scenarios.append(scenario)
-        
-        return {"scenarios": scenarios}
-        
-    except Exception as e:
-        logger.error(f"Failed to get scenarios: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get scenarios")
-
-@app.get("/download")
-async def get_download_url_query(
-    scenario: str = Query(..., description="Scenario ID"),
-    type: str = Query(..., description="File type: zip, output, or sv")
-):
-    """Generate presigned URL for file download (matches frontend expectation with query params)"""
-    try:
-        # Validate file type and map to S3 keys
-        file_type_mapping = {
-            "zip": f"scenario/{scenario}/run/{scenario}_coeqwal_run.zip",
-            "output": f"scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",
-            "sv": f"scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
-        }
-        
-        if type not in file_type_mapping:
-            raise HTTPException(status_code=400, detail="Invalid file type")
-        
-        s3_key = file_type_mapping[type]
-        
-        # If S3 is not available, return placeholder
-        if not s3_client:
-            logger.warning("S3 client not available, returning placeholder URL")
-            return {"download_url": f"https://example.com/download/{scenario}/{type}"}
-        
-        # Check if file exists
-        try:
-            s3_client.head_object(Bucket=S3_BUCKET, Key=s3_key)
-        except ClientError as e:
-            if e.response['Error']['Code'] == '404':
-                raise HTTPException(status_code=404, detail="File not found")
-            raise
-        
-        # Generate presigned URL (valid for 1 hour)
-        presigned_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': S3_BUCKET, 'Key': s3_key},
-            ExpiresIn=3600
-        )
-        
-        return {"download_url": presigned_url}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to generate download URL: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to generate download URL")
 
 @app.get("/api/health")
 async def health_check():

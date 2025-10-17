@@ -72,7 +72,6 @@ async def get_tier_map_data(
             JOIN tier_definition td ON tlr.tier_short_code = td.short_code
             WHERE tlr.scenario_short_code = $1
             AND tlr.tier_short_code = $2
-            AND tlr.is_active = TRUE
         )
         SELECT 
             tl.location_type,
@@ -204,7 +203,6 @@ async def get_available_scenarios(
             COUNT(DISTINCT tier_short_code) as tier_count,
             COUNT(*) as location_count
         FROM tier_location_result
-        WHERE is_active = TRUE
         GROUP BY scenario_short_code
         ORDER BY scenario_short_code
         """
@@ -251,7 +249,6 @@ async def get_available_tiers(
             FROM tier_definition td
             JOIN tier_location_result tlr ON td.short_code = tlr.tier_short_code
             WHERE tlr.scenario_short_code = $1
-            AND tlr.is_active = TRUE
             AND td.is_active = TRUE
             GROUP BY td.short_code, td.name, td.description, td.tier_type, td.tier_count
             ORDER BY td.tier_type DESC, td.short_code
@@ -314,7 +311,6 @@ async def get_scenario_tier_summary(
         FROM tier_definition td
         JOIN tier_location_result tlr ON td.short_code = tlr.tier_short_code
         WHERE tlr.scenario_short_code = $1
-        AND tlr.is_active = TRUE
         AND td.is_active = TRUE
         GROUP BY td.short_code, td.name, td.description, td.tier_type, td.tier_count
         ORDER BY td.tier_type DESC, td.short_code
@@ -351,4 +347,8 @@ async def get_scenario_tier_summary(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+<<<<<<< HEAD
 
+||||||| e790095
+=======
+>>>>>>> dev

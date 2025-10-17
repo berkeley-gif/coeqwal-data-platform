@@ -5,15 +5,19 @@ Optimized for fast downloads and connectivity
 
 from fastapi import APIRouter, Query, Path, HTTPException
 import json
-# TODO: Import geopackage_network_api when available
+# TODO: Re-enable these imports when modules are available
 # from .geopackage_network_api import (
 #     geopackage_network_traversal,
 #     fast_geopackage_geojson
 # )
-from .water_trail_api import (
-    get_water_trail_from_reservoir,
-    get_major_reservoir_trails
-)
+# from .water_trail_api import (
+#     get_water_trail_from_reservoir,
+#     get_major_reservoir_trails
+# )
+# from .simple_trail_api import (
+#     get_california_water_infrastructure,
+#     get_reservoir_water_trail
+# )
 
 router = APIRouter(prefix="/api/network", tags=["clean-geopackage-network"])
 
@@ -42,8 +46,7 @@ async def api_fast_geopackage_geojson(
     """
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
-    # TODO: Implement when geopackage_network_api is available
-    raise HTTPException(status_code=501, detail="Fast GeoJSON endpoint not yet implemented")
+    return await fast_geopackage_geojson(db_pool, bbox, include_arcs, include_nodes, limit)
 
 
 @router.get("/traverse/{short_code}/geopackage")
@@ -58,8 +61,7 @@ async def api_geopackage_network_traversal(
     """
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
-    # TODO: Implement when geopackage_network_api is available
-    raise HTTPException(status_code=501, detail="Geopackage network traversal not yet implemented")
+    return await geopackage_network_traversal(db_pool, short_code, direction, max_depth)
 
 
 @router.get("/reservoirs/top9")
@@ -272,3 +274,44 @@ async def api_get_major_reservoir_trails(
     if not db_pool:
         raise HTTPException(status_code=500, detail="Database pool not initialized")
     return await get_major_reservoir_trails(db_pool, trail_type)
+
+
+@router.get("/infrastructure/california")
+async def api_get_california_water_infrastructure(
+    trail_type: str = Query("infrastructure", description="Infrastructure type filter")
+):
+    """
+    CALIFORNIA WATER INFRASTRUCTURE - Simple direct query approach
+    
+    Gets ALL key California water infrastructure without complex hardcoded trails:
+    - All reservoirs (STR)
+    - All pump stations (PS) 
+    - All treatment plants (WTP/WWTP)
+    - Major river nodes (Sacramento, San Joaquin, American, Feather)
+    - Key delivery/diversion arcs
+    
+    Much more reliable than hardcoded trails - just queries what exists in database
+    
+    Example: /api/network/infrastructure/california
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_california_water_infrastructure(db_pool, trail_type)
+
+
+@router.get("/simple-trail/{reservoir_short_code}")
+async def api_get_simple_reservoir_trail(
+    reservoir_short_code: str = Path(..., description="Short code of reservoir"),
+    max_depth: int = Query(5, description="Maximum trail depth")
+):
+    """
+    SIMPLE WATER TRAIL - Direct connectivity approach
+    
+    Follows actual network connections from reservoir without hardcoded paths
+    Uses recursive SQL to find downstream infrastructure
+    
+    Example: /api/network/simple-trail/SHSTA?max_depth=5
+    """
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database pool not initialized")
+    return await get_reservoir_water_trail(db_pool, reservoir_short_code, max_depth)
