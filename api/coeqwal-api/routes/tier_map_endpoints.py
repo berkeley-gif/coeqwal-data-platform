@@ -194,6 +194,8 @@ async def get_scenario_tier_summary(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 # ============================================================================
 # CATCH-ALL ROUTE (MUST COME LAST)
