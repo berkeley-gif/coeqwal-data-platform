@@ -2,9 +2,8 @@
 Download API endpoints for scenario file downloads
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, List, Optional, Any
-import asyncpg
 from pydantic import BaseModel
 import logging
 import os
@@ -21,14 +20,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["downloads"])
 
-# Global variable to hold db_pool reference, set by main.py
-db_pool = None
+# Global S3 client
 s3_client = None
 
 def set_db_pool(pool):
-    """Set the database pool - called from main.py after pool creation"""
-    global db_pool
-    db_pool = pool
+    """Placeholder function for compatibility - no longer needed"""
+    pass
 
 def initialize_s3_client():
     """Initialize S3 client if available"""
@@ -59,14 +56,7 @@ class Scenario(BaseModel):
 class ScenariosResponse(BaseModel):
     scenarios: List[Scenario]
 
-# Dependency for database connections
-async def get_db():
-    """Get database connection from pool"""
-    if not db_pool:
-        raise HTTPException(status_code=500, detail="Database pool not initialized")
-    
-    async with db_pool.acquire() as connection:
-        yield connection
+# Database dependency removed - scenarios discovered from S3 only
 
 def check_s3_file_exists(bucket: str, key: str) -> bool:
     """Check if file exists in S3"""
@@ -126,33 +116,55 @@ def list_scenario_files(bucket: str, scenario_id: str) -> Dict[str, FileInfo]:
         
     return files
 
+def discover_scenarios_from_s3(bucket: str) -> List[str]:
+    """Discover scenario IDs by scanning S3 bucket structure"""
+    if not s3_client:
+        # Return hardcoded scenarios for development
+        return ["s0011", "s0020", "s0021"]
+    
+    scenario_ids = set()
+    
+    try:
+        # List all objects under scenario/ prefix
+        paginator = s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=bucket, Prefix="scenario/", Delimiter="/")
+        
+        for page in pages:
+            # Get scenario directories from CommonPrefixes
+            if 'CommonPrefixes' in page:
+                for prefix in page['CommonPrefixes']:
+                    # Extract scenario_id from "scenario/{scenario_id}/"
+                    prefix_path = prefix['Prefix']  # e.g., "scenario/s0011/"
+                    if prefix_path.startswith('scenario/') and prefix_path.endswith('/'):
+                        scenario_id = prefix_path[9:-1]  # Remove "scenario/" and trailing "/"
+                        if scenario_id:  # Make sure it's not empty
+                            scenario_ids.add(scenario_id)
+        
+        return sorted(list(scenario_ids))
+        
+    except Exception as e:
+        logger.error(f"Error discovering scenarios from S3: {e}")
+        # Return empty list if S3 scan fails
+        return []
+
 @router.get("/scenario", response_model=ScenariosResponse)
-async def get_scenarios_for_download(db: asyncpg.Connection = Depends(get_db)):
+async def get_scenarios_for_download():
     """
     Get all scenarios with their available files for download
-    Matches the Lambda API response format exactly
+    Discovers scenarios directly from S3 bucket structure - no database dependency
     """
     # Initialize S3 client if not already done
     initialize_s3_client()
     
     try:
-        # Get scenarios from database
-        query = """
-        SELECT scenario_id, short_code, title, description
-        FROM scenario
-        WHERE is_active = TRUE
-        ORDER BY scenario_id
-        """
-        
-        rows = await db.fetch(query)
-        scenarios = []
-        
         # S3 bucket configuration
         s3_bucket = os.getenv("S3_BUCKET", "coeqwal-model-run")
         
-        for row in rows:
-            scenario_id = row['scenario_id']
-            
+        # Discover scenarios from S3 bucket structure
+        scenario_ids = discover_scenarios_from_s3(s3_bucket)
+        scenarios = []
+        
+        for scenario_id in scenario_ids:
             # Dynamically discover all files for this scenario in S3
             discovered_files = list_scenario_files(s3_bucket, scenario_id)
             
