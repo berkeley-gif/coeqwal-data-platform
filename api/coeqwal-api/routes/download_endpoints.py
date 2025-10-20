@@ -23,10 +23,6 @@ router = APIRouter(tags=["downloads"])
 # Global S3 client
 s3_client = None
 
-def set_db_pool(pool):
-    """Placeholder function for compatibility - no longer needed"""
-    pass
-
 def initialize_s3_client():
     """Initialize S3 client if available"""
     global s3_client
@@ -39,7 +35,6 @@ def initialize_s3_client():
             logger.warning(f"S3 client initialization failed: {e}")
             s3_client = None
 
-# Pydantic models matching the Lambda API response format exactly
 class FileInfo(BaseModel):
     key: str
     filename: str
@@ -55,8 +50,6 @@ class Scenario(BaseModel):
 
 class ScenariosResponse(BaseModel):
     scenarios: List[Scenario]
-
-# Database dependency removed - scenarios discovered from S3 only
 
 def check_s3_file_exists(bucket: str, key: str) -> bool:
     """Check if file exists in S3"""
@@ -119,8 +112,8 @@ def list_scenario_files(bucket: str, scenario_id: str) -> Dict[str, FileInfo]:
 def discover_scenarios_from_s3(bucket: str) -> List[str]:
     """Discover scenario IDs by scanning S3 bucket structure"""
     if not s3_client:
-        # Return hardcoded scenarios for development
-        return ["s0011", "s0020", "s0021"]
+        # Return empty list if S3 not available - no fake scenarios
+        return []
     
     scenario_ids = set()
     
@@ -149,10 +142,7 @@ def discover_scenarios_from_s3(bucket: str) -> List[str]:
 
 @router.get("/scenario", response_model=ScenariosResponse)
 async def get_scenarios_for_download():
-    """
-    Get all scenarios with their available files for download
-    Discovers scenarios directly from S3 bucket structure - no database dependency
-    """
+    """Get all scenarios with their available files from S3"""
     # Initialize S3 client if not already done
     initialize_s3_client()
     
@@ -178,21 +168,6 @@ async def get_scenarios_for_download():
             if 'sv_csv' in discovered_files:
                 files.sv_csv = discovered_files['sv_csv']
             
-            # If S3 not available, create placeholder files for development
-            if not s3_client:
-                files.zip = FileInfo(
-                    key=f"scenario/{scenario_id}/run/{scenario_id}_placeholder.zip",
-                    filename=f"{scenario_id}_placeholder.zip"
-                )
-                files.output_csv = FileInfo(
-                    key=f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
-                    filename=f"{scenario_id}_coeqwal_calsim_output.csv"
-                )
-                files.sv_csv = FileInfo(
-                    key=f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_sv_input.csv",
-                    filename=f"{scenario_id}_coeqwal_sv_input.csv"
-                )
-            
             # Include scenario if it has at least one file
             if files.zip or files.output_csv or files.sv_csv:
                 scenario = Scenario(
@@ -212,10 +187,7 @@ async def get_download_url(
     scenario: str = Query(..., description="Scenario ID"),
     type: str = Query(..., description="File type: zip, output, or sv")
 ):
-    """
-    Generate presigned URL for file download
-    Matches the Lambda API structure exactly
-    """
+    """Generate presigned URL for file download"""
     # Initialize S3 client if not already done
     initialize_s3_client()
     
