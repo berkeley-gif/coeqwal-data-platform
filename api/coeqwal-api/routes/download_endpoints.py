@@ -150,8 +150,13 @@ async def get_scenarios_for_download():
         # S3 bucket configuration
         s3_bucket = os.getenv("S3_BUCKET", "coeqwal-model-run")
         
+        # Debug logging
+        logger.info(f"S3 client available: {s3_client is not None}")
+        logger.info(f"S3 bucket: {s3_bucket}")
+        
         # Discover scenarios from S3 bucket structure
         scenario_ids = discover_scenarios_from_s3(s3_bucket)
+        logger.info(f"Discovered scenario IDs: {scenario_ids}")
         scenarios = []
         
         for scenario_id in scenario_ids:
