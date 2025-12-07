@@ -194,8 +194,97 @@ async def get_scenario_tier_summary(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Database error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# ============================================================================
+# LOCATIONS ENDPOINT (Returns data even without geometry)
+# ============================================================================
+
+@router.get("/{scenario_short_code}/{tier_short_code}/locations")
+async def get_tier_locations(
+    scenario_short_code: str,
+    tier_short_code: str,
+    connection: asyncpg.Connection = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get tier location data for a specific scenario and tier combination.
+    
+    Returns ALL locations with tier levels, even if geometry is not available.
+    Use this endpoint for CWS_DEL, AG_REV, or other demand unit tiers.
+    
+    Response includes:
+    - locations: Array of location objects with tier_level (1-4)
+    - metadata: Scenario, tier info, and counts
+    """
+    try:
+        query = """
+        SELECT 
+            tlr.location_type,
+            tlr.location_id,
+            tlr.location_name,
+            tlr.tier_level,
+            tlr.tier_value,
+            tlr.display_order,
+            td.name as tier_name,
+            td.tier_type
+        FROM tier_location_result tlr
+        JOIN tier_definition td ON tlr.tier_short_code = td.short_code
+        WHERE tlr.scenario_short_code = $1
+        AND tlr.tier_short_code = $2
+        ORDER BY tlr.display_order, tlr.location_name
+        """
+        
+        rows = await connection.fetch(query, scenario_short_code, tier_short_code)
+        
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No tier data found for scenario '{scenario_short_code}' and tier '{tier_short_code}'"
+            )
+        
+        # Build locations array
+        locations = []
+        tier_name = None
+        tier_type = None
+        
+        for row in rows:
+            if not tier_name:
+                tier_name = row['tier_name']
+                tier_type = row['tier_type']
+            
+            locations.append({
+                "location_id": row['location_id'],
+                "location_name": row['location_name'],
+                "location_type": row['location_type'],
+                "tier_level": row['tier_level'],
+                "tier_value": row['tier_value'],
+                "display_order": row['display_order']
+            })
+        
+        # Count by tier level
+        tier_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+        for loc in locations:
+            if loc['tier_level'] in tier_counts:
+                tier_counts[loc['tier_level']] += 1
+        
+        return {
+            "scenario": scenario_short_code,
+            "tier_code": tier_short_code,
+            "tier_name": tier_name,
+            "tier_type": tier_type,
+            "locations": locations,
+            "metadata": {
+                "total_locations": len(locations),
+                "location_types": list(set(row['location_type'] for row in rows)),
+                "tier_counts": tier_counts
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 
 # ============================================================================
 # CATCH-ALL ROUTE (MUST COME LAST)
@@ -277,6 +366,11 @@ async def get_tier_map_data(
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM network_gis 
                      WHERE short_code = tl.location_id)
+                -- Demand unit lookup (urban/agriculture/refuge demand units)
+                WHEN tl.location_type = 'demand_unit' THEN
+                    (SELECT ST_AsGeoJSON(geom)::jsonb 
+                     FROM network_gis 
+                     WHERE short_code = tl.location_id)
                 ELSE NULL
             END as geometry,
             CASE 
@@ -285,6 +379,7 @@ async def get_tier_map_data(
                 WHEN tl.location_type = 'region' THEN 'Region'
                 WHEN tl.location_type = 'compliance_station' THEN 'Compliance Station'
                 WHEN tl.location_type = 'network_node' THEN 'Environmental Flow'
+                WHEN tl.location_type = 'demand_unit' THEN 'Demand Unit'
                 ELSE tl.location_type
             END as location_type_display
         FROM tier_locations tl
