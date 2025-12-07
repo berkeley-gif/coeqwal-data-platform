@@ -4,7 +4,7 @@ Following the established pattern: Foundation -> Enhanced -> Complete -> Curated
 """
 
 import asyncpg
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any
 import json
 
 # FOUNDATION TRAILS - Simple, reliable backbone (like Pass 1: Geopackage-only)

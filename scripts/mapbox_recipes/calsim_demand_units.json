@@ -1,0 +1,10 @@
+{
+    "version": 1,
+    "layers": {
+      "demand_units": {
+        "source": "mapbox://tileset-source/coeqwal/calsim_demand_units",
+        "minzoom": 4,
+        "maxzoom": 16
+        }
+    }
+}

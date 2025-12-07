@@ -3,7 +3,7 @@ Download API endpoints for scenario file downloads
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from pydantic import BaseModel
 import logging
 import os

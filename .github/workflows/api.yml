@@ -17,6 +17,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Lint Python code
+        run: |
+          pip install ruff
+          echo "🔍 Checking for syntax errors and undefined variables..."
+          # Exclude backup files and network_endpoints.py (has pre-existing issues with commented imports)
+          ruff check api/coeqwal-api/ --select=E,F --ignore=E501,E741 --exclude="*BACKUP*,network_endpoints.py"
+          echo "✅ Linting passed!"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:

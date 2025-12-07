@@ -4,7 +4,6 @@ For COEQWAL FastAPI api
 """
 
 from fastapi import Query, HTTPException
-from typing import Optional
 import asyncpg
 import json
 

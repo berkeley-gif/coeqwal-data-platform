@@ -129,6 +129,43 @@ export DATABASE_URL="postgresql://user:pass@host:5432/coeqwal_scenario"
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### **Linting (required before push)**
+
+We use [Ruff](https://docs.astral.sh/ruff/) to catch errors like undefined variables before deployment.
+
+```bash
+# Install ruff (included in requirements.txt)
+pip install ruff
+
+# Check for errors
+ruff check api/coeqwal-api/
+
+# Auto-fix simple issues
+ruff check api/coeqwal-api/ --fix
+
+# Check a specific file
+ruff check api/coeqwal-api/routes/tier_map_endpoints.py
+```
+
+**What it catches:**
+- Undefined variables
+- Unused imports
+- Syntax errors
+- Common Python mistakes
+
+**CI/CD Integration:**
+- Linting runs automatically in GitHub Actions before Docker build
+- If linting fails, the deployment is blocked
+
+### **Testing Docker build locally**
+```bash
+# Build the production image
+docker build -f api/deployment/Dockerfile.production -t coeqwal-api-test .
+
+# Run locally (optional)
+docker run -p 8000:8000 -e DATABASE_URL="..." coeqwal-api-test
+```
+
 ### **Testing**
 ```bash
 # Health check

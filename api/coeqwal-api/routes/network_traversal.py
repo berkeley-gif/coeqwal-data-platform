@@ -3,7 +3,7 @@ Complete CalSim network traversal
 """
 import json
 import asyncpg
-from fastapi import HTTPException, Query
+from fastapi import HTTPException
 
 
 async def get_node_network_unlimited(
