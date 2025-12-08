@@ -49,27 +49,10 @@ API_VERSION = "2.1.0"
 API_DESCRIPTION = """
 # COEQWAL API
 
-This API provides data for the COEQWAL interactive dashboard, enabling users to explore
-how different water management scenarios affect communities, agriculture, and ecosystems
-across California.
+Data API for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
 
-## Key features
-
-### Tier data
-Outcome indicators scored on a 1-4 tier system:
-- **Tier 1** (Green): Best outcomes
-- **Tier 2** (Blue): Good outcomes  
-- **Tier 3** (Orange): Moderate concern
-- **Tier 4** (Red): Significant concern
-
-### Tier map visualization
-GeoJSON data for mapping tier outcomes by location (reservoirs, aquifers, demand units).
-
-### Network data (in progress)
-CalSim3 water network nodes and arcs with spatial queries and network traversal.
-
-### Downloads
-Presigned S3 URLs for downloading scenario model run files.
+Enables exploration of how different water management scenarios affect communities, 
+agriculture, and ecosystems across California.
 
 ## Scenarios
 
