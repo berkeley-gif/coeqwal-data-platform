@@ -1,10 +1,17 @@
 """
-Download API endpoints for scenario file downloads
+Download API endpoints for scenario file downloads.
+
+Provides access to CalSim model run files stored in S3:
+- DSS files (complete model output)
+- CSV output files (time series data)
+- State variable input files
+
+Files are organized by scenario ID in the S3 bucket.
 """
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import logging
 import os
 
@@ -36,20 +43,24 @@ def initialize_s3_client():
             s3_client = None
 
 class FileInfo(BaseModel):
-    key: str
-    filename: str
+    """Information about a downloadable file"""
+    key: str = Field(..., description="S3 object key")
+    filename: str = Field(..., description="Original filename")
 
 class ScenarioFiles(BaseModel):
-    zip: Optional[FileInfo] = None
-    output_csv: Optional[FileInfo] = None
-    sv_csv: Optional[FileInfo] = None
+    """Available files for a scenario"""
+    zip: Optional[FileInfo] = Field(None, description="DSS model output file")
+    output_csv: Optional[FileInfo] = Field(None, description="CalSim output time series CSV")
+    sv_csv: Optional[FileInfo] = Field(None, description="State variable input CSV")
 
 class Scenario(BaseModel):
-    scenario_id: str
-    files: ScenarioFiles
+    """Scenario with available download files"""
+    scenario_id: str = Field(..., description="Scenario identifier (e.g., 's0020')")
+    files: ScenarioFiles = Field(..., description="Available files for download")
 
 class ScenariosResponse(BaseModel):
-    scenarios: List[Scenario]
+    """List of scenarios with downloadable files"""
+    scenarios: List[Scenario] = Field(..., description="Scenarios with available files")
 
 def check_s3_file_exists(bucket: str, key: str) -> bool:
     """Check if file exists in S3"""
@@ -140,9 +151,22 @@ def discover_scenarios_from_s3(bucket: str) -> List[str]:
         # Return empty list if S3 scan fails
         return []
 
-@router.get("/scenario", response_model=ScenariosResponse)
+@router.get("/scenario", 
+             response_model=ScenariosResponse,
+             summary="List downloadable scenarios")
 async def get_scenarios_for_download():
-    """Get all scenarios with their available files from S3"""
+    """
+    Get all scenarios with their available download files.
+    
+    **Use case:** Build download page showing available files per scenario.
+    
+    Scans S3 bucket for scenario directories and returns available files.
+    
+    **File types:**
+    - `zip`: DSS model output file (complete model data)
+    - `output_csv`: CalSim output time series
+    - `sv_csv`: State variable inputs
+    """
     # Initialize S3 client if not already done
     initialize_s3_client()
     
@@ -187,12 +211,30 @@ async def get_scenarios_for_download():
         logger.error(f"Failed to get scenarios: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get scenarios")
 
-@router.get("/download")
+@router.get("/download", summary="Get download URL")
 async def get_download_url(
-    scenario: str = Query(..., description="Scenario ID"),
-    type: str = Query(..., description="File type: zip, output, or sv")
+    scenario: str = Query(..., description="Scenario ID (e.g., 's0020')", example="s0020"),
+    type: str = Query(..., description="File type: 'zip', 'output', or 'sv'", example="zip")
 ):
-    """Generate presigned URL for file download"""
+    """
+    Generate a presigned S3 URL for downloading a scenario file.
+    
+    **Use case:** Get temporary download link (valid 1 hour).
+    
+    **Parameters:**
+    - `scenario`: Scenario ID (e.g., 's0020', 's0021')
+    - `type`: File type to download
+      - `zip`: DSS model output
+      - `output`: CalSim output CSV
+      - `sv`: State variable CSV
+    
+    **Example:** `GET /download?scenario=s0020&type=zip`
+    
+    **Response:**
+    ```json
+    {"download_url": "https://s3.amazonaws.com/...?signature=..."}
+    ```
+    """
     # Initialize S3 client if not already done
     initialize_s3_client()
     

@@ -1,14 +1,20 @@
 """
 COEQWAL API
-FastAPI backend
-Production-ready with connection pooling and workshop optimization
+FastAPI backend for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
+
+This API provides:
+- Tier data for scenario outcome visualization (charts and maps)
+- CalSim3 network node/arc data with spatial queries
+- Scenario file downloads from S3
+
+Documentation: https://api.coeqwal.org/docs
 """
 
 from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import asyncpg
 import json
@@ -33,6 +39,89 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@host:port/db")
 
 # Database connection pool
 db_pool = None
+
+# =============================================================================
+# API METADATA & TAGS
+# =============================================================================
+
+API_TITLE = "COEQWAL API"
+API_VERSION = "2.1.0"
+API_DESCRIPTION = """
+# COEQWAL API
+
+This API provides data for the COEQWAL interactive dashboard, enabling users to explore
+how different water management scenarios affect communities, agriculture, and ecosystems
+across California.
+
+## Key features
+
+### Tier data
+Outcome indicators scored on a 1-4 tier system:
+- **Tier 1** (Green): Best outcomes
+- **Tier 2** (Blue): Good outcomes  
+- **Tier 3** (Orange): Moderate concern
+- **Tier 4** (Red): Significant concern
+
+### Tier map visualization
+GeoJSON data for mapping tier outcomes by location (reservoirs, aquifers, demand units).
+
+### Network data (in progress)
+CalSim3 water network nodes and arcs with spatial queries and network traversal.
+
+### Downloads
+Presigned S3 URLs for downloading scenario model run files.
+
+## Scenarios
+
+| ID | Description |
+|----|-------------|
+| s0011 | DCR 2023 Baseline with TUCPs |
+| s0020 | DCR 2023 + 2020 LandIQ land use with TUCPs |
+| s0021 | DCR 2023 + 2020 LandIQ without TUCPs |
+| s0023 | USBR 2024 Alt2V1 without TUCPs |
+| s0024 | USBR 2024 Alt2V1 with TUCPs |
+| s0025 | San Joaquin Valley groundwater limits |
+| s0027 | Central Valley groundwater limits |
+| s0029 | Functional flows scenario |
+
+## Tier Indicators
+
+| Code | Name | Type |
+|------|------|------|
+| AG_REV | Agricultural Revenue | multi_value (132 locations) |
+| CWS_DEL | Community Water System Deliveries | multi_value (91 locations) |
+| DELTA_ECO | Delta Estuary Ecology | single_value |
+| ENV_FLOWS | Environmental Flows | multi_value (17 locations) |
+| FW_DELTA_USES | Freshwater for In-Delta Uses | single_value |
+| FW_EXP | Freshwater for Delta Exports | single_value |
+| GW_STOR | Groundwater Storage | multi_value (42 locations) |
+| RES_STOR | Reservoir Storage | multi_value (8 locations) |
+| WRC_SALMON_AB | Salmon Abundance | single_value |
+"""
+
+TAGS_METADATA = [
+    {
+        "name": "tiers",
+        "description": "**Tier definitions and scenario tier data.** Used for charts showing outcome distributions.",
+    },
+    {
+        "name": "tier-map",
+        "description": "**Tier map visualization data.** Returns GeoJSON for mapping tier outcomes by location.",
+    },
+    {
+        "name": "network",
+        "description": "**CalSim3 water network data.** Nodes (reservoirs, demand units) and arcs (rivers, canals) with spatial queries.",
+    },
+    {
+        "name": "downloads",
+        "description": "**Scenario file downloads.** Lists available files and generates presigned S3 URLs.",
+    },
+    {
+        "name": "system",
+        "description": "**System endpoints.** Health checks and API info.",
+    },
+]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -64,10 +153,20 @@ async def lifespan(app: FastAPI):
     await db_pool.close()
 
 app = FastAPI(
-    title="COEQWAL API",
-    description="Production API for COEQWAL project",
-    version="2.0.0",
-    lifespan=lifespan
+    title=API_TITLE,
+    description=API_DESCRIPTION,
+    version=API_VERSION,
+    lifespan=lifespan,
+    openapi_tags=TAGS_METADATA,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    contact={
+        "name": "COEQWAL Team",
+        "url": "https://coeqwal.org",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
 
 # Include tier endpoints
@@ -120,82 +219,116 @@ async def add_performance_headers(request, call_next):
     return response
 
 # Pydantic models
+# =============================================================================
+# PYDANTIC MODELS
+# =============================================================================
+
 class NetworkNode(BaseModel):
-    id: int
-    short_code: str
-    calsim_id: Optional[str]
-    name: Optional[str]
-    description: Optional[str]
-    node_type: str
-    latitude: Optional[float]
-    longitude: Optional[float]
-    hydrologic_region: Optional[str]
-    geojson: Dict[str, Any]
-    attributes: Dict[str, Any]
+    """A CalSim3 network node with spatial data"""
+    id: int = Field(..., description="Internal database ID")
+    short_code: str = Field(..., description="Unique node identifier (e.g., 'SHSTA' for Shasta)")
+    calsim_id: Optional[str] = Field(None, description="CalSim model identifier")
+    name: Optional[str] = Field(None, description="Human-readable name")
+    description: Optional[str] = Field(None, description="Node description")
+    node_type: str = Field(..., description="Node type (Reservoir, Demand, Junction, etc.)")
+    latitude: Optional[float] = Field(None, description="Latitude in WGS84")
+    longitude: Optional[float] = Field(None, description="Longitude in WGS84")
+    hydrologic_region: Optional[str] = Field(None, description="Hydrologic region code (SAC, SJR, etc.)")
+    geojson: Dict[str, Any] = Field(..., description="GeoJSON geometry object")
+    attributes: Dict[str, Any] = Field(..., description="Additional node attributes")
 
 class NetworkArc(BaseModel):
-    id: int
-    short_code: str
-    calsim_id: Optional[str]
-    name: Optional[str]
-    description: Optional[str]
-    arc_type: str
-    from_node: Optional[str]
-    to_node: Optional[str]
-    shape_length: Optional[float]
-    hydrologic_region: Optional[str]
-    geojson: Dict[str, Any]
-    attributes: Dict[str, Any]
+    """A CalSim3 network arc (river, canal, or pipeline connection)"""
+    id: int = Field(..., description="Internal database ID")
+    short_code: str = Field(..., description="Unique arc identifier")
+    calsim_id: Optional[str] = Field(None, description="CalSim model identifier")
+    name: Optional[str] = Field(None, description="Human-readable name")
+    description: Optional[str] = Field(None, description="Arc description")
+    arc_type: str = Field(..., description="Arc type (River, Canal, Pipeline, etc.)")
+    from_node: Optional[str] = Field(None, description="Source node short_code")
+    to_node: Optional[str] = Field(None, description="Destination node short_code")
+    shape_length: Optional[float] = Field(None, description="Arc length in meters")
+    hydrologic_region: Optional[str] = Field(None, description="Hydrologic region code")
+    geojson: Dict[str, Any] = Field(..., description="GeoJSON geometry object (LineString)")
+    attributes: Dict[str, Any] = Field(..., description="Additional arc attributes")
 
 class ConnectedElement(BaseModel):
-    id: int
-    short_code: str
-    name: Optional[str]
-    element_type: str  # 'node' or 'arc'
-    distance: Optional[int]  # hops from origin
-    direction: Optional[str]  # 'upstream' or 'downstream'
+    """A network element connected to the origin node"""
+    id: int = Field(..., description="Element database ID")
+    short_code: str = Field(..., description="Element identifier")
+    name: Optional[str] = Field(None, description="Element name")
+    element_type: str = Field(..., description="'node' or 'arc'")
+    distance: Optional[int] = Field(None, description="Hops from origin node")
+    direction: Optional[str] = Field(None, description="'upstream' or 'downstream'")
 
 class NetworkAnalysis(BaseModel):
-    origin_id: int
-    origin_type: str
-    upstream_nodes: List[ConnectedElement]
-    downstream_nodes: List[ConnectedElement]
-    connected_arcs: List[ConnectedElement]
+    """Network traversal analysis results"""
+    origin_id: int = Field(..., description="Starting node ID")
+    origin_type: str = Field(..., description="'node' or 'arc'")
+    upstream_nodes: List[ConnectedElement] = Field(..., description="Nodes upstream of origin")
+    downstream_nodes: List[ConnectedElement] = Field(..., description="Nodes downstream of origin")
+    connected_arcs: List[ConnectedElement] = Field(..., description="Arcs connected to origin")
 
-@app.get("/")
+
+# =============================================================================
+# SYSTEM ENDPOINTS
+# =============================================================================
+
+@app.get("/", tags=["system"], summary="API Information")
 async def root():
+    """
+    Get API information and available endpoints.
+    
+    Returns version, data summary, and links to key endpoints.
+    """
     return {
-        "message": "COEQWAL API",
-        "description": "Production API for COEQWAL project",
-        "version": "2.0.0",
-        "data_summary": {
-            "nodes": "1,400+ California water network nodes with coordinates",
-            "arcs": "1,063+ river and canal connections with geometry",
-            "analysis": "Upstream/downstream network traversal functions"
+        "name": API_TITLE,
+        "description": "California Operational Equity in Water Allocation API",
+        "version": API_VERSION,
+        "documentation": {
+            "swagger": "/docs",
+            "redoc": "/redoc",
+            "openapi": "/openapi.json"
         },
-        "endpoints": {
-            "health": "/api/health",
-            "nodes": "/api/nodes",
-            "arcs": "/api/arcs", 
-            "node_analysis": "/api/nodes/{node_id}/analysis",
-            "arc_analysis": "/api/arcs/{arc_id}/analysis",
-            "search": "/api/search",
-            "scenarios": "/scenario",
-            "download": "/download?scenario={id}&type={type}",
-            "documentation": "/docs"
+        "data_summary": {
+            "scenarios": "8 water management scenarios",
+            "tiers": "9 outcome indicators with 1-4 tier scoring",
+            "nodes": "1,400+ CalSim3 network nodes with coordinates",
+            "arcs": "1,063+ river and canal connections with geometry"
+        },
+        "quick_start": {
+            "tier_list": "GET /api/tiers/list",
+            "scenario_tiers": "GET /api/tiers/scenarios/s0020/tiers",
+            "tier_map": "GET /api/tier-map/s0020/AG_REV",
+            "network_nodes": "GET /api/nodes?limit=100",
+            "downloads": "GET /scenario"
         }
     }
 
+# =============================================================================
+# NETWORK ENDPOINTS
+# =============================================================================
+
 @app.get("/api/nodes", 
          response_model=List[NetworkNode],
+         tags=["network"],
          summary="Get network nodes",
-         description="Get CalSim3 network nodes with coordinates and attributes")
+         description="Get CalSim3 network nodes with coordinates and attributes. Use for downloading all nodes or filtering by region.")
 async def get_all_nodes(
-    limit: int = Query(1000, le=10000, description="Maximum number of nodes to return"),
-    region: Optional[str] = Query(None, description="Filter by hydrologic region (SAC, SJR, and others)"),
+    limit: int = Query(1000, le=10000, description="Maximum nodes to return (max 10,000)"),
+    region: Optional[str] = Query(None, description="Filter by hydrologic region: SAC, SJR, TUL, SF, SC, CC, NC"),
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Get all network nodes with their spatial data and attributes"""
+    """
+    Get CalSim3 network nodes with spatial data and attributes.
+    
+    **Use cases:**
+    - Download all nodes for offline analysis
+    - Filter by hydrologic region for focused study
+    - Get node coordinates for map visualization
+    
+    **Example:** `GET /api/nodes?region=SAC&limit=500`
+    """
     try:
         # Build query with optional filters
         where_clause = "WHERE n.geom IS NOT NULL"
@@ -271,14 +404,24 @@ async def get_all_nodes(
 
 @app.get("/api/arcs", 
          response_model=List[NetworkArc],
-         summary="Get network arcs", 
-         description="Get CalSim3 network arcs with attributes")
+         tags=["network"],
+         summary="Get network arcs",
+         description="Get CalSim3 network arcs (rivers, canals, pipelines) with geometry and attributes.")
 async def get_all_arcs(
-    limit: int = Query(1000, le=10000, description="Maximum number of arcs to return"),
-    region: Optional[str] = Query(None, description="Filter by hydrologic region (SAC, SJR, etc.)"),
+    limit: int = Query(1000, le=10000, description="Maximum arcs to return (max 10,000)"),
+    region: Optional[str] = Query(None, description="Filter by hydrologic region: SAC, SJR, TUL, SF, SC, CC, NC"),
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Get network arcs with spatial data and attributes"""
+    """
+    Get CalSim3 network arcs with spatial data and attributes.
+    
+    **Arc types include:**
+    - Rivers and streams
+    - Canals and aqueducts
+    - Pipelines
+    
+    **Example:** `GET /api/arcs?region=SAC&limit=500`
+    """
     try:
         # Build query with optional filters
         where_clause = "WHERE a.geom IS NOT NULL"
@@ -354,13 +497,23 @@ async def get_all_arcs(
         logger.error(f"Database query failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Database query failed")
 
-@app.get("/api/nodes/{node_id}/analysis", response_model=NetworkAnalysis)
+@app.get("/api/nodes/{node_id}/analysis", 
+         response_model=NetworkAnalysis,
+         tags=["network"],
+         summary="Analyze node connections")
 async def get_node_analysis(
     node_id: int,
-    max_depth: int = Query(3, description="Maximum depth for network traversal"),
+    max_depth: int = Query(3, ge=1, le=10, description="Maximum traversal depth (1-10 hops)"),
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Get network analysis for a specific node (upstream/downstream connections)"""
+    """
+    Get network connectivity analysis for a specific node.
+    
+    Returns upstream nodes, downstream nodes, and connected arcs
+    up to the specified depth.
+    
+    **Example:** `GET /api/nodes/42/analysis?max_depth=5`
+    """
     try:
         # Get upstream nodes
         upstream_query = """
@@ -435,12 +588,19 @@ async def get_node_analysis(
         logger.error(f"Network analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Network analysis failed")
 
-@app.get("/api/arcs/{arc_id}/analysis", response_model=NetworkAnalysis)
+@app.get("/api/arcs/{arc_id}/analysis", 
+         response_model=NetworkAnalysis,
+         tags=["network"],
+         summary="Analyze arc connections")
 async def get_arc_analysis(
     arc_id: int,
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Get network analysis for a specific arc (connected nodes)"""
+    """
+    Get network connectivity for a specific arc.
+    
+    Returns the from_node and to_node endpoints of the arc.
+    """
     try:
         # Get arc endpoints and their connections
         query = """
@@ -497,13 +657,19 @@ async def get_arc_analysis(
         logger.error(f"Arc analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Arc analysis failed")
 
-@app.get("/api/search")
+@app.get("/api/search", tags=["network"], summary="Search network elements")
 async def search_network(
-    q: str = Query(..., description="Search query for nodes/arcs by name or code"),
-    limit: int = Query(20, description="Maximum results to return"),
+    q: str = Query(..., min_length=2, description="Search query (min 2 characters)"),
+    limit: int = Query(20, le=100, description="Maximum results (max 100)"),
     db: asyncpg.Connection = Depends(get_db)
 ):
-    """Search network elements by name or code"""
+    """
+    Search network nodes and arcs by name, short_code, or calsim_id.
+    
+    **Example:** `GET /api/search?q=shasta&limit=10`
+    
+    Returns matching nodes and arcs with their IDs and names.
+    """
     try:
         search_pattern = f"%{q.lower()}%"
         
@@ -557,47 +723,82 @@ async def search_network(
         logger.error(f"Search failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Search failed")
 
-# New spatial endpoints
-@app.get("/api/nodes/spatial")
+# =============================================================================
+# SPATIAL QUERY ENDPOINTS
+# =============================================================================
+
+@app.get("/api/nodes/spatial", tags=["network"], summary="Spatial node query")
 async def api_get_nodes_spatial(
-    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
-    zoom: int = Query(10, description="Map zoom level"),
-    limit: int = Query(1000, description="Maximum nodes to return")
+    bbox: str = Query(..., description="Bounding box: 'minLng,minLat,maxLng,maxLat'", 
+                      example="-122.5,37.0,-121.0,38.5"),
+    zoom: int = Query(10, ge=1, le=20, description="Map zoom level (1-20)"),
+    limit: int = Query(1000, le=10000, description="Maximum nodes (max 10,000)")
 ):
-    """Get nodes within bounding box with zoom-based priority filtering"""
+    """
+    Get nodes within a bounding box with zoom-based filtering.
+    
+    Higher zoom levels return more detailed results.
+    Lower zoom levels prioritize major infrastructure.
+    
+    **Example:** `GET /api/nodes/spatial?bbox=-122.5,37.0,-121.0,38.5&zoom=10`
+    """
     return await get_nodes_spatial(db_pool, bbox, zoom, limit)
 
-@app.get("/api/nodes/{node_id}/network")
+@app.get("/api/nodes/{node_id}/network", tags=["network"], summary="Node network traversal")
 async def api_get_node_network(
     node_id: int,
-    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
-    max_depth: int = Query(50, description="Maximum traversal depth (50 for vast networks)"),
+    direction: str = Query("both", description="'upstream', 'downstream', or 'both'"),
+    max_depth: int = Query(50, ge=1, le=100, description="Max traversal depth (1-100)"),
     include_arcs: str = Query("true", description="Include arc geometries (true/false)")
 ):
-    """Get upstream/downstream network from a clicked node"""
+    """
+    Traverse the water network from a starting node.
+    
+    Returns connected nodes and optionally arc geometries for visualization.
+    
+    **Example:** `GET /api/nodes/42/network?direction=downstream&max_depth=20`
+    """
     return await get_node_network(db_pool, node_id, direction, max_depth, include_arcs)
 
-@app.get("/api/nodes/unfiltered")
+@app.get("/api/nodes/unfiltered", tags=["network"], summary="All nodes in bbox (unfiltered)")
 async def api_get_all_nodes_unfiltered(
-    bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
-    limit: int = Query(10000, description="Maximum nodes to return"),
+    bbox: str = Query(..., description="Bounding box: 'minLng,minLat,maxLng,maxLat'"),
+    limit: int = Query(10000, le=50000, description="Maximum nodes (max 50,000)"),
     source_filter: str = Query("all", description="'geopackage', 'network_schematic', or 'all'")
 ):
-    """Get ALL nodes within bounding box with NO filtering - for enhanced network testing"""
+    """
+    Get ALL nodes within bounding box without zoom filtering.
+    
+    Use for complete network data export or detailed analysis.
+    Warning: May return large datasets.
+    """
     return await get_all_nodes_unfiltered(db_pool, bbox, limit, source_filter)
 
-@app.get("/api/nodes/{node_id}/network/unlimited")
+@app.get("/api/nodes/{node_id}/network/unlimited", tags=["network"], summary="Full network traversal")
 async def api_get_node_network_unlimited(
     node_id: int,
-    direction: str = Query("both", description="Direction: 'upstream', 'downstream', or 'both'"),
+    direction: str = Query("both", description="'upstream', 'downstream', or 'both'"),
     include_arcs: str = Query("true", description="Include arc geometries (true/false)")
 ):
-    """Get COMPLETE upstream/downstream network with NO DEPTH LIMIT - like CalSim3_schematic"""
+    """
+    Get complete upstream/downstream network with no depth limit.
+    
+    Warning: May return very large networks for major nodes.
+    """
     return await get_node_network_unlimited(db_pool, node_id, direction, include_arcs)
 
-@app.get("/api/health")
+# =============================================================================
+# HEALTH CHECK
+# =============================================================================
+
+@app.get("/api/health", tags=["system"], summary="Health check")
 async def health_check():
-    """Health check endpoint"""
+    """
+    Check API and database health.
+    
+    Returns status, timestamp, and database connection state.
+    Used by monitoring systems and load balancers.
+    """
     try:
         async with db_pool.acquire() as db:
             await db.fetchval("SELECT 1")

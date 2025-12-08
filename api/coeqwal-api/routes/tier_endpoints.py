@@ -1,41 +1,59 @@
 """
-Tier API endpoints for COEQWAL interpretive framework
-Provides tier definitions and scenario tier data
+Tier API endpoints for COEQWAL interpretive framework.
+
+Provides tier definitions and scenario tier data for outcome visualization.
+
+Tier System:
+- Tier 1 (Green): Best outcomes
+- Tier 2 (Blue): Good outcomes
+- Tier 3 (Orange): Moderate concern
+- Tier 4 (Red): Significant concern
+
+Two tier types:
+- multi_value: Distribution across locations (e.g., 70 tier-1, 30 tier-2, etc.)
+- single_value: Single overall tier level (1-4)
 """
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, List, Optional, Any
 import asyncpg
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/tiers", tags=["tiers"])
 
-# Pydantic models for response validation
+# =============================================================================
+# PYDANTIC MODELS
+# =============================================================================
+
 class TierDefinition(BaseModel):
-    short_code: str
-    name: str
-    description: str
-    tier_type: str
-    tier_count: int
-    is_active: bool
+    """Definition of a tier indicator"""
+    short_code: str = Field(..., description="Unique identifier (e.g., 'AG_REV', 'CWS_DEL')")
+    name: str = Field(..., description="Display name (e.g., 'Agricultural revenue')")
+    description: str = Field(..., description="Detailed description for tooltips")
+    tier_type: str = Field(..., description="'multi_value' or 'single_value'")
+    tier_count: int = Field(..., description="Number of tier levels (usually 4)")
+    is_active: bool = Field(..., description="Whether this tier is currently active")
 
 class TierData(BaseModel):
-    tier: str
-    value: Optional[int]
-    normalized: Optional[float]
+    """Single tier level data point"""
+    tier: str = Field(..., description="Tier identifier: 'tier1', 'tier2', 'tier3', 'tier4'")
+    value: Optional[int] = Field(None, description="Raw count of locations at this tier")
+    normalized: Optional[float] = Field(None, description="Normalized value (0.0-1.0)")
 
 class MultiValueTierResult(BaseModel):
-    scenario: str
-    tier_code: str
-    tier_type: str
-    data: List[TierData]
-    total_value: int
+    """Result for multi-value tier (distribution across locations)"""
+    scenario: str = Field(..., description="Scenario ID (e.g., 's0020')")
+    tier_code: str = Field(..., description="Tier indicator code")
+    tier_type: str = Field("multi_value", description="Always 'multi_value'")
+    data: List[TierData] = Field(..., description="Tier distribution data")
+    total_value: int = Field(..., description="Total number of locations")
 
 class SingleValueTierResult(BaseModel):
-    scenario: str
-    tier_code: str
-    tier_type: str
-    single_tier_level: int
+    """Result for single-value tier (one overall tier level)"""
+    scenario: str = Field(..., description="Scenario ID (e.g., 's0020')")
+    tier_code: str = Field(..., description="Tier indicator code")
+    tier_type: str = Field("single_value", description="Always 'single_value'")
+    single_tier_level: int = Field(..., ge=1, le=4, description="Overall tier level (1-4)")
 
 
 # Database connection dependency (set by main.py)
@@ -51,13 +69,23 @@ async def get_db():
     async with db_pool.acquire() as connection:
         yield connection
 
-@router.get("/definitions")
+@router.get("/definitions", summary="Get tier descriptions")
 async def get_tier_definitions(
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, str]:
     """
-    Get tier definitions for tooltip content
-    Returns: {short_code: description} mapping
+    Get tier definitions as a simple short_code → description mapping.
+    
+    **Use case:** Populate tooltips and help text in the UI.
+    
+    **Response format:**
+    ```json
+    {
+      "AG_REV": "Impact on agricultural production and revenue",
+      "CWS_DEL": "Reliability of deliveries to community water systems",
+      ...
+    }
+    ```
     """
     try:
         query = """
@@ -79,12 +107,20 @@ async def get_tier_definitions(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-@router.get("/list")
+@router.get("/list", summary="List all tier indicators", response_model=List[TierDefinition])
 async def get_all_tier_definitions(
     connection: asyncpg.Connection = Depends(get_db)
 ) -> List[TierDefinition]:
     """
-    Get complete tier definitions list
+    Get complete list of tier indicator definitions.
+    
+    **Use case:** Build tier selection UI, understand available indicators.
+    
+    Returns full metadata for each tier including:
+    - `short_code`: Unique identifier for API calls
+    - `name`: Human-readable display name
+    - `tier_type`: 'multi_value' (distribution) or 'single_value' (overall score)
+    - `tier_count`: Number of locations (for multi_value) or 1 (for single_value)
     """
     try:
         query = """
@@ -111,15 +147,44 @@ async def get_all_tier_definitions(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.get("/scenarios/{scenario_id}/tiers/{tier_short_code}")
+@router.get("/scenarios/{scenario_id}/tiers/{tier_short_code}", summary="Get single tier for scenario")
 async def get_scenario_tier_data(
     scenario_id: str,
     tier_short_code: str,
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get specific tier data for a scenario
-    Returns either multi-value or single-value tier data
+    Get specific tier indicator data for a scenario.
+    
+    **Example:** `GET /api/tiers/scenarios/s0020/tiers/AG_REV`
+    
+    **Multi-value response (AG_REV, CWS_DEL, etc.):**
+    ```json
+    {
+      "scenario": "s0020",
+      "tier_code": "AG_REV",
+      "name": "Agricultural revenue",
+      "tier_type": "multi_value",
+      "data": [
+        {"tier": "tier1", "value": 70, "normalized": 0.53},
+        {"tier": "tier2", "value": 35, "normalized": 0.265},
+        {"tier": "tier3", "value": 13, "normalized": 0.098},
+        {"tier": "tier4", "value": 14, "normalized": 0.106}
+      ],
+      "total_value": 132
+    }
+    ```
+    
+    **Single-value response (DELTA_ECO, FW_EXP, etc.):**
+    ```json
+    {
+      "scenario": "s0020",
+      "tier_code": "DELTA_ECO",
+      "name": "Delta ecology",
+      "tier_type": "single_value",
+      "single_tier_level": 3
+    }
+    ```
     """
     try:
         query = """
@@ -199,13 +264,30 @@ async def get_scenario_tier_data(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.get("/scenarios/{scenario_id}/tiers")
+@router.get("/scenarios/{scenario_id}/tiers", summary="Get all tiers for scenario")
 async def get_all_scenario_tiers(
     scenario_id: str,
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get all tier data for a scenario
+    Get all tier indicator data for a scenario in a single request.
+    
+    **Use case:** Load all data for scenario comparison charts.
+    
+    **Example:** `GET /api/tiers/scenarios/s0020/tiers`
+    
+    Returns a dictionary of all tier indicators keyed by short_code:
+    ```json
+    {
+      "scenario": "s0020",
+      "tiers": {
+        "AG_REV": { "name": "...", "type": "multi_value", "data": [...], "total": 132 },
+        "CWS_DEL": { "name": "...", "type": "multi_value", "data": [...], "total": 91 },
+        "DELTA_ECO": { "name": "...", "type": "single_value", "level": 3 },
+        ...
+      }
+    }
+    ```
     """
     try:
         query = """
@@ -285,5 +367,66 @@ async def get_all_scenario_tiers(
         
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# =============================================================================
+# DISCOVERY ENDPOINTS (For Scientists/Researchers)
+# =============================================================================
+
+@router.get("/scenarios", summary="List available scenarios")
+async def get_available_scenarios(
+    connection: asyncpg.Connection = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Discover which scenarios have tier data available.
+    
+    **Use case:** Researchers can see what data exists before querying.
+    
+    **Example:** `GET /api/tiers/scenarios`
+    
+    **Response:**
+    ```json
+    {
+      "scenarios": [
+        {
+          "scenario_id": "s0020",
+          "tiers": ["AG_REV", "CWS_DEL", "DELTA_ECO", ...],
+          "tier_count": 9
+        },
+        ...
+      ],
+      "total": 8
+    }
+    ```
+    """
+    try:
+        query = """
+        SELECT 
+            tr.scenario_short_code,
+            array_agg(DISTINCT tr.tier_short_code ORDER BY tr.tier_short_code) as tiers,
+            COUNT(DISTINCT tr.tier_short_code) as tier_count
+        FROM tier_result tr
+        WHERE tr.is_active = TRUE
+        GROUP BY tr.scenario_short_code
+        ORDER BY tr.scenario_short_code
+        """
+        rows = await connection.fetch(query)
+        
+        scenarios = [
+            {
+                "scenario_id": row['scenario_short_code'],
+                "tiers": list(row['tiers']),
+                "tier_count": row['tier_count']
+            }
+            for row in rows
+        ]
+        
+        return {
+            "scenarios": scenarios,
+            "total": len(scenarios)
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

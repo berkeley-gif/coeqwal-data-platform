@@ -1,28 +1,45 @@
 """
-Map/tier visualization API endpoints
-Provides tier data with geospatial geometries
+Tier Map Visualization API Endpoints
+
+Provides tier data with geospatial geometries for map-based visualization.
+
+Location Types:
+- reservoir: Major reservoirs (Shasta, Oroville, etc.)
+- wba: Water budget areas / aquifers (groundwater)
+- region: Regions like Delta
+- compliance_station: Flow compliance points
+- network_node: CalSim network nodes (environmental flows)
+- demand_unit: Urban and agricultural demand units (CWS, AG)
+
+GeoJSON Format:
+- Returns standard GeoJSON FeatureCollection
+- Each feature includes tier_level (1-4) in properties
+- Frontend can color by tier_level
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Dict, List, Optional, Any
 import asyncpg
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import json
 
 router = APIRouter(prefix="/api/tier-map", tags=["tier-map"])
 
-# Pydantic models for response validation
+# =============================================================================
+# PYDANTIC MODELS
+# =============================================================================
+
 class TierMapFeature(BaseModel):
     """GeoJSON Feature for a single tier location"""
-    type: str = "Feature"
-    geometry: Dict[str, Any]  # GeoJSON geometry
-    properties: Dict[str, Any]  # Tier level, location info, etc.
+    type: str = Field("Feature", description="GeoJSON type")
+    geometry: Dict[str, Any] = Field(..., description="GeoJSON geometry (Point, Polygon, etc.)")
+    properties: Dict[str, Any] = Field(..., description="Location metadata including tier_level")
 
 class TierMapResponse(BaseModel):
     """GeoJSON FeatureCollection for tier visualization"""
-    type: str = "FeatureCollection"
-    features: List[TierMapFeature]
-    metadata: Dict[str, Any]
+    type: str = Field("FeatureCollection", description="GeoJSON type")
+    features: List[TierMapFeature] = Field(..., description="Array of location features")
+    metadata: Dict[str, Any] = Field(..., description="Scenario, tier, and count info")
 
 # Database connection dependency (set by main.py)
 db_pool = None
@@ -37,12 +54,16 @@ async def get_db():
     async with db_pool.acquire() as connection:
         yield connection
 
-@router.get("/scenarios")
+@router.get("/scenarios", summary="List available scenarios")
 async def get_available_scenarios(
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get list of available scenarios for tier map visualization
+    Get list of scenarios that have tier map data available.
+    
+    **Use case:** Build scenario selector for map visualization.
+    
+    Returns count of tiers and locations available for each scenario.
     """
     try:
         query = """
@@ -75,14 +96,19 @@ async def get_available_scenarios(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-@router.get("/tiers")
+@router.get("/tiers", summary="List available tier indicators")
 async def get_available_tiers(
-    scenario_short_code: Optional[str] = Query(None, description="Filter by scenario"),
+    scenario_short_code: Optional[str] = Query(None, description="Filter by scenario (e.g., 's0020')"),
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get list of available tiers for tier map visualization
-    Optionally filter by scenario
+    Get list of tier indicators available for map visualization.
+    
+    **Use case:** Build tier selector for map visualization.
+    
+    Optionally filter by scenario to see only tiers with data for that scenario.
+    
+    **Example:** `GET /api/tier-map/tiers?scenario_short_code=s0020`
     """
     try:
         if scenario_short_code:
@@ -138,13 +164,19 @@ async def get_available_tiers(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-@router.get("/summary/{scenario_short_code}")
+@router.get("/summary/{scenario_short_code}", summary="Get scenario tier summary")
 async def get_scenario_tier_summary(
     scenario_short_code: str,
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get summary of all tiers for a scenario (for UI tier selector)
+    Get summary of all tier indicators for a specific scenario.
+    
+    **Use case:** Display tier selector with location counts.
+    
+    Returns each tier's metadata plus count of locations with tier data.
+    
+    **Example:** `GET /api/tier-map/summary/s0020`
     """
     try:
         query = """
@@ -196,25 +228,46 @@ async def get_scenario_tier_summary(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# ============================================================================
+# =============================================================================
 # LOCATIONS ENDPOINT (Returns data even without geometry)
-# ============================================================================
+# =============================================================================
 
-@router.get("/{scenario_short_code}/{tier_short_code}/locations")
+@router.get("/{scenario_short_code}/{tier_short_code}/locations", 
+            summary="Get tier locations (no geometry)")
 async def get_tier_locations(
     scenario_short_code: str,
     tier_short_code: str,
     connection: asyncpg.Connection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get tier location data for a specific scenario and tier combination.
+    Get tier location data WITHOUT geometries.
     
-    Returns ALL locations with tier levels, even if geometry is not available.
-    Use this endpoint for CWS_DEL, AG_REV, or other demand unit tiers.
+    **Use case:** For CWS_DEL and AG_REV where the frontend matches
+    location_id to existing Mapbox layer features.
     
-    Response includes:
-    - locations: Array of location objects with tier_level (1-4)
-    - metadata: Scenario, tier info, and counts
+    **Example:** `GET /api/tier-map/s0020/CWS_DEL/locations`
+    
+    **Response:**
+    ```json
+    {
+      "scenario": "s0020",
+      "tier_code": "CWS_DEL",
+      "tier_name": "Community water system deliveries",
+      "tier_type": "multi_value",
+      "locations": [
+        {"location_id": "26S_PU4", "tier_level": 2, ...},
+        {"location_id": "73_NU", "tier_level": 1, ...}
+      ],
+      "metadata": {
+        "total_locations": 91,
+        "tier_counts": {"1": 87, "2": 1, "3": 0, "4": 3}
+      }
+    }
+    ```
+    
+    **Tier Indicators using this endpoint:**
+    - CWS_DEL (91 urban demand units)
+    - AG_REV (132 agricultural demand units)
     """
     try:
         query = """
@@ -286,25 +339,57 @@ async def get_tier_locations(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-# ============================================================================
-# CATCH-ALL ROUTE (MUST COME LAST)
-# ============================================================================
+# =============================================================================
+# GEOJSON MAP ENDPOINT (MUST COME LAST - catch-all route)
+# =============================================================================
 
-@router.get("/{scenario_short_code}/{tier_short_code}")
+@router.get("/{scenario_short_code}/{tier_short_code}", 
+            summary="Get tier map GeoJSON",
+            response_model=TierMapResponse)
 async def get_tier_map_data(
     scenario_short_code: str,
     tier_short_code: str,
     connection: asyncpg.Connection = Depends(get_db)
 ) -> TierMapResponse:
     """
-    Get tier visualization data for a specific scenario and tier combination.
+    Get GeoJSON FeatureCollection for map visualization.
     
-    Returns GeoJSON FeatureCollection with:
-    - Points (nodes, compliance stations) or polygons (reservoirs, WBAs)
-    - Tier level (1-4) for coloring on frontend
-    - Location metadata (name, type, etc.)
+    **Use case:** Render tier outcomes on a map with colored markers/polygons.
     
-    Special handling: SLUIS_CVP and SLUIS_SWP both return the same SLUIS polygon
+    **Example:** `GET /api/tier-map/s0020/RES_STOR`
+    
+    **Response:** Standard GeoJSON FeatureCollection
+    ```json
+    {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {"type": "Polygon", "coordinates": [...]},
+          "properties": {
+            "location_id": "SHSTA",
+            "location_name": "Shasta",
+            "tier_level": 2,
+            "tier_color_class": "tier-2"
+          }
+        }
+      ],
+      "metadata": {
+        "scenario": "s0020",
+        "tier_code": "RES_STOR",
+        "tier_name": "Reservoir storage",
+        "feature_count": 8
+      }
+    }
+    ```
+    
+    **Tier Indicators using this endpoint:**
+    - RES_STOR (8 reservoirs)
+    - GW_STOR (42 aquifers)
+    - ENV_FLOWS (17 compliance nodes)
+    - DELTA_ECO, FW_DELTA_USES, FW_EXP (region polygons)
+    
+    **Note:** For CWS_DEL and AG_REV, use `/locations` endpoint instead.
     """
     try:
         # Main query to get tier location data with geometries
