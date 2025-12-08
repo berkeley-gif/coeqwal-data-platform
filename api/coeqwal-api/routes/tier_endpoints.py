@@ -69,6 +69,43 @@ async def get_db():
     async with db_pool.acquire() as connection:
         yield connection
 
+
+def calculate_tier_scores(norm_1: float, norm_2: float, norm_3: float, norm_4: float,
+                          tier_4_count: int = None, total: int = None) -> dict:
+    """
+    Calculate scores for multi-value tiers.
+    
+    Returns:
+    - weighted_score: 1.0 (best) to 4.0 (worst) - use for parallel plot Y-axis & sorting
+    - equity_score: 0.0 to 1.0 - proportion NOT in Tier 4 (higher = more equitable)
+    - tier_4_pct: proportion in Tier 4 (for filtering)
+    """
+    n1 = norm_1 or 0.0
+    n2 = norm_2 or 0.0
+    n3 = norm_3 or 0.0
+    n4 = norm_4 or 0.0
+    
+    total_pct = n1 + n2 + n3 + n4
+    
+    # Weighted score (1-4 scale)
+    if total_pct == 0:
+        weighted_score = 0.0
+    else:
+        weighted_sum = (1 * n1) + (2 * n2) + (3 * n3) + (4 * n4)
+        weighted_score = round(weighted_sum / total_pct, 3)
+    
+    # Equity score (0-1 scale, higher = more equitable)
+    equity_score = round(1.0 - n4, 3)
+    
+    # Tier 4 percentage
+    tier_4_pct = round(n4, 3)
+    
+    return {
+        "weighted_score": weighted_score,
+        "equity_score": equity_score,
+        "tier_4_pct": tier_4_pct
+    }
+
 @router.get("/definitions", summary="Get tier descriptions")
 async def get_tier_definitions(
     connection: asyncpg.Connection = Depends(get_db)
@@ -165,6 +202,7 @@ async def get_scenario_tier_data(
       "tier_code": "AG_REV",
       "name": "Agricultural revenue",
       "tier_type": "multi_value",
+      "weighted_score": 1.778,
       "data": [
         {"tier": "tier1", "value": 70, "normalized": 0.53},
         {"tier": "tier2", "value": 35, "normalized": 0.265},
@@ -174,6 +212,9 @@ async def get_scenario_tier_data(
       "total_value": 132
     }
     ```
+    
+    `weighted_score` formula: `(1×tier1% + 2×tier2% + 3×tier3% + 4×tier4%) / total%`
+    Range: 1.0 (best) to 4.0 (worst) - use for sorting/comparison
     
     **Single-value response (DELTA_ECO, FW_EXP, etc.):**
     ```json
@@ -220,43 +261,42 @@ async def get_scenario_tier_data(
         
         # Return different format based on tier_type
         if row['tier_type'] == 'multi_value':
+            norm_1 = float(row['norm_tier_1']) if row['norm_tier_1'] else 0.0
+            norm_2 = float(row['norm_tier_2']) if row['norm_tier_2'] else 0.0
+            norm_3 = float(row['norm_tier_3']) if row['norm_tier_3'] else 0.0
+            norm_4 = float(row['norm_tier_4']) if row['norm_tier_4'] else 0.0
+            
+            scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
+            
             return {
                 "scenario": row['scenario_short_code'],
                 "tier_code": row['tier_short_code'],
                 "name": row['name'],
                 "tier_type": "multi_value",
+                "weighted_score": scores["weighted_score"],
+                "equity_score": scores["equity_score"],
+                "tier_4_pct": scores["tier_4_pct"],
+                "tier_4_count": row['tier_4_value'],
                 "data": [
-                    {
-                        "tier": "tier1",
-                        "value": row['tier_1_value'],
-                        "normalized": float(row['norm_tier_1']) if row['norm_tier_1'] else 0.0
-                    },
-                    {
-                        "tier": "tier2", 
-                        "value": row['tier_2_value'],
-                        "normalized": float(row['norm_tier_2']) if row['norm_tier_2'] else 0.0
-                    },
-                    {
-                        "tier": "tier3",
-                        "value": row['tier_3_value'], 
-                        "normalized": float(row['norm_tier_3']) if row['norm_tier_3'] else 0.0
-                    },
-                    {
-                        "tier": "tier4",
-                        "value": row['tier_4_value'],
-                        "normalized": float(row['norm_tier_4']) if row['norm_tier_4'] else 0.0
-                    }
+                    {"tier": "tier1", "value": row['tier_1_value'], "normalized": norm_1},
+                    {"tier": "tier2", "value": row['tier_2_value'], "normalized": norm_2},
+                    {"tier": "tier3", "value": row['tier_3_value'], "normalized": norm_3},
+                    {"tier": "tier4", "value": row['tier_4_value'], "normalized": norm_4}
                 ],
                 "total_value": row['total_value']
             }
         else:
-            # Single value tier
+            # Single value tier - use single_tier_level as the score
+            level = row['single_tier_level'] or 0
             return {
                 "scenario": row['scenario_short_code'],
                 "tier_code": row['tier_short_code'], 
                 "name": row['name'],
                 "tier_type": "single_value",
-                "single_tier_level": row['single_tier_level']
+                "weighted_score": float(level),
+                "equity_score": 1.0 if level < 4 else 0.0,  # Binary: not Tier 4 = equitable
+                "tier_4_pct": 1.0 if level == 4 else 0.0,
+                "single_tier_level": level
             }
         
     except HTTPException:
@@ -281,13 +321,15 @@ async def get_all_scenario_tiers(
     {
       "scenario": "s0020",
       "tiers": {
-        "AG_REV": { "name": "...", "type": "multi_value", "data": [...], "total": 132 },
-        "CWS_DEL": { "name": "...", "type": "multi_value", "data": [...], "total": 91 },
-        "DELTA_ECO": { "name": "...", "type": "single_value", "level": 3 },
+        "AG_REV": { "name": "...", "type": "multi_value", "weighted_score": 1.78, "data": [...], "total": 132 },
+        "CWS_DEL": { "name": "...", "type": "multi_value", "weighted_score": 1.12, "data": [...], "total": 91 },
+        "DELTA_ECO": { "name": "...", "type": "single_value", "weighted_score": 3.0, "level": 3 },
         ...
       }
     }
     ```
+    
+    `weighted_score` is 1.0-4.0 for all tiers (lower is better). Use for sorting/comparison.
     """
     try:
         query = """
@@ -326,38 +368,37 @@ async def get_all_scenario_tiers(
             tier_code = row['tier_short_code']
             
             if row['tier_type'] == 'multi_value':
+                norm_1 = float(row['norm_tier_1']) if row['norm_tier_1'] else 0.0
+                norm_2 = float(row['norm_tier_2']) if row['norm_tier_2'] else 0.0
+                norm_3 = float(row['norm_tier_3']) if row['norm_tier_3'] else 0.0
+                norm_4 = float(row['norm_tier_4']) if row['norm_tier_4'] else 0.0
+                
+                scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
+                
                 tiers[tier_code] = {
                     "name": row['name'],
                     "type": "multi_value",
+                    "weighted_score": scores["weighted_score"],
+                    "equity_score": scores["equity_score"],
+                    "tier_4_pct": scores["tier_4_pct"],
+                    "tier_4_count": row['tier_4_value'],
                     "data": [
-                        {
-                            "tier": "tier1",
-                            "value": row['tier_1_value'],
-                            "normalized": float(row['norm_tier_1']) if row['norm_tier_1'] else 0.0
-                        },
-                        {
-                            "tier": "tier2",
-                            "value": row['tier_2_value'],
-                            "normalized": float(row['norm_tier_2']) if row['norm_tier_2'] else 0.0
-                        },
-                        {
-                            "tier": "tier3", 
-                            "value": row['tier_3_value'],
-                            "normalized": float(row['norm_tier_3']) if row['norm_tier_3'] else 0.0
-                        },
-                        {
-                            "tier": "tier4",
-                            "value": row['tier_4_value'],
-                            "normalized": float(row['norm_tier_4']) if row['norm_tier_4'] else 0.0
-                        }
+                        {"tier": "tier1", "value": row['tier_1_value'], "normalized": norm_1},
+                        {"tier": "tier2", "value": row['tier_2_value'], "normalized": norm_2},
+                        {"tier": "tier3", "value": row['tier_3_value'], "normalized": norm_3},
+                        {"tier": "tier4", "value": row['tier_4_value'], "normalized": norm_4}
                     ],
                     "total": row['total_value']
                 }
             else:
+                level = row['single_tier_level'] or 0
                 tiers[tier_code] = {
                     "name": row['name'],
-                    "type": "single_value", 
-                    "level": row['single_tier_level']
+                    "type": "single_value",
+                    "weighted_score": float(level),
+                    "equity_score": 1.0 if level < 4 else 0.0,
+                    "tier_4_pct": 1.0 if level == 4 else 0.0,
+                    "level": level
                 }
         
         return {
