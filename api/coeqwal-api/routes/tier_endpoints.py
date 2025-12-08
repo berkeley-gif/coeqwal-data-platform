@@ -70,15 +70,66 @@ async def get_db():
         yield connection
 
 
-def calculate_tier_scores(norm_1: float, norm_2: float, norm_3: float, norm_4: float,
-                          tier_4_count: int = None, total: int = None) -> dict:
+def calculate_gini(t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float) -> float:
     """
-    Calculate scores for multi-value tiers.
+    Gini coefficient measuring inequality in tier distribution.
+    0.0 = all locations at same tier (equitable)
+    ~1.0 = maximum polarization (inequitable)
+    """
+    tiers = [1, 2, 3, 4]
+    pcts = [t1_pct or 0, t2_pct or 0, t3_pct or 0, t4_pct or 0]
+    
+    # Weighted mean tier level
+    mean = sum(t * p for t, p in zip(tiers, pcts))
+    if mean == 0:
+        return 0.0
+    
+    # Mean absolute difference between all pairs
+    total_diff = 0.0
+    for i, (t_i, p_i) in enumerate(zip(tiers, pcts)):
+        for j, (t_j, p_j) in enumerate(zip(tiers, pcts)):
+            total_diff += abs(t_i - t_j) * p_i * p_j
+    
+    gini = total_diff / (2 * mean)
+    return round(gini, 3)
+
+
+def get_best_tier_present(t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float) -> int:
+    """Return the best (lowest numbered) tier with non-zero percentage."""
+    if (t1_pct or 0) > 0:
+        return 1
+    if (t2_pct or 0) > 0:
+        return 2
+    if (t3_pct or 0) > 0:
+        return 3
+    if (t4_pct or 0) > 0:
+        return 4
+    return 1  # fallback
+
+
+def get_worst_tier_present(t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float) -> int:
+    """Return the worst (highest numbered) tier with non-zero percentage."""
+    if (t4_pct or 0) > 0:
+        return 4
+    if (t3_pct or 0) > 0:
+        return 3
+    if (t2_pct or 0) > 0:
+        return 2
+    if (t1_pct or 0) > 0:
+        return 1
+    return 4  # fallback
+
+
+def calculate_tier_scores(norm_1: float, norm_2: float, norm_3: float, norm_4: float) -> dict:
+    """
+    Calculate comprehensive scores for multi-value tiers.
     
     Returns:
-    - weighted_score: 1.0 (best) to 4.0 (worst) - use for parallel plot Y-axis & sorting
-    - equity_score: 0.0 to 1.0 - proportion NOT in Tier 4 (higher = more equitable)
-    - tier_4_pct: proportion in Tier 4 (for filtering)
+    - weighted_score: 1.0 (best) to 4.0 (worst) - for sorting scenarios
+    - normalized_score: 0.0 to 1.0 - Y-axis for parallel plot (higher = better)
+    - gini: 0.0 to ~1.0 - equity indicator (lower = more equitable)
+    - band_upper: 0.0 to 1.0 - top edge of spread band on parallel plot
+    - band_lower: 0.0 to 1.0 - bottom edge of spread band on parallel plot
     """
     n1 = norm_1 or 0.0
     n2 = norm_2 or 0.0
@@ -87,23 +138,42 @@ def calculate_tier_scores(norm_1: float, norm_2: float, norm_3: float, norm_4: f
     
     total_pct = n1 + n2 + n3 + n4
     
-    # Weighted score (1-4 scale)
+    # Handle missing/zero data
     if total_pct == 0:
-        weighted_score = 0.0
-    else:
-        weighted_sum = (1 * n1) + (2 * n2) + (3 * n3) + (4 * n4)
-        weighted_score = round(weighted_sum / total_pct, 3)
+        return {
+            "weighted_score": None,
+            "normalized_score": None,
+            "gini": None,
+            "band_upper": None,
+            "band_lower": None
+        }
     
-    # Equity score (0-1 scale, higher = more equitable)
-    equity_score = round(1.0 - n4, 3)
+    # 1. Weighted score (1-4 scale, lower = better)
+    weighted_sum = (1 * n1) + (2 * n2) + (3 * n3) + (4 * n4)
+    weighted_score = round(weighted_sum / total_pct, 3)
     
-    # Tier 4 percentage
-    tier_4_pct = round(n4, 3)
+    # 2. Normalized score (0-1 scale, higher = better)
+    # When weighted_score = 1.0 → normalized = 1.0 (best)
+    # When weighted_score = 4.0 → normalized = 0.0 (worst)
+    normalized_score = round((4.0 - weighted_score) / 3.0, 3)
+    
+    # 3. Gini coefficient (0 = equitable, ~1 = polarized)
+    gini = calculate_gini(n1, n2, n3, n4)
+    
+    # 4. Band upper (best tier present, normalized to 0-1)
+    best_tier = get_best_tier_present(n1, n2, n3, n4)
+    band_upper = round((4.0 - best_tier) / 3.0, 3)
+    
+    # 5. Band lower (worst tier present, normalized to 0-1)
+    worst_tier = get_worst_tier_present(n1, n2, n3, n4)
+    band_lower = round((4.0 - worst_tier) / 3.0, 3)
     
     return {
         "weighted_score": weighted_score,
-        "equity_score": equity_score,
-        "tier_4_pct": tier_4_pct
+        "normalized_score": normalized_score,
+        "gini": gini,
+        "band_upper": band_upper,
+        "band_lower": band_lower
     }
 
 @router.get("/definitions", summary="Get tier descriptions")
@@ -274,9 +344,10 @@ async def get_scenario_tier_data(
                 "name": row['name'],
                 "tier_type": "multi_value",
                 "weighted_score": scores["weighted_score"],
-                "equity_score": scores["equity_score"],
-                "tier_4_pct": scores["tier_4_pct"],
-                "tier_4_count": row['tier_4_value'],
+                "normalized_score": scores["normalized_score"],
+                "gini": scores["gini"],
+                "band_upper": scores["band_upper"],
+                "band_lower": scores["band_lower"],
                 "data": [
                     {"tier": "tier1", "value": row['tier_1_value'], "normalized": norm_1},
                     {"tier": "tier2", "value": row['tier_2_value'], "normalized": norm_2},
@@ -286,16 +357,20 @@ async def get_scenario_tier_data(
                 "total_value": row['total_value']
             }
         else:
-            # Single value tier - use single_tier_level as the score
+            # Single value tier - gini=0, band_upper=band_lower=normalized_score
             level = row['single_tier_level'] or 0
+            weighted = float(level) if level else 0.0
+            normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
             return {
                 "scenario": row['scenario_short_code'],
                 "tier_code": row['tier_short_code'], 
                 "name": row['name'],
                 "tier_type": "single_value",
-                "weighted_score": float(level),
-                "equity_score": 1.0 if level < 4 else 0.0,  # Binary: not Tier 4 = equitable
-                "tier_4_pct": 1.0 if level == 4 else 0.0,
+                "weighted_score": weighted,
+                "normalized_score": normalized,
+                "gini": 0.0,
+                "band_upper": normalized,
+                "band_lower": normalized,
                 "single_tier_level": level
             }
         
@@ -379,9 +454,10 @@ async def get_all_scenario_tiers(
                     "name": row['name'],
                     "type": "multi_value",
                     "weighted_score": scores["weighted_score"],
-                    "equity_score": scores["equity_score"],
-                    "tier_4_pct": scores["tier_4_pct"],
-                    "tier_4_count": row['tier_4_value'],
+                    "normalized_score": scores["normalized_score"],
+                    "gini": scores["gini"],
+                    "band_upper": scores["band_upper"],
+                    "band_lower": scores["band_lower"],
                     "data": [
                         {"tier": "tier1", "value": row['tier_1_value'], "normalized": norm_1},
                         {"tier": "tier2", "value": row['tier_2_value'], "normalized": norm_2},
@@ -392,12 +468,16 @@ async def get_all_scenario_tiers(
                 }
             else:
                 level = row['single_tier_level'] or 0
+                weighted = float(level) if level else 0.0
+                normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
                 tiers[tier_code] = {
                     "name": row['name'],
                     "type": "single_value",
-                    "weighted_score": float(level),
-                    "equity_score": 1.0 if level < 4 else 0.0,
-                    "tier_4_pct": 1.0 if level == 4 else 0.0,
+                    "weighted_score": weighted,
+                    "normalized_score": normalized,
+                    "gini": 0.0,
+                    "band_upper": normalized,
+                    "band_lower": normalized,
                     "level": level
                 }
         
