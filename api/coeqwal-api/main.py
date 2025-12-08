@@ -47,39 +47,10 @@ db_pool = None
 API_TITLE = "COEQWAL API"
 API_VERSION = "2.1.0"
 API_DESCRIPTION = """
-# COEQWAL API
-
 Data API for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
 
 Enables exploration of how different water management scenarios affect communities, 
 agriculture, and ecosystems across California.
-
-## Scenarios
-
-| ID | Description |
-|----|-------------|
-| s0011 | DCR 2023 Baseline with TUCPs |
-| s0020 | DCR 2023 + 2020 LandIQ land use with TUCPs |
-| s0021 | DCR 2023 + 2020 LandIQ without TUCPs |
-| s0023 | USBR 2024 Alt2V1 without TUCPs |
-| s0024 | USBR 2024 Alt2V1 with TUCPs |
-| s0025 | San Joaquin Valley groundwater limits |
-| s0027 | Central Valley groundwater limits |
-| s0029 | Functional flows scenario |
-
-## Tier Indicators
-
-| Code | Name | Type |
-|------|------|------|
-| AG_REV | Agricultural Revenue | multi_value (132 locations) |
-| CWS_DEL | Community Water System Deliveries | multi_value (91 locations) |
-| DELTA_ECO | Delta Estuary Ecology | single_value |
-| ENV_FLOWS | Environmental Flows | multi_value (17 locations) |
-| FW_DELTA_USES | Freshwater for In-Delta Uses | single_value |
-| FW_EXP | Freshwater for Delta Exports | single_value |
-| GW_STOR | Groundwater Storage | multi_value (42 locations) |
-| RES_STOR | Reservoir Storage | multi_value (8 locations) |
-| WRC_SALMON_AB | Salmon Abundance | single_value |
 """
 
 TAGS_METADATA = [
@@ -143,13 +114,6 @@ app = FastAPI(
     openapi_tags=TAGS_METADATA,
     docs_url="/docs",
     redoc_url="/redoc",
-    contact={
-        "name": "COEQWAL Team",
-        "url": "https://coeqwal.org",
-    },
-    license_info={
-        "name": "MIT",
-    },
 )
 
 # Include tier endpoints
