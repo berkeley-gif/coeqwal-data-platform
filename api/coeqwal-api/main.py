@@ -28,6 +28,7 @@ from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_no
 from routes.network_traversal import get_node_network_unlimited
 from routes.tier_endpoints import router as tier_router, set_db_pool as set_tier_db_pool
 from routes.tier_map_endpoints import router as tier_map_router, set_db_pool as set_tier_map_db_pool
+from routes.scenario_endpoints import router as scenario_router, set_db_pool as set_scenario_db_pool
 from routes.download_endpoints import router as download_router
 
 # Configure logging
@@ -54,6 +55,10 @@ agriculture, and ecosystems across California.
 """
 
 TAGS_METADATA = [
+    {
+        "name": "scenarios",
+        "description": "**Scenario definitions and metadata.** Lists scenarios, themes, and key assumptions.",
+    },
     {
         "name": "tiers",
         "description": "**Tier definitions and scenario tier data.** Used for charts showing outcome distributions.",
@@ -100,6 +105,9 @@ async def lifespan(app: FastAPI):
     # Set the database pool for tier map router
     set_tier_map_db_pool(db_pool)
     
+    # Set the database pool for scenario router
+    set_scenario_db_pool(db_pool)
+    
     yield
     
     # Shutdown
@@ -115,6 +123,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Include scenario endpoints
+app.include_router(scenario_router)
 
 # Include tier endpoints
 app.include_router(tier_router)
