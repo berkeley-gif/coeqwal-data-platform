@@ -14,3 +14,4 @@ id,short_code,title,short_title,category,description,assumptions_version_id,is_a
 13,no_min_flow,minimum flow requirements removed,,flow,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
 14,functional_flows,functional flows,,flow,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
 15,salmon_flows,modified functional flows adjusted for Winter-run Chinook salmon,,flow,,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
+16,biops_2024,2024 USBR Biological Opinions (LTO Alt2V1),,biops,2024 USBR Long-Term Operations proposed action biological opinions,1.0,1.0,,1.0,,2024-01-01 00:00:00,2024-01-01 00:00:00
