@@ -1,6 +1,9 @@
 # Ruff configuration for COEQWAL API
 # https://docs.astral.sh/ruff/
 
+# Exclude archived/unused files
+exclude = ["routes/_archive"]
+
 [lint]
 # Enable these rule categories:
 # E = pycodestyle errors
