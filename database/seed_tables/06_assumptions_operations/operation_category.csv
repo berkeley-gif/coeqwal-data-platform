@@ -1,0 +1,6 @@
+id,short_code,name,description,is_active,created_at,created_by,updated_at,updated_by
+1,comm_delivery,Community Water Delivery,Operations related to community water delivery prioritization,1,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+2,delta_outflow,Delta Outflow,Operations related to Delta outflow requirements,1,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+3,carryover,Reservoir Carryover,Operations related to reservoir carryover requirements,1,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+4,regulatory_salinity,Regulatory Salinity,Operations related to Delta salinity standards,1,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+

@@ -16,6 +16,30 @@
 ├── Units, statistics, and geometry types
 └── Purpose: provide consistent reference values
 
+05_THEMES_SCENARIOS LAYER
+├── Research themes (storylines for exploring scenarios)
+├── Scenarios (water management configurations)
+├── Theme-scenario relationships
+├── Scenario authors and sources
+└── Purpose: organize and describe what-if scenarios
+
+06_ASSUMPTIONS_OPERATIONS LAYER
+├── Assumption definitions and categories
+├── Operation definitions and categories
+├── Scenario-assumption and scenario-operation links
+└── Purpose: define inputs and rules for each scenario
+
+07_HYDROCLIMATE LAYER
+├── Hydroclimate conditions (historical, projected)
+├── Climate projections and sea level rise
+└── Purpose: define environmental boundary conditions
+
+10_TIER LAYER
+├── Tier definitions (outcome indicators)
+├── Tier results (aggregated scenario outcomes)
+├── Tier location results (spatially-detailed outcomes)
+└── Purpose: evaluate and compare scenario performance
+
 NETWORK LAYER (infrastructure/physical)
 ├── Master registry of all physical network elements
 ├── Spatial data and engineering attributes
@@ -312,6 +336,406 @@ Values (9 total):
 
 ---
 
+## **05_THEMES_SCENARIOS LAYER**
+
+### **1. theme (research themes)**
+
+```
+Table: theme
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "baseline", "community_water", "flow", etc.
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── name                 TEXT NOT NULL              -- "Current operations for California water"
+├── subtitle             TEXT
+├── short_title          TEXT                       -- "Current operations"
+├── simple_description   TEXT
+├── description          TEXT
+├── description_next     TEXT
+├── narrative            JSONB                      -- Structured narrative data
+├── outcome_description  TEXT
+├── outcome_narrative    TEXT
+├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK → version.id (theme family)
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+└── updated_by           INTEGER                    -- FK → developer.id
+
+Records: 7 themes
+
+Foreign keys:
+├── Ref: theme.theme_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: theme.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: theme.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── theme_short_code_key (short_code) -- Unique constraint
+├── idx_theme_short_code_active (short_code, is_active)
+└── idx_theme_active (is_active)
+
+Values (7 total):
+├── baseline: Current operations for California water
+├── community_water: Prioritizing community water systems
+├── flow: Enhancing river flows for the environment
+├── gw_ag: Managing groundwater in a changing agricultural landscape
+├── delta_flow: Improving flows for the health of the Bay Delta estuary
+├── delta_uses: Sustaining uses in the Delta for communities and farms
+└── delta_export_reliability: Improving reliability of Delta exports for farms and cities
+```
+
+### **2. scenario (water management scenarios)**
+
+```
+Table: scenario
+├── id                   SERIAL PRIMARY KEY
+├── scenario_id          TEXT NOT NULL UNIQUE       -- Friendly identifier like "s0011"
+├── short_code           TEXT NOT NULL              -- Full technical code like "s0011_adjBL_wTUCP"
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── name                 TEXT NOT NULL              -- "Baseline - adjusted with TUCP/TUCO"
+├── subtitle             TEXT
+├── short_title          TEXT
+├── simple_description   TEXT
+├── description          TEXT
+├── narrative            JSONB                      -- Structured narrative data
+├── baseline_scenario_id INTEGER                    -- FK → scenario.id (self-referencing, NULL for baseline scenarios)
+├── hydroclimate_id      INTEGER                    -- FK → hydroclimate.id
+├── scenario_author_id   INTEGER                    -- FK → scenario_author.id
+├── scenario_version_id  INTEGER NOT NULL           -- FK → version.id (scenario family)
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Records: 8 scenarios (s0011, s0020, s0021, s0023, s0024, s0025, s0027, s0029)
+
+Foreign keys:
+├── Ref: scenario.baseline_scenario_id > scenario.id [delete: set null, update: cascade]
+├── Ref: scenario.hydroclimate_id > hydroclimate.id [delete: restrict, update: cascade]
+├── Ref: scenario.scenario_author_id > scenario_author.id [delete: restrict, update: cascade]
+├── Ref: scenario.scenario_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: scenario.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: scenario.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── scenario_scenario_id_key (scenario_id) -- Unique constraint
+├── idx_scenario_short_code_active (short_code, is_active)
+├── idx_scenario_active (is_active)
+├── idx_scenario_baseline (baseline_scenario_id)
+├── idx_scenario_hydroclimate (hydroclimate_id)
+└── idx_scenario_active_version (is_active, scenario_version_id)
+
+Baseline Derivations:
+├── s0011 (id=1): baseline_scenario_id = 1 (self, is the baseline)
+├── s0020 (id=2): baseline_scenario_id = 2 (self, is a baseline)
+├── s0021 (id=3): baseline_scenario_id = 2 (derived from s0020)
+├── s0023 (id=4): baseline_scenario_id = NULL (no baseline yet)
+├── s0024 (id=5): baseline_scenario_id = NULL (no baseline yet)
+├── s0025 (id=6): baseline_scenario_id = 2 (derived from s0020)
+├── s0027 (id=7): baseline_scenario_id = 2 (derived from s0020)
+└── s0029 (id=8): baseline_scenario_id = 2 (derived from s0020)
+```
+
+### **3. theme_scenario_link (many-to-many relationship)**
+
+```
+Table: theme_scenario_link
+├── theme_id             INTEGER NOT NULL           -- FK → theme.id
+└── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+
+Primary key: (theme_id, scenario_id)
+
+Foreign keys:
+├── Ref: theme_scenario_link.theme_id > theme.id [delete: restrict, update: cascade]
+└── Ref: theme_scenario_link.scenario_id > scenario.id [delete: restrict, update: cascade]
+
+Indexes:
+├── theme_scenario_link_pkey (theme_id, scenario_id) -- Primary key
+└── idx_theme_scenario_reverse (scenario_id, theme_id) -- Reverse lookup
+
+Records: 8 links
+```
+
+### **4. scenario_author (scenario authors/groups)**
+
+```
+Table: scenario_author
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "UC_DAVIS", "DWR", etc.
+├── name                 TEXT NOT NULL              -- "UC Davis Center for Watershed Sciences"
+├── email                TEXT
+├── organization         TEXT
+├── affiliation          TEXT
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: scenario_author.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: scenario_author.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── scenario_author_short_code_key (short_code) -- Unique constraint
+└── idx_scenario_author_active (is_active, short_code)
+
+Records: 3 authors
+```
+
+---
+
+## **06_ASSUMPTIONS_OPERATIONS LAYER**
+
+### **1. assumption_category (assumption categories)**
+
+```
+Table: assumption_category
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "hydrology", "land_use", "regulations", etc.
+├── label                TEXT NOT NULL              -- "Hydrology", "Land Use", "Regulations"
+├── description          TEXT
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: assumption_category.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: assumption_category.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── assumption_category_short_code_key (short_code)
+└── idx_assumption_category_active (is_active, short_code)
+
+Values (8 total):
+├── hydrology: Hydrology
+├── hydroclimate: Hydroclimate
+├── land_use: Land Use
+├── future_land_use: Future Land Use
+├── gw_model: Groundwater Model
+├── regulations: Regulations
+├── demand: Demand
+└── infrastructure: Infrastructure
+
+Records: 8 categories
+```
+
+### **2. assumption_definition (assumption definitions)**
+
+```
+Table: assumption_definition
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "tucp_tuco", "land_use_2030", etc.
+├── name                 TEXT NOT NULL              -- "Temporary Urgency Change Petition / Order"
+├── short_title          TEXT
+├── subtitle             TEXT
+├── simple_description   TEXT
+├── description          TEXT
+├── narrative            JSONB
+├── category_id          INTEGER                    -- FK → assumption_category.id (nullable for flexibility)
+├── source               TEXT                       -- Source citation
+├── source_access_date   DATE                       -- When source was accessed
+├── file                 TEXT                       -- Associated file path/name
+├── assumptions_version_id INTEGER NOT NULL         -- FK → version.id (assumptions family)
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── notes                TEXT
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: assumption_definition.category_id > assumption_category.id [delete: restrict, update: cascade]
+├── Ref: assumption_definition.assumptions_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: assumption_definition.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: assumption_definition.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── assumption_definition_short_code_key (short_code)
+├── idx_assumption_definition_category (category_id, short_code)
+└── idx_assumption_definition_active (is_active)
+
+Records: 17 assumption definitions
+```
+
+### **3. scenario_key_assumption_link (scenario-assumption relationships)**
+
+```
+Table: scenario_key_assumption_link
+├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+└── assumption_id        INTEGER NOT NULL           -- FK → assumption_definition.id
+
+Primary key: (scenario_id, assumption_id)
+
+Foreign keys:
+├── Ref: scenario_key_assumption_link.scenario_id > scenario.id [delete: restrict, update: cascade]
+└── Ref: scenario_key_assumption_link.assumption_id > assumption_definition.id [delete: restrict, update: cascade]
+
+Indexes:
+├── scenario_key_assumption_link_pkey (scenario_id, assumption_id)
+└── idx_scenario_assumption_reverse (assumption_id, scenario_id)
+```
+
+### **4. operation_category (operation categories)**
+
+```
+Table: operation_category
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "allocation", "regulatory", "infrastructure"
+├── name                 TEXT                       -- "Allocation", "Regulatory", "Infrastructure"
+├── description          TEXT
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: operation_category.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: operation_category.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── operation_category_short_code_key (short_code)
+└── idx_operation_category_active (is_active, short_code)
+
+Values (4 total):
+├── allocation: Allocation
+├── carryover: Carryover Storage
+├── infrastructure: Infrastructure
+└── regulatory: Regulatory
+
+Records: 4 categories
+```
+
+### **5. operation_definition (operation definitions)**
+
+```
+Table: operation_definition
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "priority_allocation", "min_flow_req", etc.
+├── name                 TEXT NOT NULL              -- "Priority Allocation Rules"
+├── short_title          TEXT
+├── subtitle             TEXT
+├── simple_description   TEXT
+├── description          TEXT
+├── narrative            JSONB
+├── category_id          INTEGER                    -- FK → operation_category.id (nullable for flexibility)
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── notes                TEXT
+├── operation_version_id INTEGER NOT NULL           -- FK → version.id (operations family)
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: operation_definition.category_id > operation_category.id [delete: restrict, update: cascade]
+├── Ref: operation_definition.operation_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: operation_definition.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: operation_definition.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── operation_definition_short_code_key (short_code)
+├── idx_operation_definition_category (category_id, short_code)
+└── idx_operation_definition_active (is_active)
+
+Records: 10 operation definitions
+```
+
+### **6. scenario_key_operation_link (scenario-operation relationships)**
+
+```
+Table: scenario_key_operation_link
+├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+└── operation_id         INTEGER NOT NULL           -- FK → operation_definition.id
+
+Primary key: (scenario_id, operation_id)
+
+Foreign keys:
+├── Ref: scenario_key_operation_link.scenario_id > scenario.id [delete: restrict, update: cascade]
+└── Ref: scenario_key_operation_link.operation_id > operation_definition.id [delete: restrict, update: cascade]
+
+Indexes:
+├── scenario_key_operation_link_pkey (scenario_id, operation_id)
+└── idx_scenario_operation_reverse (operation_id, scenario_id)
+```
+
+---
+
+## **07_HYDROCLIMATE LAYER**
+
+### **1. hydroclimate (hydroclimate conditions)**
+
+```
+Table: hydroclimate
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "historical", "2040_central", "2070_dry", etc.
+├── name                 TEXT                       -- "Historical (1922-2021)"
+├── subtitle             TEXT
+├── short_title          TEXT
+├── simple_description   TEXT
+├── description          TEXT
+├── narrative            JSONB
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── projection_year      INTEGER                    -- 2040, 2070, etc.
+├── slr_value            NUMERIC                    -- Sea level rise value
+├── slr_unit_id          INTEGER                    -- FK → unit.id
+├── source_id            INTEGER                    -- FK → hydroclimate_source.id
+├── notes                TEXT
+├── hydroclimate_version_id INTEGER                 -- FK → version.id (hydroclimate family)
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: hydroclimate.hydroclimate_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: hydroclimate.source_id > hydroclimate_source.id [delete: restrict, update: cascade]
+├── Ref: hydroclimate.slr_unit_id > unit.id [delete: restrict, update: cascade]
+├── Ref: hydroclimate.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: hydroclimate.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── hydroclimate_short_code_key (short_code) -- Unique constraint
+├── idx_hydroclimate_active (is_active, short_code)
+└── idx_hydroclimate_source (source_id)
+
+Values (7 total):
+├── historical: Historical (1922-2021)
+├── 2040_central: 2040 Central Tendency
+├── 2040_dry: 2040 Dry Extreme
+├── 2040_wet: 2040 Wet Extreme
+├── 2070_central: 2070 Central Tendency
+├── 2070_dry: 2070 Dry Extreme
+└── 2070_wet: 2070 Wet Extreme
+
+Records: 7 hydroclimate conditions
+```
+
+### **2. hydroclimate_source (hydroclimate data sources)**
+
+```
+Table: hydroclimate_source
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "dwr_cctag", "usgs", etc.
+├── name                 TEXT                       -- "DWR Climate Change Technical Advisory Group"
+├── description          TEXT
+├── citation             TEXT
+├── url                  TEXT
+├── notes                TEXT
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Foreign keys:
+├── Ref: hydroclimate_source.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: hydroclimate_source.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+└── hydroclimate_source_short_code_key (short_code)
+```
+
+---
+
 ## **10_TIER LAYER**
 
 ### **1. tier_definition**
@@ -366,7 +790,7 @@ Values (9 total):
 ```
 Table: tier_location_result
 ├── id                      SERIAL PRIMARY KEY
-├── scenario_short_code     VARCHAR NOT NULL           -- Scenario identifier (s0011, s0020, s0021)
+├── scenario_short_code     VARCHAR NOT NULL           -- Scenario identifier (s0011, s0020, etc.) - logical ref to scenario.scenario_id
 ├── tier_short_code         VARCHAR NOT NULL           -- FK → tier_definition.short_code
 ├── location_type           VARCHAR NOT NULL           -- 'network_node', 'wba', 'reservoir', 'compliance_station', 'region'
 ├── location_id             VARCHAR NOT NULL           -- ID in respective table (e.g., SAC232, 08N, SHSTA, JP, DELTA)
@@ -413,7 +837,7 @@ Example: ENV_FLOWS s0011 has 17 location records (one per evaluation node) with 
 ```
 Table: tier_result
 ├── id                   SERIAL PRIMARY KEY
-├── scenario_short_code  VARCHAR NOT NULL           -- Scenario identifier (s0011, s0020, s0021)
+├── scenario_short_code  VARCHAR NOT NULL           -- Scenario identifier (s0011, etc.) - logical ref to scenario.scenario_id
 ├── tier_short_code      VARCHAR NOT NULL           -- FK → tier_definition.short_code
 ├── tier_1_value         INTEGER                    -- Count in Tier 1 (best performance)
 ├── tier_2_value         INTEGER                    -- Count in Tier 2 (good performance)
@@ -432,7 +856,10 @@ Table: tier_result
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
 
-Records: 21 tier results (3 scenarios × 7 indicators)
+Records: 64 tier results (8 scenarios × ~8 indicators)
+
+Note: scenario_short_code is a logical reference to scenario.scenario_id, not a strict FK.
+This allows tier results to exist independently for flexibility during data loading.
 
 Foreign keys:
 ├── Ref: tier_result.tier_short_code > tier_definition.short_code [delete: restrict, update: cascade]

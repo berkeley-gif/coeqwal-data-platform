@@ -34,44 +34,58 @@ async def get_all_scenarios(
     Get list of all scenarios with metadata.
     
     Returns scenario definitions including:
-    - `short_code`: Unique identifier (e.g., 's0020')
-    - `title`: Display title
+    - `scenario_id`: Friendly identifier (e.g., 's0020')
+    - `short_code`: Technical code (e.g., 's0020_DCRadjBL_2020LU_wTUCP')
+    - `name`: Display name
     - `description`: Full description
-    - `status`: Current status (e.g., 'FINAL')
-    - `theme`: Associated theme short_code
-    - `hydroclimate`: Hydroclimate setting
-    - `land_use`: Land use setting
+    - `is_active`: Whether scenario is active
     
     **Use case:** Build scenario selection UI, show scenario cards.
     """
     try:
+        # Simple query - no joins
         query = """
         SELECT 
-            s.short_code,
-            s.title,
-            s.description,
-            s.status,
-            s.hydroclimate_id,
-            s.is_active,
-            h.short_code as hydroclimate,
-            h.title as hydroclimate_title
-        FROM scenario s
-        LEFT JOIN hydroclimate h ON s.hydroclimate_id = h.id
-        WHERE s.is_active = 1
-        ORDER BY s.short_code
+            scenario_id,
+            short_code,
+            name,
+            short_title,
+            description,
+            simple_description,
+            hydroclimate_id,
+            is_active
+        FROM scenario
+        WHERE is_active = 1 OR is_active::text = 'true' OR is_active::text = 't'
+        ORDER BY scenario_id
         """
         
         rows = await connection.fetch(query)
         
+        # If still empty, try without the filter
+        if not rows:
+            query_all = """
+            SELECT 
+                scenario_id,
+                short_code,
+                name,
+                short_title,
+                description,
+                simple_description,
+                hydroclimate_id,
+                is_active
+            FROM scenario
+            ORDER BY scenario_id
+            """
+            rows = await connection.fetch(query_all)
+        
         return [
             {
+                "scenario_id": row['scenario_id'],
                 "short_code": row['short_code'],
-                "title": row['title'] or row['short_code'],
-                "description": row['description'],
-                "status": row['status'],
-                "hydroclimate": row['hydroclimate'],
-                "hydroclimate_title": row['hydroclimate_title'],
-                "is_active": bool(row['is_active'])
+                "name": row['name'] or row['short_title'] or row['short_code'],
+                "short_title": row['short_title'],
+                "description": row['description'] or row['simple_description'],
+                "is_active": bool(row['is_active']) if row['is_active'] is not None else True
             }
             for row in rows
         ]
@@ -93,21 +107,21 @@ async def get_scenario(
     Returns full scenario metadata including themes and key assumptions.
     """
     try:
-        # Get scenario base info
+        # Get scenario base info - simple query first
+        # Try matching by scenario_id first (e.g., 's0020'), then by short_code
         scenario_query = """
         SELECT 
-            s.id,
-            s.short_code,
-            s.title,
-            s.description,
-            s.status,
-            s.hydroclimate_id,
-            s.is_active,
-            h.short_code as hydroclimate,
-            h.title as hydroclimate_title
-        FROM scenario s
-        LEFT JOIN hydroclimate h ON s.hydroclimate_id = h.id
-        WHERE s.short_code = $1
+            id,
+            scenario_id,
+            short_code,
+            name,
+            description,
+            simple_description,
+            short_title,
+            hydroclimate_id,
+            is_active
+        FROM scenario
+        WHERE scenario_id = $1 OR short_code = $1
         """
         
         scenario = await connection.fetchrow(scenario_query, scenario_id)
@@ -118,48 +132,58 @@ async def get_scenario(
                 detail=f"Scenario {scenario_id} not found"
             )
         
-        # Get associated themes
+        # Get hydroclimate info separately (may not exist)
+        hydroclimate = None
+        hydroclimate_name = None
+        if scenario['hydroclimate_id']:
+            hc = await connection.fetchrow(
+                "SELECT short_code, name FROM hydroclimate WHERE id = $1",
+                scenario['hydroclimate_id']
+            )
+            if hc:
+                hydroclimate = hc['short_code']
+                hydroclimate_name = hc['name']
+        
+        # Get associated themes (may be empty)
         theme_query = """
-        SELECT t.short_code, t.title, t.short_title
+        SELECT t.short_code, t.name, t.short_title
         FROM theme t
         JOIN theme_scenario_link tsl ON t.id = tsl.theme_id
-        JOIN scenario s ON s.id = tsl.scenario_id
-        WHERE s.short_code = $1
+        WHERE tsl.scenario_id = $1
         """
-        themes = await connection.fetch(theme_query, scenario_id)
+        themes = await connection.fetch(theme_query, scenario['id'])
         
-        # Get key assumptions
+        # Get key assumptions (may be empty)
         assumption_query = """
-        SELECT ad.short_code, ad.title, ad.description
+        SELECT ad.short_code, ad.name, ad.description
         FROM assumption_definition ad
         JOIN scenario_key_assumption_link skal ON ad.id = skal.assumption_id
-        JOIN scenario s ON s.id = skal.scenario_id
-        WHERE s.short_code = $1
+        WHERE skal.scenario_id = $1
         """
-        assumptions = await connection.fetch(assumption_query, scenario_id)
+        assumptions = await connection.fetch(assumption_query, scenario['id'])
         
-        # Get key operations
+        # Get key operations (may be empty)
         operation_query = """
-        SELECT od.short_code, od.title, od.description
+        SELECT od.short_code, od.name, od.description
         FROM operation_definition od
         JOIN scenario_key_operation_link skol ON od.id = skol.operation_id
-        JOIN scenario s ON s.id = skol.scenario_id
-        WHERE s.short_code = $1
+        WHERE skol.scenario_id = $1
         """
-        operations = await connection.fetch(operation_query, scenario_id)
+        operations = await connection.fetch(operation_query, scenario['id'])
         
         return {
+            "scenario_id": scenario['scenario_id'],
             "short_code": scenario['short_code'],
-            "title": scenario['title'] or scenario['short_code'],
-            "description": scenario['description'],
-            "status": scenario['status'],
-            "hydroclimate": scenario['hydroclimate'],
-            "hydroclimate_title": scenario['hydroclimate_title'],
+            "name": scenario['name'] or scenario['short_title'] or scenario['short_code'],
+            "short_title": scenario['short_title'],
+            "description": scenario['description'] or scenario['simple_description'],
+            "hydroclimate": hydroclimate,
+            "hydroclimate_name": hydroclimate_name,
             "is_active": bool(scenario['is_active']),
             "themes": [
                 {
                     "short_code": t['short_code'],
-                    "title": t['title'],
+                    "name": t['name'],
                     "short_title": t['short_title']
                 }
                 for t in themes
@@ -167,7 +191,7 @@ async def get_scenario(
             "key_assumptions": [
                 {
                     "short_code": a['short_code'],
-                    "title": a['title'],
+                    "name": a['name'],
                     "description": a['description']
                 }
                 for a in assumptions
@@ -175,7 +199,7 @@ async def get_scenario(
             "key_operations": [
                 {
                     "short_code": o['short_code'],
-                    "title": o['title'],
+                    "name": o['name'],
                     "description": o['description']
                 }
                 for o in operations

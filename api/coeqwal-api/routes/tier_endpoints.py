@@ -472,7 +472,7 @@ async def get_all_scenario_tiers(
                 normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
                 tiers[tier_code] = {
                     "name": row['name'],
-                    "type": "single_value",
+                    "type": "single_value", 
                     "weighted_score": weighted,
                     "normalized_score": normalized,
                     "gini": 0.0,

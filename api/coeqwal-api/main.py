@@ -363,7 +363,7 @@ async def get_all_nodes(
 @app.get("/api/arcs", 
          response_model=List[NetworkArc],
          tags=["network"],
-         summary="Get network arcs",
+         summary="Get network arcs", 
          description="Get CalSim3 network arcs (rivers, canals, pipelines) with geometry and attributes.")
 async def get_all_arcs(
     limit: int = Query(1000, le=10000, description="Maximum arcs to return (max 10,000)"),
