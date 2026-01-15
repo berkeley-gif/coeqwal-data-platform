@@ -1,231 +1,132 @@
 # COEQWAL API
 
-Production FastAPI backend
+FastAPI backend for the COEQWAL project.
 
 ## Quick start
+
 - **Base URL**: `https://api.coeqwal.org`
-- **Documentation**: `https://api.coeqwal.org/docs`
+- **Interactive docs**: `https://api.coeqwal.org/docs`
 - **Health check**: `https://api.coeqwal.org/api/health`
 
-## **API endpoints**
+## API endpoints
 
-### **Core data**
-- `GET /api/nodes` - Network nodes with coordinates (up to 10,000 per request)
-- `GET /api/arcs` - Network arcs with geometry (up to 10,000 per request)
-- `GET /api/search?q={query}` - Search nodes/arcs by name or code
+### Scenarios
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/scenarios` | List all water management scenarios |
+| `GET /api/scenarios/{id}` | Get scenario details |
+| `GET /api/scenarios/{id}/compare/{other_id}` | Compare two scenarios |
 
-### **Network analysis**
-- `GET /api/nodes/{id}/analysis` - Upstream/downstream connections for any node
-- `GET /api/arcs/{id}/analysis` - Connected nodes for any arc
+### Tier data (for charts)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/tiers/list` | List all tier indicators with metadata |
+| `GET /api/tiers/definitions` | Get tier descriptions for tooltips |
+| `GET /api/tiers/scenarios/{id}/tiers` | Get all tiers for a scenario |
+| `GET /api/tiers/scenarios/{id}/tiers/{tier_code}` | Get specific tier data |
 
-### **Tier data**
-- `GET /api/tiers/definitions` - Tier definitions for tooltip content
-- `GET /api/tiers/list` - Complete tier definitions with metadata
-- `GET /api/tiers/scenarios/{scenario_id}/tiers/{tier_code}` - Specific tier data for D3 visualization
-- `GET /api/tiers/scenarios/{scenario_id}/tiers` - All tier data for a scenario
+### Tier map (for map visualization)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/tier-map/scenarios` | List scenarios with tier map data |
+| `GET /api/tier-map/tiers` | List available tier indicators |
+| `GET /api/tier-map/summary/{scenario}` | Get tier summary for a scenario |
+| `GET /api/tier-map/{scenario}/{tier}` | Get GeoJSON for map rendering |
+| `GET /api/tier-map/{scenario}/{tier}/locations` | Get tier locations (no geometry) |
 
-### **Monitoring**
-- `GET /api/health` - Database connectivity and performance metrics
-- `GET /docs` - Interactive API documentation
+### Network data
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/nodes` | Get CalSim3 network nodes (up to 10,000) |
+| `GET /api/arcs` | Get network arcs with geometry (up to 10,000) |
+| `GET /api/nodes/spatial?bbox=...&zoom=...` | Spatial query within bounding box |
+| `GET /api/nodes/{id}/network` | Network traversal from a node |
+| `GET /api/nodes/{id}/analysis` | Upstream/downstream connections |
+| `GET /api/search?q=...` | Search nodes/arcs by name or code |
 
-## **Mapbox integration**
+### Downloads
+| Endpoint | Description |
+|----------|-------------|
+| `GET /scenario` | List downloadable scenario files |
+| `GET /download?scenario=...&type=...` | Get presigned S3 download URL |
 
-### **Load network data**
-```javascript
-const API_URL = "https://api.coeqwal.org"
+### System
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Database connectivity check |
+| `GET /docs` | Interactive Swagger documentation |
+| `GET /redoc` | ReDoc documentation |
 
-// Load all nodes and arcs for map visualization
-  const [nodesResponse, arcsResponse] = await Promise.all([
-  fetch(`${API_URL}/api/nodes`),
-  fetch(`${API_URL}/api/arcs`)
-])
+## Local development
 
-const nodes = await nodesResponse.json()
-const arcs = await arcsResponse.json()
-  
-  // Add to Mapbox map
-  map.addSource('nodes', {
-    type: 'geojson',
-    data: {
-      type: 'FeatureCollection',
-      features: nodes.map(node => ({
-        type: 'Feature',
-        geometry: node.geojson,
-        properties: {
-          id: node.id,
-          name: node.name,
-          type: node.node_type,
-        region: node.hydrologic_region,
-          ...node.attributes
-        }
-      }))
-    }
-})
-```
-
-### **Interactive network analysis**
-```javascript
-// Handle node clicks for network analysis
-map.on('click', 'nodes', async (e) => {
-  const nodeId = e.features[0].properties.id
-  
-  // Get upstream/downstream connections
-  const response = await fetch(`${API_URL}/api/nodes/${nodeId}/analysis`)
-  const analysis = await response.json()
-  
-  // Highlight connected elements
-  highlightConnectedElements(analysis.upstream_nodes, analysis.downstream_nodes)
-  
-  // Show popup with data attributes
-  showNetworkPopup(e.lngLat, e.features[0].properties, analysis)
-})
-```
-
-## **Architecture**
-
-### **Production infrastructure**
-```
-Internet → Route 53 (api.coeqwal.org) → Application Load Balancer → ECS Fargate → PostgreSQL RDS
-```
-
-### **Expected performance**
-- **Response time**: 50-300ms for spatial queries
-- **Concurrent users**: 50+ workshop participants supported
-- **Database pool**: 5-50 connections with auto-scaling
-- **Auto-scaling**: ECS tasks scale based on load
-- **Zero cold starts**: Always-on containers
-
-### **Security**
-- **HTTPS/SSL**: TLS 1.3 encryption with wildcard certificate
-- **VPC isolation**: All resources in private network
-- **Security groups**: Controlled access between services
-- **Database security**: Private subnets, restricted access
-
-## **Database schema**
-
-### **Network topology (Ring 1)**
-- **network_node**: 1,402 California water system nodes
-- **network_arc**: 1,061 river/canal connections
-- **Spatial data**: PostGIS geometry with EPSG:4326 coordinates
-- **Metadata**: CalSim attributes, operational data, versioning
-
-### **Supporting tables**
-- **network_node_type**: 29 node classifications
-- **network_arc_type**: 26 arc classifications  
-- **hydrologic_region**: 5 California water regions
-- **Versioning system**: Developer tracking, version management
-
-## **Development**
-
-### **Local development**
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
 # Set database connection
-export DATABASE_URL="postgresql://user:pass@host:5432/coeqwal_scenario"
+export DATABASE_URL="postgresql://user:pass@host:5432/coeqwal"
 
 # Run locally
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --port 8000
+
+# View docs
+open http://localhost:8000/docs
 ```
 
-### **Linting (required before push)**
+## Linting
 
-We use [Ruff](https://docs.astral.sh/ruff/) to catch errors like undefined variables before deployment.
+We use [Ruff](https://docs.astral.sh/ruff/) to catch errors before deployment.
 
 ```bash
-# Install ruff (included in requirements.txt)
-pip install ruff
-
 # Check for errors
-ruff check api/coeqwal-api/
+ruff check .
 
 # Auto-fix simple issues
-ruff check api/coeqwal-api/ --fix
-
-# Check a specific file
-ruff check api/coeqwal-api/routes/tier_map_endpoints.py
+ruff check . --fix
 ```
 
-**What it catches:**
-- Undefined variables
-- Unused imports
-- Syntax errors
-- Common Python mistakes
+## Testing
 
-**CI/CD Integration:**
-- Linting runs automatically in GitHub Actions before Docker build
-- If linting fails, the deployment is blocked
-
-### **Testing Docker build locally**
-```bash
-# Build the production image
-docker build -f api/deployment/Dockerfile.production -t coeqwal-api-test .
-
-# Run locally (optional)
-docker run -p 8000:8000 -e DATABASE_URL="..." coeqwal-api-test
-```
-
-### **Testing**
 ```bash
 # Health check
 curl http://localhost:8000/api/health
 
-# Sample data
+# Sample queries
 curl "http://localhost:8000/api/nodes?limit=5"
-curl "http://localhost:8000/api/nodes/1/analysis"
-
-# Tier data
-curl "http://localhost:8000/api/tiers/definitions"
-curl "http://localhost:8000/api/tiers/scenarios/s0011/tiers/ENV_FLOWS"
+curl "http://localhost:8000/api/tier-map/s0020/RES_STOR"
+curl "http://localhost:8000/api/tiers/scenarios/s0020/tiers"
 ```
 
-## **Deployment**
+## Deployment
 
-### **Production deployment**
-- **GitHub Actions**: Automated Docker builds on push to `main`
-- **ECR**: Container registry for image storage
-- **ECS Fargate**: Serverless container orchestration
-- **Application Load Balancer**: Traffic distribution and SSL termination
+Deployment is handled via GitHub Actions → ECR → ECS Fargate.
 
-### **Manual updates**
 ```bash
-# Update code and deploy
-git add .
-git commit -m "Update API ..."
+# Push to main triggers deployment
 git push origin main
 
-# Force ECS deployment (if needed)
+# Manual ECS update (if needed)
 # ECS Console → Update service → Force new deployment
 ```
 
-## **Monitoring**
+See [AWS_DEPLOYMENT_INSTRUCTIONS.md](../../AWS_DEPLOYMENT_INSTRUCTIONS.md) for detailed guides.
 
-### **CloudWatch integration**
-- **Application logs**: `/ecs/coeqwal-api`
-- **Performance metrics**: Response times via `X-Process-Time` headers
-- **Database monitoring**: Connection pool status
-- **Load balancer metrics**: Request count, error rates
+## Architecture
 
-### **Health endpoints**
-- **`/api/health`**: Database connectivity and pool status
-- **`/api/performance/stats`**: Detailed performance metrics
+```
+Internet → Route 53 (api.coeqwal.org) → ALB → ECS Fargate → PostgreSQL RDS
+```
 
-## **Cost**
+**Performance:**
+- Response time: 50-300ms for spatial queries
+- Connection pool: 5-50 connections (auto-scaling)
+- Concurrent users: 50+ supported
 
-### **Monthly pperational cost estimate**
-- **ECS Fargate**: ~$25-35 (2 tasks, 0.5 vCPU, 1GB each)
-- **Application Load Balancer**: ~$20
-- **Route 53**: ~$0.50
-- **CloudWatch Logs**: ~$5
-- **Total**: ~$50-60/month
+## Database
 
-### **Workshop scaling**
-- **Auto-scaling**: Additional ECS tasks during high load
-- **Cost**: +$15-25 for workshop hours
-- **Performance**: Maintains <300ms response times
+- **1,400+ network nodes** with PostGIS coordinates
+- **1,000+ network arcs** (rivers, canals, pipelines)
+- **8 scenarios** with tier outcomes
+- **9 tier indicators** with location-level results
 
-
-
-
-
+See [COEQWAL_SCENARIOS_DB_ERD.md](../../database/schema/COEQWAL_SCENARIOS_DB_ERD.md) for full schema.

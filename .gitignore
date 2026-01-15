@@ -66,3 +66,5 @@ Thumbs.db
 # FastAPI / docs builds
 /site/
 docs/_build/
+# Archived working documents
+.archive/
