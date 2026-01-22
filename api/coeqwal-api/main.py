@@ -146,11 +146,13 @@ app.add_middleware(
         "https://www.coeqwal.org", 
         "https://dev.coeqwal.org",
         "https://staging.coeqwal.org",
+        "https://scenario-list-main.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    allow_origin_regex=r"https?://localhost:\d+",  # Allow any localhost port
+    # Allow localhost and any Vercel preview deployments
+    allow_origin_regex=r"https?://localhost:\d+|https://.*\.vercel\.app",
 )
 
 # Dependency for database connections
