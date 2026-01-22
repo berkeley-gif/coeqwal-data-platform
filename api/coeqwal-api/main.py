@@ -265,6 +265,44 @@ async def root():
         }
     }
 
+@app.get("/api", tags=["system"], summary="API Endpoints Overview")
+async def api_root():
+    """
+    Overview of available API endpoints.
+    """
+    return {
+        "name": API_TITLE,
+        "version": API_VERSION,
+        "documentation": "https://api.coeqwal.org/docs",
+        "endpoints": {
+            "scenarios": {
+                "list": "GET /api/scenarios",
+                "detail": "GET /api/scenarios/{scenario_id}"
+            },
+            "tiers": {
+                "definitions": "GET /api/tiers/list",
+                "scenario_data": "GET /api/tiers/scenarios/{scenario_id}/tiers"
+            },
+            "tier_map": {
+                "geojson": "GET /api/tier-map/{scenario}/{tier}",
+                "available": "GET /api/tier-map/scenarios"
+            },
+            "network": {
+                "nodes": "GET /api/nodes",
+                "arcs": "GET /api/arcs",
+                "spatial": "GET /api/nodes/spatial?bbox=minLng,minLat,maxLng,maxLat"
+            },
+            "downloads": {
+                "list": "GET /scenario",
+                "download": "GET /download?scenario={id}&type=zip|output|sv"
+            },
+            "system": {
+                "health": "GET /api/health",
+                "docs": "GET /docs"
+            }
+        }
+    }
+
 # =============================================================================
 # NETWORK ENDPOINTS
 # =============================================================================
