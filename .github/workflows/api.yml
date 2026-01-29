@@ -24,7 +24,7 @@ jobs:
 
       - name: Lint Python code
         run: |
-          pip install ruff
+          pip install -r api/coeqwal-api/requirements.txt
           echo "🔍 Checking for syntax errors and undefined variables..."
           # Exclude backup files and network_endpoints.py (has pre-existing issues with commented imports)
           ruff check api/coeqwal-api/ --select=E,F --ignore=E501,E741 --exclude="*BACKUP*,network_endpoints.py"
