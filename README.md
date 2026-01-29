@@ -5,10 +5,10 @@ A comprehensive backend system for the Collaboratory for Equity in Water Allocat
 ## Tech stack
 
 ### API layer
-- **FastAPI** — Async Python web framework with automatic OpenAPI documentation
-- **Pydantic** — Data validation and serialization
-- **asyncpg** — High-performance async PostgreSQL driver
-- **Uvicorn** — ASGI server
+- **FastAPI** Async Python web framework with automatic OpenAPI documentation
+- **Pydantic** Data validation and serialization
+- **asyncpg** High-performance async PostgreSQL driver
+- **Uvicorn** ASGI server
 
 **Request flow:**
 ```
@@ -16,56 +16,27 @@ Request → Uvicorn → FastAPI → Pydantic (validates) → asyncpg (queries DB
 ```
 
 ### Database
-- **PostgreSQL** — Primary relational database
-- **PostGIS** — Spatial extensions for geospatial queries (bounding box, geometry)
+- **PostgreSQL** Primary relational database
+- **PostGIS** Spatial extensions for geospatial queries (bounding box, geometry)
 
 ### Cloud infrastructure (AWS)
-- **ECS / Fargate** — Containerized API deployment
-- **ECR** — Docker image registry
-- **S3** — Model output file storage
-- **Lambda** — Presigned URL generation for downloads
-- **API Gateway** — Lambda endpoint management
-- **RDS** — Managed PostgreSQL hosting
+- **ECS Fargate** Runs containerized API (Docker → ECR → ECS)
+- **RDS PostgreSQL** Managed database with PostGIS
+- **S3** Model output file storage
+- **Route 53** DNS routing to api.coeqwal.org
 
 ### Data processing
-- **boto3** — AWS SDK for Python (ETL pipelines, database utilities)
-- **Python scripts** — ETL pipelines and data transformers
+- **boto3** AWS SDK for Python (ETL pipelines, database utilities)
+- **Python scripts** ETL pipelines and data transformers
 
 ### Development tools
-- **Docker** — Containerization
-- **Ruff** — Python linting
-- **Git** — Version control
-
-## Project structure
-
-```
-coeqwal-backend/
-├── api/coeqwal-api/       # FastAPI application
-│   ├── main.py            # App entry point & core endpoints
-│   ├── routes/            # API endpoint modules
-│   │   ├── tier_endpoints.py
-│   │   ├── tier_map_endpoints.py
-│   │   ├── scenario_endpoints.py
-│   │   ├── download_endpoints.py
-│   │   ├── nodes_spatial.py
-│   │   └── network_traversal.py
-│   ├── config.py
-│   └── requirements.txt
-├── database/
-│   ├── schema/            # ERD and table designs
-│   ├── scripts/           # SQL migrations and loaders
-│   ├── seed_tables/       # CSV seed data
-│   └── utils/             # Database utilities
-├── etl/                   # Data pipelines
-│   ├── coeqwal-etl/       # Main ETL package
-│   ├── lambda-trigger/    # S3 event triggers
-│   └── tier_data/         # Tier data loaders
-├── scripts/               # Utility scripts
-│   └── coeqwalPresignDownloadLambda  # Lambda function code
-└── data/                  # Raw and processed data files
-```
+- **Docker** Containerization
+- **Ruff** Python linting
+- **Git** Version control
 
 ## API endpoints
+
+**Production:** https://api.coeqwal.org | [Interactive docs](https://api.coeqwal.org/docs)
 
 | Category | Endpoint | Description |
 |----------|----------|-------------|
@@ -114,13 +85,6 @@ See [AWS_DEPLOYMENT_INSTRUCTIONS.md](./AWS_DEPLOYMENT_INSTRUCTIONS.md) for deplo
 - Manual Docker + ECS deployment
 - EC2 direct deployment
 - Elastic Beanstalk deployment
-
-## Documentation
-
-- [API documentation](./api/coeqwal-api/README.md)
-- [Database ERD](./database/schema/COEQWAL_SCENARIOS_DB_ERD.md)
-- [Tier map API guide](./api/coeqwal-api/TIER_MAP_API_DOCUMENTATION.md)
-- [Frontend integration](./api/coeqwal-api/FRONTEND_API_DOCUMENTATION.md)
 
 ## License
 
