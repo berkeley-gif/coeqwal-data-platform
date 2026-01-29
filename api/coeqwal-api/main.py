@@ -13,7 +13,6 @@ Documentation: https://api.coeqwal.org/docs
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
