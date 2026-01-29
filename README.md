@@ -78,14 +78,6 @@ uvicorn main:app --reload --port 8000
 open http://localhost:8000/docs
 ```
 
-## Deployment
-
-See [AWS_DEPLOYMENT_INSTRUCTIONS.md](./AWS_DEPLOYMENT_INSTRUCTIONS.md) for deployment guides including:
-- CI/CD pipeline deployment
-- Manual Docker + ECS deployment
-- EC2 direct deployment
-- Elastic Beanstalk deployment
-
 ## License
 
 See [LICENSE](./LICENSE) for details.
