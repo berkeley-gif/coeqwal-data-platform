@@ -70,15 +70,21 @@ coeqwal-backend/
 | Category | Endpoint | Description |
 |----------|----------|-------------|
 | **Scenarios** | `GET /api/scenarios` | List water management scenarios |
+| | `GET /api/scenarios/{id}` | Get scenario details |
 | **Tiers** | `GET /api/tiers/list` | List tier outcome indicators |
-| | `GET /api/tiers/scenarios/{id}/tiers` | Get tier data for a scenario |
+| | `GET /api/tiers/definitions` | Get tier descriptions (for tooltips) |
+| | `GET /api/tiers/scenarios/{id}/tiers` | Get all tier data for a scenario |
 | **Tier map** | `GET /api/tier-map/{scenario}/{tier}` | GeoJSON for map visualization |
+| | `GET /api/tier-map/scenarios` | List scenarios with tier map data |
+| | `GET /api/tier-map/tiers` | List available tier indicators |
+| | `GET /api/tier-map/summary/{scenario}` | Get tier summary for a scenario |
 | **Network** | `GET /api/nodes` | CalSim3 network nodes |
 | | `GET /api/arcs` | Network arcs (rivers, canals) |
 | | `GET /api/nodes/spatial?bbox=...` | Spatial query within bounding box |
 | | `GET /api/nodes/{id}/network` | Network traversal from node |
-| **Downloads** | `GET /scenario` | List downloadable scenario files |
-| | `GET /download?scenario=...&type=...` | Get presigned S3 download URL |
+| | `GET /api/search?q=...` | Search nodes/arcs by name |
+| **Downloads** | `GET /api/scenario` | List downloadable scenario files |
+| | `GET /api/download?scenario=...&type=...` | Get presigned S3 download URL |
 
 ## Quick start
 

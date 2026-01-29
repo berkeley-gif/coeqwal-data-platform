@@ -10,9 +10,10 @@ This API provides:
 Documentation: https://api.coeqwal.org/docs
 """
 
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -22,6 +23,9 @@ import os
 import logging
 import time
 from datetime import datetime
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Import our endpoints
 from routes.nodes_spatial import get_nodes_spatial, get_node_network, get_all_nodes_unfiltered
@@ -34,6 +38,12 @@ from routes.download_endpoints import router as download_router
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Rate limiter - 200 requests per minute per IP (generous for normal use)
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200/minute", "20/second"]
+)
 
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@host:port/db")
@@ -124,6 +134,10 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Rate limiting setup
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Include scenario endpoints
 app.include_router(scenario_router)
 
@@ -143,10 +157,11 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:*",
         "https://coeqwal.org",
-        "https://www.coeqwal.org", 
+        "https://www.coeqwal.org",
         "https://dev.coeqwal.org",
         "https://staging.coeqwal.org",
         "https://scenario-list-main.vercel.app",
+        "https://yuya737.github.io",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -234,72 +249,71 @@ class NetworkAnalysis(BaseModel):
 # SYSTEM ENDPOINTS
 # =============================================================================
 
-@app.get("/", tags=["system"], summary="API Information")
-async def root():
+@app.get("/", tags=["system"], summary="Service Info")
+@limiter.limit("100/minute")
+async def root(request: Request):
     """
-    Get API information and available endpoints.
-    
-    Returns version, data summary, and links to key endpoints.
+    Service information and documentation links.
     """
     return {
-        "name": API_TITLE,
-        "description": "California Operational Equity in Water Allocation API",
+        "service": API_TITLE,
         "version": API_VERSION,
-        "documentation": {
-            "swagger": "/docs",
-            "redoc": "/redoc",
-            "openapi": "/openapi.json"
-        },
-        "data_summary": {
-            "scenarios": "8 water management scenarios",
-            "tiers": "9 outcome indicators with 1-4 tier scoring",
-            "nodes": "1,400+ CalSim3 network nodes with coordinates",
-            "arcs": "1,063+ river and canal connections with geometry"
-        },
-        "quick_start": {
-            "tier_list": "GET /api/tiers/list",
-            "scenario_tiers": "GET /api/tiers/scenarios/s0020/tiers",
-            "tier_map": "GET /api/tier-map/s0020/AG_REV",
-            "network_nodes": "GET /api/nodes?limit=100",
-            "downloads": "GET /scenario"
+        "description": "Data API for California water management scenario analysis",
+        "project": "Collaboratory for Equity in Water Allocation (COEQWAL)",
+        "links": {
+            "endpoints": "/api",
+            "documentation": "/docs",
+            "health": "/api/health"
         }
     }
 
-@app.get("/api", tags=["system"], summary="API Endpoints Overview")
-async def api_root():
+@app.get("/api", tags=["system"], summary="API Reference")
+@limiter.limit("100/minute")
+async def api_root(request: Request):
     """
-    Overview of available API endpoints.
+    Complete endpoint reference for developers.
     """
     return {
-        "name": API_TITLE,
+        "api": API_TITLE,
         "version": API_VERSION,
+        "base_url": "https://api.coeqwal.org",
         "documentation": "https://api.coeqwal.org/docs",
         "endpoints": {
             "scenarios": {
+                "description": "Water management scenario definitions",
                 "list": "GET /api/scenarios",
-                "detail": "GET /api/scenarios/{scenario_id}"
+                "detail": "GET /api/scenarios/{scenario_id}",
+                "compare": "GET /api/scenarios/{id}/compare/{other_id}"
             },
             "tiers": {
+                "description": "Outcome tier data for charts",
                 "definitions": "GET /api/tiers/list",
                 "scenario_data": "GET /api/tiers/scenarios/{scenario_id}/tiers"
             },
             "tier_map": {
+                "description": "GeoJSON tier data for map visualization",
                 "geojson": "GET /api/tier-map/{scenario}/{tier}",
-                "available": "GET /api/tier-map/scenarios"
+                "scenarios": "GET /api/tier-map/scenarios",
+                "summary": "GET /api/tier-map/summary/{scenario}"
             },
             "network": {
+                "description": "CalSim3 water infrastructure network",
                 "nodes": "GET /api/nodes",
                 "arcs": "GET /api/arcs",
-                "spatial": "GET /api/nodes/spatial?bbox=minLng,minLat,maxLng,maxLat"
+                "spatial_query": "GET /api/nodes/spatial?bbox={minLng,minLat,maxLng,maxLat}",
+                "search": "GET /api/search?q={query}"
             },
             "downloads": {
-                "list": "GET /scenario",
-                "download": "GET /download?scenario={id}&type=zip|output|sv"
-            },
-            "system": {
-                "health": "GET /api/health",
-                "docs": "GET /docs"
+                "description": "Model output file downloads",
+                "list": "GET /api/scenario",
+                "download": "GET /api/download?scenario={id}&type={zip|output|sv}"
             }
+        },
+        "data_summary": {
+            "scenarios": 8,
+            "tier_indicators": 9,
+            "network_nodes": 1400,
+            "network_arcs": 1063
         }
     }
 
@@ -790,7 +804,8 @@ async def api_get_node_network_unlimited(
 # =============================================================================
 
 @app.get("/api/health", tags=["system"], summary="Health check")
-async def health_check():
+@limiter.limit("60/minute")
+async def health_check(request: Request):
     """
     Check API and database health.
     

@@ -47,8 +47,8 @@ FastAPI backend for the COEQWAL project.
 ### Downloads
 | Endpoint | Description |
 |----------|-------------|
-| `GET /scenario` | List downloadable scenario files |
-| `GET /download?scenario=...&type=...` | Get presigned S3 download URL |
+| `GET /api/scenario` | List downloadable scenario files |
+| `GET /api/download?scenario=...&type=...` | Get presigned S3 download URL |
 
 ### System
 | Endpoint | Description |

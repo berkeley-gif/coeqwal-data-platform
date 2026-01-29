@@ -25,7 +25,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["downloads"])
+router = APIRouter(prefix="/api", tags=["downloads"])
 
 # Global S3 client
 s3_client = None

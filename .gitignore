@@ -68,3 +68,18 @@ Thumbs.db
 docs/_build/
 # Archived working documents
 .archive/
+_archive/
+api/coeqwal-api/routes/_archive/
+
+# Large data/processing folders (not needed in repo)
+CalSim3_schematic/
+audits/
+database/secrets/
+.github/ISSUES/
+
+# Database utility scripts (local dev)
+database/scripts/sql/
+database/scripts/*.sh
+
+# Docs build folder
+docs/
