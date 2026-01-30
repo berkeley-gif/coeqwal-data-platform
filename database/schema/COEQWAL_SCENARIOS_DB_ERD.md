@@ -34,6 +34,13 @@
 ├── Climate projections and sea level rise
 └── Purpose: define environmental boundary conditions
 
+09_STATISTICS LAYER
+├── Outcome categories (types of outcomes being measured)
+├── Outcome statistics (types of statistics per category)
+├── Variable prefixes (S_, C_, I_, E_, D_, etc.)
+├── Reservoir monthly percentiles (storage distribution by water month)
+└── Purpose: pre-calculated statistics for frontend visualization
+
 10_TIER LAYER
 ├── Tier definitions (outcome indicators)
 ├── Tier results (aggregated scenario outcomes)
@@ -732,6 +739,209 @@ Foreign keys:
 
 Indexes:
 └── hydroclimate_source_short_code_key (short_code)
+```
+
+---
+
+## **09_STATISTICS LAYER**
+
+Pre-calculated statistics and outcome metrics derived from scenario model runs. Provides aggregated data for frontend visualization (percentile bands, time series summaries).
+
+### **1. outcome_category (outcome types)**
+
+```
+Table: outcome_category
+├── id                    SERIAL PRIMARY KEY
+├── short_code            TEXT UNIQUE NOT NULL       -- "reservoir_storage", "groundwater_storage", etc.
+├── label                 TEXT                       -- "Reservoir Storage", etc.
+├── description           TEXT                       -- Detailed description
+├── outcome_version_id    INTEGER NOT NULL           -- FK → version.id (outcome family, version_family_id=7)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (1 = system)
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Foreign keys:
+├── Ref: outcome_category.outcome_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: outcome_category.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: outcome_category.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+└── outcome_category_short_code_key (short_code)
+
+Values (10 total):
+├── 1: community_water - Community Water Systems delivery performance
+├── 2: agricultural_water - Agricultural water supply and economic outcomes
+├── 3: environmental_water - River flows and ecosystem function indicators
+├── 4: delta_outflow - Delta to San Francisco Bay flows
+├── 5: delta_salinity - Salinity levels including X2 position
+├── 6: delta_water_quality - In-Delta water quality for uses
+├── 7: delta_exports - Water exported from Delta via pumping facilities
+├── 8: reservoir_storage - Major Central Valley reservoir storage
+├── 9: groundwater_storage - Central Valley aquifer storage
+└── 10: salmon_population - Winter Run Chinook Salmon abundance
+```
+
+### **2. variable_prefix (CalSim variable naming convention)**
+
+```
+Table: variable_prefix
+├── id                    SERIAL PRIMARY KEY
+├── prefix                VARCHAR(10) UNIQUE NOT NULL -- "S", "C", "I", "E", "D", "A", "X", etc.
+├── label                 VARCHAR NOT NULL           -- "Storage", "Channel Flow", "Inflow", etc.
+├── description           TEXT                       -- What this variable type represents
+├── unit_id               INTEGER                    -- FK → unit.id (default unit for prefix)
+├── applies_to_entity     TEXT[]                     -- ["reservoir", "channel", "node", "demand_unit"]
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Foreign keys:
+├── Ref: variable_prefix.unit_id > unit.id [delete: restrict, update: cascade]
+├── Ref: variable_prefix.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: variable_prefix.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── variable_prefix_pkey (id)
+└── variable_prefix_prefix_key (prefix)
+
+Values:
+├── S: Storage (TAF) - applies to ["reservoir"]
+├── C: Channel Flow (CFS) - applies to ["reservoir", "channel"]
+├── I: Inflow (TAF) - applies to ["reservoir", "inflow"]
+├── E: Evaporation (TAF) - applies to ["reservoir"]
+├── D: Diversion (CFS) - applies to ["demand_unit", "node"]
+├── A: Area (acres) - applies to ["reservoir"]
+├── X: Transfer (CFS) - applies to ["demand_unit"]
+└── DLT: Delivery (TAF/CFS) - applies to ["demand_unit"]
+
+Usage: CalSim variable names follow pattern {prefix}_{entity_short_code}[_{suffix}]
+Example: S_SHSTA = variable_prefix.prefix "S" + "_" + reservoir_entity.short_code "SHSTA"
+```
+
+### **3. outcome_statistic (statistics type per category)**
+
+```
+Table: outcome_statistic
+├── id                    SERIAL PRIMARY KEY
+├── outcome_category_id   INTEGER NOT NULL           -- FK → outcome_category.id
+├── short_code            VARCHAR(50) NOT NULL       -- "monthly_percentile", "annual_exceedance", etc.
+├── label                 VARCHAR NOT NULL           -- "Monthly Percentile Bands"
+├── description           TEXT                       -- What this statistic measures
+├── variable_prefix_id    INTEGER                    -- FK → variable_prefix.id (e.g., "S" for storage)
+├── percentile_scheme     TEXT[]                     -- ['p0','p10','p30','p50','p70','p90','p100']
+├── time_resolution       VARCHAR(20)                -- "monthly", "annual", "daily"
+├── unit                  VARCHAR(50)                -- "percent_capacity", "taf", "cfs"
+├── data_table            VARCHAR(100)               -- "reservoir_monthly_percentile" (target table)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Foreign keys:
+├── Ref: outcome_statistic.outcome_category_id > outcome_category.id [delete: restrict, update: cascade]
+├── Ref: outcome_statistic.variable_prefix_id > variable_prefix.id [delete: restrict, update: cascade]
+├── Ref: outcome_statistic.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: outcome_statistic.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── outcome_statistic_pkey (id)
+├── uq_outcome_statistic (outcome_category_id, short_code)
+├── idx_outcome_statistic_category (outcome_category_id)
+└── idx_outcome_statistic_prefix (variable_prefix_id)
+
+Constraints:
+└── Unique: (outcome_category_id, short_code)
+
+Values (initial):
+├── outcome_category_id=8 (reservoir_storage):
+│   └── short_code="monthly_percentile"
+│       label="Monthly Percentile Bands"
+│       variable_prefix_id → "S" (storage)
+│       percentile_scheme=['p0','p10','p30','p50','p70','p90','p100']
+│       time_resolution="monthly"
+│       unit="percent_capacity"
+│       data_table="reservoir_monthly_percentile"
+```
+
+### **4. reservoir_monthly_percentile (storage distribution by water month)**
+
+```
+Table: reservoir_monthly_percentile
+├── id                    SERIAL PRIMARY KEY
+├── outcome_statistic_id  INTEGER NOT NULL           -- FK → outcome_statistic.id
+├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier (s0011, s0020, etc.)
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id (SHSTA, OROVL, etc.)
+├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Nov=2, ..., Sep=12)
+│
+├── -- Percentiles (% of reservoir capacity, using water management scheme)
+├── p0                    NUMERIC(6,2)               -- min (0th percentile)
+├── p10                   NUMERIC(6,2)               -- dry
+├── p30                   NUMERIC(6,2)               -- below normal
+├── p50                   NUMERIC(6,2)               -- median
+├── p70                   NUMERIC(6,2)               -- above normal
+├── p90                   NUMERIC(6,2)               -- wet
+├── p100                  NUMERIC(6,2)               -- max (100th percentile)
+├── mean_value            NUMERIC(6,2)               -- mean for reference
+│
+├── -- Audit fields (ETL uses developer.id = 1 "system")
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Note: scenario_short_code is a logical reference to scenario.scenario_id, not a strict FK.
+This allows percentile data to be loaded independently for ETL flexibility.
+
+Note: Capacity lookup via reservoir_entity.capacity_taf (no duplication).
+Variable reconstruction: variable_prefix.prefix "S" + "_" + reservoir_entity.short_code = "S_SHSTA"
+
+Foreign keys:
+├── Ref: reservoir_monthly_percentile.outcome_statistic_id > outcome_statistic.id [delete: restrict, update: cascade]
+├── Ref: reservoir_monthly_percentile.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
+├── Ref: reservoir_monthly_percentile.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_monthly_percentile.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── reservoir_monthly_percentile_pkey (id)
+├── uq_reservoir_percentile (outcome_statistic_id, scenario_short_code, reservoir_entity_id, water_month)
+├── idx_reservoir_percentile_statistic (outcome_statistic_id)
+├── idx_reservoir_percentile_scenario (scenario_short_code)
+├── idx_reservoir_percentile_reservoir (reservoir_entity_id)
+├── idx_reservoir_percentile_combined (scenario_short_code, reservoir_entity_id)
+└── idx_reservoir_percentile_active (is_active) WHERE is_active = TRUE
+
+Constraints:
+├── water_month CHECK (water_month BETWEEN 1 AND 12)
+└── Unique: (outcome_statistic_id, scenario_short_code, reservoir_entity_id, water_month)
+
+Target Reservoirs (8 major):
+├── SHSTA: Shasta (4,552 TAF capacity)
+├── TRNTY: Trinity (2,448 TAF)
+├── OROVL: Oroville (3,537 TAF)
+├── FOLSM: Folsom (975 TAF)
+├── MELON: New Melones (2,400 TAF)
+├── MLRTN: Millerton (520 TAF)
+├── SLUIS_CVP: San Luis CVP (1,062 TAF)
+└── SLUIS_SWP: San Luis SWP (979 TAF)
+
+Expected Records: 96 rows per scenario (8 reservoirs × 12 months)
+Total: 768 rows for 8 scenarios
+
+Frontend Use:
+├── Band charts showing storage distribution across water year months
+├── Outer band: p10-p90 (lightest color)
+├── Inner bands: p30-p70 (darker)
+├── Center line: p50 (median)
+└── Min/max bounds: p0-p100
+
+Source: CalSim scenario CSV from S3 (s3://coeqwal-model-run/scenario/{id}/csv/)
+ETL: etl/statistics/calculate_reservoir_percentiles.py
 ```
 
 ---
@@ -1512,4 +1722,83 @@ Table: du_refuge_entity
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
+```
+
+### **Entity Grouping Tables**
+
+#### **reservoir_group (reservoir subset definitions)**
+```
+Table: reservoir_group
+├── id                    SERIAL PRIMARY KEY
+├── short_code            VARCHAR(50) UNIQUE NOT NULL -- "major_8", "cvp_primary", "swp_primary", "tier_analysis"
+├── label                 VARCHAR NOT NULL           -- "8 Major Reservoirs"
+├── description           TEXT                       -- Purpose of this grouping
+├── display_order         INTEGER DEFAULT 0          -- For UI ordering
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Foreign keys:
+├── Ref: reservoir_group.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_group.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── reservoir_group_pkey (id)
+└── reservoir_group_short_code_key (short_code)
+
+Values:
+├── major: Major Reservoirs - Primary CVP/SWP storage reservoirs for statistics dashboards
+├── cvp: CVP Storage - Central Valley Project reservoirs
+├── swp: SWP Storage - State Water Project reservoirs
+└── tier: Tier Reservoirs - Reservoirs included in tier result analysis
+
+Note: Regional aggregation (NOD/SOD) uses reservoir_entity.hydrologic_region_id:
+├── NOD (North of Delta): hydrologic_region_id = 1 (Sacramento)
+└── SOD (South of Delta): hydrologic_region_id IN (2, 4) (San Joaquin, Tulare)
+```
+
+#### **reservoir_group_member (reservoir-to-group junction)**
+```
+Table: reservoir_group_member
+├── id                    SERIAL PRIMARY KEY
+├── reservoir_group_id    INTEGER NOT NULL           -- FK → reservoir_group.id
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
+├── display_order         INTEGER DEFAULT 0          -- Order within group for UI
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Foreign keys:
+├── Ref: reservoir_group_member.reservoir_group_id > reservoir_group.id [delete: cascade, update: cascade]
+├── Ref: reservoir_group_member.reservoir_entity_id > reservoir_entity.id [delete: cascade, update: cascade]
+├── Ref: reservoir_group_member.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_group_member.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── reservoir_group_member_pkey (id)
+├── uq_reservoir_group_member (reservoir_group_id, reservoir_entity_id)
+├── idx_reservoir_group_member_group (reservoir_group_id)
+└── idx_reservoir_group_member_reservoir (reservoir_entity_id)
+
+Constraints:
+└── Unique: (reservoir_group_id, reservoir_entity_id)
+
+Example memberships (reservoirs can be in multiple groups):
+
+major group (id=1):
+├── SHSTA (66), TRNTY (79), OROVL (56), FOLSM (26)
+├── MELON (49), MLRTN (51), SLUIS_CVP (70), SLUIS_SWP (71)
+
+cvp group (id=2):
+├── SHSTA (66), TRNTY (79), FOLSM (26), MELON (49), MLRTN (51), SLUIS_CVP (70)
+
+swp group (id=3):
+├── OROVL (56), SLUIS_SWP (71)
+
+tier group (id=4):
+└── Same as major group
 ```

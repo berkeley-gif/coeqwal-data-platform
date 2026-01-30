@@ -33,6 +33,10 @@ from routes.tier_endpoints import router as tier_router, set_db_pool as set_tier
 from routes.tier_map_endpoints import router as tier_map_router, set_db_pool as set_tier_map_db_pool
 from routes.scenario_endpoints import router as scenario_router, set_db_pool as set_scenario_db_pool
 from routes.download_endpoints import router as download_router
+from routes.reservoir_statistics_endpoints import (
+    router as reservoir_stats_router,
+    set_db_pool as set_reservoir_stats_db_pool
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +89,10 @@ TAGS_METADATA = [
         "description": "**Scenario file downloads.** Lists available files and generates presigned S3 URLs.",
     },
     {
+        "name": "statistics",
+        "description": "**Reservoir statistics.** Monthly percentile data for reservoir storage band charts.",
+    },
+    {
         "name": "system",
         "description": "**System endpoints.** Health checks and API info.",
     },
@@ -116,7 +124,10 @@ async def lifespan(app: FastAPI):
     
     # Set the database pool for scenario router
     set_scenario_db_pool(db_pool)
-    
+
+    # Set the database pool for reservoir statistics router
+    set_reservoir_stats_db_pool(db_pool)
+
     yield
     
     # Shutdown
@@ -148,6 +159,9 @@ app.include_router(tier_map_router)
 
 # Include download endpoints (replaces problematic Lambda service)
 app.include_router(download_router)
+
+# Include reservoir statistics endpoints
+app.include_router(reservoir_stats_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -306,6 +320,13 @@ async def api_root(request: Request):
                 "description": "Model output file downloads",
                 "list": "GET /api/scenario",
                 "download": "GET /api/download?scenario={id}&type={zip|output|sv}"
+            },
+            "statistics": {
+                "description": "Reservoir storage percentile statistics",
+                "reservoir_percentiles": "GET /api/statistics/scenarios/{scenario_id}/reservoirs/{reservoir_id}/percentiles",
+                "all_reservoirs": "GET /api/statistics/scenarios/{scenario_id}/reservoir-percentiles",
+                "list_reservoirs": "GET /api/statistics/reservoirs",
+                "list_scenarios": "GET /api/statistics/scenarios"
             }
         },
         "data_summary": {

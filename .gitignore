@@ -71,15 +71,18 @@ docs/_build/
 _archive/
 api/coeqwal-api/routes/_archive/
 
-# Large data/processing folders (not needed in repo)
+# Large data/processing folders
 CalSim3_schematic/
 audits/
 database/secrets/
 .github/ISSUES/
+etl/COEQWAL-pydsstools-archive/
 
 # Database utility scripts (local dev)
-database/scripts/sql/
 database/scripts/*.sh
 
-# Docs build folder
-docs/
+# Seed tables (stored in S3 bucket coeqwal-seeds-dev)
+database/seed_tables/
+
+# Claude Code config (local)
+.claude/
