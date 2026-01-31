@@ -1012,7 +1012,7 @@ Seed CSV: database/seed_tables/04_calsim_data/reservoir_variable.csv
 Table: reservoir_storage_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier (s0020, etc.)
-├── reservoir_code        VARCHAR(20) NOT NULL       -- S_SHSTA, S_OROVL, etc.
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
 ├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Sep=12)
 │
 ├── -- Storage statistics (TAF)
@@ -1040,17 +1040,25 @@ Table: reservoir_storage_monthly
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
+Note: scenario_short_code is a logical reference (not strict FK) for ETL flexibility.
+Reservoir lookup via reservoir_entity join to get short_code, capacity, dead_pool.
+
+Foreign keys:
+├── Ref: reservoir_storage_monthly.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
+├── Ref: reservoir_storage_monthly.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_storage_monthly.updated_by > developer.id [delete: restrict, update: cascade]
+
 Indexes:
 ├── reservoir_storage_monthly_pkey (id)
-├── uq_storage_monthly (scenario_short_code, reservoir_code, water_month)
+├── uq_storage_monthly (scenario_short_code, reservoir_entity_id, water_month)
 ├── idx_storage_monthly_scenario (scenario_short_code)
-├── idx_storage_monthly_reservoir (reservoir_code)
-├── idx_storage_monthly_combined (scenario_short_code, reservoir_code)
+├── idx_storage_monthly_entity (reservoir_entity_id)
+├── idx_storage_monthly_combined (scenario_short_code, reservoir_entity_id)
 └── idx_storage_monthly_active (is_active) WHERE is_active = TRUE
 
 Constraints:
 ├── water_month CHECK (water_month BETWEEN 1 AND 12)
-└── Unique: (scenario_short_code, reservoir_code, water_month)
+└── Unique: (scenario_short_code, reservoir_entity_id, water_month)
 
 Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
 
@@ -1064,7 +1072,7 @@ ETL: etl/statistics/calculate_reservoir_statistics.py
 Table: reservoir_spill_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier
-├── reservoir_code        VARCHAR(20) NOT NULL       -- S_SHSTA, S_OROVL, etc.
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
 ├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Sep=12)
 │
 ├── -- Spill frequency this month
@@ -1091,21 +1099,27 @@ Table: reservoir_spill_monthly
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
-Note: Spill = C_*_FLOOD variable (flood release above release capacity)
+Note: Spill data from C_{short_code}_FLOOD variable (flood release above release capacity).
 From constraints-FloodSpill.wresl: C_{res}_NCF + C_{res}_Flood = C_{res}
+ETL maps reservoir_entity.short_code → CalSim variable C_{short_code}_FLOOD
+
+Foreign keys:
+├── Ref: reservoir_spill_monthly.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
+├── Ref: reservoir_spill_monthly.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_spill_monthly.updated_by > developer.id [delete: restrict, update: cascade]
 
 Indexes:
 ├── reservoir_spill_monthly_pkey (id)
-├── uq_spill_monthly (scenario_short_code, reservoir_code, water_month)
+├── uq_spill_monthly (scenario_short_code, reservoir_entity_id, water_month)
 ├── idx_spill_monthly_scenario (scenario_short_code)
-├── idx_spill_monthly_reservoir (reservoir_code)
-├── idx_spill_monthly_combined (scenario_short_code, reservoir_code)
+├── idx_spill_monthly_entity (reservoir_entity_id)
+├── idx_spill_monthly_combined (scenario_short_code, reservoir_entity_id)
 ├── idx_spill_monthly_frequency (spill_frequency_pct DESC)
 └── idx_spill_monthly_active (is_active) WHERE is_active = TRUE
 
 Constraints:
 ├── water_month CHECK (water_month BETWEEN 1 AND 12)
-└── Unique: (scenario_short_code, reservoir_code, water_month)
+└── Unique: (scenario_short_code, reservoir_entity_id, water_month)
 
 Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
 
@@ -1119,7 +1133,7 @@ ETL: etl/statistics/calculate_reservoir_statistics.py
 Table: reservoir_period_summary
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier
-├── reservoir_code        VARCHAR(20) NOT NULL       -- S_SHSTA, S_OROVL, etc.
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
 │
 ├── -- Simulation period
 ├── simulation_start_year INTEGER NOT NULL           -- First water year
@@ -1168,6 +1182,10 @@ Table: reservoir_period_summary
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
+Note: ETL maps reservoir_entity.short_code → CalSim variables:
+├── Storage: S_{short_code} (e.g., S_SHSTA)
+└── Spill: C_{short_code}_FLOOD (e.g., C_SHSTA_FLOOD)
+
 Storage Exceedance Interpretation:
 ├── storage_exc_p10 = 60% means "90% of the time, storage ≥ 60% of capacity"
 ├── storage_exc_p50 = 75% means "50% of the time, storage ≥ 75% of capacity"
@@ -1195,16 +1213,21 @@ Use Cases:
 ├── Exceedance curves: storage_exc_* enables full period storage duration curves
 └── Chart thresholds: dead_pool_pct and spill_threshold_pct for visual markers
 
+Foreign keys:
+├── Ref: reservoir_period_summary.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
+├── Ref: reservoir_period_summary.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_period_summary.updated_by > developer.id [delete: restrict, update: cascade]
+
 Indexes:
 ├── reservoir_period_summary_pkey (id)
-├── uq_period_summary (scenario_short_code, reservoir_code)
+├── uq_period_summary (scenario_short_code, reservoir_entity_id)
 ├── idx_period_summary_scenario (scenario_short_code)
-├── idx_period_summary_reservoir (reservoir_code)
+├── idx_period_summary_entity (reservoir_entity_id)
 ├── idx_period_summary_spill_freq (spill_frequency_pct DESC)
 └── idx_period_summary_active (is_active) WHERE is_active = TRUE
 
 Constraints:
-└── Unique: (scenario_short_code, reservoir_code)
+└── Unique: (scenario_short_code, reservoir_entity_id)
 
 Expected Records: 736 rows (92 reservoirs × 8 scenarios)
 

@@ -26,7 +26,7 @@ DROP TABLE IF EXISTS reservoir_spill_monthly CASCADE;
 CREATE TABLE reservoir_spill_monthly (
     id SERIAL PRIMARY KEY,
     scenario_short_code VARCHAR(20) NOT NULL,
-    reservoir_code VARCHAR(20) NOT NULL,       -- S_SHSTA, S_OROVL, etc.
+    reservoir_entity_id INTEGER NOT NULL,      -- FK to reservoir_entity.id
     water_month INTEGER NOT NULL,              -- 1-12 (Oct=1, Sep=12)
 
     -- Spill frequency this month
@@ -54,8 +54,11 @@ CREATE TABLE reservoir_spill_monthly (
     updated_by INTEGER NOT NULL DEFAULT 1,
 
     -- Constraints
+    CONSTRAINT fk_spill_monthly_reservoir_entity
+        FOREIGN KEY (reservoir_entity_id) REFERENCES reservoir_entity(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT uq_spill_monthly
-        UNIQUE(scenario_short_code, reservoir_code, water_month),
+        UNIQUE(scenario_short_code, reservoir_entity_id, water_month),
     CONSTRAINT chk_spill_water_month
         CHECK (water_month BETWEEN 1 AND 12)
 );
@@ -68,11 +71,11 @@ CREATE TABLE reservoir_spill_monthly (
 CREATE INDEX idx_spill_monthly_scenario
     ON reservoir_spill_monthly(scenario_short_code);
 
-CREATE INDEX idx_spill_monthly_reservoir
-    ON reservoir_spill_monthly(reservoir_code);
+CREATE INDEX idx_spill_monthly_entity
+    ON reservoir_spill_monthly(reservoir_entity_id);
 
 CREATE INDEX idx_spill_monthly_combined
-    ON reservoir_spill_monthly(scenario_short_code, reservoir_code);
+    ON reservoir_spill_monthly(scenario_short_code, reservoir_entity_id);
 
 CREATE INDEX idx_spill_monthly_frequency
     ON reservoir_spill_monthly(spill_frequency_pct DESC);
@@ -91,8 +94,8 @@ COMMENT ON TABLE reservoir_spill_monthly IS
 COMMENT ON COLUMN reservoir_spill_monthly.scenario_short_code IS
     'Scenario identifier (e.g., s0020)';
 
-COMMENT ON COLUMN reservoir_spill_monthly.reservoir_code IS
-    'Reservoir code (e.g., S_SHSTA). Corresponds to C_{code}_FLOOD spill variable.';
+COMMENT ON COLUMN reservoir_spill_monthly.reservoir_entity_id IS
+    'FK to reservoir_entity.id. Spill calculated from C_{short_code}_FLOOD variable.';
 
 COMMENT ON COLUMN reservoir_spill_monthly.water_month IS
     'Water year month: 1=October, 2=November, ..., 12=September';

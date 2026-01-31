@@ -29,7 +29,7 @@ DROP TABLE IF EXISTS reservoir_period_summary CASCADE;
 CREATE TABLE reservoir_period_summary (
     id SERIAL PRIMARY KEY,
     scenario_short_code VARCHAR(20) NOT NULL,
-    reservoir_code VARCHAR(20) NOT NULL,       -- S_SHSTA, S_OROVL, etc.
+    reservoir_entity_id INTEGER NOT NULL,      -- FK to reservoir_entity.id
 
     -- Simulation period
     simulation_start_year INTEGER NOT NULL,
@@ -87,8 +87,11 @@ CREATE TABLE reservoir_period_summary (
     updated_by INTEGER NOT NULL DEFAULT 1,
 
     -- Constraints
+    CONSTRAINT fk_period_summary_reservoir_entity
+        FOREIGN KEY (reservoir_entity_id) REFERENCES reservoir_entity(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT uq_period_summary
-        UNIQUE(scenario_short_code, reservoir_code)
+        UNIQUE(scenario_short_code, reservoir_entity_id)
 );
 
 \echo 'Created table: reservoir_period_summary'
@@ -99,8 +102,8 @@ CREATE TABLE reservoir_period_summary (
 CREATE INDEX idx_period_summary_scenario
     ON reservoir_period_summary(scenario_short_code);
 
-CREATE INDEX idx_period_summary_reservoir
-    ON reservoir_period_summary(reservoir_code);
+CREATE INDEX idx_period_summary_entity
+    ON reservoir_period_summary(reservoir_entity_id);
 
 CREATE INDEX idx_period_summary_spill_freq
     ON reservoir_period_summary(spill_frequency_pct DESC);
@@ -119,8 +122,8 @@ COMMENT ON TABLE reservoir_period_summary IS
 COMMENT ON COLUMN reservoir_period_summary.scenario_short_code IS
     'Scenario identifier (e.g., s0020)';
 
-COMMENT ON COLUMN reservoir_period_summary.reservoir_code IS
-    'Reservoir code (e.g., S_SHSTA)';
+COMMENT ON COLUMN reservoir_period_summary.reservoir_entity_id IS
+    'FK to reservoir_entity.id. Storage from S_{short_code}, spill from C_{short_code}_FLOOD.';
 
 COMMENT ON COLUMN reservoir_period_summary.simulation_start_year IS
     'First water year in the simulation period';

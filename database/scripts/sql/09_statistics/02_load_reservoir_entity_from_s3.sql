@@ -35,7 +35,7 @@ TRUNCATE TABLE reservoir_entity CASCADE;
 
 SELECT aws_s3.table_import_from_s3(
     'reservoir_entity',
-    'id, network_node_id, short_code, name, description, associated_river, entity_type_id, schematic_type_id, hydrologic_region_id, capacity_taf, dead_pool_taf, surface_area_acres, operational_purpose, has_tiers, is_main, has_gis_data, entity_version_id, source_ids',
+    'id, network_node_id, short_code, name, description, associated_river, entity_type_id, schematic_type_id, hydrologic_region_id, capacity_taf, dead_pool_taf, surface_area_acres, operational_purpose, has_gis_data, entity_version_id, source_ids',
     '(format csv, header true)',
     'coeqwal-seeds-dev',
     '04_calsim_data/reservoir_entity.csv',
@@ -94,11 +94,13 @@ UNION ALL
 SELECT 'reservoir_group_member', COUNT(*) FROM reservoir_group_member;
 
 \echo ''
-\echo 'Major reservoirs (has_tiers=TRUE):'
-SELECT id, short_code, name, capacity_taf, hydrologic_region_id
-FROM reservoir_entity
-WHERE has_tiers = TRUE
-ORDER BY capacity_taf DESC;
+\echo 'Major reservoirs (via reservoir_group):'
+SELECT re.id, re.short_code, re.name, re.capacity_taf, re.hydrologic_region_id
+FROM reservoir_entity re
+JOIN reservoir_group_member rgm ON re.id = rgm.reservoir_entity_id
+JOIN reservoir_group rg ON rgm.reservoir_group_id = rg.id
+WHERE rg.short_code = 'major'
+ORDER BY re.capacity_taf DESC;
 
 \echo ''
 \echo 'Reservoir groups:'

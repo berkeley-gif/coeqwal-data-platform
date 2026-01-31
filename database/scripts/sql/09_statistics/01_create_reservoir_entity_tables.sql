@@ -29,8 +29,6 @@ CREATE TABLE IF NOT EXISTS reservoir_entity (
     dead_pool_taf NUMERIC(10,2),
     surface_area_acres NUMERIC(12,2),
     operational_purpose VARCHAR(50),
-    has_tiers BOOLEAN DEFAULT FALSE,
-    is_main BOOLEAN DEFAULT FALSE,
     has_gis_data INTEGER DEFAULT 1,
     entity_version_id INTEGER NOT NULL DEFAULT 1,
     source_ids TEXT,
@@ -46,16 +44,12 @@ CREATE TABLE IF NOT EXISTS reservoir_entity (
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_reservoir_entity_short_code ON reservoir_entity(short_code);
 CREATE INDEX IF NOT EXISTS idx_reservoir_entity_region ON reservoir_entity(hydrologic_region_id);
-CREATE INDEX IF NOT EXISTS idx_reservoir_entity_has_tiers ON reservoir_entity(has_tiers) WHERE has_tiers = TRUE;
-CREATE INDEX IF NOT EXISTS idx_reservoir_entity_is_main ON reservoir_entity(is_main) WHERE is_main = TRUE;
 
 -- Comments
 COMMENT ON TABLE reservoir_entity IS 'Reservoir management entities with capacity and operational attributes. Part of ENTITY LAYER.';
 COMMENT ON COLUMN reservoir_entity.short_code IS 'Short identifier (SHSTA, OROVL, etc.) - matches network.short_code';
 COMMENT ON COLUMN reservoir_entity.capacity_taf IS 'Maximum reservoir capacity in thousand acre-feet (TAF)';
 COMMENT ON COLUMN reservoir_entity.dead_pool_taf IS 'Dead pool storage in TAF - unusable storage at bottom';
-COMMENT ON COLUMN reservoir_entity.has_tiers IS 'TRUE if reservoir is included in tier analysis';
-COMMENT ON COLUMN reservoir_entity.is_main IS 'TRUE if reservoir is a major system reservoir';
 COMMENT ON COLUMN reservoir_entity.hydrologic_region_id IS 'FK to hydrologic_region: 1=SAC(NOD), 2=SJR(SOD), 4=Tulare(SOD)';
 
 \echo '✅ reservoir_entity table created'

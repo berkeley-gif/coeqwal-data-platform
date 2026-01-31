@@ -23,7 +23,7 @@ DROP TABLE IF EXISTS reservoir_monthly_percentile CASCADE;
 CREATE TABLE reservoir_monthly_percentile (
     id SERIAL PRIMARY KEY,
     scenario_short_code VARCHAR(20) NOT NULL,
-    reservoir_code VARCHAR(20) NOT NULL,      -- S_SHSTA, S_OROVL, etc.
+    reservoir_entity_id INTEGER NOT NULL,     -- FK to reservoir_entity.id
     water_month INTEGER NOT NULL,             -- 1-12 (Oct=1, Sep=12)
 
     -- Percentiles (% of capacity): q0=min, q50=median, q100=max
@@ -45,9 +45,14 @@ CREATE TABLE reservoir_monthly_percentile (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by INTEGER NOT NULL DEFAULT 1,    -- FK → developer.id
 
+    -- FK constraint
+    CONSTRAINT fk_percentile_reservoir_entity
+        FOREIGN KEY (reservoir_entity_id) REFERENCES reservoir_entity(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+
     -- Unique constraint: one row per scenario/reservoir/month combination
     CONSTRAINT uq_reservoir_percentile
-        UNIQUE(scenario_short_code, reservoir_code, water_month),
+        UNIQUE(scenario_short_code, reservoir_entity_id, water_month),
 
     -- Check constraint for water_month range
     CONSTRAINT chk_water_month
@@ -62,11 +67,11 @@ CREATE TABLE reservoir_monthly_percentile (
 CREATE INDEX idx_reservoir_percentile_scenario
     ON reservoir_monthly_percentile(scenario_short_code);
 
-CREATE INDEX idx_reservoir_percentile_reservoir
-    ON reservoir_monthly_percentile(reservoir_code);
+CREATE INDEX idx_reservoir_percentile_entity
+    ON reservoir_monthly_percentile(reservoir_entity_id);
 
-CREATE INDEX idx_reservoir_percentile_scenario_reservoir
-    ON reservoir_monthly_percentile(scenario_short_code, reservoir_code);
+CREATE INDEX idx_reservoir_percentile_scenario_entity
+    ON reservoir_monthly_percentile(scenario_short_code, reservoir_entity_id);
 
 CREATE INDEX idx_reservoir_percentile_active
     ON reservoir_monthly_percentile(is_active) WHERE is_active = TRUE;
@@ -82,8 +87,8 @@ COMMENT ON TABLE reservoir_monthly_percentile IS
 COMMENT ON COLUMN reservoir_monthly_percentile.scenario_short_code IS
     'Scenario identifier (e.g., s0020)';
 
-COMMENT ON COLUMN reservoir_monthly_percentile.reservoir_code IS
-    'Reservoir variable code from reservoir_entity (e.g., S_SHSTA, S_OROVL)';
+COMMENT ON COLUMN reservoir_monthly_percentile.reservoir_entity_id IS
+    'FK to reservoir_entity.id. Storage calculated from S_{short_code} variable.';
 
 COMMENT ON COLUMN reservoir_monthly_percentile.water_month IS
     'Water year month: 1=October, 2=November, ..., 12=September';
@@ -107,7 +112,7 @@ COMMENT ON COLUMN reservoir_monthly_percentile.mean_value IS
 -- ============================================================================
 CREATE OR REPLACE FUNCTION upsert_reservoir_percentile(
     p_scenario_short_code VARCHAR(20),
-    p_reservoir_code VARCHAR(20),
+    p_reservoir_entity_id INTEGER,
     p_water_month INTEGER,
     p_q0 NUMERIC(6,2),
     p_q10 NUMERIC(6,2),
@@ -123,17 +128,17 @@ DECLARE
     v_id INTEGER;
 BEGIN
     INSERT INTO reservoir_monthly_percentile (
-        scenario_short_code, reservoir_code, water_month,
+        scenario_short_code, reservoir_entity_id, water_month,
         q0, q10, q30, q50, q70, q90, q100,
         mean_value,
         is_active, created_by, updated_by
     ) VALUES (
-        p_scenario_short_code, p_reservoir_code, p_water_month,
+        p_scenario_short_code, p_reservoir_entity_id, p_water_month,
         p_q0, p_q10, p_q30, p_q50, p_q70, p_q90, p_q100,
         p_mean_value,
         TRUE, p_updated_by, p_updated_by
     )
-    ON CONFLICT (scenario_short_code, reservoir_code, water_month)
+    ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)
     DO UPDATE SET
         q0 = EXCLUDED.q0,
         q10 = EXCLUDED.q10,
@@ -153,7 +158,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION upsert_reservoir_percentile IS
-    'Insert or update reservoir percentile data with proper audit tracking';
+    'Insert or update reservoir percentile data with proper audit tracking. Uses reservoir_entity_id FK.';
 
 \echo 'Created upsert function'
 

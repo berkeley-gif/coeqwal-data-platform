@@ -65,7 +65,8 @@ def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[s
     """
     Load reservoir metadata from reservoir_entity.csv.
 
-    Returns dict keyed by short_code with capacity_taf and dead_pool_taf.
+    Returns dict keyed by short_code with id, capacity_taf, and dead_pool_taf.
+    The 'id' field is the reservoir_entity_id used as FK in statistics tables.
     """
     if csv_path is None:
         csv_path = RESERVOIR_ENTITY_CSV
@@ -79,6 +80,7 @@ def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[s
         for row in reader:
             short_code = row['short_code']
             reservoirs[short_code] = {
+                'id': int(row['id']),  # reservoir_entity_id for FK
                 'name': row['name'],
                 'capacity_taf': float(row['capacity_taf']) if row['capacity_taf'] else 0,
                 'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
@@ -548,6 +550,7 @@ def calculate_all_statistics(
     period_summary_rows = []
 
     for code, meta in reservoirs.items():
+        entity_id = meta['id']
         capacity_taf = meta['capacity_taf']
         dead_pool_taf = meta['dead_pool_taf']
 
@@ -559,21 +562,21 @@ def calculate_all_statistics(
         storage_rows = calculate_storage_monthly(df, code, capacity_taf)
         for row in storage_rows:
             row['scenario_short_code'] = scenario_id
-            row['reservoir_code'] = f'S_{code}'
+            row['reservoir_entity_id'] = entity_id
         storage_monthly_rows.extend(storage_rows)
 
         # Calculate spill monthly
         spill_rows = calculate_spill_monthly(df, code, capacity_taf)
         for row in spill_rows:
             row['scenario_short_code'] = scenario_id
-            row['reservoir_code'] = f'S_{code}'
+            row['reservoir_entity_id'] = entity_id
         spill_monthly_rows.extend(spill_rows)
 
         # Calculate period summary
         summary = calculate_period_summary(df, code, capacity_taf, dead_pool_taf)
         if summary:
             summary['scenario_short_code'] = scenario_id
-            summary['reservoir_code'] = f'S_{code}'
+            summary['reservoir_entity_id'] = entity_id
             period_summary_rows.append(summary)
 
     log.info(f"Generated: {len(storage_monthly_rows)} storage monthly, "
@@ -605,7 +608,7 @@ def generate_sql_inserts(
     if storage_monthly:
         lines.append("-- reservoir_storage_monthly")
         lines.append("INSERT INTO reservoir_storage_monthly (")
-        lines.append("    scenario_short_code, reservoir_code, water_month,")
+        lines.append("    scenario_short_code, reservoir_entity_id, water_month,")
         lines.append("    storage_avg_taf, storage_cv, storage_pct_capacity,")
         lines.append("    q0, q10, q30, q50, q70, q90, q100,")
         lines.append("    capacity_taf, sample_count, created_by, updated_by")
@@ -614,7 +617,7 @@ def generate_sql_inserts(
         value_rows = []
         for row in storage_monthly:
             value_row = (
-                f"    ('{row['scenario_short_code']}', '{row['reservoir_code']}', {row['water_month']}, "
+                f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, {row['water_month']}, "
                 f"{row['storage_avg_taf']}, {row['storage_cv']}, {row['storage_pct_capacity']}, "
                 f"{row['q0']}, {row['q10']}, {row['q30']}, {row['q50']}, "
                 f"{row['q70']}, {row['q90']}, {row['q100']}, "
@@ -623,7 +626,7 @@ def generate_sql_inserts(
             value_rows.append(value_row)
 
         lines.append(",\n".join(value_rows))
-        lines.append("ON CONFLICT (scenario_short_code, reservoir_code, water_month)")
+        lines.append("ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)")
         lines.append("DO UPDATE SET")
         lines.append("    storage_avg_taf = EXCLUDED.storage_avg_taf,")
         lines.append("    storage_cv = EXCLUDED.storage_cv,")
@@ -640,7 +643,7 @@ def generate_sql_inserts(
     if spill_monthly:
         lines.append("-- reservoir_spill_monthly")
         lines.append("INSERT INTO reservoir_spill_monthly (")
-        lines.append("    scenario_short_code, reservoir_code, water_month,")
+        lines.append("    scenario_short_code, reservoir_entity_id, water_month,")
         lines.append("    spill_months_count, total_months, spill_frequency_pct,")
         lines.append("    spill_avg_cfs, spill_max_cfs,")
         lines.append("    spill_q50, spill_q90, spill_q100,")
@@ -653,7 +656,7 @@ def generate_sql_inserts(
             storage_at_spill_sql = 'NULL' if storage_at_spill is None else str(storage_at_spill)
 
             value_row = (
-                f"    ('{row['scenario_short_code']}', '{row['reservoir_code']}', {row['water_month']}, "
+                f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, {row['water_month']}, "
                 f"{row['spill_months_count']}, {row['total_months']}, {row['spill_frequency_pct']}, "
                 f"{row['spill_avg_cfs']}, {row['spill_max_cfs']}, "
                 f"{row['spill_q50']}, {row['spill_q90']}, {row['spill_q100']}, "
@@ -662,7 +665,7 @@ def generate_sql_inserts(
             value_rows.append(value_row)
 
         lines.append(",\n".join(value_rows))
-        lines.append("ON CONFLICT (scenario_short_code, reservoir_code, water_month)")
+        lines.append("ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)")
         lines.append("DO UPDATE SET")
         lines.append("    spill_months_count = EXCLUDED.spill_months_count,")
         lines.append("    total_months = EXCLUDED.total_months,")
@@ -680,7 +683,7 @@ def generate_sql_inserts(
     if period_summary:
         lines.append("-- reservoir_period_summary")
         lines.append("INSERT INTO reservoir_period_summary (")
-        lines.append("    scenario_short_code, reservoir_code,")
+        lines.append("    scenario_short_code, reservoir_entity_id,")
         lines.append("    simulation_start_year, simulation_end_year, total_years,")
         lines.append("    storage_exc_p5, storage_exc_p10, storage_exc_p25, storage_exc_p50,")
         lines.append("    storage_exc_p75, storage_exc_p90, storage_exc_p95,")
@@ -698,7 +701,7 @@ def generate_sql_inserts(
                 return 'NULL' if v is None else str(v)
 
             value_row = (
-                f"    ('{row['scenario_short_code']}', '{row['reservoir_code']}', "
+                f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, "
                 f"{row['simulation_start_year']}, {row['simulation_end_year']}, {row['total_years']}, "
                 f"{sql_val(row.get('storage_exc_p5'))}, {sql_val(row.get('storage_exc_p10'))}, "
                 f"{sql_val(row.get('storage_exc_p25'))}, {sql_val(row.get('storage_exc_p50'))}, "
@@ -714,7 +717,7 @@ def generate_sql_inserts(
             value_rows.append(value_row)
 
         lines.append(",\n".join(value_rows))
-        lines.append("ON CONFLICT (scenario_short_code, reservoir_code)")
+        lines.append("ON CONFLICT (scenario_short_code, reservoir_entity_id)")
         lines.append("DO UPDATE SET")
         lines.append("    simulation_start_year = EXCLUDED.simulation_start_year,")
         lines.append("    simulation_end_year = EXCLUDED.simulation_end_year,")

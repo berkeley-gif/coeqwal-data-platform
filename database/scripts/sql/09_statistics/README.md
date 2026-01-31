@@ -15,6 +15,8 @@ SQL scripts for creating and loading the Statistics Layer tables.
 | `reservoir_spill_monthly` | Monthly spill (flood release) statistics | ETL-generated |
 | `reservoir_period_summary` | Period-of-record spill summary metrics | ETL-generated |
 
+**Note:** All statistics tables use `reservoir_entity_id` as FK to `reservoir_entity.id`. The API accepts entity short_codes (e.g., SHSTA) not CalSim variable codes (S_SHSTA).
+
 ## Workflow
 
 ### Step 1: Upload CSVs to S3
@@ -70,11 +72,13 @@ psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
 ## Verification Queries
 
 ```sql
--- Check major reservoirs
-SELECT short_code, name, capacity_taf
-FROM reservoir_entity
-WHERE has_tiers = TRUE
-ORDER BY capacity_taf DESC;
+-- Check major reservoirs (via reservoir_group)
+SELECT re.short_code, re.name, re.capacity_taf
+FROM reservoir_entity re
+JOIN reservoir_group_member rgm ON re.id = rgm.reservoir_entity_id
+JOIN reservoir_group rg ON rgm.reservoir_group_id = rg.id
+WHERE rg.short_code = 'major'
+ORDER BY re.capacity_taf DESC;
 
 -- Check group memberships
 SELECT rg.short_code, COUNT(*) as members
@@ -90,17 +94,19 @@ JOIN reservoir_group rg ON rgm.reservoir_group_id = rg.id
 WHERE rg.short_code = 'major'
 ORDER BY rgm.display_order;
 
--- Regional aggregation (NOD vs SOD)
+-- Regional aggregation for major reservoirs (NOD vs SOD)
 SELECT
     CASE
-        WHEN hydrologic_region_id = 1 THEN 'NOD'
-        WHEN hydrologic_region_id IN (2, 4) THEN 'SOD'
+        WHEN re.hydrologic_region_id = 1 THEN 'NOD'
+        WHEN re.hydrologic_region_id IN (2, 4) THEN 'SOD'
         ELSE 'Other'
     END as region,
     COUNT(*) as reservoir_count,
-    SUM(capacity_taf) as total_capacity_taf
-FROM reservoir_entity
-WHERE has_tiers = TRUE
+    SUM(re.capacity_taf) as total_capacity_taf
+FROM reservoir_entity re
+JOIN reservoir_group_member rgm ON re.id = rgm.reservoir_entity_id
+JOIN reservoir_group rg ON rgm.reservoir_group_id = rg.id
+WHERE rg.short_code = 'major'
 GROUP BY 1;
 ```
 
@@ -124,29 +130,31 @@ python etl/statistics/calculate_reservoir_percentiles.py --scenario s0020
 | Column | Description |
 |--------|-------------|
 | `scenario_short_code` | Scenario identifier (e.g., s0020) |
-| `reservoir_code` | Reservoir variable code (e.g., S_SHSTA) |
+| `reservoir_entity_id` | FK to reservoir_entity.id |
 | `water_month` | 1-12 (Oct=1, Sep=12) |
 | `q0` | Minimum (0th percentile) |
 | `q10, q30, q50, q70, q90` | Percentile bands |
 | `q100` | Maximum (100th percentile) |
 | `mean_value` | Mean storage (% of capacity) |
 
-Note: `capacity_taf` and `dead_pool_taf` are reservoir attributes (from `reservoir_entity`), not stored in the statistics table. The API enriches responses with these values.
+Note: Statistics tables reference reservoirs via `reservoir_entity_id` FK. The API JOINs on `reservoir_entity` to return short_codes (SHSTA) and enrich responses with capacity/dead_pool.
 
 ### Percentile Verification Queries
 
 ```sql
--- Check percentile data for a scenario
-SELECT reservoir_code, water_month, q0, q50, q100, mean_value
-FROM reservoir_monthly_percentile
-WHERE scenario_short_code = 's0020'
-ORDER BY reservoir_code, water_month;
+-- Check percentile data for a scenario (with JOIN)
+SELECT re.short_code, rmp.water_month, rmp.q0, rmp.q50, rmp.q100, rmp.mean_value
+FROM reservoir_monthly_percentile rmp
+JOIN reservoir_entity re ON rmp.reservoir_entity_id = re.id
+WHERE rmp.scenario_short_code = 's0020'
+ORDER BY re.short_code, rmp.water_month;
 
 -- Monthly summary for a reservoir
-SELECT water_month, q10, q50, q90
-FROM reservoir_monthly_percentile
-WHERE scenario_short_code = 's0020' AND reservoir_code = 'S_SHSTA'
-ORDER BY water_month;
+SELECT rmp.water_month, rmp.q10, rmp.q50, rmp.q90
+FROM reservoir_monthly_percentile rmp
+JOIN reservoir_entity re ON rmp.reservoir_entity_id = re.id
+WHERE rmp.scenario_short_code = 's0020' AND re.short_code = 'SHSTA'
+ORDER BY rmp.water_month;
 ```
 
 ## New Reservoir Statistics Tables (All 92 Reservoirs)
@@ -183,7 +191,7 @@ python etl/statistics/calculate_reservoir_statistics.py --scenario s0020
 | Column | Description |
 |--------|-------------|
 | `scenario_short_code` | Scenario identifier (e.g., s0020) |
-| `reservoir_code` | Reservoir variable code (e.g., S_SHSTA) |
+| `reservoir_entity_id` | FK to reservoir_entity.id |
 | `water_month` | 1-12 (Oct=1, Sep=12) |
 | `storage_avg_taf` | Mean storage (TAF) |
 | `storage_cv` | Coefficient of variation |
@@ -194,6 +202,7 @@ python etl/statistics/calculate_reservoir_statistics.py --scenario s0020
 
 | Column | Description |
 |--------|-------------|
+| `reservoir_entity_id` | FK to reservoir_entity.id |
 | `spill_months_count` | Count of months with spill > 0 |
 | `spill_frequency_pct` | % of months with spill |
 | `spill_avg_cfs` | Mean spill when spilling (CFS) |
@@ -248,40 +257,43 @@ FROM reservoir_period_summary
 GROUP BY scenario_short_code;
 -- Expected: 92 rows per scenario
 
--- Monthly spill patterns (higher in wet months)
+-- Monthly spill patterns (higher in wet months) - JOIN on reservoir_entity
 SELECT
-    water_month,
-    AVG(spill_frequency_pct) as avg_spill_freq,
-    AVG(spill_avg_cfs) as avg_spill_mag
-FROM reservoir_spill_monthly
-WHERE scenario_short_code = 's0020'
-  AND reservoir_code IN ('S_SHSTA', 'S_OROVL', 'S_FOLSM')
-GROUP BY water_month
-ORDER BY water_month;
+    rsm.water_month,
+    AVG(rsm.spill_frequency_pct) as avg_spill_freq,
+    AVG(rsm.spill_avg_cfs) as avg_spill_mag
+FROM reservoir_spill_monthly rsm
+JOIN reservoir_entity re ON rsm.reservoir_entity_id = re.id
+WHERE rsm.scenario_short_code = 's0020'
+  AND re.short_code IN ('SHSTA', 'OROVL', 'FOLSM')
+GROUP BY rsm.water_month
+ORDER BY rsm.water_month;
 
 -- Top spill-prone reservoirs
 SELECT
-    reservoir_code,
-    spill_frequency_pct,
-    spill_peak_cfs,
-    annual_spill_avg_taf
-FROM reservoir_period_summary
-WHERE scenario_short_code = 's0020'
-ORDER BY spill_frequency_pct DESC
+    re.short_code,
+    rps.spill_frequency_pct,
+    rps.spill_peak_cfs,
+    rps.annual_spill_avg_taf
+FROM reservoir_period_summary rps
+JOIN reservoir_entity re ON rps.reservoir_entity_id = re.id
+WHERE rps.scenario_short_code = 's0020'
+ORDER BY rps.spill_frequency_pct DESC
 LIMIT 10;
 
 -- Storage exceedance curve data
 SELECT
-    reservoir_code,
-    storage_exc_p10 as "90% exceeded",
-    storage_exc_p50 as "50% exceeded",
-    storage_exc_p90 as "10% exceeded",
-    dead_pool_pct,
-    spill_threshold_pct
-FROM reservoir_period_summary
-WHERE scenario_short_code = 's0020'
-  AND reservoir_code IN ('S_SHSTA', 'S_OROVL', 'S_FOLSM')
-ORDER BY reservoir_code;
+    re.short_code,
+    rps.storage_exc_p10 as "90% exceeded",
+    rps.storage_exc_p50 as "50% exceeded",
+    rps.storage_exc_p90 as "10% exceeded",
+    rps.dead_pool_pct,
+    rps.spill_threshold_pct
+FROM reservoir_period_summary rps
+JOIN reservoir_entity re ON rps.reservoir_entity_id = re.id
+WHERE rps.scenario_short_code = 's0020'
+  AND re.short_code IN ('SHSTA', 'OROVL', 'FOLSM')
+ORDER BY re.short_code;
 ```
 
 ## Related Files
