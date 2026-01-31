@@ -362,42 +362,49 @@ def format_for_database(results: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
     """
-    Generate SQL INSERT statements with ON CONFLICT upsert.
+    Generate a single bulk INSERT statement with ON CONFLICT upsert.
 
-    Returns SQL script that can be run against the database.
+    Uses multi-row VALUES syntax for clean console output (one INSERT message).
     """
     lines = [
         "-- Generated SQL for reservoir_monthly_percentile data",
         "-- Run this script after creating the table with 03_create_reservoir_percentile_table.sql",
+        f"-- Total rows: {len(rows)}",
         "",
         "BEGIN;",
         "",
+        "INSERT INTO reservoir_monthly_percentile (",
+        "    scenario_short_code, reservoir_code, water_month,",
+        "    q0, q10, q30, q50, q70, q90, q100,",
+        "    mean_value, created_by, updated_by",
+        ") VALUES",
     ]
 
+    # Build VALUES rows
+    value_rows = []
     for row in rows:
-        sql = f"""INSERT INTO reservoir_monthly_percentile (
-    scenario_short_code, reservoir_code, water_month,
-    q0, q10, q30, q50, q70, q90, q100,
-    mean_value, created_by, updated_by
-) VALUES (
-    '{row['scenario_short_code']}',
-    '{row['reservoir_code']}',
-    {row['water_month']},
-    {row['q0']}, {row['q10']}, {row['q30']}, {row['q50']},
-    {row['q70']}, {row['q90']}, {row['q100']},
-    {row['mean_value']}, 1, 1
-) ON CONFLICT (scenario_short_code, reservoir_code, water_month)
-DO UPDATE SET
-    q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,
-    q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,
-    q100 = EXCLUDED.q100, mean_value = EXCLUDED.mean_value,
-    updated_at = NOW(), updated_by = 1;"""
-        lines.append(sql)
-        lines.append("")
+        value_row = (
+            f"    ('{row['scenario_short_code']}', '{row['reservoir_code']}', {row['water_month']}, "
+            f"{row['q0']}, {row['q10']}, {row['q30']}, {row['q50']}, "
+            f"{row['q70']}, {row['q90']}, {row['q100']}, "
+            f"{row['mean_value']}, 1, 1)"
+        )
+        value_rows.append(value_row)
 
+    # Join with commas, last row gets no comma
+    lines.append(",\n".join(value_rows))
+
+    # ON CONFLICT clause
+    lines.append("ON CONFLICT (scenario_short_code, reservoir_code, water_month)")
+    lines.append("DO UPDATE SET")
+    lines.append("    q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,")
+    lines.append("    q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,")
+    lines.append("    q100 = EXCLUDED.q100, mean_value = EXCLUDED.mean_value,")
+    lines.append("    updated_at = NOW(), updated_by = 1;")
+    lines.append("")
     lines.append("COMMIT;")
     lines.append("")
-    lines.append(f"-- Total rows: {len(rows)}")
+    lines.append(f"\\echo 'Loaded {len(rows)} rows into reservoir_monthly_percentile'")
 
     return "\n".join(lines)
 
