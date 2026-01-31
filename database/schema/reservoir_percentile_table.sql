@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS reservoir_monthly_percentile (
     -- Additional statistics
     mean_value NUMERIC(6,2),
 
-    -- Reference data
-    max_capacity_taf NUMERIC(10,2),           -- reservoir capacity in TAF
+    -- Note: max_capacity_taf is NOT stored here - it's an entity attribute
+    -- from reservoir_entity. The API enriches responses with capacity data.
 
     -- Audit fields (matching ERD standard)
     is_active BOOLEAN DEFAULT TRUE,

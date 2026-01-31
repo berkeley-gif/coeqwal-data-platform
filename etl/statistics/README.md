@@ -145,32 +145,11 @@ s3://coeqwal-model-run/
             └── {scenario_id}_coeqwal_calsim_output.csv
 ```
 
-## API Endpoints
+## API
 
-After loading data, these endpoints become available:
+After loading data, the statistics endpoints are available under `/api/statistics/`.
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/statistics/scenarios/{scenario}/reservoirs/{reservoir}/percentiles` | Single reservoir percentiles |
-| `GET /api/statistics/scenarios/{scenario}/reservoir-percentiles` | All reservoirs for scenario |
-| `GET /api/statistics/reservoirs` | List available reservoirs |
-| `GET /api/statistics/scenarios` | List scenarios with data |
-
-Example response:
-```json
-{
-  "reservoir_id": "S_SHSTA",
-  "reservoir_name": "Shasta",
-  "scenario_id": "s0020",
-  "unit": "percent_capacity",
-  "max_capacity_taf": 4552.0,
-  "monthly_percentiles": {
-    "1": {"q10": 25.9, "q20": 48.54, ..., "mean": 57.73},
-    "2": {"q10": 23.84, ...},
-    ...
-  }
-}
-```
+See interactive documentation: https://api.coeqwal.org/docs
 
 ## Database Schema
 
@@ -198,21 +177,6 @@ CREATE TABLE reservoir_monthly_percentile (
 ```
 
 See: `database/schema/reservoir_percentile_table.sql`
-
-## Frontend Visualization
-
-The percentile data enables band charts showing storage distribution:
-
-```
-     100% ┌─────────────────────────────┐
-          │    ░░░░░░░░░░░░░░░░░░░░░░░  │  ← q10-q90 band (lightest)
-          │      ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒    │  ← q20-q80 band
-          │        ▓▓▓▓▓▓▓▓▓▓▓▓▓▓      │  ← q30-q70 band
-          │          ████████████      │  ← q40-q60 band (darkest)
-          │          ────────────      │  ← q50 median line
-       0% └─────────────────────────────┘
-           Oct Nov Dec Jan Feb Mar Apr May Jun Jul Aug Sep
-```
 
 ## Troubleshooting
 
