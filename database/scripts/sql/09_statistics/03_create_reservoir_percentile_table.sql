@@ -191,6 +191,3 @@ ORDER BY ordinal_position;
 \echo 'RESERVOIR_MONTHLY_PERCENTILE TABLE CREATED SUCCESSFULLY'
 \echo '============================================================================'
 \echo ''
-\echo 'Next step: Run ETL script to calculate and load percentile data'
-\echo '  python etl/statistics/calculate_reservoir_percentiles.py --scenario s0020'
-\echo ''

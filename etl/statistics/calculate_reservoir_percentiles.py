@@ -59,7 +59,12 @@ S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 
 
 def load_scenario_csv_from_s3(scenario_id: str) -> pd.DataFrame:
-    """Load scenario CSV from S3 bucket."""
+    """
+    Load scenario CSV from S3 bucket.
+
+    Memory optimization: Only loads the columns we need (DateTime + 8 reservoir columns)
+    instead of the entire 10,000+ column CSV.
+    """
     if not HAS_BOTO3:
         raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
 
@@ -77,9 +82,44 @@ def load_scenario_csv_from_s3(scenario_id: str) -> pd.DataFrame:
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            df = pd.read_csv(response['Body'], header=None)
+
+            # First, read just the header rows to find column indices
+            # Read small chunk to get column names from row 1 (b row)
+            log.info("Reading header rows to identify column indices...")
+            header_df = pd.read_csv(
+                response['Body'],
+                header=None,
+                nrows=8  # Just header rows
+            )
+
+            # Variable names are in row 1 (the 'b' row)
+            col_names = header_df.iloc[1].tolist()
+
+            # Find indices of columns we need: DateTime (col 0) + reservoir columns
+            cols_to_load = [0]  # DateTime column
+            reservoir_col_indices = {}
+            for i, name in enumerate(col_names):
+                if i == 0:
+                    continue
+                name_str = str(name).strip()
+                if name_str in RESERVOIR_CAPACITIES:
+                    cols_to_load.append(i)
+                    reservoir_col_indices[name_str] = i
+                    log.info(f"Found {name_str} at column {i}")
+
+            log.info(f"Loading only {len(cols_to_load)} columns instead of {len(col_names)}")
+
+            # Re-fetch the file and read only needed columns
+            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+            df = pd.read_csv(
+                response['Body'],
+                header=None,
+                usecols=cols_to_load
+            )
             log.info(f"Successfully loaded from: {key}")
+            log.info(f"DataFrame shape: {df.shape}")
             return df
+
         except s3.exceptions.NoSuchKey:
             continue
         except Exception as e:
