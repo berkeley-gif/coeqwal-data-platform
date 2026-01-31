@@ -42,6 +42,10 @@ pip-wheel-metadata/
 !.env.example  # Keep a template
 
 # Local data and processing directories
+/CalSim3_schematic
+/data
+
+
 # Allow specific CSV directory from CalSim report
 !/data/raw/csv_from_CalSim_report_pdf/
 !/data/raw/csv_from_CalSim_report_pdf/**

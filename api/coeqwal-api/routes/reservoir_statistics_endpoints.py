@@ -49,17 +49,13 @@ WATER_MONTH_NAMES = {
 
 class MonthlyPercentiles(BaseModel):
     """Percentile data for a single water month"""
-    q10: float = Field(..., description="10th percentile (% of capacity)")
-    q20: float = Field(..., description="20th percentile")
+    q0: float = Field(..., description="0th percentile - minimum (% of capacity)")
+    q10: float = Field(..., description="10th percentile")
     q30: float = Field(..., description="30th percentile")
-    q40: float = Field(..., description="40th percentile")
     q50: float = Field(..., description="50th percentile (median)")
-    q60: float = Field(..., description="60th percentile")
     q70: float = Field(..., description="70th percentile")
-    q80: float = Field(..., description="80th percentile")
     q90: float = Field(..., description="90th percentile")
-    min: float = Field(..., description="Minimum value")
-    max: float = Field(..., description="Maximum value")
+    q100: float = Field(..., description="100th percentile - maximum")
     mean: float = Field(..., description="Mean value")
 
 
@@ -131,10 +127,10 @@ async def get_reservoir_percentiles(
       "unit": "percent_capacity",
       "max_capacity_taf": 4552.0,
       "monthly_percentiles": {
-        "1": {"q10": 45.2, "q20": 52.1, ..., "mean": 65.3},
-        "2": {"q10": 48.1, ...},
+        "1": {"q0": 32.1, "q10": 45.2, "q30": 58.7, "q50": 70.1, "q70": 81.2, "q90": 91.3, "q100": 98.5, "mean": 68.4},
+        "2": {"q0": 35.2, "q10": 48.1, ...},
         ...
-        "12": {"q10": 42.8, ...}
+        "12": {"q0": 30.5, ...}
       }
     }
     ```
@@ -143,8 +139,9 @@ async def get_reservoir_percentiles(
 
     **Band chart rendering:**
     - Outer band: q10 to q90 (lightest color)
-    - Inner bands: q20-q80, q30-q70, q40-q60 (progressively darker)
+    - Inner bands: q30-q70 (darker)
     - Center line: q50 (median)
+    - Full range: q0 (min) to q100 (max) available for tooltips
     """
     if reservoir_id not in RESERVOIR_NAMES:
         valid_ids = ', '.join(sorted(RESERVOIR_NAMES.keys()))
@@ -156,8 +153,8 @@ async def get_reservoir_percentiles(
     try:
         query = """
         SELECT
-            water_month, q10, q20, q30, q40, q50, q60, q70, q80, q90,
-            min_value, max_value, mean_value, max_capacity_taf
+            water_month, q0, q10, q30, q50, q70, q90, q100,
+            mean_value, max_capacity_taf
         FROM reservoir_monthly_percentile
         WHERE scenario_short_code = $1 AND reservoir_code = $2
         ORDER BY water_month
@@ -173,17 +170,13 @@ async def get_reservoir_percentiles(
         monthly = {}
         for row in rows:
             monthly[row['water_month']] = {
+                'q0': float(row['q0']) if row['q0'] else 0.0,
                 'q10': float(row['q10']) if row['q10'] else 0.0,
-                'q20': float(row['q20']) if row['q20'] else 0.0,
                 'q30': float(row['q30']) if row['q30'] else 0.0,
-                'q40': float(row['q40']) if row['q40'] else 0.0,
                 'q50': float(row['q50']) if row['q50'] else 0.0,
-                'q60': float(row['q60']) if row['q60'] else 0.0,
                 'q70': float(row['q70']) if row['q70'] else 0.0,
-                'q80': float(row['q80']) if row['q80'] else 0.0,
                 'q90': float(row['q90']) if row['q90'] else 0.0,
-                'min': float(row['min_value']) if row['min_value'] else 0.0,
-                'max': float(row['max_value']) if row['max_value'] else 0.0,
+                'q100': float(row['q100']) if row['q100'] else 0.0,
                 'mean': float(row['mean_value']) if row['mean_value'] else 0.0,
             }
 
@@ -227,7 +220,7 @@ async def get_all_reservoir_percentiles(
           "name": "Shasta",
           "max_capacity_taf": 4552.0,
           "monthly_percentiles": {
-            "1": {"q10": 45.2, "q20": 52.1, ..., "mean": 65.3},
+            "1": {"q0": 32.1, "q10": 45.2, "q30": 58.7, "q50": 70.1, "q70": 81.2, "q90": 91.3, "q100": 98.5, "mean": 68.4},
             ...
           }
         },
@@ -241,8 +234,8 @@ async def get_all_reservoir_percentiles(
         query = """
         SELECT
             reservoir_code, water_month,
-            q10, q20, q30, q40, q50, q60, q70, q80, q90,
-            min_value, max_value, mean_value, max_capacity_taf
+            q0, q10, q30, q50, q70, q90, q100,
+            mean_value, max_capacity_taf
         FROM reservoir_monthly_percentile
         WHERE scenario_short_code = $1
         ORDER BY reservoir_code, water_month
@@ -267,17 +260,13 @@ async def get_all_reservoir_percentiles(
                 }
 
             reservoirs[res_code]['monthly_percentiles'][row['water_month']] = {
+                'q0': float(row['q0']) if row['q0'] else 0.0,
                 'q10': float(row['q10']) if row['q10'] else 0.0,
-                'q20': float(row['q20']) if row['q20'] else 0.0,
                 'q30': float(row['q30']) if row['q30'] else 0.0,
-                'q40': float(row['q40']) if row['q40'] else 0.0,
                 'q50': float(row['q50']) if row['q50'] else 0.0,
-                'q60': float(row['q60']) if row['q60'] else 0.0,
                 'q70': float(row['q70']) if row['q70'] else 0.0,
-                'q80': float(row['q80']) if row['q80'] else 0.0,
                 'q90': float(row['q90']) if row['q90'] else 0.0,
-                'min': float(row['min_value']) if row['min_value'] else 0.0,
-                'max': float(row['max_value']) if row['max_value'] else 0.0,
+                'q100': float(row['q100']) if row['q100'] else 0.0,
                 'mean': float(row['mean_value']) if row['mean_value'] else 0.0,
             }
 

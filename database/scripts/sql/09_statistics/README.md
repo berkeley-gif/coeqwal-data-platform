@@ -9,6 +9,7 @@ SQL scripts for creating and loading the Statistics Layer tables.
 | `reservoir_entity` | 92 reservoirs with capacity, location, attributes | `04_calsim_data/reservoir_entity.csv` |
 | `reservoir_group` | Group definitions (major, cvp, swp, tier) | `04_calsim_data/reservoir_group.csv` |
 | `reservoir_group_member` | Reservoir-to-group memberships | `04_calsim_data/reservoir_group_member.csv` |
+| `reservoir_monthly_percentile` | Monthly percentile statistics for reservoir storage | ETL-generated |
 
 ## Workflow
 
@@ -99,8 +100,55 @@ WHERE has_tiers = TRUE
 GROUP BY 1;
 ```
 
+## Reservoir Percentile Table
+
+### Step 4: Create Percentile Table
+
+```bash
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
+    -f database/scripts/sql/09_statistics/03_create_reservoir_percentile_table.sql
+```
+
+### Step 5: Load Percentile Data (via ETL)
+
+```bash
+python etl/statistics/calculate_reservoir_percentiles.py --scenario s0020
+```
+
+### Percentile Table Structure
+
+| Column | Description |
+|--------|-------------|
+| `scenario_short_code` | Scenario identifier (e.g., s0020) |
+| `reservoir_code` | Reservoir variable code (e.g., S_SHSTA) |
+| `water_month` | 1-12 (Oct=1, Sep=12) |
+| `q0` | Minimum (0th percentile) |
+| `q10, q30, q50, q70, q90` | Percentile bands |
+| `q100` | Maximum (100th percentile) |
+| `mean_value` | Mean storage (% of capacity) |
+| `max_capacity_taf` | Reservoir capacity in TAF |
+
+### Percentile Verification Queries
+
+```sql
+-- Check percentile data for a scenario
+SELECT reservoir_code, water_month, q0, q50, q100, mean_value
+FROM reservoir_monthly_percentile
+WHERE scenario_short_code = 's0020'
+ORDER BY reservoir_code, water_month;
+
+-- Monthly summary for a reservoir
+SELECT water_month, q10, q50, q90
+FROM reservoir_monthly_percentile
+WHERE scenario_short_code = 's0020' AND reservoir_code = 'S_SHSTA'
+ORDER BY water_month;
+```
+
 ## Related Files
 
 - ERD: `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` (09_STATISTICS LAYER + ENTITY LAYER)
+- Schema: `database/schema/reservoir_percentile_table.sql`
+- ETL: `etl/statistics/calculate_reservoir_percentiles.py`
+- API: `api/coeqwal-api/routes/reservoir_statistics_endpoints.py`
 - Seed CSVs: `database/seed_tables/04_calsim_data/`
 - S3 Bucket: `coeqwal-seeds-dev`
