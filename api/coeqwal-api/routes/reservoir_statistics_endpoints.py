@@ -35,6 +35,19 @@ RESERVOIR_NAMES = {
     'S_SLUIS_SWP': 'San Luis (SWP)',
 }
 
+# Reservoir attributes (from reservoir_entity table)
+# capacity_taf and dead_pool_taf are static properties, not stored in statistics table
+RESERVOIR_ATTRIBUTES = {
+    'S_SHSTA': {'capacity_taf': 4552.0, 'dead_pool_taf': 115.0},
+    'S_TRNTY': {'capacity_taf': 2448.0, 'dead_pool_taf': 105.0},
+    'S_OROVL': {'capacity_taf': 3537.0, 'dead_pool_taf': 850.0},
+    'S_FOLSM': {'capacity_taf': 975.0, 'dead_pool_taf': 115.0},
+    'S_MELON': {'capacity_taf': 2400.0, 'dead_pool_taf': 300.0},
+    'S_MLRTN': {'capacity_taf': 520.0, 'dead_pool_taf': 115.0},
+    'S_SLUIS_CVP': {'capacity_taf': 1062.0, 'dead_pool_taf': 15.0},
+    'S_SLUIS_SWP': {'capacity_taf': 979.0, 'dead_pool_taf': 10.0},
+}
+
 WATER_MONTH_NAMES = {
     1: 'October', 2: 'November', 3: 'December',
     4: 'January', 5: 'February', 6: 'March',
@@ -125,7 +138,8 @@ async def get_reservoir_percentiles(
       "reservoir_name": "Shasta",
       "scenario_id": "s0020",
       "unit": "percent_capacity",
-      "max_capacity_taf": 4552.0,
+      "capacity_taf": 4552.0,
+      "dead_pool_taf": 115.0,
       "monthly_percentiles": {
         "1": {"q0": 32.1, "q10": 45.2, "q30": 58.7, "q50": 70.1, "q70": 81.2, "q90": 91.3, "q100": 98.5, "mean": 68.4},
         "2": {"q0": 35.2, "q10": 48.1, ...},
@@ -154,7 +168,7 @@ async def get_reservoir_percentiles(
         query = """
         SELECT
             water_month, q0, q10, q30, q50, q70, q90, q100,
-            mean_value, max_capacity_taf
+            mean_value
         FROM reservoir_monthly_percentile
         WHERE scenario_short_code = $1 AND reservoir_code = $2
         ORDER BY water_month
@@ -180,12 +194,14 @@ async def get_reservoir_percentiles(
                 'mean': float(row['mean_value']) if row['mean_value'] else 0.0,
             }
 
+        attrs = RESERVOIR_ATTRIBUTES[reservoir_id]
         return {
             'reservoir_id': reservoir_id,
             'reservoir_name': RESERVOIR_NAMES[reservoir_id],
             'scenario_id': scenario_id,
             'unit': 'percent_capacity',
-            'max_capacity_taf': float(rows[0]['max_capacity_taf']),
+            'capacity_taf': attrs['capacity_taf'],
+            'dead_pool_taf': attrs['dead_pool_taf'],
             'monthly_percentiles': monthly
         }
 
@@ -218,7 +234,8 @@ async def get_all_reservoir_percentiles(
       "reservoirs": {
         "S_SHSTA": {
           "name": "Shasta",
-          "max_capacity_taf": 4552.0,
+          "capacity_taf": 4552.0,
+          "dead_pool_taf": 115.0,
           "monthly_percentiles": {
             "1": {"q0": 32.1, "q10": 45.2, "q30": 58.7, "q50": 70.1, "q70": 81.2, "q90": 91.3, "q100": 98.5, "mean": 68.4},
             ...
@@ -235,7 +252,7 @@ async def get_all_reservoir_percentiles(
         SELECT
             reservoir_code, water_month,
             q0, q10, q30, q50, q70, q90, q100,
-            mean_value, max_capacity_taf
+            mean_value
         FROM reservoir_monthly_percentile
         WHERE scenario_short_code = $1
         ORDER BY reservoir_code, water_month
@@ -253,9 +270,11 @@ async def get_all_reservoir_percentiles(
             res_code = row['reservoir_code']
 
             if res_code not in reservoirs:
+                attrs = RESERVOIR_ATTRIBUTES.get(res_code, {})
                 reservoirs[res_code] = {
                     'name': RESERVOIR_NAMES.get(res_code, res_code),
-                    'max_capacity_taf': float(row['max_capacity_taf']),
+                    'capacity_taf': attrs.get('capacity_taf', 0.0),
+                    'dead_pool_taf': attrs.get('dead_pool_taf', 0.0),
                     'monthly_percentiles': {}
                 }
 

@@ -335,6 +335,7 @@ def format_for_database(results: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     Returns list of dicts matching reservoir_monthly_percentile table columns.
     Table uses q0 (min), q10, q30, q50 (median), q70, q90, q100 (max).
+    Note: max_capacity_taf is an entity attribute, not stored in statistics table.
     """
     rows = []
     scenario_id = results['scenario_id']
@@ -353,7 +354,6 @@ def format_for_database(results: Dict[str, Any]) -> List[Dict[str, Any]]:
                 'q90': stats.get('q90'),
                 'q100': stats.get('q100'),  # maximum
                 'mean_value': stats.get('mean'),
-                'max_capacity_taf': res_data['capacity_taf'],
             }
             rows.append(row)
 
@@ -378,20 +378,19 @@ def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
         sql = f"""INSERT INTO reservoir_monthly_percentile (
     scenario_short_code, reservoir_code, water_month,
     q0, q10, q30, q50, q70, q90, q100,
-    mean_value, max_capacity_taf, created_by, updated_by
+    mean_value, created_by, updated_by
 ) VALUES (
     '{row['scenario_short_code']}',
     '{row['reservoir_code']}',
     {row['water_month']},
     {row['q0']}, {row['q10']}, {row['q30']}, {row['q50']},
     {row['q70']}, {row['q90']}, {row['q100']},
-    {row['mean_value']}, {row['max_capacity_taf']}, 1, 1
+    {row['mean_value']}, 1, 1
 ) ON CONFLICT (scenario_short_code, reservoir_code, water_month)
 DO UPDATE SET
     q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,
     q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,
     q100 = EXCLUDED.q100, mean_value = EXCLUDED.mean_value,
-    max_capacity_taf = EXCLUDED.max_capacity_taf,
     updated_at = NOW(), updated_by = 1;"""
         lines.append(sql)
         lines.append("")

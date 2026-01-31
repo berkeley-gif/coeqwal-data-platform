@@ -38,9 +38,6 @@ CREATE TABLE reservoir_monthly_percentile (
     -- Additional statistics
     mean_value NUMERIC(6,2),
 
-    -- Reference data
-    max_capacity_taf NUMERIC(10,2),           -- reservoir capacity in TAF
-
     -- Audit fields (matching ERD standard)
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -103,9 +100,6 @@ COMMENT ON COLUMN reservoir_monthly_percentile.q100 IS
 COMMENT ON COLUMN reservoir_monthly_percentile.mean_value IS
     'Mean storage as percent of reservoir capacity';
 
-COMMENT ON COLUMN reservoir_monthly_percentile.max_capacity_taf IS
-    'Reservoir maximum capacity in thousand acre-feet (TAF), from reservoir_entity';
-
 \echo 'Added comments'
 
 -- ============================================================================
@@ -123,7 +117,6 @@ CREATE OR REPLACE FUNCTION upsert_reservoir_percentile(
     p_q90 NUMERIC(6,2),
     p_q100 NUMERIC(6,2),
     p_mean_value NUMERIC(6,2),
-    p_max_capacity_taf NUMERIC(10,2),
     p_updated_by INTEGER DEFAULT 1
 ) RETURNS INTEGER AS $$
 DECLARE
@@ -132,12 +125,12 @@ BEGIN
     INSERT INTO reservoir_monthly_percentile (
         scenario_short_code, reservoir_code, water_month,
         q0, q10, q30, q50, q70, q90, q100,
-        mean_value, max_capacity_taf,
+        mean_value,
         is_active, created_by, updated_by
     ) VALUES (
         p_scenario_short_code, p_reservoir_code, p_water_month,
         p_q0, p_q10, p_q30, p_q50, p_q70, p_q90, p_q100,
-        p_mean_value, p_max_capacity_taf,
+        p_mean_value,
         TRUE, p_updated_by, p_updated_by
     )
     ON CONFLICT (scenario_short_code, reservoir_code, water_month)
@@ -150,7 +143,6 @@ BEGIN
         q90 = EXCLUDED.q90,
         q100 = EXCLUDED.q100,
         mean_value = EXCLUDED.mean_value,
-        max_capacity_taf = EXCLUDED.max_capacity_taf,
         is_active = TRUE,
         updated_at = NOW(),
         updated_by = p_updated_by

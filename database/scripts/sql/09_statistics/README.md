@@ -126,7 +126,8 @@ python etl/statistics/calculate_reservoir_percentiles.py --scenario s0020
 | `q10, q30, q50, q70, q90` | Percentile bands |
 | `q100` | Maximum (100th percentile) |
 | `mean_value` | Mean storage (% of capacity) |
-| `max_capacity_taf` | Reservoir capacity in TAF |
+
+Note: `capacity_taf` and `dead_pool_taf` are reservoir attributes (from `reservoir_entity`), not stored in the statistics table. The API enriches responses with these values.
 
 ### Percentile Verification Queries
 
