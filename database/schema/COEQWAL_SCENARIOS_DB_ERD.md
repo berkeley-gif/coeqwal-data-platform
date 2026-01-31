@@ -38,7 +38,11 @@
 ├── Outcome categories (types of outcomes being measured)
 ├── Outcome statistics (types of statistics per category)
 ├── Variable prefixes (S_, C_, I_, E_, D_, etc.)
+├── Reservoir variables (CalSim storage/release variables linked to entities)
 ├── Reservoir monthly percentiles (storage distribution by water month)
+├── Reservoir storage monthly (storage statistics for all 92 reservoirs)
+├── Reservoir spill monthly (spill/flood release statistics)
+├── Reservoir period summary (period-of-record spill metrics)
 └── Purpose: pre-calculated statistics for frontend visualization
 
 10_TIER LAYER
@@ -942,6 +946,270 @@ Frontend Use:
 
 Source: CalSim scenario CSV from S3 (s3://coeqwal-model-run/scenario/{id}/csv/)
 ETL: etl/statistics/calculate_reservoir_percentiles.py
+```
+
+### **5. reservoir_variable (CalSim variables linked to reservoirs)**
+
+```
+Table: reservoir_variable
+├── id                    SERIAL PRIMARY KEY
+├── calsim_id             TEXT NOT NULL              -- "S_SHSTA", "C_SHSTA", "C_SHSTA_FLOOD", etc.
+├── name                  TEXT NOT NULL              -- "Shasta Storage", "Shasta Total Release", etc.
+├── description           TEXT                       -- Detailed description
+├── reservoir_entity_id   INTEGER                    -- FK → reservoir_entity.id (NULL for aggregates)
+├── variable_type         TEXT NOT NULL              -- "storage", "storage_level", "release_total", "release_normal", "release_flood"
+├── is_aggregate          BOOLEAN DEFAULT FALSE      -- TRUE for composite variables
+├── aggregated_variable_ids INTEGER[]                -- IDs of component variables if aggregate
+├── trigger_threshold     NUMERIC                    -- Threshold for alerts/triggers
+├── unit_id               INTEGER NOT NULL           -- FK → unit.id (1=TAF, 2=CFS)
+├── temporal_scale_id     INTEGER NOT NULL           -- FK → temporal_scale.id (3=monthly)
+├── variable_version_id   INTEGER NOT NULL           -- FK → version.id (variable family)
+├── variable_id           UUID UNIQUE NOT NULL       -- External system identifier
+├── source_ids            INTEGER[]                  -- FK array → data_source.id
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Variable Types:
+├── storage: S_{code} - Reservoir storage volume (TAF)
+├── storage_level: S_{code}LEVEL* - Storage zone decision variables (TAF)
+├── release_total: C_{code} - Total release from reservoir (CFS)
+├── release_normal: C_{code}_NCF - Normal controlled release ≤ release capacity (CFS)
+└── release_flood: C_{code}_FLOOD - Flood spill above release capacity (CFS)
+
+CalSim Release Logic (from constraints-FloodSpill.wresl):
+├── C_{code}_NCF + C_{code}_FLOOD = C_{code} (total release equation)
+├── Normal release ≤ RelCap (release capacity, function of storage)
+└── Flood spill is penalized heavily in optimization (-900000 weight)
+
+Foreign keys:
+├── Ref: reservoir_variable.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
+├── Ref: reservoir_variable.unit_id > unit.id [delete: restrict, update: cascade]
+├── Ref: reservoir_variable.temporal_scale_id > temporal_scale.id [delete: restrict, update: cascade]
+├── Ref: reservoir_variable.variable_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: reservoir_variable.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: reservoir_variable.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── reservoir_variable_pkey (id)
+├── idx_reservoir_variable_calsim_id (calsim_id)
+├── idx_reservoir_variable_entity (reservoir_entity_id)
+├── idx_reservoir_variable_type (variable_type)
+└── idx_reservoir_variable_uuid (variable_id)
+
+Expected Records: ~466 rows
+├── storage: ~100 rows (92 base + variants like DELTA, EBMUD)
+├── storage_level: ~90 rows (level decision variables)
+├── release_total: 92 rows (one per reservoir)
+├── release_normal: 92 rows (one per reservoir)
+└── release_flood: 92 rows (one per reservoir)
+
+Seed CSV: database/seed_tables/04_calsim_data/reservoir_variable.csv
+```
+
+### **6. reservoir_storage_monthly (monthly storage statistics)**
+
+```
+Table: reservoir_storage_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier (s0020, etc.)
+├── reservoir_code        VARCHAR(20) NOT NULL       -- S_SHSTA, S_OROVL, etc.
+├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Sep=12)
+│
+├── -- Storage statistics (TAF)
+├── storage_avg_taf       NUMERIC(10,2)              -- Mean storage
+├── storage_cv            NUMERIC(6,4)               -- Coefficient of variation
+├── storage_pct_capacity  NUMERIC(6,2)               -- Mean as % of capacity
+│
+├── -- Storage percentiles (% of capacity)
+├── q0                    NUMERIC(6,2)               -- min (0th percentile)
+├── q10                   NUMERIC(6,2)
+├── q30                   NUMERIC(6,2)
+├── q50                   NUMERIC(6,2)               -- median
+├── q70                   NUMERIC(6,2)
+├── q90                   NUMERIC(6,2)
+├── q100                  NUMERIC(6,2)               -- max
+│
+├── -- Metadata
+├── capacity_taf          NUMERIC(10,2)              -- Denormalized for convenience
+├── sample_count          INTEGER                    -- Number of months in sample
+│
+├── -- Audit fields (ERD standard)
+├── is_active             BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Indexes:
+├── reservoir_storage_monthly_pkey (id)
+├── uq_storage_monthly (scenario_short_code, reservoir_code, water_month)
+├── idx_storage_monthly_scenario (scenario_short_code)
+├── idx_storage_monthly_reservoir (reservoir_code)
+├── idx_storage_monthly_combined (scenario_short_code, reservoir_code)
+└── idx_storage_monthly_active (is_active) WHERE is_active = TRUE
+
+Constraints:
+├── water_month CHECK (water_month BETWEEN 1 AND 12)
+└── Unique: (scenario_short_code, reservoir_code, water_month)
+
+Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
+
+DDL: database/scripts/sql/09_statistics/04_create_reservoir_storage_monthly.sql
+ETL: etl/statistics/calculate_reservoir_statistics.py
+```
+
+### **7. reservoir_spill_monthly (monthly spill statistics)**
+
+```
+Table: reservoir_spill_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier
+├── reservoir_code        VARCHAR(20) NOT NULL       -- S_SHSTA, S_OROVL, etc.
+├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Sep=12)
+│
+├── -- Spill frequency this month
+├── spill_months_count    INTEGER                    -- Count of months with spill > 0
+├── total_months          INTEGER                    -- Total months in sample
+├── spill_frequency_pct   NUMERIC(5,2)               -- % of months with spill
+│
+├── -- Spill magnitude when spilling (CFS)
+├── spill_avg_cfs         NUMERIC(10,2)              -- Mean spill when > 0
+├── spill_max_cfs         NUMERIC(10,2)              -- Max spill this month
+│
+├── -- Spill exceedance percentiles (CFS) - of non-zero values
+├── spill_q50             NUMERIC(10,2)              -- Median when spilling
+├── spill_q90             NUMERIC(10,2)              -- 90th percentile
+├── spill_q100            NUMERIC(10,2)              -- Max (same as spill_max_cfs)
+│
+├── -- Storage threshold for spill context
+├── storage_at_spill_avg_pct NUMERIC(6,2)            -- Avg storage % when spilling
+│
+├── -- Audit fields (ERD standard)
+├── is_active             BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Note: Spill = C_*_FLOOD variable (flood release above release capacity)
+From constraints-FloodSpill.wresl: C_{res}_NCF + C_{res}_Flood = C_{res}
+
+Indexes:
+├── reservoir_spill_monthly_pkey (id)
+├── uq_spill_monthly (scenario_short_code, reservoir_code, water_month)
+├── idx_spill_monthly_scenario (scenario_short_code)
+├── idx_spill_monthly_reservoir (reservoir_code)
+├── idx_spill_monthly_combined (scenario_short_code, reservoir_code)
+├── idx_spill_monthly_frequency (spill_frequency_pct DESC)
+└── idx_spill_monthly_active (is_active) WHERE is_active = TRUE
+
+Constraints:
+├── water_month CHECK (water_month BETWEEN 1 AND 12)
+└── Unique: (scenario_short_code, reservoir_code, water_month)
+
+Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
+
+DDL: database/scripts/sql/09_statistics/05_create_reservoir_spill_monthly.sql
+ETL: etl/statistics/calculate_reservoir_statistics.py
+```
+
+### **8. reservoir_period_summary (period-of-record summary)**
+
+```
+Table: reservoir_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier
+├── reservoir_code        VARCHAR(20) NOT NULL       -- S_SHSTA, S_OROVL, etc.
+│
+├── -- Simulation period
+├── simulation_start_year INTEGER NOT NULL           -- First water year
+├── simulation_end_year   INTEGER NOT NULL           -- Last water year
+├── total_years           INTEGER NOT NULL           -- Number of years
+│
+├── -- Storage exceedance (% capacity exceeded X% of time) - for full exceedance curves
+├── storage_exc_p5        NUMERIC(6,2)               -- Exceeded 95% of time (5th percentile)
+├── storage_exc_p10       NUMERIC(6,2)               -- Exceeded 90% of time
+├── storage_exc_p25       NUMERIC(6,2)               -- Exceeded 75% of time
+├── storage_exc_p50       NUMERIC(6,2)               -- Exceeded 50% of time (median)
+├── storage_exc_p75       NUMERIC(6,2)               -- Exceeded 25% of time
+├── storage_exc_p90       NUMERIC(6,2)               -- Exceeded 10% of time
+├── storage_exc_p95       NUMERIC(6,2)               -- Exceeded 5% of time (95th percentile)
+│
+├── -- Threshold markers (for horizontal lines on charts)
+├── dead_pool_taf         NUMERIC(10,2)              -- Dead pool volume (from reservoir_entity)
+├── dead_pool_pct         NUMERIC(6,2)               -- Dead pool as % of capacity
+├── spill_threshold_pct   NUMERIC(6,2)               -- Avg storage % when spill begins
+│
+├── -- Annual spill frequency
+├── spill_years_count     INTEGER                    -- Years with any spill
+├── spill_frequency_pct   NUMERIC(5,2)               -- % of years with spill
+│
+├── -- Spill magnitude summary (CFS)
+├── spill_mean_cfs        NUMERIC(10,2)              -- Mean when spilling (all events)
+├── spill_peak_cfs        NUMERIC(10,2)              -- Maximum ever observed
+│
+├── -- Annual spill volume (TAF)
+├── annual_spill_avg_taf  NUMERIC(10,2)              -- Mean annual volume
+├── annual_spill_cv       NUMERIC(6,4)               -- CV of annual volume
+├── annual_spill_max_taf  NUMERIC(10,2)              -- Max annual volume
+│
+├── -- Annual max spill distribution (worst event each year)
+├── annual_max_spill_q50  NUMERIC(10,2)              -- Median of annual peaks
+├── annual_max_spill_q90  NUMERIC(10,2)              -- 90th percentile of annual peaks
+├── annual_max_spill_q100 NUMERIC(10,2)              -- Max (same as spill_peak_cfs)
+│
+├── -- Metadata
+├── capacity_taf          NUMERIC(10,2)              -- Denormalized for convenience
+│
+├── -- Audit fields (ERD standard)
+├── is_active             BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Storage Exceedance Interpretation:
+├── storage_exc_p10 = 60% means "90% of the time, storage ≥ 60% of capacity"
+├── storage_exc_p50 = 75% means "50% of the time, storage ≥ 75% of capacity"
+└── storage_exc_p90 = 95% means "10% of the time, storage ≥ 95% of capacity"
+
+Threshold Markers for Charts:
+├── dead_pool_pct: horizontal line at bottom (physical minimum)
+├── spill_threshold_pct: horizontal line near top (where spill typically begins)
+└── Example chart with thresholds:
+    100% ─┬────────────────── Capacity
+          │    ╱╲
+      90% │   ╱  ╲   ← spill_threshold_pct
+          │  ╱    ╲
+      50% │ ╱      ╲  ← Percentile bands
+          │╱        ╲
+      10% ├──────────── dead_pool_pct
+          │
+       0% ─┴──────────────────
+
+Use Cases:
+├── Spill risk assessment: spill_frequency_pct shows probability of annual spill
+├── Infrastructure planning: annual_max_spill_q90 indicates 90th percentile worst case
+├── Climate comparison: compare spill patterns across scenarios
+├── Volume impacts: annual_spill_avg_taf quantifies water "lost" to spill
+├── Exceedance curves: storage_exc_* enables full period storage duration curves
+└── Chart thresholds: dead_pool_pct and spill_threshold_pct for visual markers
+
+Indexes:
+├── reservoir_period_summary_pkey (id)
+├── uq_period_summary (scenario_short_code, reservoir_code)
+├── idx_period_summary_scenario (scenario_short_code)
+├── idx_period_summary_reservoir (reservoir_code)
+├── idx_period_summary_spill_freq (spill_frequency_pct DESC)
+└── idx_period_summary_active (is_active) WHERE is_active = TRUE
+
+Constraints:
+└── Unique: (scenario_short_code, reservoir_code)
+
+Expected Records: 736 rows (92 reservoirs × 8 scenarios)
+
+DDL: database/scripts/sql/09_statistics/06_create_reservoir_period_summary.sql
+ETL: etl/statistics/calculate_reservoir_statistics.py
 ```
 
 ---
