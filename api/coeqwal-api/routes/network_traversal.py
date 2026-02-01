@@ -1,6 +1,7 @@
 """
 Complete CalSim network traversal
 """
+
 import json
 import asyncpg
 from fastapi import HTTPException
@@ -10,15 +11,15 @@ async def get_node_network_unlimited(
     db_pool: asyncpg.Pool,
     node_id: int,
     direction: str = "both",
-    include_arcs: str = "true"
+    include_arcs: str = "true",
 ):
     """
     Get COMPLETE upstream/downstream network with no depth limit
     """
     try:
         # Convert string to boolean
-        include_arcs_bool = include_arcs.lower() in ('true', '1', 'yes')
-        
+        include_arcs_bool = include_arcs.lower() in ("true", "1", "yes")
+
         # Build the traversal query based on direction
         if direction == "upstream":
             traversal_query = """
@@ -107,7 +108,7 @@ async def get_node_network_unlimited(
                 WHERE NOT (n.id = ANY(nt_prev.path))  -- Only cycle prevention, NO depth limit
                 AND nt_prev.depth < 100  -- Safety limit to prevent infinite loops
             )"""
-        
+
         # Add the final SELECT to all queries
         traversal_query += """
         -- Get geometry after recursion
@@ -120,10 +121,10 @@ async def get_node_network_unlimited(
         JOIN network_node n ON n.id = nt.id
         ORDER BY nt.depth, nt.node_type, nt.name;
         """
-        
+
         async with db_pool.acquire() as conn:
             rows = await conn.fetch(traversal_query, node_id)
-            
+
             nodes = []
             for row in rows:
                 # Parse geometry
@@ -133,19 +134,23 @@ async def get_node_network_unlimited(
                         geometry = json.loads(geometry)
                     except (json.JSONDecodeError, TypeError):
                         geometry = None
-                
-                nodes.append({
-                    "id": row["id"],
-                    "short_code": row["short_code"],
-                    "name": row["name"],
-                    "node_type": row["node_type"],
-                    "depth": row["depth"],
-                    "geometry": geometry,
-                    "latitude": float(row["latitude"]) if row["latitude"] else None,
-                    "longitude": float(row["longitude"]) if row["longitude"] else None,
-                    "connected_arcs": row["connected_arcs"]
-                })
-            
+
+                nodes.append(
+                    {
+                        "id": row["id"],
+                        "short_code": row["short_code"],
+                        "name": row["name"],
+                        "node_type": row["node_type"],
+                        "depth": row["depth"],
+                        "geometry": geometry,
+                        "latitude": float(row["latitude"]) if row["latitude"] else None,
+                        "longitude": float(row["longitude"])
+                        if row["longitude"]
+                        else None,
+                        "connected_arcs": row["connected_arcs"],
+                    }
+                )
+
             result = {
                 "clicked_node_id": node_id,
                 "direction": direction,
@@ -154,9 +159,9 @@ async def get_node_network_unlimited(
                 "total_nodes": len(nodes),
                 "max_depth_reached": max(row["depth"] for row in rows) if rows else 0,
                 "vast_network": True,
-                "note": "Complete network traversal with no depth limit like CalSim3_schematic"
+                "note": "Complete network traversal with no depth limit like CalSim3_schematic",
             }
-            
+
             # Optionally include arcs for the complete network
             if include_arcs_bool and len(nodes) > 0:
                 node_ids = [node["id"] for node in nodes]
@@ -175,7 +180,7 @@ async def get_node_network_unlimited(
                 WHERE (a.from_node_id = ANY($1::int[]) OR a.to_node_id = ANY($1::int[]))
                 ORDER BY a.short_code;
                 """
-                
+
                 arc_rows = await conn.fetch(arcs_query, node_ids)
                 parsed_arcs = []
                 for arc_row in arc_rows:
@@ -187,12 +192,12 @@ async def get_node_network_unlimited(
                             except (json.JSONDecodeError, TypeError):
                                 arc_dict["geometry"] = None
                     parsed_arcs.append(arc_dict)
-                
+
                 result["arcs"] = parsed_arcs
                 result["total_arcs"] = len(parsed_arcs)
-            
+
             return result
-            
+
     except Exception as e:
         # Log the actual error for debugging
         print(f"Unlimited traversal error for node {node_id}: {str(e)}")

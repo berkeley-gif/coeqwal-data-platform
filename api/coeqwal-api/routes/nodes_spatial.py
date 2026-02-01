@@ -7,32 +7,35 @@ from fastapi import Query, HTTPException
 import asyncpg
 import json
 
+
 async def get_nodes_spatial(
     db_pool: asyncpg.Pool,
     bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
     zoom: int = Query(10, description="Map zoom level"),
-    limit: int = Query(5000, description="Maximum nodes to return (enhanced for 7K+ network)")
+    limit: int = Query(
+        5000, description="Maximum nodes to return (enhanced for 7K+ network)"
+    ),
 ):
     """
     Get nodes within bounding box with zoom-based priority filtering
-    
+
     Zoom <= 7: Priority types only (STR, PR, PS, S)
     Zoom > 7: All node types
     """
     try:
         # Parse bounding box
-        min_lng, min_lat, max_lng, max_lat = map(float, bbox.split(','))
-        
+        min_lng, min_lat, max_lng, max_lat = map(float, bbox.split(","))
+
         # Zoom-based filtering (DISABLED for enhanced network testing)
         # For enhanced network testing, show all node types regardless of zoom
         type_filter = ""  # No filtering - show all nodes for testing
-        
+
         # Original zoom filtering (commented out for testing):
         # if zoom <= 7:
         #     type_filter = "AND nt.short_code IN ('STR', 'STR-SIM', 'PR-A', 'PR-U', 'PR-R', 'PS', 'PS-SG', 'S-A', 'S-U')"
         # else:
         #     type_filter = ""
-        
+
         query = f"""
         SELECT 
             n.id,
@@ -94,10 +97,10 @@ async def get_nodes_spatial(
             n.name
         LIMIT $5;
         """
-        
+
         async with db_pool.acquire() as conn:
             rows = await conn.fetch(query, min_lng, min_lat, max_lng, max_lat, limit)
-            
+
             nodes = []
             for row in rows:
                 # Parse geometry JSON string to object
@@ -107,44 +110,47 @@ async def get_nodes_spatial(
                         geometry = json.loads(geometry)
                     except (json.JSONDecodeError, TypeError):
                         geometry = None
-                
-                nodes.append({
-                    "id": row["id"],
-                    "short_code": row["short_code"],
-                    "name": row["name"],
-                    "description": row["description"],
-                    "node_type": row["node_type"],
-                    "node_type_name": row["node_type_name"],
-                    "hydrologic_region": row["hydrologic_region"],
-                    "geometry": geometry,  # Parsed JSON object
-                    "latitude": float(row["latitude"]) if row["latitude"] else None,
-                    "longitude": float(row["longitude"]) if row["longitude"] else None,
-                    "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
-                    "riv_name": row["riv_name"],
-                    
-                    # Reservoir identification and attributes
-                    "is_reservoir": row["is_reservoir"],
-                    "capacity_taf": float(row["capacity_taf"]) if row["capacity_taf"] else None,
-                    "operational_purpose": row["operational_purpose"],
-                    "associated_river": row["associated_river"],
-                    
-                    # Map styling
-                    "map_category": row["map_category"],
-                    
-                    # Interactivity
-                    "connected_arcs": row["connected_arcs"],
-                    "is_interactive": row["connected_arcs"] > 0
-                })
-                
+
+                nodes.append(
+                    {
+                        "id": row["id"],
+                        "short_code": row["short_code"],
+                        "name": row["name"],
+                        "description": row["description"],
+                        "node_type": row["node_type"],
+                        "node_type_name": row["node_type_name"],
+                        "hydrologic_region": row["hydrologic_region"],
+                        "geometry": geometry,  # Parsed JSON object
+                        "latitude": float(row["latitude"]) if row["latitude"] else None,
+                        "longitude": float(row["longitude"])
+                        if row["longitude"]
+                        else None,
+                        "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
+                        "riv_name": row["riv_name"],
+                        # Reservoir identification and attributes
+                        "is_reservoir": row["is_reservoir"],
+                        "capacity_taf": float(row["capacity_taf"])
+                        if row["capacity_taf"]
+                        else None,
+                        "operational_purpose": row["operational_purpose"],
+                        "associated_river": row["associated_river"],
+                        # Map styling
+                        "map_category": row["map_category"],
+                        # Interactivity
+                        "connected_arcs": row["connected_arcs"],
+                        "is_interactive": row["connected_arcs"] > 0,
+                    }
+                )
+
             return {
                 "nodes": nodes,
                 "total": len(nodes),
                 "bbox": bbox,
                 "zoom": zoom,
                 "priority_filter": zoom <= 7,
-                "truncated": len(nodes) >= limit
+                "truncated": len(nodes) >= limit,
             }
-            
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid bbox format: {str(e)}")
     except Exception as e:
@@ -156,25 +162,25 @@ async def get_node_network(
     node_id: int,
     direction: str = "both",
     max_depth: int = 50,  # basically unlimited network traversal depth
-    include_arcs: str = "true"
+    include_arcs: str = "true",
 ):
     """
     Get upstream/downstream network from a clicked node
     """
     try:
         # Convert string to boolean
-        include_arcs_bool = include_arcs.lower() in ('true', '1', 'yes')
+        include_arcs_bool = include_arcs.lower() in ("true", "1", "yes")
         # Build direction conditions
         if direction == "upstream":
             arc_condition = "a.to_node_id = $1"
             next_node_field = "a.from_node_id"
         elif direction == "downstream":
-            arc_condition = "a.from_node_id = $1" 
+            arc_condition = "a.from_node_id = $1"
             next_node_field = "a.to_node_id"
         else:  # both
             arc_condition = "(a.from_node_id = $1 OR a.to_node_id = $1)"
             next_node_field = "CASE WHEN a.from_node_id = $1 THEN a.to_node_id ELSE a.from_node_id END"
-        
+
         # Get connected nodes via traversal
         traversal_query = f"""
         WITH RECURSIVE network_traversal AS (
@@ -197,7 +203,7 @@ async def get_node_network(
                 nt_prev.depth + 1,
                 nt_prev.path || n.id
             FROM network_traversal nt_prev
-            JOIN network_arc a ON {arc_condition.replace('$1', 'nt_prev.id')}
+            JOIN network_arc a ON {arc_condition.replace("$1", "nt_prev.id")}
             JOIN network_node n ON n.id = {next_node_field}
             LEFT JOIN network_node_type nt ON nt.id = n.node_type_id
             WHERE nt_prev.depth < $2
@@ -211,11 +217,11 @@ async def get_node_network(
         JOIN network_node n ON n.id = nt.id
         ORDER BY nt.depth, nt.node_type, nt.name;
         """
-        
+
         async with db_pool.acquire() as conn:
             # Get traversal nodes
             nodes = await conn.fetch(traversal_query, node_id, max_depth)
-            
+
             # Parse geometry for nodes
             parsed_nodes = []
             for row in nodes:
@@ -226,15 +232,15 @@ async def get_node_network(
                     except (json.JSONDecodeError, TypeError):
                         node_dict["geometry"] = None
                 parsed_nodes.append(node_dict)
-            
+
             result = {
                 "source_node_id": node_id,
                 "direction": direction,
                 "max_depth": max_depth,
                 "nodes": parsed_nodes,
-                "arcs": []
+                "arcs": [],
             }
-            
+
             if include_arcs_bool and len(nodes) > 1:
                 # Get connecting arcs between traversal nodes
                 node_ids = [row["id"] for row in nodes]
@@ -253,9 +259,9 @@ async def get_node_network(
                 WHERE (a.from_node_id = ANY($1) OR a.to_node_id = ANY($1))
                 ORDER BY a.name;
                 """
-                
+
                 arcs = await conn.fetch(arc_query, node_ids)
-                
+
                 # Parse geometry for arcs
                 parsed_arcs = []
                 for row in arcs:
@@ -266,11 +272,11 @@ async def get_node_network(
                         except (json.JSONDecodeError, TypeError):
                             arc_dict["geometry"] = None
                     parsed_arcs.append(arc_dict)
-                
+
                 result["arcs"] = parsed_arcs
-            
+
             return result
-            
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
@@ -279,22 +285,24 @@ async def get_all_nodes_unfiltered(
     db_pool: asyncpg.Pool,
     bbox: str = Query(..., description="Bounding box as 'minLng,minLat,maxLng,maxLat'"),
     limit: int = Query(10000, description="Maximum nodes to return"),
-    source_filter: str = Query("all", description="'geopackage', 'network_schematic', or 'all'")
+    source_filter: str = Query(
+        "all", description="'geopackage', 'network_schematic', or 'all'"
+    ),
 ):
     """
     Get ALL nodes within bounding box with NO type filtering - for enhanced network testing
     """
     try:
         # Parse bounding box
-        min_lng, min_lat, max_lng, max_lat = map(float, bbox.split(','))
-        
+        min_lng, min_lat, max_lng, max_lat = map(float, bbox.split(","))
+
         # Optional source filtering
         source_condition = ""
         if source_filter == "geopackage":
             source_condition = "AND src.source = 'geopackage'"
         elif source_filter == "network_schematic":
             source_condition = "AND src.source = 'network_schematic'"
-        
+
         query = f"""
         SELECT 
             n.id,
@@ -356,10 +364,10 @@ async def get_all_nodes_unfiltered(
             n.name
         LIMIT $5;
         """
-        
+
         async with db_pool.acquire() as conn:
             rows = await conn.fetch(query, min_lng, min_lat, max_lng, max_lat, limit)
-            
+
             nodes = []
             for row in rows:
                 # Parse geometry
@@ -369,31 +377,37 @@ async def get_all_nodes_unfiltered(
                         geometry = json.loads(geometry)
                     except (json.JSONDecodeError, TypeError):
                         geometry = None
-                
-                nodes.append({
-                    "id": row["id"],
-                    "short_code": row["short_code"],
-                    "name": row["name"],
-                    "description": row["description"],
-                    "node_type": row["node_type"],
-                    "node_type_name": row["node_type_name"],
-                    "hydrologic_region": row["hydrologic_region"],
-                    "geometry": geometry,
-                    "latitude": float(row["latitude"]) if row["latitude"] else None,
-                    "longitude": float(row["longitude"]) if row["longitude"] else None,
-                    "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
-                    "riv_name": row["riv_name"],
-                    "json_id": row["json_id"],
-                    "is_reservoir": row["is_reservoir"],
-                    "capacity_taf": float(row["capacity_taf"]) if row["capacity_taf"] else None,
-                    "operational_purpose": row["operational_purpose"],
-                    "associated_river": row["associated_river"],
-                    "map_category": row["map_category"],
-                    "data_source": row["data_source"],
-                    "connected_arcs": row["connected_arcs"],
-                    "is_interactive": row["connected_arcs"] > 0
-                })
-                
+
+                nodes.append(
+                    {
+                        "id": row["id"],
+                        "short_code": row["short_code"],
+                        "name": row["name"],
+                        "description": row["description"],
+                        "node_type": row["node_type"],
+                        "node_type_name": row["node_type_name"],
+                        "hydrologic_region": row["hydrologic_region"],
+                        "geometry": geometry,
+                        "latitude": float(row["latitude"]) if row["latitude"] else None,
+                        "longitude": float(row["longitude"])
+                        if row["longitude"]
+                        else None,
+                        "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
+                        "riv_name": row["riv_name"],
+                        "json_id": row["json_id"],
+                        "is_reservoir": row["is_reservoir"],
+                        "capacity_taf": float(row["capacity_taf"])
+                        if row["capacity_taf"]
+                        else None,
+                        "operational_purpose": row["operational_purpose"],
+                        "associated_river": row["associated_river"],
+                        "map_category": row["map_category"],
+                        "data_source": row["data_source"],
+                        "connected_arcs": row["connected_arcs"],
+                        "is_interactive": row["connected_arcs"] > 0,
+                    }
+                )
+
             return {
                 "nodes": nodes,
                 "total": len(nodes),
@@ -402,9 +416,9 @@ async def get_all_nodes_unfiltered(
                 "source_filter": source_filter,
                 "type_filtering": "disabled",
                 "enhanced_network": True,
-                "note": "All node types included for enhanced network testing"
+                "note": "All node types included for enhanced network testing",
             }
-            
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid bbox format: {str(e)}")
     except Exception as e:

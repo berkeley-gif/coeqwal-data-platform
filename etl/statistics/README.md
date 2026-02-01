@@ -563,7 +563,7 @@ The following metrics are calculated by the ETL but not included in the notebook
 | Monthly percentile bands by water month | Website-specific grouping approach |
 | Spill frequency and volume metrics | Not in Metrics.ipynb scope |
 | Storage exceedance curves | Different calculation in notebook |
-| April flood pool probability | Notebook only calculates All and September |
+| April flood pool probability | Notebook only calculates All and September; `verify_metrics.py` does not calculate April probabilities (including FOLSM) |
 | 84 additional reservoirs | Notebook limited to 8 major reservoirs |
 
 ---
