@@ -1,194 +1,583 @@
 # ETL Statistics Pipeline
 
-Calculate and load monthly percentile statistics for reservoir storage.
+Calculate and load reservoir statistics from CalSim model outputs to the database.
 
 ## Overview
 
-This pipeline processes CalSim model output CSVs to calculate monthly percentile bands for 8 major California reservoirs. The data powers frontend visualization charts showing the distribution of storage levels across water years.
+This pipeline processes CalSim model output CSVs stored in S3 to calculate reservoir statistics. The calculated metrics are loaded directly into PostgreSQL for the COEQWAL website API.
 
+**Automated pipeline flow:**
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  S3 / Local     │───▶│  calculate_      │───▶│  PostgreSQL     │───▶│  API Endpoint   │
-│  CSV Files      │    │  reservoir_      │    │  Database       │    │  /api/statistics│
-│                 │    │  percentiles.py  │    │                 │    │                 │
+│  S3 bucket      │───▶│  AWS Lambda      │───▶│  PostgreSQL     │───▶│  API endpoints  │
+│  CSV upload     │    │  (main.py)       │    │  database       │    │  /api/statistics│
 └─────────────────┘    └──────────────────┘    └─────────────────┘    └─────────────────┘
+        │                      │
+        │  S3 Event Trigger    │  Direct DB writes
+        └──────────────────────┘  via psycopg2
 ```
 
-## Target Reservoirs
+## Directory Structure
+
+```
+etl/statistics/
+├── main.py                              # Entry point - Lambda handler + CLI
+├── README.md                            # This file
+├── dev_run.sh                           # Local development script
+├── test_local.py                        # Local test runner
+├── verify_metrics.py                    # Verification against notebook output
+└── reservoirs/                          # Reservoir statistics
+    ├── calculate_reservoir_statistics.py  # Full statistics for all 92 reservoirs
+    ├── calculate_reservoir_percentiles.py # Percentile bands for website charts
+    └── reservoir_metrics.py               # Core calculation functions
+```
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `main.py` | **Entry point** - Lambda handler + CLI for automated ETL |
+| `dev_run.sh` | Local development runner for testing with CSV files |
+| `test_local.py` | Quick sanity check for individual reservoir calculations |
+| `verify_metrics.py` | **Verification** - Compare ETL output against metrics in all_metrics_output.csv |
+| `reservoirs/calculate_reservoir_statistics.py` | Calculates all reservoir statistics including probability metrics |
+| `reservoirs/calculate_reservoir_percentiles.py` | Percentile band calculation for website charts |
+| `reservoirs/reservoir_metrics.py` | Core calculation functions aligned with COEQWAL modeler Jupyter notebooks |
+
+## Automated pipeline setup
+
+### 1. AWS Lambda configuration
+
+Lambda function with:
+- **Runtime**: Python 3.9+
+- **Handler**: `main.lambda_handler`
+- **Memory**: 512 MB (for large CSV processing)
+- **Timeout**: 5 minutes
+- **Environment variables**:
+  - `DATABASE_URL`: PostgreSQL connection string
+  - `S3_BUCKET`: `coeqwal-model-run`
+
+### 2. S3 event trigger
+
+Trigger Lambda on new DSS uploads:
+
+```json
+{
+  "LambdaFunctionConfigurations": [{
+    "LambdaFunctionArn": "arn:aws:lambda:...:function:coeqwal-statistics-etl",
+    "Events": ["s3:ObjectCreated:*"],
+    "Filter": {
+      "Key": {
+        "FilterRules": [
+          {"Name": "prefix", "Value": "scenario/"},
+          {"Name": "suffix", "Value": "_coeqwal_calsim_output.csv"}
+        ]
+      }
+    }
+  }]
+}
+```
+
+### 3. Dependencies (Lambda layer)
+
+```
+pandas
+numpy
+psycopg2-binary
+boto3
+```
+
+### 4. New scenario pipeline
+
+When a new scenario DSS is uploaded to S3:
+
+1. **Extraction** → pydsstools implementation creates output csv
+2. **S3 event** → Triggers lambda
+3. **Lambda** → Extracts scenario ID from path (`s0030`)
+4. **ETL** → Calculates percentiles, statistics, probabilities
+5. **Database** → Writes directly via psycopg2
+6. **API** → Data available at `/api/statistics/`
+
+---
+
+## Calculation methodology
+
+All calculations are aligned with the COEQWAL modeler Jupyter notebooks located at https://github.com/maramahmedd/coeqwal. See:
+- `coeqwal/notebooks/coeqwalpackage/metrics.py`
+- `coeqwal/notebooks/Metrics.ipynb`
+
+### 1. Percentile bands
+
+**Purpose**: Supply data for the reservoir storage percentile band charts on the website.
+
+**Implementation here** (`calculate_reservoir_percentiles.py:293-294`):
+```python
+for p in PERCENTILES:  # [0, 10, 30, 50, 70, 90, 100]
+    stats[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
+```
+
+**Notebook reference** (`metrics.py:399-400`):
+```python
+iqr_values = subset_df.apply(lambda x: x.quantile(q), axis=0)
+```
+
+**Comparison**:
+
+| Aspect | Our ETL | Notebook |
+|--------|---------|----------|
+| Method | `np.percentile()` | `pandas.quantile()` |
+| Interpolation | Linear (NumPy default) | Linear (Pandas default) |
+| Grouping | By **water month** (Oct=1 ... Sep=12) | By entire time series |
+
+**Note**: Here we group by water month before calculating percentiles for the purposes of showing range and variability by month in charts on the website. Both methods produce mathematically equivalent percentile values. The grouping by month is a deliberate design choice for the frontend website visualization.
+
+### 2. Flood pool probability
+
+**Definition**: Probability that storage reaches or exceeds the flood control level.
+
+**Implementation** (`reservoir_metrics.py:calculate_flood_pool_probability()`):
+```python
+# Flood pool hit when: storage >= threshold
+difference = storage.values - flood_threshold
+difference = difference + 0.000001  # Small epsilon for >= comparison
+hit_count = int((difference >= 0).sum())
+probability = hit_count / total_count
+```
+
+**Notebook reference** (`metrics.py:617-655 frequency_hitting_level()`):
+```python
+subset_df_res_comp_values = subset_df_res.values - subset_df_floodzone.values
+if floodzone:
+    subset_df_res_comp_values += 0.000001
+exceedance_days = count_exceedance_days(subset_df_res_comp, 0)
+```
+
+**Threshold sources** (from `Metrics.ipynb`):
+
+| Reservoir | Flood Threshold Variable |
+|-----------|-------------------------|
+| SHSTA | `S_SHSTALEVEL5DV` (model output) |
+| OROVL | `S_OROVLLEVEL5DV` (model output) |
+| TRNTY | `S_TRNTYLEVEL5DV` (model output) |
+| FOLSM | `S_FOLSMLEVEL5DV` (model output) |
+| MELON | `S_MELONLEVEL4DV` (model output) |
+| MLRTN | 524 TAF (constant) | <- question
+| SLUIS_CVP | `S_SLUIS_CVPLEVEL5DV` (model output) |
+| SLUIS_SWP | `S_SLUIS_SWPLEVEL5DV` (model output) |
+
+### 3. Dead pool probability
+
+**Definition**: Probability that storage drops to or below the dead pool (minimum operating level).
+
+**Implementation** (`reservoir_metrics.py:calculate_dead_pool_probability()`):
+```python
+# Dead pool hit when: storage <= threshold
+difference = storage.values - dead_pool_threshold
+hit_count = int((difference <= 0).sum())
+probability = hit_count / total_count
+```
+
+**Notebook reference**: Same `frequency_hitting_level()` with `floodzone=False`.
+
+**Threshold Sources**:
+
+| Reservoir | Dead Pool Threshold |
+|-----------|---------------------|
+| SHSTA | `S_SHSTALEVEL1DV` (model output) |
+| OROVL | `S_OROVLLEVEL1DV` (model output) |
+| TRNTY | `S_TRNTYLEVEL1DV` (model output) |
+| FOLSM | `S_FOLSMLEVEL1DV` (model output) |
+| MELON | 80 TAF (constant) |
+| MLRTN | 135 TAF (constant) |
+| Others | `dead_pool_taf` from `reservoir_entity.csv` |
+
+### 4. Coefficient of variation (CV)
+
+Measure of relative variability.
+
+**Formula**: `CV = standard_deviation / mean`
+
+**Implementation** (`reservoir_metrics.py:calculate_cv()`):
+```python
+mean = float(data.mean())
+std = float(data.std())
+return std / mean if mean != 0 else 0
+```
+
+**Notebook reference** (`metrics.py:383-393 compute_cv()`):
+```python
+cv = (subset_df.std(axis=0) / subset_df.mean(axis=0))
+```
+
+**Metrics calculated**:
+- `storage_cv_all`: CV across entire period
+- `storage_cv_april`: CV for April values only (spring storage)
+- `storage_cv_september`: CV for September values only (end of water year)
+
+### 5. Annual average
+
+**Definition**: Mean of annual means. Calculates yearly average, then averages across years.
+
+**Implementation** (`reservoir_metrics.py:calculate_annual_average()`):
+```python
+# Calculate mean for each water year
+annual_means = data.groupby('WaterYear')['value'].mean()
+# Return mean of annual means
+return float(annual_means.mean())
+```
+
+**Notebook reference** (`metrics.py:526-534 ann_avg()`):
+```python
+metric_value = compute_mean(df, var_name, [study_index], units, months=months)
+# where compute_mean groups by WaterYear and calculates mean of means
+```
+
+### 6. Monthly average
+
+**Definition**: Mean value for a specific calendar month across all years.
+
+**Implementation** (`reservoir_metrics.py:calculate_monthly_average()`):
+```python
+month_mask = date_index.month == month
+month_data = values.loc[month_mask].dropna()
+return float(month_data.mean())
+```
+
+**Notebook reference** (`metrics.py:545-554 mnth_avg()`):
+```python
+metric_value = compute_mean(df, var_name, [study_index], units, months=[mnth_num])
+```
+
+**Metrics calculated**:
+- `april_avg_taf`: Average April storage (spring peak)
+- `september_avg_taf`: Average September storage (end of water year)
+
+---
+
+## Database tables
+
+### reservoir_monthly_percentile
+Monthly percentile bands for UI charts.
+
+| Column | Description |
+|--------|-------------|
+| `scenario_short_code` | e.g., "s0020" |
+| `reservoir_entity_id` | FK to reservoir_entity |
+| `water_month` | 1-12 (Oct=1, Sep=12) |
+| `q0, q10, q30, q50, q70, q90, q100` | Percentiles (% of capacity) |
+| `mean_value` | Mean storage (% of capacity) |
+
+### reservoir_storage_monthly
+Monthly storage statistics including CV.
+
+### reservoir_spill_monthly
+Monthly spill/flood release statistics.
+
+### reservoir_period_summary
+Period-of-record summary with probability metrics.
+
+| Column | Description |
+|--------|-------------|
+| `flood_pool_prob_all` | P(storage >= flood level), all months |
+| `flood_pool_prob_september` | P(storage >= flood level), September only |
+| `flood_pool_prob_april` | P(storage >= flood level), April only |
+| `dead_pool_prob_all` | P(storage <= dead pool), all months |
+| `dead_pool_prob_september` | P(storage <= dead pool), September only |
+| `storage_cv_all` | Coefficient of variation, all months |
+| `storage_cv_april` | CV for April |
+| `storage_cv_september` | CV for September |
+| `annual_avg_taf` | Mean of annual mean storage |
+| `april_avg_taf` | Mean April storage |
+| `september_avg_taf` | Mean September storage |
+
+---
+
+## Target reservoirs
+
+The ETL processes **all 92 reservoirs** defined in the reservoir_entity.csv file. This includes major reservoirs such as:
 
 | Code | Reservoir | Capacity (TAF) | Dead Pool (TAF) |
 |------|-----------|----------------|-----------------|
-| S_SHSTA | Shasta | 4,552 | 115 |
-| S_TRNTY | Trinity | 2,448 | 105 |
-| S_OROVL | Oroville | 3,537 | 850 |
-| S_FOLSM | Folsom | 975 | 115 |
-| S_MELON | New Melones | 2,400 | 300 |
-| S_MLRTN | Millerton | 520 | 115 |
-| S_SLUIS_CVP | San Luis (CVP) | 1,062 | 15 |
-| S_SLUIS_SWP | San Luis (SWP) | 979 | 10 |
+| SHSTA | Shasta | 4,552 | 115 |
+| TRNTY | Trinity | 2,448 | 105 |
+| OROVL | Oroville | 3,537 | 850 |
+| FOLSM | Folsom | 975 | 115 |
+| MELON | New Melones | 2,400 | 300 |
+| MLRTN | Millerton | 520 | 115 |
+| SLUIS_CVP | San Luis (CVP) | 1,062 | 15 |
+| SLUIS_SWP | San Luis (SWP) | 979 | 10 |
 
-Source: `database/seed_tables/04_calsim_data/reservoir_entity.csv`
+For the complete list of all 92 reservoirs, see: `database/seed_tables/04_calsim_data/reservoir_entity.csv`
 
-## Output Statistics
+---
 
-For each reservoir and water month (Oct=1 ... Sep=12):
-- **Percentiles**: q10, q20, q30, q40, q50 (median), q60, q70, q80, q90
-- **Summary**: min, max, mean
-- **Values**: Expressed as % of reservoir capacity (0-100+)
+## Usage
 
-## Quick Start
+### Automated
 
-### Prerequisites
-```bash
-pip install pandas numpy boto3  # boto3 only needed for S3 access
-```
-
-### Step 1: Create Database Table
-```bash
-psql $DATABASE_URL -f database/schema/reservoir_percentile_table.sql
-```
-
-### Step 2: Calculate Percentiles
-```bash
-# From local CSV file
-python etl/statistics/calculate_reservoir_percentiles.py \
-  --scenario s0020 \
-  --csv-path etl/pipelines/s0020_coeqwal_calsim_output.csv \
-  --output-csv /tmp/s0020_percentiles.csv
-
-# From S3 (requires AWS credentials)
-python etl/statistics/calculate_reservoir_percentiles.py \
-  --scenario s0020 \
-  --output-csv /tmp/s0020_percentiles.csv
-```
-
-### Step 3: Load to Database
-```bash
-# Using COPY (fast bulk load)
-psql $DATABASE_URL -c "
-  COPY reservoir_monthly_percentile (
-    scenario_short_code, reservoir_code, water_month,
-    q10, q20, q30, q40, q50, q60, q70, q80, q90,
-    min_value, max_value, mean_value, max_capacity_taf
-  ) FROM '/tmp/s0020_percentiles.csv' CSV HEADER;
-"
-
-# Or use upsert for updates (slower but handles duplicates)
-# See database/schema/reservoir_percentile_table.sql for upsert function
-```
-
-### Step 4: Verify Data
-```bash
-psql $DATABASE_URL -c "
-  SELECT scenario_short_code, reservoir_code, COUNT(*)
-  FROM reservoir_monthly_percentile
-  GROUP BY scenario_short_code, reservoir_code;
-"
-```
-
-## CLI Reference
+Use `main.py` for direct database writes:
 
 ```bash
-python calculate_reservoir_percentiles.py [OPTIONS]
+# Process single scenario and write to database
+DATABASE_URL=postgres://... python main.py --scenario s0020
 
-Options:
-  --scenario, -s TEXT     Scenario ID (e.g., s0020)
-  --all-scenarios         Process all known scenarios
-  --csv-path TEXT         Local CSV file path (uses S3 if not provided)
-  --output-json           Output results as JSON to stdout
-  --output-csv TEXT       Output results as CSV to specified path
+# Process from S3 key (extracts scenario ID automatically)
+DATABASE_URL=postgres://... python main.py --s3-key scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
+
+# Process all scenarios
+DATABASE_URL=postgres://... python main.py --all-scenarios
+
+# Dry run (calculate without writing)
+python main.py --scenario s0020 --dry-run
+
+# Output as JSON (for debugging)
+python main.py --scenario s0020 --output-json
 ```
 
-### Examples
+### Manual (via direct SQL)
+
+For manual review or custom loading:
 
 ```bash
-# Preview results as JSON
-python calculate_reservoir_percentiles.py -s s0020 \
-  --csv-path etl/pipelines/s0020_coeqwal_calsim_output.csv \
-  --output-json
+# Generate SQL file
+python calculate_reservoir_statistics.py --scenario s0020 --output-sql output.sql
 
-# Process all scenarios from S3
-python calculate_reservoir_percentiles.py --all-scenarios \
-  --output-csv /tmp/all_percentiles.csv
-
-# Process single scenario, output CSV
-python calculate_reservoir_percentiles.py -s s0020 \
-  --output-csv /tmp/s0020_percentiles.csv
+# Load to database
+psql $DATABASE_URL -f output.sql
 ```
 
-## CSV Input Format
+### Percentiles only
 
-The script expects CalSim DSS-export CSV format:
-
-```
-Row 0 (a):     CALSIM, CALSIM, CALSIM, ...     (source)
-Row 1 (b):     A17, S_SHSTA, S_FOLSM, ...      (variable names)
-Row 2 (c):     SURFACE-AREA, STORAGE, ...      (descriptions)
-Row 3 (e):     1MON, 1MON, 1MON, ...           (time step)
-Row 4 (f):     L2020A, L2020A, ...             (dataset)
-Row 5 (type):  PER-AVER, PER-AVER, ...         (data type)
-Row 6 (units): ACRES, TAF, TAF, ...            (units)
-Row 7+:        1921-10-31 00:00:00, 0.0, ...   (data)
+```bash
+python calculate_reservoir_percentiles.py --scenario s0020 --output-sql percentiles.sql
 ```
 
-Key columns we extract:
-- Column 0: DateTime
-- S_SHSTA, S_TRNTY, S_OROVL, S_FOLSM, S_MELON, S_MLRTN, S_SLUIS_CVP, S_SLUIS_SWP
+---
 
-## S3 Bucket Structure
+## Relevant S3 bucket structure
 
 ```
 s3://coeqwal-model-run/
+├── reference/
+│   └── all_metrics_output.csv       # Verification reference from Metrics.ipynb
 └── scenario/
     └── {scenario_id}/
         └── csv/
             └── {scenario_id}_coeqwal_calsim_output.csv
 ```
 
-## API
+---
 
-After loading data, the statistics endpoints are available under `/api/statistics/`.
+## CSV input format
 
-See interactive documentation: https://api.coeqwal.org/docs
+CalSim DSS-export CSV with 7 header rows:
 
-## Database Schema
-
-```sql
-CREATE TABLE reservoir_monthly_percentile (
-    id SERIAL PRIMARY KEY,
-    scenario_short_code VARCHAR(20) NOT NULL,
-    reservoir_code VARCHAR(20) NOT NULL,
-    water_month INTEGER NOT NULL,  -- 1-12 (Oct=1, Sep=12)
-
-    -- Percentiles (% of capacity)
-    q10, q20, q30, q40, q50, q60, q70, q80, q90 NUMERIC(6,2),
-
-    -- Summary stats
-    min_value, max_value, mean_value NUMERIC(6,2),
-    max_capacity_taf NUMERIC(10,2),
-
-    -- Audit fields
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at, updated_at TIMESTAMPTZ,
-    created_by, updated_by INTEGER,
-
-    UNIQUE(scenario_short_code, reservoir_code, water_month)
-);
+```
+Row 0 (a):     CALSIM, CALSIM, ...          (source)
+Row 1 (b):     S_SHSTA, S_SHSTALEVEL5DV, ... (variable names)
+Row 2 (c):     STORAGE, STORAGE-LEVEL5, ... (descriptions)
+Row 3 (e):     1MON, 1MON, ...              (time step)
+Row 4 (f):     L2020A, L2020A, ...          (dataset)
+Row 5 (type):  PER-AVER, PER-AVER, ...      (data type)
+Row 6 (units): TAF, TAF, ...                (units)
+Row 7+:        1921-10-31, 1234.5, ...      (data)
 ```
 
-See: `database/schema/reservoir_percentile_table.sql`
+**Variables loaded**:
+- `S_{code}`: Storage (TAF)
+- `C_{code}_FLOOD`: Flood release (CFS)
+- `S_{code}LEVEL5DV`: Flood control level (TAF)
+- `S_{code}LEVEL1DV`: Dead pool level (TAF)
+
+---
+
+## Verification
+
+### Verification Script
+
+Use `verify_metrics.py` to validate ETL calculations against the COEQWAL research notebook output:
+
+```bash
+# Calculate metrics and display
+python verify_metrics.py
+
+# Compare against notebook output (stored in S3/audits)
+python verify_metrics.py --compare /path/to/all_metrics_output.csv
+
+# Save calculated metrics to CSV
+python verify_metrics.py --output my_metrics.csv
+
+# Test specific reservoirs
+python verify_metrics.py --reservoirs SHSTA OROVL FOLSM
+```
+
+### Verification Results (s0020 Baseline)
+
+**Tolerance: 0.01% (0.0001)**
+
+| Category | Passed | Failed | Notes |
+|----------|--------|--------|-------|
+| Flood Pool Probabilities | 14/14 | 0 | All match within tolerance |
+| Dead Pool Probabilities | 14/14 | 0 | All match within tolerance |
+| Monthly Averages (TAF) | 12/16 | 4 | See SLUIS note below |
+| Coefficient of Variation | 16/16 | 0 | All match exactly |
+| **TOTAL** | **56/60** | **4** | 93% exact match |
+
+### Naming Convention
+
+Column names match the notebook's `all_metrics_output.csv` exactly:
+
+| Metric Type | Column Pattern | Example |
+|-------------|----------------|---------|
+| Flood Probability (all) | `All_Prob_S_{RES}_flood` | `All_Prob_S_SHSTA_flood` |
+| Flood Probability (Sep) | `Sep_Prob_S_{RES}_flood` | `Sep_Prob_S_SHSTA_flood` |
+| Dead Pool Probability | `All_Prob_S_{RES}_dead` | `All_Prob_S_OROVL_dead` |
+| April Average | `Apr_Avg_S_{RES}_TAF` | `Apr_Avg_S_SHSTA_TAF` |
+| September Average | `Sep_Avg_S_{RES}_TAF` | `Sep_Avg_S_TRNTY_TAF` |
+| April CV | `Apr_S_{RES}_CV` | `Apr_S_FOLSM_CV` |
+| September CV | `Sep_S_{RES}_CV` | `Sep_S_MELON_CV` |
+
+**Note**: SLUIS reservoirs use condensed naming (no underscore before TAF/CV):
+- `Apr_Avg_S_SLUIS_SWPTAF` (not `Apr_Avg_S_SLUIS_SWP_TAF`)
+- `Apr_S_SLUIS_CVPCV` (not `Apr_S_SLUIS_CVP_CV`)
+
+### Sample Verified Values (s0020)
+
+| Metric | ETL Value | Notebook Value | Status |
+|--------|-----------|----------------|--------|
+| All_Prob_S_SHSTA_flood | 0.3117 | 0.3117 | ✅ |
+| All_Prob_S_SHSTA_dead | 0.0150 | 0.0150 | ✅ |
+| Sep_Prob_S_OROVL_flood | 0.0800 | 0.0800 | ✅ |
+| Apr_Avg_S_SHSTA_TAF | 3906.98 | 3906.98 | ✅ |
+| Sep_S_SHSTA_CV | 0.3045 | 0.3045 | ✅ |
+| Apr_S_SLUIS_SWPCV | 0.3692 | 0.3692 | ✅ |
+| Sep_S_SLUIS_CVPCV | 0.9886 | 0.9886 | ✅ |
+
+### ⚠️ SLUIS Monthly Averages - Known Discrepancy
+
+**Status**: Under investigation with modeling team
+
+The notebook outputs constant values for SLUIS monthly averages that don't match the ETL calculations:
+
+| Metric | ETL Value | Notebook Value | Analysis |
+|--------|-----------|----------------|----------|
+| Apr_Avg_S_SLUIS_SWPTAF | 710.54 | 1067.0 | ⚠️ |
+| Sep_Avg_S_SLUIS_SWPTAF | 442.29 | 1067.0 | ⚠️ |
+| Apr_Avg_S_SLUIS_CVPTAF | 746.59 | 972.0 | ⚠️ |
+| Sep_Avg_S_SLUIS_CVPTAF | 262.42 | 972.0 | ⚠️ |
+
+**Evidence that ETL values are correct**:
+
+1. **CV values match exactly** - The same storage data produces matching CV calculations:
+   - ETL `Apr_S_SLUIS_SWPCV`: 0.3692 = Notebook: 0.3692 ✅
+   - ETL `Sep_S_SLUIS_CVPCV`: 0.9886 = Notebook: 0.9886 ✅
+
+2. **Hydrological validity** - ETL values show expected seasonal pattern:
+   - September storage < April storage (reservoirs draw down in summer)
+   - SLUIS_CVP September (262 TAF) much lower than April (747 TAF) - reflects CVP pumping patterns
+
+3. **Notebook values are constant** - Same value for April and September (1067, 972) is hydrologically impossible for storage reservoirs
+
+4. **Probability metrics match** - Same data source produces matching probabilities:
+   - ETL `All_Prob_S_SLUIS_CVP_flood`: 0.125 = Notebook: 0.125 ✅
+
+**Hypothesis**: The notebook may be outputting threshold constants instead of calculated averages for these variables.
+
+### Metrics Not in Notebook
+
+The following metrics are calculated by the ETL but not included in the notebook output:
+
+| Metric | ETL Value | Notes |
+|--------|-----------|-------|
+| All_Prob_S_FOLSM_flood | 0.4267 | FOLSM excluded from notebook probability calculations |
+| Sep_Prob_S_FOLSM_flood | 0.2900 | FOLSM excluded from notebook probability calculations |
+
+### Verification Workflow
+
+1. **Notebook generates reference data**:
+   - Run `coeqwal/notebooks/Metrics.ipynb`
+   - Outputs `all_metrics_output.csv` to `{GroupDataDirPath}/metrics_output/`
+
+2. **Reference data stored in two locations**:
+   - **Local**: `coeqwal-backend/audits/all_metrics_output.csv`
+   - **S3**: `s3://coeqwal-model-run/reference/all_metrics_output.csv`
+
+   Upload command:
+   ```bash
+   aws s3 cp audits/all_metrics_output.csv s3://coeqwal-model-run/reference/all_metrics_output.csv
+   ```
+
+3. **ETL verification** (from `etl/statistics/` directory):
+   ```bash
+   # Using local file
+   python verify_metrics.py --compare ../../audits/all_metrics_output.csv
+
+   # Or download from S3 first
+   aws s3 cp s3://coeqwal-model-run/reference/all_metrics_output.csv /tmp/
+   python verify_metrics.py --compare /tmp/all_metrics_output.csv
+   ```
+
+4. **Expected results**:
+   - 56/60 metrics pass at 0.01% tolerance
+   - 4 SLUIS monthly averages flagged (known discrepancy)
+   - 2 FOLSM flood probabilities not in notebook (ETL-only)
+
+---
+
+## Verification Summary
+
+### ✅ Verified Against Notebook (56 metrics)
+
+| Statistic | Reservoirs | Verification Status |
+|-----------|------------|---------------------|
+| **Flood Pool Probability (All)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
+| **Flood Pool Probability (Sep)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
+| **Dead Pool Probability (All)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
+| **Dead Pool Probability (Sep)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
+| **April Average (TAF)** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN | ✅ 0.01% tolerance |
+| **September Average (TAF)** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN | ✅ 0.01% tolerance |
+| **April CV** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP | ✅ 0.01% tolerance |
+| **September CV** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP | ✅ 0.01% tolerance |
+
+### ⚠️ Known Discrepancy (4 metrics)
+
+| Statistic | Reservoirs | Issue |
+|-----------|------------|-------|
+| **April Average (TAF)** | SLUIS_CVP, SLUIS_SWP | Notebook outputs constant values |
+| **September Average (TAF)** | SLUIS_CVP, SLUIS_SWP | Notebook outputs constant values |
+
+### 📊 ETL-Only Metrics (not in notebook)
+
+| Statistic | Reservoirs | Notes |
+|-----------|------------|-------|
+| **Flood Pool Probability** | FOLSM | FOLSM not in notebook threshold calculations |
+| **All 92 reservoirs** | Full entity list | Notebook only calculates 8 major reservoirs |
+| **Monthly percentile bands** | All | Website-specific visualization data |
+| **Spill statistics** | All | Not calculated in Metrics.ipynb |
+| **Storage exceedance percentiles** | All | Period summary metrics |
+
+### 🔍 Cannot Verify (no notebook equivalent)
+
+| Statistic | Reason |
+|-----------|--------|
+| Monthly percentile bands by water month | Website-specific grouping approach |
+| Spill frequency and volume metrics | Not in Metrics.ipynb scope |
+| Storage exceedance curves | Different calculation in notebook |
+| April flood pool probability | Notebook only calculates All and September |
+| 84 additional reservoirs | Notebook limited to 8 major reservoirs |
+
+---
 
 ## Troubleshooting
 
 ### "No storage columns found"
-- Check that the CSV has the expected 7 header rows
-- Verify variable names in row 1 match exactly: S_SHSTA, S_TRNTY, etc.
+- Verify CSV has 7 header rows
+- Check variable names in row 1 match: `S_SHSTA`, `S_TRNTY`, etc.
 
-### Memory issues with large CSVs
-- The full CSV has ~20,000 columns and 1,200 rows
-- Processing requires ~500MB RAM
-- Consider filtering columns before loading if needed
+### "Threshold column not found"
+- Not all scenarios include LEVEL5DV/LEVEL1DV columns
+- The ETL falls back to constant thresholds for these reservoirs
 
-### S3 access errors
-- Ensure AWS credentials are configured: `aws configure`
-- Check bucket name in `S3_BUCKET` environment variable
+### S3 Access Errors
+- Configure AWS credentials: `aws configure`
+- Set bucket: `export S3_BUCKET=coeqwal-model-run`

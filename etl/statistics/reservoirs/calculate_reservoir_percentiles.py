@@ -42,19 +42,23 @@ log = logging.getLogger("reservoir_percentiles")
 PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 
 # Path to reservoir_entity.csv (relative to project root)
-RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent / \
+# From: etl/statistics/reservoirs/ -> need to go up 3 levels to reach database/
+RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent.parent / \
     "database/seed_tables/04_calsim_data/reservoir_entity.csv"
 
-# Major reservoir short_codes for percentile calculations
-MAJOR_RESERVOIR_CODES = ['SHSTA', 'TRNTY', 'OROVL', 'FOLSM', 'MELON', 'MLRTN', 'SLUIS_CVP', 'SLUIS_SWP']
 
-
-def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+def load_reservoir_entities(
+    csv_path: Optional[Path] = None,
+    filter_codes: Optional[List[str]] = None
+) -> Dict[str, Dict[str, Any]]:
     """
     Load reservoir metadata from reservoir_entity.csv.
 
+    Args:
+        csv_path: Path to reservoir_entity.csv
+        filter_codes: Optional list of short_codes to filter to. If None, loads all 92 reservoirs.
+
     Returns dict keyed by short_code with id, capacity_taf, and dead_pool_taf.
-    Only includes major reservoirs for percentile calculations.
     """
     if csv_path is None:
         csv_path = RESERVOIR_ENTITY_CSV
@@ -67,16 +71,24 @@ def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[s
         reader = csv.DictReader(f)
         for row in reader:
             short_code = row['short_code']
-            # Only include major reservoirs for percentile calculations
-            if short_code in MAJOR_RESERVOIR_CODES:
-                reservoirs[short_code] = {
-                    'id': int(row['id']),  # reservoir_entity_id for FK
-                    'name': row['name'],
-                    'capacity_taf': float(row['capacity_taf']) if row['capacity_taf'] else 0,
-                    'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
-                }
 
-    log.info(f"Loaded {len(reservoirs)} major reservoirs from {csv_path}")
+            # Skip if filtering and not in filter list
+            if filter_codes is not None and short_code not in filter_codes:
+                continue
+
+            # Skip reservoirs with zero capacity (can't calculate percentiles)
+            capacity = float(row['capacity_taf']) if row['capacity_taf'] else 0
+            if capacity <= 0:
+                continue
+
+            reservoirs[short_code] = {
+                'id': int(row['id']),  # reservoir_entity_id for FK
+                'name': row['name'],
+                'capacity_taf': capacity,
+                'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
+            }
+
+    log.info(f"Loaded {len(reservoirs)} reservoirs from {csv_path}")
     return reservoirs
 
 # Known scenarios
@@ -269,32 +281,41 @@ def calculate_percentiles_for_reservoir(
         short_code: Reservoir short_code (e.g., SHSTA)
         capacity_taf: Reservoir capacity for percent calculation
 
-    Returns dict of water_month -> {q10, q20, ..., q90, min, max, mean}
-    Values are expressed as percent of capacity.
+    Returns dict of water_month -> {
+        q0, q10, ..., q100, mean: values as percent of capacity
+        q0_taf, q10_taf, ..., q100_taf, mean_taf: values in TAF
+    }
     """
     storage_col = f'S_{short_code}'
     if storage_col not in df.columns:
         log.warning(f"Storage column {storage_col} not found in data")
         return {}
 
-    # Convert to percent of capacity
     df = df.copy()
-    df['storage_pct'] = (df[storage_col] / capacity_taf) * 100
 
     monthly_stats = {}
     for wm in range(1, 13):
-        month_data = df[df['WaterMonth'] == wm]['storage_pct'].dropna()
+        # Get raw TAF values for this water month
+        month_data_taf = df[df['WaterMonth'] == wm][storage_col].dropna()
 
-        if month_data.empty:
+        if month_data_taf.empty:
             log.warning(f"No data for {short_code} water month {wm}")
             continue
 
         stats = {}
-        for p in PERCENTILES:
-            stats[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
 
-        # q0 and q100 already represent min/max
-        stats['mean'] = round(float(month_data.mean()), 2)
+        # Calculate percentiles in both TAF and percent of capacity
+        for p in PERCENTILES:
+            taf_value = float(np.percentile(month_data_taf, p))
+            pct_value = (taf_value / capacity_taf) * 100
+
+            stats[f'q{p}'] = round(pct_value, 2)           # Percent of capacity
+            stats[f'q{p}_taf'] = round(taf_value, 2)       # TAF
+
+        # Mean in both units
+        mean_taf = float(month_data_taf.mean())
+        stats['mean'] = round((mean_taf / capacity_taf) * 100, 2)  # Percent
+        stats['mean_taf'] = round(mean_taf, 2)                      # TAF
 
         monthly_stats[wm] = stats
 
@@ -380,18 +401,21 @@ def format_for_database(results: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     Returns list of dicts matching reservoir_monthly_percentile table columns.
     Table uses q0 (min), q10, q30, q50 (median), q70, q90, q100 (max).
-    Note: capacity_taf is an entity attribute, not stored in statistics table.
+    Includes both percent-of-capacity and TAF values.
     """
     rows = []
     scenario_id = results['scenario_id']
 
     for short_code, res_data in results['reservoirs'].items():
         entity_id = res_data['id']
+        capacity_taf = res_data['capacity_taf']
+
         for water_month, stats in res_data['monthly_percentiles'].items():
             row = {
                 'scenario_short_code': scenario_id,
                 'reservoir_entity_id': entity_id,  # FK to reservoir_entity.id
                 'water_month': water_month,
+                # Percent of capacity values
                 'q0': stats.get('q0'),      # minimum
                 'q10': stats.get('q10'),
                 'q30': stats.get('q30'),
@@ -400,6 +424,17 @@ def format_for_database(results: Dict[str, Any]) -> List[Dict[str, Any]]:
                 'q90': stats.get('q90'),
                 'q100': stats.get('q100'),  # maximum
                 'mean_value': stats.get('mean'),
+                # TAF values
+                'q0_taf': stats.get('q0_taf'),
+                'q10_taf': stats.get('q10_taf'),
+                'q30_taf': stats.get('q30_taf'),
+                'q50_taf': stats.get('q50_taf'),
+                'q70_taf': stats.get('q70_taf'),
+                'q90_taf': stats.get('q90_taf'),
+                'q100_taf': stats.get('q100_taf'),
+                'mean_taf': stats.get('mean_taf'),
+                # Reference
+                'capacity_taf': capacity_taf,
             }
             rows.append(row)
 
@@ -411,18 +446,23 @@ def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
     Generate a single bulk INSERT statement with ON CONFLICT upsert.
 
     Uses multi-row VALUES syntax for clean console output (one INSERT message).
+    Includes both percent-of-capacity and TAF columns.
     """
     lines = [
         "-- Generated SQL for reservoir_monthly_percentile data",
         "-- Run this script after creating the table with 03_create_reservoir_percentile_table.sql",
+        "-- and applying 09_add_taf_percentile_columns.sql migration",
         f"-- Total rows: {len(rows)}",
         "",
         "BEGIN;",
         "",
         "INSERT INTO reservoir_monthly_percentile (",
         "    scenario_short_code, reservoir_entity_id, water_month,",
-        "    q0, q10, q30, q50, q70, q90, q100,",
-        "    mean_value, created_by, updated_by",
+        "    -- Percent of capacity values",
+        "    q0, q10, q30, q50, q70, q90, q100, mean_value,",
+        "    -- TAF values",
+        "    q0_taf, q10_taf, q30_taf, q50_taf, q70_taf, q90_taf, q100_taf, mean_taf,",
+        "    capacity_taf, created_by, updated_by",
         ") VALUES",
     ]
 
@@ -431,9 +471,13 @@ def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
     for row in rows:
         value_row = (
             f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, {row['water_month']}, "
+            # Percent values
             f"{row['q0']}, {row['q10']}, {row['q30']}, {row['q50']}, "
-            f"{row['q70']}, {row['q90']}, {row['q100']}, "
-            f"{row['mean_value']}, 1, 1)"
+            f"{row['q70']}, {row['q90']}, {row['q100']}, {row['mean_value']}, "
+            # TAF values
+            f"{row['q0_taf']}, {row['q10_taf']}, {row['q30_taf']}, {row['q50_taf']}, "
+            f"{row['q70_taf']}, {row['q90_taf']}, {row['q100_taf']}, {row['mean_taf']}, "
+            f"{row['capacity_taf']}, 1, 1)"
         )
         value_rows.append(value_row)
 
@@ -443,9 +487,15 @@ def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
     # ON CONFLICT clause
     lines.append("ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)")
     lines.append("DO UPDATE SET")
+    lines.append("    -- Percent of capacity values")
     lines.append("    q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,")
     lines.append("    q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,")
     lines.append("    q100 = EXCLUDED.q100, mean_value = EXCLUDED.mean_value,")
+    lines.append("    -- TAF values")
+    lines.append("    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,")
+    lines.append("    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,")
+    lines.append("    q100_taf = EXCLUDED.q100_taf, mean_taf = EXCLUDED.mean_taf,")
+    lines.append("    capacity_taf = EXCLUDED.capacity_taf,")
     lines.append("    updated_at = NOW(), updated_by = 1;")
     lines.append("")
     lines.append("COMMIT;")

@@ -24,6 +24,27 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+# Import reservoir metrics calculations (aligned with COEQWAL research notebooks)
+# Handle both package import and direct script execution
+try:
+    from .reservoir_metrics import (
+        calculate_flood_pool_probability,
+        calculate_dead_pool_probability,
+        calculate_cv,
+        calculate_annual_average,
+        calculate_monthly_average,
+        RESERVOIR_THRESHOLDS,
+    )
+except ImportError:
+    from reservoir_metrics import (
+        calculate_flood_pool_probability,
+        calculate_dead_pool_probability,
+        calculate_cv,
+        calculate_annual_average,
+        calculate_monthly_average,
+        RESERVOIR_THRESHOLDS,
+    )
+
 # Optional: boto3 for S3 access
 try:
     import boto3
@@ -46,7 +67,8 @@ SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027']
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 
 # Path to reservoir_entity.csv (relative to project root)
-RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent / \
+# From reservoirs/ -> statistics/ -> etl/ -> coeqwal-backend/ -> database/...
+RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent.parent / \
     "database/seed_tables/04_calsim_data/reservoir_entity.csv"
 
 # Percentiles for storage monthly statistics
@@ -106,11 +128,23 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
     s3 = boto3.client('s3')
 
     # Build list of variable names to load
-    # Storage: S_{code}, Spill: C_{code}_FLOOD
+    # Storage: S_{code}, Spill: C_{code}_FLOOD, Thresholds: S_{code}LEVEL*DV
     vars_to_find = set()
     for code in reservoir_codes:
         vars_to_find.add(f'S_{code}')          # storage
         vars_to_find.add(f'C_{code}_FLOOD')    # flood spill
+
+        # Add threshold variables for flood/dead pool probability calculations
+        # These are model output variables used to calculate probability metrics
+        # aligned with COEQWAL research notebooks (coeqwal/notebooks/coeqwalpackage/metrics.py)
+        if code in RESERVOIR_THRESHOLDS:
+            threshold_info = RESERVOIR_THRESHOLDS[code]
+            flood_var = threshold_info.get('flood_var')
+            dead_var = threshold_info.get('dead_var')
+            if isinstance(flood_var, str):
+                vars_to_find.add(flood_var)
+            if isinstance(dead_var, str):
+                vars_to_find.add(dead_var)
 
     # Try different possible CSV locations
     possible_keys = [
@@ -190,6 +224,16 @@ def load_scenario_csv_from_file(file_path: str, reservoir_codes: List[str]) -> p
     for code in reservoir_codes:
         vars_to_find.add(f'S_{code}')
         vars_to_find.add(f'C_{code}_FLOOD')
+
+        # Add threshold variables for flood/dead pool probability calculations
+        if code in RESERVOIR_THRESHOLDS:
+            threshold_info = RESERVOIR_THRESHOLDS[code]
+            flood_var = threshold_info.get('flood_var')
+            dead_var = threshold_info.get('dead_var')
+            if isinstance(flood_var, str):
+                vars_to_find.add(flood_var)
+            if isinstance(dead_var, str):
+                vars_to_find.add(dead_var)
 
     # Find column indices
     cols_to_load = [0]  # DateTime
@@ -285,6 +329,7 @@ def calculate_storage_monthly(
     Calculate monthly storage statistics for a single reservoir.
 
     Returns list of dicts (one per water month) for reservoir_storage_monthly table.
+    Includes both percent-of-capacity and TAF percentile values.
     """
     storage_col = f'S_{reservoir_code}'
 
@@ -300,9 +345,6 @@ def calculate_storage_monthly(
         if month_data.empty:
             continue
 
-        # Convert to percent of capacity
-        storage_pct = (month_data / capacity_taf) * 100
-
         # Calculate statistics
         mean_taf = float(month_data.mean())
         std_taf = float(month_data.std())
@@ -317,9 +359,13 @@ def calculate_storage_monthly(
             'sample_count': len(month_data),
         }
 
-        # Add percentiles (as % of capacity)
+        # Add percentiles in both units
         for p in STORAGE_PERCENTILES:
-            row[f'q{p}'] = round(float(np.percentile(storage_pct, p)), 2)
+            taf_value = float(np.percentile(month_data, p))
+            pct_value = (taf_value / capacity_taf) * 100
+
+            row[f'q{p}'] = round(pct_value, 2)          # Percent of capacity
+            row[f'q{p}_taf'] = round(taf_value, 2)      # TAF
 
         results.append(row)
 
@@ -510,6 +556,89 @@ def calculate_period_summary(
         result['annual_max_spill_q100'] = 0
         result['spill_threshold_pct'] = None
 
+    # ========== Flood/Dead Pool Probabilities ==========
+    # Aligned with COEQWAL research notebooks (coeqwal/notebooks/coeqwalpackage/metrics.py)
+    # Reference functions: frequency_hitting_level(), frequency_hitting_var_const_level()
+    storage = df[storage_col]
+    date_idx = df['DateTime']
+
+    # Get threshold values (variable from model output or constant)
+    flood_threshold = None
+    dead_threshold = None
+
+    if reservoir_code in RESERVOIR_THRESHOLDS:
+        threshold_info = RESERVOIR_THRESHOLDS[reservoir_code]
+
+        # Flood threshold
+        flood_var = threshold_info.get('flood_var')
+        if isinstance(flood_var, str) and flood_var in df.columns:
+            flood_threshold = df[flood_var]
+        elif isinstance(flood_var, (int, float)):
+            flood_threshold = float(flood_var)
+
+        # Dead pool threshold
+        dead_var = threshold_info.get('dead_var')
+        if isinstance(dead_var, str) and dead_var in df.columns:
+            dead_threshold = df[dead_var]
+        elif isinstance(dead_var, (int, float)):
+            dead_threshold = float(dead_var)
+
+    # Fallback to entity dead_pool_taf if no threshold defined
+    if dead_threshold is None and dead_pool_taf > 0:
+        dead_threshold = dead_pool_taf
+
+    # Calculate flood pool probabilities
+    if flood_threshold is not None:
+        fp_all = calculate_flood_pool_probability(storage, flood_threshold)
+        result['flood_pool_prob_all'] = round(fp_all['probability'], 4)
+
+        fp_sep = calculate_flood_pool_probability(
+            storage, flood_threshold, months=[9], date_index=date_idx
+        )
+        result['flood_pool_prob_september'] = round(fp_sep['probability'], 4)
+
+        fp_apr = calculate_flood_pool_probability(
+            storage, flood_threshold, months=[4], date_index=date_idx
+        )
+        result['flood_pool_prob_april'] = round(fp_apr['probability'], 4)
+    else:
+        result['flood_pool_prob_all'] = None
+        result['flood_pool_prob_september'] = None
+        result['flood_pool_prob_april'] = None
+
+    # Calculate dead pool probabilities
+    if dead_threshold is not None:
+        dp_all = calculate_dead_pool_probability(storage, dead_threshold)
+        result['dead_pool_prob_all'] = round(dp_all['probability'], 4)
+
+        dp_sep = calculate_dead_pool_probability(
+            storage, dead_threshold, months=[9], date_index=date_idx
+        )
+        result['dead_pool_prob_september'] = round(dp_sep['probability'], 4)
+    else:
+        result['dead_pool_prob_all'] = None
+        result['dead_pool_prob_september'] = None
+
+    # CV calculations (using imported function, aligned with notebook's compute_cv)
+    result['storage_cv_all'] = round(calculate_cv(storage), 4)
+    result['storage_cv_april'] = round(
+        calculate_cv(storage, months=[4], date_index=date_idx), 4
+    )
+    result['storage_cv_september'] = round(
+        calculate_cv(storage, months=[9], date_index=date_idx), 4
+    )
+
+    # Annual and monthly averages
+    result['annual_avg_taf'] = round(
+        calculate_annual_average(storage, df['WaterYear']), 2
+    )
+    result['april_avg_taf'] = round(
+        calculate_monthly_average(storage, date_idx, month=4), 2
+    )
+    result['september_avg_taf'] = round(
+        calculate_monthly_average(storage, date_idx, month=9), 2
+    )
+
     return result
 
 
@@ -610,7 +739,10 @@ def generate_sql_inserts(
         lines.append("INSERT INTO reservoir_storage_monthly (")
         lines.append("    scenario_short_code, reservoir_entity_id, water_month,")
         lines.append("    storage_avg_taf, storage_cv, storage_pct_capacity,")
+        lines.append("    -- Percent of capacity values")
         lines.append("    q0, q10, q30, q50, q70, q90, q100,")
+        lines.append("    -- TAF values")
+        lines.append("    q0_taf, q10_taf, q30_taf, q50_taf, q70_taf, q90_taf, q100_taf,")
         lines.append("    capacity_taf, sample_count, created_by, updated_by")
         lines.append(") VALUES")
 
@@ -619,8 +751,13 @@ def generate_sql_inserts(
             value_row = (
                 f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, {row['water_month']}, "
                 f"{row['storage_avg_taf']}, {row['storage_cv']}, {row['storage_pct_capacity']}, "
+                # Percent values
                 f"{row['q0']}, {row['q10']}, {row['q30']}, {row['q50']}, "
                 f"{row['q70']}, {row['q90']}, {row['q100']}, "
+                # TAF values
+                f"{row.get('q0_taf', 'NULL')}, {row.get('q10_taf', 'NULL')}, {row.get('q30_taf', 'NULL')}, "
+                f"{row.get('q50_taf', 'NULL')}, {row.get('q70_taf', 'NULL')}, {row.get('q90_taf', 'NULL')}, "
+                f"{row.get('q100_taf', 'NULL')}, "
                 f"{row['capacity_taf']}, {row['sample_count']}, 1, 1)"
             )
             value_rows.append(value_row)
@@ -634,6 +771,9 @@ def generate_sql_inserts(
         lines.append("    q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,")
         lines.append("    q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,")
         lines.append("    q100 = EXCLUDED.q100,")
+        lines.append("    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,")
+        lines.append("    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,")
+        lines.append("    q100_taf = EXCLUDED.q100_taf,")
         lines.append("    capacity_taf = EXCLUDED.capacity_taf,")
         lines.append("    sample_count = EXCLUDED.sample_count,")
         lines.append("    updated_at = NOW(), updated_by = 1;")
@@ -692,6 +832,11 @@ def generate_sql_inserts(
         lines.append("    spill_mean_cfs, spill_peak_cfs,")
         lines.append("    annual_spill_avg_taf, annual_spill_cv, annual_spill_max_taf,")
         lines.append("    annual_max_spill_q50, annual_max_spill_q90, annual_max_spill_q100,")
+        lines.append("    -- Probability metrics (aligned with COEQWAL research notebooks)")
+        lines.append("    flood_pool_prob_all, flood_pool_prob_september, flood_pool_prob_april,")
+        lines.append("    dead_pool_prob_all, dead_pool_prob_september,")
+        lines.append("    storage_cv_all, storage_cv_april, storage_cv_september,")
+        lines.append("    annual_avg_taf, april_avg_taf, september_avg_taf,")
         lines.append("    capacity_taf, created_by, updated_by")
         lines.append(") VALUES")
 
@@ -712,6 +857,14 @@ def generate_sql_inserts(
                 f"{row['spill_mean_cfs']}, {row['spill_peak_cfs']}, "
                 f"{row['annual_spill_avg_taf']}, {row['annual_spill_cv']}, {row['annual_spill_max_taf']}, "
                 f"{row['annual_max_spill_q50']}, {row['annual_max_spill_q90']}, {row['annual_max_spill_q100']}, "
+                # Probability metrics
+                f"{sql_val(row.get('flood_pool_prob_all'))}, {sql_val(row.get('flood_pool_prob_september'))}, "
+                f"{sql_val(row.get('flood_pool_prob_april'))}, "
+                f"{sql_val(row.get('dead_pool_prob_all'))}, {sql_val(row.get('dead_pool_prob_september'))}, "
+                f"{sql_val(row.get('storage_cv_all'))}, {sql_val(row.get('storage_cv_april'))}, "
+                f"{sql_val(row.get('storage_cv_september'))}, "
+                f"{sql_val(row.get('annual_avg_taf'))}, {sql_val(row.get('april_avg_taf'))}, "
+                f"{sql_val(row.get('september_avg_taf'))}, "
                 f"{row['capacity_taf']}, 1, 1)"
             )
             value_rows.append(value_row)
@@ -742,6 +895,18 @@ def generate_sql_inserts(
         lines.append("    annual_max_spill_q50 = EXCLUDED.annual_max_spill_q50,")
         lines.append("    annual_max_spill_q90 = EXCLUDED.annual_max_spill_q90,")
         lines.append("    annual_max_spill_q100 = EXCLUDED.annual_max_spill_q100,")
+        lines.append("    -- Probability metrics")
+        lines.append("    flood_pool_prob_all = EXCLUDED.flood_pool_prob_all,")
+        lines.append("    flood_pool_prob_september = EXCLUDED.flood_pool_prob_september,")
+        lines.append("    flood_pool_prob_april = EXCLUDED.flood_pool_prob_april,")
+        lines.append("    dead_pool_prob_all = EXCLUDED.dead_pool_prob_all,")
+        lines.append("    dead_pool_prob_september = EXCLUDED.dead_pool_prob_september,")
+        lines.append("    storage_cv_all = EXCLUDED.storage_cv_all,")
+        lines.append("    storage_cv_april = EXCLUDED.storage_cv_april,")
+        lines.append("    storage_cv_september = EXCLUDED.storage_cv_september,")
+        lines.append("    annual_avg_taf = EXCLUDED.annual_avg_taf,")
+        lines.append("    april_avg_taf = EXCLUDED.april_avg_taf,")
+        lines.append("    september_avg_taf = EXCLUDED.september_avg_taf,")
         lines.append("    capacity_taf = EXCLUDED.capacity_taf,")
         lines.append("    updated_at = NOW(), updated_by = 1;")
         lines.append("")

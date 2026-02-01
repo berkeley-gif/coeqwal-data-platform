@@ -1029,6 +1029,15 @@ Table: reservoir_storage_monthly
 ├── q90                   NUMERIC(6,2)
 ├── q100                  NUMERIC(6,2)               -- max
 │
+├── -- Storage percentiles (TAF volume) - aligned with COEQWAL research notebooks
+├── q0_taf                NUMERIC(10,2)              -- Minimum storage in TAF
+├── q10_taf               NUMERIC(10,2)              -- 10th percentile in TAF
+├── q30_taf               NUMERIC(10,2)              -- 30th percentile in TAF
+├── q50_taf               NUMERIC(10,2)              -- Median storage in TAF
+├── q70_taf               NUMERIC(10,2)              -- 70th percentile in TAF
+├── q90_taf               NUMERIC(10,2)              -- 90th percentile in TAF
+├── q100_taf              NUMERIC(10,2)              -- Maximum storage in TAF
+│
 ├── -- Metadata
 ├── capacity_taf          NUMERIC(10,2)              -- Denormalized for convenience
 ├── sample_count          INTEGER                    -- Number of months in sample
@@ -1063,7 +1072,11 @@ Constraints:
 Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
 
 DDL: database/scripts/sql/09_statistics/04_create_reservoir_storage_monthly.sql
+     database/scripts/sql/09_statistics/09_add_taf_percentile_columns.sql (ALTER)
 ETL: etl/statistics/calculate_reservoir_statistics.py
+
+Note: TAF percentile columns (q0_taf through q100_taf) added to support COEQWAL research
+notebook verification and provide absolute storage values alongside % of capacity.
 ```
 
 ### **7. reservoir_spill_monthly (monthly spill statistics)**
@@ -1172,6 +1185,26 @@ Table: reservoir_period_summary
 ├── annual_max_spill_q90  NUMERIC(10,2)              -- 90th percentile of annual peaks
 ├── annual_max_spill_q100 NUMERIC(10,2)              -- Max (same as spill_peak_cfs)
 │
+├── -- Probability metrics (aligned with COEQWAL research notebooks)
+├── -- Flood pool: P(storage >= flood control level)
+├── flood_pool_prob_all       NUMERIC(6,4)           -- Flood probability, all months (0-1)
+├── flood_pool_prob_september NUMERIC(6,4)           -- Flood probability, September
+├── flood_pool_prob_april     NUMERIC(6,4)           -- Flood probability, April
+│
+├── -- Dead pool: P(storage <= dead pool level)
+├── dead_pool_prob_all        NUMERIC(6,4)           -- Dead pool probability, all months (0-1)
+├── dead_pool_prob_september  NUMERIC(6,4)           -- Dead pool probability, September
+│
+├── -- Coefficient of variation: CV = std / mean
+├── storage_cv_all            NUMERIC(6,4)           -- CV of storage, all months
+├── storage_cv_april          NUMERIC(6,4)           -- CV of storage, April
+├── storage_cv_september      NUMERIC(6,4)           -- CV of storage, September
+│
+├── -- Average storage (aligned with notebook metrics)
+├── annual_avg_taf            NUMERIC(10,2)          -- Mean of annual mean storage
+├── april_avg_taf             NUMERIC(10,2)          -- Mean April storage
+├── september_avg_taf         NUMERIC(10,2)          -- Mean September storage
+│
 ├── -- Metadata
 ├── capacity_taf          NUMERIC(10,2)              -- Denormalized for convenience
 │
@@ -1213,6 +1246,44 @@ Use Cases:
 ├── Exceedance curves: storage_exc_* enables full period storage duration curves
 └── Chart thresholds: dead_pool_pct and spill_threshold_pct for visual markers
 
+Probability Metrics (COEQWAL Research Notebooks Alignment):
+├── Source: coeqwal/notebooks/coeqwalpackage/metrics.py
+├── Verified against: all_metrics_output.csv (Metrics.ipynb output)
+│
+├── Flood Pool Probability:
+│   ├── Formula: P = count(storage >= flood_control_level) / total_count
+│   ├── Threshold source: S_{res}LEVEL5DV variable (dynamic) or constant
+│   ├── Example SHSTA flood_pool_prob_all: 0.3117 (31.17% of months at flood control)
+│   └── Reservoirs with variable thresholds: SHSTA, OROVL, TRNTY, FOLSM, MELON, SLUIS_CVP, SLUIS_SWP
+│
+├── Dead Pool Probability:
+│   ├── Formula: P = count(storage <= dead_pool_level) / total_count
+│   ├── Threshold source: S_{res}LEVEL1DV variable (dynamic) or constant (reservoir_entity.dead_pool_taf)
+│   ├── Example: Most reservoirs have 0.0000 dead pool probability under normal conditions
+│   └── Key drought indicator: increasing dead_pool_prob signals storage stress
+│
+├── Coefficient of Variation (CV):
+│   ├── Formula: CV = standard_deviation / mean
+│   ├── Higher CV = more variability = less predictable operations
+│   └── Separate CV for all months, April (spring), September (end of dry season)
+│
+└── Metric Naming (matching notebook output):
+    ├── All_Prob_S_{RES}_flood → flood_pool_prob_all
+    ├── Sep_Prob_S_{RES}_flood → flood_pool_prob_september
+    ├── All_Prob_S_{RES}_dead → dead_pool_prob_all
+    ├── Sep_Avg_S_{RES}_TAF → september_avg_taf
+    └── Sep_S_{RES}_CV → storage_cv_september
+
+Reservoir Thresholds Reference:
+├── SHSTA: floodVar=S_SHSTALEVEL5DV, deadVar=S_SHSTALEVEL1DV
+├── OROVL: floodVar=S_OROVLLEVEL5DV, deadVar=S_OROVLLEVEL1DV
+├── TRNTY: floodVar=S_TRNTYLEVEL5DV, deadVar=S_TRNTYLEVEL1DV
+├── FOLSM: floodVar=S_FOLSMLEVEL5DV, deadVar=S_FOLSMLEVEL1DV
+├── MELON: floodVar=S_MELONLEVEL4DV, deadPool=80 TAF (constant)
+├── MLRTN: floodPool=524 TAF (constant), deadPool=135 TAF (constant)
+├── SLUIS_CVP: floodVar=S_SLUIS_CVPLEVEL5DV, deadVar=S_SLUIS_CVPLEVEL1DV
+└── SLUIS_SWP: floodVar=S_SLUIS_SWPLEVEL5DV, deadVar=S_SLUIS_SWPLEVEL1DV
+
 Foreign keys:
 ├── Ref: reservoir_period_summary.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
 ├── Ref: reservoir_period_summary.created_by > developer.id [delete: restrict, update: cascade]
@@ -1224,6 +1295,9 @@ Indexes:
 ├── idx_period_summary_scenario (scenario_short_code)
 ├── idx_period_summary_entity (reservoir_entity_id)
 ├── idx_period_summary_spill_freq (spill_frequency_pct DESC)
+├── idx_period_summary_flood_prob (flood_pool_prob_all DESC) -- For flood risk queries
+├── idx_period_summary_dead_prob (dead_pool_prob_all DESC) -- For drought risk queries
+├── idx_period_summary_cv (storage_cv_all DESC) -- For variability queries
 └── idx_period_summary_active (is_active) WHERE is_active = TRUE
 
 Constraints:
@@ -1232,6 +1306,7 @@ Constraints:
 Expected Records: 736 rows (92 reservoirs × 8 scenarios)
 
 DDL: database/scripts/sql/09_statistics/06_create_reservoir_period_summary.sql
+     database/scripts/sql/09_statistics/08_add_probability_metrics_to_period_summary.sql (ALTER)
 ETL: etl/statistics/calculate_reservoir_statistics.py
 ```
 
