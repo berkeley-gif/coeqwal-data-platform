@@ -1985,23 +1985,38 @@ Table: channel_entity
 #### **reservoir_entity (reservoir management)**
 ```
 Table: reservoir_entity
-├── id                   SERIAL PRIMARY KEY
-├── network_node_id      INTEGER NOT NULL           -- FK → network.id
-├── short_code           VARCHAR UNIQUE NOT NULL
-├── name                 VARCHAR
-├── description          TEXT
-├── associated_river     VARCHAR
-├── entity_type_id       INTEGER NOT NULL           -- FK → calsim_entity_type.id
-├── capacity_taf         NUMERIC
-├── dead_pool_taf        NUMERIC
-├── surface_area_acres   NUMERIC
-├── operational_purpose  VARCHAR
-├── entity_version_id    INTEGER NOT NULL           -- FK → version.id (entity family)
-├── attribute_source     JSONB NOT NULL             -- {"capacity_taf": "entity_system", "operational_purpose": "management"}
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── id                   INTEGER PRIMARY KEY
+├── network_node_id      VARCHAR(20) NOT NULL       -- Network node identifier (e.g., "SHSTA")
+├── short_code           VARCHAR(20) UNIQUE NOT NULL -- Short identifier (SHSTA, OROVL, etc.)
+├── name                 VARCHAR(100)               -- Full reservoir name
+├── description          TEXT                       -- Detailed description
+├── associated_river     VARCHAR(100)               -- River system
+├── entity_type_id       INTEGER NOT NULL DEFAULT 1 -- FK → calsim_entity_type.id
+├── schematic_type_id    INTEGER                    -- FK → schematic type lookup
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (1=SAC, 2=SJR, 4=Tulare)
+├── capacity_taf         NUMERIC(10,2)              -- Maximum capacity in TAF
+├── dead_pool_taf        NUMERIC(10,2)              -- Dead pool storage in TAF
+├── surface_area_acres   NUMERIC(12,2)              -- Surface area in acres
+├── operational_purpose  VARCHAR(50)                -- Primary operational purpose
+├── has_gis_data         INTEGER DEFAULT 1          -- Whether GIS data exists (1=yes, 0=no)
+├── entity_version_id    INTEGER NOT NULL DEFAULT 1 -- FK → version.id (entity family)
+├── source_ids           TEXT                       -- Comma-separated source IDs
+├── is_active            BOOLEAN DEFAULT TRUE       -- Soft delete flag
+├── created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+├── updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+
+Indexes:
+├── idx_reservoir_entity_short_code (short_code)
+└── idx_reservoir_entity_region (hydrologic_region_id)
+
+Comments:
+├── Table: Reservoir management entities with capacity and operational attributes. Part of ENTITY LAYER.
+├── short_code: Short identifier (SHSTA, OROVL, etc.) - matches network.short_code
+├── capacity_taf: Maximum reservoir capacity in thousand acre-feet (TAF)
+├── dead_pool_taf: Dead pool storage in TAF - unusable storage at bottom
+└── hydrologic_region_id: FK to hydrologic_region: 1=SAC(NOD), 2=SJR(SOD), 4=Tulare(SOD)
 ```
 
 #### **inflow_entity (inflow management)**

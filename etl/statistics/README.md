@@ -636,3 +636,8 @@ python verify_metrics.py --reservoirs SHSTA OROVL
 ### S3 Access Errors
 - Configure AWS credentials: `aws configure`
 - Set bucket: `export S3_BUCKET=coeqwal-model-run`
+
+### Skipped Reservoirs
+Two reservoirs are skipped (no storage data in CalSim CSV):
+- **EBMUD** - EBMUD Terminal Reservoirs
+- **RELIE** - Relief Reservoir

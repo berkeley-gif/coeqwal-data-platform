@@ -17,14 +17,20 @@ Metrics calculated (matching notebook column names):
 
 Usage:
     python verify_metrics.py                    # Calculate and display metrics
-    python verify_metrics.py --compare FILE    # Compare against notebook output
+    python verify_metrics.py --compare FILE    # Compare against notebook output (local or S3)
     python verify_metrics.py --output FILE     # Save metrics to CSV
+
+S3 Reference File:
+    s3://coeqwal-model-run/reference/all_metrics_output.csv
 """
 
 import argparse
+import io
+import os
 import sys
 from pathlib import Path
 
+import boto3
 import pandas as pd
 
 # Add parent directory to path for imports
@@ -40,12 +46,16 @@ from reservoirs.reservoir_metrics import (
 from reservoirs.calculate_reservoir_statistics import (
     load_reservoir_entities,
     load_scenario_csv_from_file,
+    load_scenario_csv_from_s3,
     parse_scenario_csv,
     add_water_year_month,
 )
 
 # Reservoirs that the notebook calculates metrics for
 NOTEBOOK_RESERVOIRS = ['SHSTA', 'OROVL', 'TRNTY', 'FOLSM', 'MELON', 'MLRTN', 'SLUIS_CVP', 'SLUIS_SWP']
+
+# Default S3 path for notebook reference output
+DEFAULT_REFERENCE_S3 = 's3://coeqwal-model-run/reference/all_metrics_output.csv'
 
 
 def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
@@ -149,8 +159,24 @@ def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
 
 
 def load_notebook_output(csv_path: str) -> pd.DataFrame:
-    """Load the notebook's all_metrics_output.csv."""
-    return pd.read_csv(csv_path, index_col=0)
+    """
+    Load the notebook's all_metrics_output.csv.
+
+    Supports local file paths or S3 URIs (s3://bucket/key).
+    """
+    if csv_path.startswith('s3://'):
+        # Parse S3 URI
+        parts = csv_path.replace('s3://', '').split('/', 1)
+        bucket = parts[0]
+        key = parts[1] if len(parts) > 1 else ''
+
+        print(f"Fetching from S3: bucket={bucket}, key={key}")
+        s3 = boto3.client('s3')
+        response = s3.get_object(Bucket=bucket, Key=key)
+        content = response['Body'].read().decode('utf-8')
+        return pd.read_csv(io.StringIO(content), index_col=0)
+    else:
+        return pd.read_csv(csv_path, index_col=0)
 
 
 def compare_metrics(calculated: dict, expected: pd.Series, tolerance: float = 0.0001) -> dict:
@@ -221,7 +247,8 @@ def main():
     parser = argparse.ArgumentParser(description='Verify ETL metrics against notebook output')
     parser.add_argument('--scenario', '-s', default='s0020', help='Scenario ID')
     parser.add_argument('--csv-path', default=None, help='Path to scenario CSV')
-    parser.add_argument('--compare', help='Path to notebook all_metrics_output.csv for comparison')
+    parser.add_argument('--compare', nargs='?', const=DEFAULT_REFERENCE_S3,
+                        help=f'Path to notebook all_metrics_output.csv (default: {DEFAULT_REFERENCE_S3})')
     parser.add_argument('--output', '-o', help='Save calculated metrics to CSV')
     parser.add_argument('--reservoirs', nargs='+', default=NOTEBOOK_RESERVOIRS,
                         help='Reservoirs to calculate (default: notebook reservoirs)')
@@ -229,27 +256,45 @@ def main():
 
     # Paths
     script_dir = Path(__file__).parent
-    default_csv = script_dir / '../pipelines/s0020_coeqwal_calsim_output.csv'
-    csv_path = Path(args.csv_path) if args.csv_path else default_csv
+    default_csv = script_dir / '../pipelines' / f'{args.scenario}_coeqwal_calsim_output.csv'
 
     print("=" * 70)
     print("COEQWAL Metrics Verification")
     print("=" * 70)
     print(f"Scenario: {args.scenario}")
-    print(f"CSV: {csv_path}")
     print(f"Reservoirs: {', '.join(args.reservoirs)}")
     print()
-
-    if not csv_path.exists():
-        print(f"ERROR: CSV file not found at {csv_path}")
-        return 1
 
     # Load reservoir metadata
     reservoirs = load_reservoir_entities()
 
-    # Load and parse CSV
+    # Determine CSV source and load
+    use_s3 = False
+    if args.csv_path:
+        if args.csv_path.startswith('s3://'):
+            use_s3 = True
+            csv_source = args.csv_path
+        else:
+            csv_path = Path(args.csv_path)
+            if not csv_path.exists():
+                print(f"ERROR: CSV file not found at {csv_path}")
+                return 1
+            csv_source = str(csv_path)
+    elif default_csv.exists():
+        csv_source = str(default_csv)
+    else:
+        # Fall back to S3
+        use_s3 = True
+        csv_source = f"s3://coeqwal-model-run/scenario/{args.scenario}/csv/{args.scenario}_coeqwal_calsim_output.csv"
+
+    print(f"CSV Source: {csv_source}")
     print("Loading data...")
-    raw_df = load_scenario_csv_from_file(str(csv_path), args.reservoirs)
+
+    if use_s3:
+        raw_df = load_scenario_csv_from_s3(args.scenario, args.reservoirs)
+    else:
+        raw_df = load_scenario_csv_from_file(csv_source, args.reservoirs)
+
     df = parse_scenario_csv(raw_df)
     df = add_water_year_month(df)
     print(f"Loaded {len(df)} rows ({df['DateTime'].min()} to {df['DateTime'].max()})")

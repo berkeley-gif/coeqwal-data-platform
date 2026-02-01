@@ -23,6 +23,8 @@ import os
 import re
 from typing import Any, Dict, Optional
 
+import numpy as np
+
 # Import calculation modules
 from reservoirs.calculate_reservoir_statistics import (
     calculate_all_statistics,
@@ -37,6 +39,7 @@ from reservoirs.calculate_reservoir_percentiles import (
 try:
     import psycopg2
     from psycopg2.extras import execute_values
+
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
@@ -50,8 +53,44 @@ logging.basicConfig(
 log = logging.getLogger("statistics_etl")
 
 # Environment config
-DATABASE_URL = os.getenv('DATABASE_URL')
-S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+DATABASE_URL = os.getenv("DATABASE_URL")
+S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
+
+
+def sanitize_value(val):
+    """
+    Convert numpy types to Python native types for database insertion.
+
+    psycopg2 can have issues with numpy scalar types, so we need to ensure
+    all values are Python-native before insertion.
+    """
+    if val is None:
+        return None
+    # Handle numpy integer types
+    if isinstance(val, (np.integer, np.int64, np.int32)):
+        return int(val)
+    # Handle numpy floating types
+    if isinstance(val, (np.floating, np.float64, np.float32)):
+        return float(val)
+    # Handle numpy boolean
+    if isinstance(val, np.bool_):
+        return bool(val)
+    # Handle numpy arrays (convert to list)
+    if isinstance(val, np.ndarray):
+        return val.tolist()
+    # Handle NaN values - convert to None for database NULL
+    if isinstance(val, float) and np.isnan(val):
+        return None
+    # Check if it's a numpy dtype type (the bug we're fixing)
+    if isinstance(val, type) and issubclass(val, np.generic):
+        log.warning(f"Found numpy type object instead of value: {val}")
+        return None
+    return val
+
+
+def sanitize_row(row_dict: dict) -> dict:
+    """Sanitize all values in a row dictionary."""
+    return {k: sanitize_value(v) for k, v in row_dict.items()}
 
 
 def extract_scenario_from_s3_key(s3_key: str) -> Optional[str]:
@@ -62,7 +101,7 @@ def extract_scenario_from_s3_key(s3_key: str) -> Optional[str]:
     - scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
     - scenario/s0020/csv/s0020_DV.csv
     """
-    match = re.search(r'scenario/(s\d{4})/', s3_key)
+    match = re.search(r"scenario/(s\d{4})/", s3_key)
     if match:
         return match.group(1)
     return None
@@ -71,7 +110,9 @@ def extract_scenario_from_s3_key(s3_key: str) -> Optional[str]:
 def get_db_connection():
     """Get database connection from DATABASE_URL."""
     if not HAS_PSYCOPG2:
-        raise ImportError("psycopg2 required for database writes. Install with: pip install psycopg2-binary")
+        raise ImportError(
+            "psycopg2 required for database writes. Install with: pip install psycopg2-binary"
+        )
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL environment variable not set")
     return psycopg2.connect(DATABASE_URL)
@@ -88,35 +129,37 @@ def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any]) -> int:
     cursor = conn.cursor()
 
     rows = []
-    for short_code, res_data in results['reservoirs'].items():
-        entity_id = res_data['id']
-        capacity_taf = res_data.get('capacity_taf')
+    for short_code, res_data in results["reservoirs"].items():
+        entity_id = sanitize_value(res_data["id"])
+        capacity_taf = sanitize_value(res_data.get("capacity_taf"))
 
-        for water_month, stats in res_data['monthly_percentiles'].items():
-            rows.append((
-                scenario_id,
-                entity_id,
-                int(water_month),
-                # Percent of capacity values
-                stats.get('q0'),
-                stats.get('q10'),
-                stats.get('q30'),
-                stats.get('q50'),
-                stats.get('q70'),
-                stats.get('q90'),
-                stats.get('q100'),
-                stats.get('mean'),
-                # TAF values
-                stats.get('q0_taf'),
-                stats.get('q10_taf'),
-                stats.get('q30_taf'),
-                stats.get('q50_taf'),
-                stats.get('q70_taf'),
-                stats.get('q90_taf'),
-                stats.get('q100_taf'),
-                stats.get('mean_taf'),
-                capacity_taf,
-            ))
+        for water_month, stats in res_data["monthly_percentiles"].items():
+            rows.append(
+                (
+                    scenario_id,
+                    entity_id,
+                    int(water_month),
+                    # Percent of capacity values
+                    sanitize_value(stats.get("q0")),
+                    sanitize_value(stats.get("q10")),
+                    sanitize_value(stats.get("q30")),
+                    sanitize_value(stats.get("q50")),
+                    sanitize_value(stats.get("q70")),
+                    sanitize_value(stats.get("q90")),
+                    sanitize_value(stats.get("q100")),
+                    sanitize_value(stats.get("mean")),
+                    # TAF values
+                    sanitize_value(stats.get("q0_taf")),
+                    sanitize_value(stats.get("q10_taf")),
+                    sanitize_value(stats.get("q30_taf")),
+                    sanitize_value(stats.get("q50_taf")),
+                    sanitize_value(stats.get("q70_taf")),
+                    sanitize_value(stats.get("q90_taf")),
+                    sanitize_value(stats.get("q100_taf")),
+                    sanitize_value(stats.get("mean_taf")),
+                    capacity_taf,
+                )
+            )
 
     if rows:
         execute_values(
@@ -139,7 +182,7 @@ def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any]) -> int:
                 capacity_taf = EXCLUDED.capacity_taf,
                 updated_at = NOW()
             """,
-            rows
+            rows,
         )
         conn.commit()
 
@@ -151,10 +194,7 @@ def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any]) -> int:
 
 
 def write_statistics_to_db(
-    scenario_id: str,
-    storage_monthly: list,
-    spill_monthly: list,
-    period_summary: list
+    scenario_id: str, storage_monthly: list, spill_monthly: list, period_summary: list
 ) -> Dict[str, int]:
     """
     Write statistics directly to database tables.
@@ -167,26 +207,37 @@ def write_statistics_to_db(
 
     # Storage monthly
     if storage_monthly:
-        storage_rows = [
-            (
-                row['scenario_short_code'],
-                row['reservoir_entity_id'],
-                row['water_month'],
-                row['storage_avg_taf'],
-                row['storage_cv'],
-                row['storage_pct_capacity'],
-                # Percentiles as % of capacity
-                row['q0'], row['q10'], row['q30'], row['q50'],
-                row['q70'], row['q90'], row['q100'],
-                # Percentiles in TAF (volume)
-                row.get('q0_taf'), row.get('q10_taf'), row.get('q30_taf'),
-                row.get('q50_taf'), row.get('q70_taf'), row.get('q90_taf'),
-                row.get('q100_taf'),
-                row['capacity_taf'],
-                row['sample_count'],
+        storage_rows = []
+        for row in storage_monthly:
+            row = sanitize_row(row)
+            storage_rows.append(
+                (
+                    row["scenario_short_code"],
+                    row["reservoir_entity_id"],
+                    row["water_month"],
+                    row["storage_avg_taf"],
+                    row["storage_cv"],
+                    row["storage_pct_capacity"],
+                    # Percentiles as % of capacity
+                    row["q0"],
+                    row["q10"],
+                    row["q30"],
+                    row["q50"],
+                    row["q70"],
+                    row["q90"],
+                    row["q100"],
+                    # Percentiles in TAF (volume)
+                    row.get("q0_taf"),
+                    row.get("q10_taf"),
+                    row.get("q30_taf"),
+                    row.get("q50_taf"),
+                    row.get("q70_taf"),
+                    row.get("q90_taf"),
+                    row.get("q100_taf"),
+                    row["capacity_taf"],
+                    row["sample_count"],
+                )
             )
-            for row in storage_monthly
-        ]
         execute_values(
             cursor,
             """
@@ -213,29 +264,31 @@ def write_statistics_to_db(
                 sample_count = EXCLUDED.sample_count,
                 updated_at = NOW()
             """,
-            storage_rows
+            storage_rows,
         )
-        counts['storage_monthly'] = len(storage_rows)
+        counts["storage_monthly"] = len(storage_rows)
 
     # Spill monthly
     if spill_monthly:
-        spill_rows = [
-            (
-                row['scenario_short_code'],
-                row['reservoir_entity_id'],
-                row['water_month'],
-                row['spill_months_count'],
-                row['total_months'],
-                row['spill_frequency_pct'],
-                row['spill_avg_cfs'],
-                row['spill_max_cfs'],
-                row['spill_q50'],
-                row['spill_q90'],
-                row['spill_q100'],
-                row.get('storage_at_spill_avg_pct'),
+        spill_rows = []
+        for row in spill_monthly:
+            row = sanitize_row(row)
+            spill_rows.append(
+                (
+                    row["scenario_short_code"],
+                    row["reservoir_entity_id"],
+                    row["water_month"],
+                    row["spill_months_count"],
+                    row["total_months"],
+                    row["spill_frequency_pct"],
+                    row["spill_avg_cfs"],
+                    row["spill_max_cfs"],
+                    row["spill_q50"],
+                    row["spill_q90"],
+                    row["spill_q100"],
+                    row.get("storage_at_spill_avg_pct"),
+                )
             )
-            for row in spill_monthly
-        ]
         execute_values(
             cursor,
             """
@@ -259,55 +312,57 @@ def write_statistics_to_db(
                 storage_at_spill_avg_pct = EXCLUDED.storage_at_spill_avg_pct,
                 updated_at = NOW()
             """,
-            spill_rows
+            spill_rows,
         )
-        counts['spill_monthly'] = len(spill_rows)
+        counts["spill_monthly"] = len(spill_rows)
 
     # Period summary (includes probability metrics)
     if period_summary:
-        summary_rows = [
-            (
-                row['scenario_short_code'],
-                row['reservoir_entity_id'],
-                row['simulation_start_year'],
-                row['simulation_end_year'],
-                row['total_years'],
-                row.get('storage_exc_p5'),
-                row.get('storage_exc_p10'),
-                row.get('storage_exc_p25'),
-                row.get('storage_exc_p50'),
-                row.get('storage_exc_p75'),
-                row.get('storage_exc_p90'),
-                row.get('storage_exc_p95'),
-                row['dead_pool_taf'],
-                row['dead_pool_pct'],
-                row.get('spill_threshold_pct'),
-                row['spill_years_count'],
-                row['spill_frequency_pct'],
-                row['spill_mean_cfs'],
-                row['spill_peak_cfs'],
-                row['annual_spill_avg_taf'],
-                row['annual_spill_cv'],
-                row['annual_spill_max_taf'],
-                row['annual_max_spill_q50'],
-                row['annual_max_spill_q90'],
-                row['annual_max_spill_q100'],
-                # Probability metrics
-                row.get('flood_pool_prob_all'),
-                row.get('flood_pool_prob_september'),
-                row.get('flood_pool_prob_april'),
-                row.get('dead_pool_prob_all'),
-                row.get('dead_pool_prob_september'),
-                row.get('storage_cv_all'),
-                row.get('storage_cv_april'),
-                row.get('storage_cv_september'),
-                row.get('annual_avg_taf'),
-                row.get('april_avg_taf'),
-                row.get('september_avg_taf'),
-                row['capacity_taf'],
+        summary_rows = []
+        for row in period_summary:
+            row = sanitize_row(row)
+            summary_rows.append(
+                (
+                    row["scenario_short_code"],
+                    row["reservoir_entity_id"],
+                    row["simulation_start_year"],
+                    row["simulation_end_year"],
+                    row["total_years"],
+                    row.get("storage_exc_p5"),
+                    row.get("storage_exc_p10"),
+                    row.get("storage_exc_p25"),
+                    row.get("storage_exc_p50"),
+                    row.get("storage_exc_p75"),
+                    row.get("storage_exc_p90"),
+                    row.get("storage_exc_p95"),
+                    row["dead_pool_taf"],
+                    row["dead_pool_pct"],
+                    row.get("spill_threshold_pct"),
+                    row["spill_years_count"],
+                    row["spill_frequency_pct"],
+                    row["spill_mean_cfs"],
+                    row["spill_peak_cfs"],
+                    row["annual_spill_avg_taf"],
+                    row["annual_spill_cv"],
+                    row["annual_spill_max_taf"],
+                    row["annual_max_spill_q50"],
+                    row["annual_max_spill_q90"],
+                    row["annual_max_spill_q100"],
+                    # Probability metrics
+                    row.get("flood_pool_prob_all"),
+                    row.get("flood_pool_prob_september"),
+                    row.get("flood_pool_prob_april"),
+                    row.get("dead_pool_prob_all"),
+                    row.get("dead_pool_prob_september"),
+                    row.get("storage_cv_all"),
+                    row.get("storage_cv_april"),
+                    row.get("storage_cv_september"),
+                    row.get("annual_avg_taf"),
+                    row.get("april_avg_taf"),
+                    row.get("september_avg_taf"),
+                    row["capacity_taf"],
+                )
             )
-            for row in period_summary
-        ]
         execute_values(
             cursor,
             """
@@ -366,9 +421,9 @@ def write_statistics_to_db(
                 capacity_taf = EXCLUDED.capacity_taf,
                 updated_at = NOW()
             """,
-            summary_rows
+            summary_rows,
         )
-        counts['period_summary'] = len(summary_rows)
+        counts["period_summary"] = len(summary_rows)
 
     conn.commit()
     cursor.close()
@@ -379,9 +434,7 @@ def write_statistics_to_db(
 
 
 def process_scenario(
-    scenario_id: str,
-    write_to_db: bool = True,
-    csv_path: Optional[str] = None
+    scenario_id: str, write_to_db: bool = True, csv_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Process a single scenario: calculate all statistics and optionally write to DB.
@@ -402,20 +455,24 @@ def process_scenario(
     reservoirs = load_reservoir_entities()
 
     result = {
-        'scenario_id': scenario_id,
-        'status': 'success',
-        'counts': {},
+        "scenario_id": scenario_id,
+        "status": "success",
+        "counts": {},
     }
 
     try:
         # Calculate percentiles (for UI charts)
         log.info("Calculating percentiles...")
-        percentile_results = calculate_all_reservoir_percentiles(scenario_id, reservoirs, csv_path)
+        percentile_results = calculate_all_reservoir_percentiles(
+            scenario_id, reservoirs, csv_path
+        )
 
         if write_to_db:
-            result['counts']['percentiles'] = write_percentiles_to_db(scenario_id, percentile_results)
+            result["counts"]["percentiles"] = write_percentiles_to_db(
+                scenario_id, percentile_results
+            )
         else:
-            result['percentile_data'] = percentile_results
+            result["percentile_data"] = percentile_results
 
         # Calculate comprehensive statistics
         log.info("Calculating statistics...")
@@ -427,16 +484,16 @@ def process_scenario(
             stats_counts = write_statistics_to_db(
                 scenario_id, storage_monthly, spill_monthly, period_summary
             )
-            result['counts'].update(stats_counts)
+            result["counts"].update(stats_counts)
         else:
-            result['storage_monthly'] = storage_monthly
-            result['spill_monthly'] = spill_monthly
-            result['period_summary'] = period_summary
+            result["storage_monthly"] = storage_monthly
+            result["spill_monthly"] = spill_monthly
+            result["period_summary"] = period_summary
 
     except Exception as e:
         log.error(f"Error processing {scenario_id}: {e}")
-        result['status'] = 'error'
-        result['error'] = str(e)
+        result["status"] = "error"
+        result["error"] = str(e)
         raise
 
     log.info(f"Completed {scenario_id}: {result['counts']}")
@@ -463,10 +520,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     results = []
 
-    for record in event.get('Records', []):
-        s3_info = record.get('s3', {})
-        bucket = s3_info.get('bucket', {}).get('name')
-        key = s3_info.get('object', {}).get('key')
+    for record in event.get("Records", []):
+        s3_info = record.get("s3", {})
+        bucket = s3_info.get("bucket", {}).get("name")
+        key = s3_info.get("object", {}).get("key")
 
         if not key:
             log.warning("No S3 key in record, skipping")
@@ -484,52 +541,47 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             result = process_scenario(scenario_id, write_to_db=True)
             results.append(result)
         except Exception as e:
-            results.append({
-                'scenario_id': scenario_id,
-                'status': 'error',
-                'error': str(e),
-            })
+            results.append(
+                {
+                    "scenario_id": scenario_id,
+                    "status": "error",
+                    "error": str(e),
+                }
+            )
 
     return {
-        'statusCode': 200,
-        'body': json.dumps({
-            'message': f'Processed {len(results)} scenarios',
-            'results': results,
-        })
+        "statusCode": 200,
+        "body": json.dumps(
+            {
+                "message": f"Processed {len(results)} scenarios",
+                "results": results,
+            }
+        ),
     }
 
 
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Reservoir statistics ETL - calculates and loads statistics to database'
+        description="Reservoir statistics ETL - calculates and loads statistics to database"
+    )
+    parser.add_argument("--scenario", "-s", help="Scenario ID to process (e.g., s0020)")
+    parser.add_argument(
+        "--s3-key", help="S3 object key (extracts scenario ID from path)"
     )
     parser.add_argument(
-        '--scenario', '-s',
-        help='Scenario ID to process (e.g., s0020)'
+        "--all-scenarios", action="store_true", help="Process all known scenarios"
     )
     parser.add_argument(
-        '--s3-key',
-        help='S3 object key (extracts scenario ID from path)'
+        "--csv-path", help="Local CSV file path (instead of loading from S3)"
     )
     parser.add_argument(
-        '--all-scenarios',
-        action='store_true',
-        help='Process all known scenarios'
+        "--dry-run", action="store_true", help="Calculate but do not write to database"
     )
     parser.add_argument(
-        '--csv-path',
-        help='Local CSV file path (instead of loading from S3)'
-    )
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Calculate but do not write to database'
-    )
-    parser.add_argument(
-        '--output-json',
-        action='store_true',
-        help='Output results as JSON (implies --dry-run)'
+        "--output-json",
+        action="store_true",
+        help="Output results as JSON (implies --dry-run)",
     )
 
     args = parser.parse_args()
@@ -558,9 +610,7 @@ def main():
     for scenario_id in scenarios:
         try:
             result = process_scenario(
-                scenario_id,
-                write_to_db=write_to_db,
-                csv_path=args.csv_path
+                scenario_id, write_to_db=write_to_db, csv_path=args.csv_path
             )
             all_results.append(result)
         except Exception as e:
@@ -574,5 +624,5 @@ def main():
     log.info(f"Completed processing {len(all_results)} scenarios")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
