@@ -691,34 +691,62 @@ async def get_storage_monthly(
     connection: asyncpg.Connection = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Get monthly storage statistics for reservoirs.
+    Get monthly storage statistics for reservoirs in both percent-of-capacity and TAF.
 
     **Use case:** Render storage percentile band charts for each water month.
+    Use `monthly_percent` for normalized comparison across reservoirs, or
+    `monthly_taf` for absolute volume visualization.
+
+    **Water Month Keys:**
+    The response uses numeric keys 1-12 representing water year months:
+    - 1 = October (start of water year)
+    - 2 = November
+    - 3 = December
+    - 4 = January
+    - 5 = February
+    - 6 = March
+    - 7 = April
+    - 8 = May
+    - 9 = June
+    - 10 = July
+    - 11 = August
+    - 12 = September (end of water year)
 
     **Examples:**
     - `GET /api/statistics/scenarios/s0020/storage-monthly` (defaults to major reservoirs)
-    - `GET /api/statistics/scenarios/s0020/storage-monthly?group=major` (8 major reservoirs)
     - `GET /api/statistics/scenarios/s0020/storage-monthly?group=cvp` (CVP reservoirs)
-    - `GET /api/statistics/scenarios/s0020/storage-monthly?group=swp` (SWP reservoirs)
-    - `GET /api/statistics/scenarios/s0020/storage-monthly?reservoirs=SHSTA,OROVL,FOLSM` (custom list)
+    - `GET /api/statistics/scenarios/s0020/storage-monthly?reservoirs=SHSTA,OROVL,FOLSM`
 
     **Response:**
     ```json
     {
       "scenario_id": "s0020",
-      "group": "major",
       "reservoirs": {
         "SHSTA": {
           "name": "Shasta",
           "capacity_taf": 4552.0,
-          "monthly": {
-            "1": {"storage_avg_taf": 2850.5, "storage_pct_capacity": 62.6, "q0": 32.1, "q10": 45.2, ...},
+          "monthly_percent": {
+            "1": {"q0": 32.1, "q10": 45.2, "q30": 58.7, "q50": 70.1, "q70": 81.2, "q90": 91.3, "q100": 98.5, "mean": 68.4},
+            "2": {...},
             ...
+            "12": {...}
+          },
+          "monthly_taf": {
+            "1": {"q0": 1461, "q10": 2057, "q30": 2672, "q50": 3190, "q70": 3696, "q90": 4156, "q100": 4484, "mean": 3113},
+            "2": {...},
+            ...
+            "12": {...}
           }
         }
       }
     }
     ```
+
+    **Percentile bands for charts:**
+    - Outer band: q10 to q90 (lightest)
+    - Middle band: q30 to q70
+    - Center line: q50 (median)
+    - Full range: q0 (min) to q100 (max) for tooltips
     """
     reservoir_list = await parse_reservoirs(reservoirs, group, connection)
 
@@ -728,6 +756,7 @@ async def get_storage_monthly(
             re.short_code, re.name, rsm.water_month,
             rsm.storage_avg_taf, rsm.storage_cv, rsm.storage_pct_capacity,
             rsm.q0, rsm.q10, rsm.q30, rsm.q50, rsm.q70, rsm.q90, rsm.q100,
+            rsm.q0_taf, rsm.q10_taf, rsm.q30_taf, rsm.q50_taf, rsm.q70_taf, rsm.q90_taf, rsm.q100_taf,
             rsm.capacity_taf, rsm.sample_count
         FROM reservoir_storage_monthly rsm
         JOIN reservoir_entity re ON rsm.reservoir_entity_id = re.id
@@ -751,17 +780,14 @@ async def get_storage_monthly(
                     "capacity_taf": float(row["capacity_taf"])
                     if row["capacity_taf"]
                     else 0.0,
-                    "monthly": {},
+                    "monthly_percent": {},
+                    "monthly_taf": {},
                 }
 
-            result[short_code]["monthly"][row["water_month"]] = {
-                "storage_avg_taf": float(row["storage_avg_taf"])
-                if row["storage_avg_taf"]
-                else 0.0,
-                "storage_cv": float(row["storage_cv"]) if row["storage_cv"] else 0.0,
-                "storage_pct_capacity": float(row["storage_pct_capacity"])
-                if row["storage_pct_capacity"]
-                else 0.0,
+            wm = row["water_month"]
+
+            # Percent of capacity
+            result[short_code]["monthly_percent"][wm] = {
                 "q0": float(row["q0"]) if row["q0"] else 0.0,
                 "q10": float(row["q10"]) if row["q10"] else 0.0,
                 "q30": float(row["q30"]) if row["q30"] else 0.0,
@@ -769,7 +795,23 @@ async def get_storage_monthly(
                 "q70": float(row["q70"]) if row["q70"] else 0.0,
                 "q90": float(row["q90"]) if row["q90"] else 0.0,
                 "q100": float(row["q100"]) if row["q100"] else 0.0,
-                "sample_count": row["sample_count"] or 0,
+                "mean": float(row["storage_pct_capacity"])
+                if row["storage_pct_capacity"]
+                else 0.0,
+            }
+
+            # Volume in TAF
+            result[short_code]["monthly_taf"][wm] = {
+                "q0": float(row["q0_taf"]) if row["q0_taf"] else 0.0,
+                "q10": float(row["q10_taf"]) if row["q10_taf"] else 0.0,
+                "q30": float(row["q30_taf"]) if row["q30_taf"] else 0.0,
+                "q50": float(row["q50_taf"]) if row["q50_taf"] else 0.0,
+                "q70": float(row["q70_taf"]) if row["q70_taf"] else 0.0,
+                "q90": float(row["q90_taf"]) if row["q90_taf"] else 0.0,
+                "q100": float(row["q100_taf"]) if row["q100_taf"] else 0.0,
+                "mean": float(row["storage_avg_taf"])
+                if row["storage_avg_taf"]
+                else 0.0,
             }
 
         response = {"scenario_id": scenario_id, "reservoirs": result}
