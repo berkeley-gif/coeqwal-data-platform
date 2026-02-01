@@ -24,7 +24,6 @@ import re
 from typing import Any, Dict, Optional
 
 # Import calculation modules
-from reservoirs.reservoir_metrics import RESERVOIR_THRESHOLDS
 from reservoirs.calculate_reservoir_statistics import (
     calculate_all_statistics,
     load_reservoir_entities,

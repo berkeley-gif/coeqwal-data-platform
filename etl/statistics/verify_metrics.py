@@ -22,11 +22,9 @@ Usage:
 """
 
 import argparse
-import csv
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 # Add parent directory to path for imports

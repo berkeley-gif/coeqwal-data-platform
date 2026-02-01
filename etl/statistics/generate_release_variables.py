@@ -119,9 +119,9 @@ def main():
 
     # Print summary to stderr
     print(f"\nGenerated {len(variables)} release variable rows", file=sys.stderr)
-    print(f"  - release_total: 92 rows", file=sys.stderr)
-    print(f"  - release_normal: 92 rows", file=sys.stderr)
-    print(f"  - release_flood: 92 rows", file=sys.stderr)
+    print("  - release_total: 92 rows", file=sys.stderr)
+    print("  - release_normal: 92 rows", file=sys.stderr)
+    print("  - release_flood: 92 rows", file=sys.stderr)
     print(f"  - ID range: 196-{196 + len(variables) - 1}", file=sys.stderr)
 
 

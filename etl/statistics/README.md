@@ -568,6 +568,61 @@ The following metrics are calculated by the ETL but not included in the notebook
 
 ---
 
+## Local Development
+
+### Prerequisites
+
+```bash
+# Python 3.9+
+python --version
+
+# Install dependencies
+pip install pandas numpy psycopg2-binary boto3
+```
+
+### Running Locally
+
+**1. Get a sample CSV file**
+
+Place a CalSim output CSV in the `pipelines/` directory:
+```bash
+# If you have AWS access:
+aws s3 cp s3://coeqwal-model-run/scenario/s0020/csv/s0020_coeqwal_calsim_output.csv ../pipelines/
+
+# Or use any existing CSV with the 7-header format
+ls ../pipelines/*.csv
+```
+
+**2. Run with dry-run (no database required)**
+
+```bash
+cd /path/to/coeqwal-backend/etl/statistics
+
+# Dry run - calculates metrics, prints summary, no database writes
+python main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run
+
+# With JSON output for debugging
+python main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run --output-json
+```
+
+**3. Run quick tests**
+
+```bash
+# Test imports and basic calculations
+python test_local.py
+
+# Verify metrics against notebook output
+python verify_metrics.py --reservoirs SHSTA OROVL
+```
+
+**4. Use the dev script**
+
+```bash
+# Runs common development scenarios
+./dev_run.sh
+```
+---
+
 ## Troubleshooting
 
 ### "No storage columns found"

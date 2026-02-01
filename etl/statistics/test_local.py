@@ -17,16 +17,8 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-import pandas as pd
-import numpy as np
 
 from reservoirs.reservoir_metrics import (
-    calculate_flood_pool_probability,
-    calculate_dead_pool_probability,
-    calculate_cv,
-    calculate_annual_average,
-    calculate_monthly_average,
-    list_available_thresholds,
     summarize_probability_metrics,
     RESERVOIR_THRESHOLDS,
 )
