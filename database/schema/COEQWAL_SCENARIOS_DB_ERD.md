@@ -1322,7 +1322,7 @@ The M&I statistics layer provides delivery and shortage statistics at two levels
 ```
 Table: du_urban_group
 ├── id                    INTEGER PRIMARY KEY
-├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- "tier", "nod", "sod", "swp_served"
+├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- "tier", "var_wba", etc.
 ├── label                 VARCHAR(100) NOT NULL        -- "Tier Matrix DUs"
 ├── description           TEXT                         -- Purpose of this grouping
 ├── display_order         INTEGER DEFAULT 0
@@ -1332,9 +1332,26 @@ Table: du_urban_group
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
-Records: 6 groups (tier, nod, sod, swp_served, cvp_served, swp_delivery_point)
+Records: 11 groups in two categories:
+
+Analytical/Geographic Groups (IDs 1-6):
+├── tier                  Tier matrix DUs (71 members)
+├── nod                   North of Delta
+├── sod                   South of Delta
+├── swp_served            Receives SWP water
+├── cvp_served            Receives CVP water
+└── swp_delivery_point    Has SWP delivery point
+
+Variable Extraction Category Groups (IDs 7-11):
+├── var_wba               WBA-style DL_* delivery (40 members)
+├── var_gw_only           Groundwater only, no surface (3 members)
+├── var_swp_contractor    SWP contractor D_*_PMI (11 members)
+├── var_named_locality    Named locality D_* arcs (15 members)
+└── var_missing           No CalSim variables found (2 members)
 
 DDL: database/scripts/sql/10_mi_statistics/02b_create_du_urban_group_tables.sql
+Seed (analytical): database/scripts/sql/10_mi_statistics/02c_load_du_urban_group_from_s3.sql
+Seed (variable): database/scripts/sql/10_mi_statistics/02d_load_du_variable_groups.sql
 ```
 
 #### **du_urban_group_member (demand unit group memberships)**
@@ -1353,7 +1370,11 @@ Table: du_urban_group_member
 Constraints:
 └── Unique: (du_urban_group_id, du_id)
 
-Records: 71 rows (tier group members from tier matrix)
+Records: ~142 rows (71 tier + 71 variable category memberships)
+
+Note: A demand unit can belong to multiple groups. For example, 02_PU is in:
+├── tier (analytical group)
+└── var_wba (variable extraction category)
 
 DDL: database/scripts/sql/10_mi_statistics/02b_create_du_urban_group_tables.sql
 ```
@@ -1451,7 +1472,7 @@ Table: du_urban_variable
 ├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
 ├── delivery_variable     VARCHAR(100) NOT NULL        -- CalSim variable (DL_*, D_*, GP_*)
 ├── shortage_variable     VARCHAR(100)                 -- CalSim variable (SHRTG_*, GW_SHORT_*)
-├── variable_type         VARCHAR(20) DEFAULT 'DL'     -- 'DL', 'D', 'GP', 'MISSING'
+├── variable_type         VARCHAR(20) DEFAULT 'delivery' -- Type of water supply measurement
 ├── requires_sum          BOOLEAN DEFAULT FALSE        -- TRUE if multiple arcs need summing
 ├── notes                 TEXT                         -- Mapping context
 ├── is_active             BOOLEAN DEFAULT TRUE
@@ -1466,11 +1487,14 @@ Constraints:
 
 Records: 71 mappings (canonical CWS demand units from tier matrix)
 
-Variable types:
-├── DL: Uses DL_* total delivery variable (e.g., DL_02_PU)
-├── D: Uses D_* arc delivery variable (e.g., D_CSB038_OBISPO_PMI)
-├── GP: Groundwater pumping only, no surface delivery (e.g., GP_71_NU)
-└── MISSING: No CalSim variable found (JLIND, UPANG)
+Variable types (type of water supply measurement):
+├── delivery: Surface water delivery (68 units)
+├── gw_pumping: Groundwater pumping, no surface delivery (3 units: 71_NU, 72_NU, 72_PU)
+├── diversion: Water diversion (future use)
+└── unknown: No CalSim variable found (2 units: JLIND, UPANG)
+
+Note: The extraction category (how to find the CalSim variable) is determined by
+group membership in du_urban_group (var_wba, var_swp_contractor, etc.).
 
 DDL: database/scripts/sql/10_mi_statistics/01c_create_du_urban_variable.sql
 Seed: database/scripts/sql/10_mi_statistics/01d_load_du_urban_variable.sql

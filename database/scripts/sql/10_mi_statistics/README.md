@@ -11,8 +11,8 @@ This directory contains SQL scripts for creating and loading tables related to M
 | `du_urban_entity` | Urban demand unit metadata (region, type, acres) | 126 |
 | `du_urban_variable` | CalSim variable mappings for 71 canonical CWS units | 71 |
 | `du_urban_delivery_arc` | Multi-arc delivery mappings for units requiring summation | 10 |
-| `du_urban_group` | Groupings of demand units (tier, nod, sod) | 6 |
-| `du_urban_group_member` | Group membership mappings | 71 |
+| `du_urban_group` | Groupings of demand units (analytical + variable categories) | 11 |
+| `du_urban_group_member` | Group membership mappings | 142 |
 | `mi_contractor` | SWP/CVP contractor entities | 30 |
 | `mi_contractor_group` | Contractor groupings | 6 |
 | `mi_contractor_delivery_arc` | Contractor delivery arc mappings | 39 |
@@ -44,6 +44,7 @@ psql -f 01d_load_du_urban_variable.sql
 psql -f 02_create_du_statistics_tables.sql
 psql -f 02b_create_du_urban_group_tables.sql
 psql -f 02c_load_du_urban_group_from_s3.sql
+psql -f 02d_load_du_variable_groups.sql  # NEW: Adds variable category groups
 
 # 3. Create and load contractor entities
 psql -f 03_create_mi_contractor_entity_tables.sql
@@ -54,6 +55,62 @@ psql -f 05_create_mi_statistics_tables.sql
 
 # 5. Create CWS aggregate tables (with seed data)
 psql -f 06_create_cws_aggregate_tables.sql
+```
+
+## Demand Unit Group Structure (Normalized)
+
+The `du_urban_group` and `du_urban_group_member` tables organize demand units into categories. A demand unit can belong to multiple groups simultaneously.
+
+### Analytical/Geographic Groups (IDs 1-6)
+
+| ID | short_code | Label | Members | Purpose |
+|----|------------|-------|---------|---------|
+| 1 | `tier` | Tier Matrix DUs | 71 | Units with tier scores |
+| 2 | `nod` | North of Delta | ~30 | Geographic location |
+| 3 | `sod` | South of Delta | ~40 | Geographic location |
+| 4 | `swp_served` | SWP Served | ~25 | Receives SWP water |
+| 5 | `cvp_served` | CVP Served | ~20 | Receives CVP water |
+| 6 | `swp_delivery_point` | SWP Delivery Point | ~15 | Has SWP delivery point |
+
+### Variable Extraction Category Groups (IDs 7-11)
+
+These groups categorize demand units by their CalSim variable extraction method:
+
+| ID | short_code | Label | Members | CalSim Variables |
+|----|------------|-------|---------|------------------|
+| 7 | `var_wba` | WBA Delivery Units | 40 | `DL_{du_id}`, `SHRTG_{du_id}` |
+| 8 | `var_gw_only` | Groundwater Only | 3 | `GP_{du_id}`, `GW_SHORT_{du_id}` |
+| 9 | `var_swp_contractor` | SWP Contractor Units | 11 | `D_*_{contractor}_PMI` |
+| 10 | `var_named_locality` | Named Locality Units | 15 | `D_*` arcs (some need summing) |
+| 11 | `var_missing` | Missing Variable Units | 2 | None (JLIND, UPANG) |
+
+### API Usage
+
+Groups enable filtered API endpoints:
+
+```
+GET /demand-units?group=tier          # All 71 tier matrix units
+GET /demand-units?group=var_wba       # 40 WBA-style units
+GET /demand-units?group=var_gw_only   # 3 groundwater-only units
+GET /demand-units?group=nod           # North of Delta units
+```
+
+### Example Query: Get Units by Category
+
+```sql
+-- Get all demand units in a specific category with their variables
+SELECT 
+    gm.du_id,
+    du.community_agency,
+    v.delivery_variable,
+    v.shortage_variable,
+    v.requires_sum
+FROM du_urban_group_member gm
+JOIN du_urban_group g ON gm.du_urban_group_id = g.id
+JOIN du_urban_entity du ON gm.du_id = du.du_id
+JOIN du_urban_variable v ON gm.du_id = v.du_id
+WHERE g.short_code = 'var_swp_contractor'
+ORDER BY gm.display_order;
 ```
 
 ## CalSim Variable Naming Conventions
@@ -71,16 +128,18 @@ CalSim3 uses consistent prefixes to identify variable types:
 | `GP_*` | Groundwater Pumping | `GP_71_NU` | Groundwater extraction |
 | `SHORT_D_*` | Arc Shortage | `SHORT_D_SBA029_ACWD_PMI` | SWP contractor shortage |
 
-### Variable Type Categories in `du_urban_variable`
+### Variable Type in `du_urban_variable`
 
-The `variable_type` column indicates how to extract delivery data:
+The `variable_type` column indicates the **type of water supply measurement**:
 
-| Type | Description | Delivery Variable | Shortage Variable |
-|------|-------------|-------------------|-------------------|
-| `DL` | WBA total delivery | `DL_{du_id}` | `SHRTG_{du_id}` |
-| `D` | Arc delivery (may need summing) | `D_*_{du_id}` | `SHORT_D_*` or none |
-| `GP` | Groundwater only | `GP_{du_id}` | `GW_SHORT_{du_id}` |
-| `MISSING` | No CalSim variable found | N/A | N/A |
+| Type | Description | Example Variables |
+|------|-------------|-------------------|
+| `delivery` | Surface water delivery | `DL_02_PU`, `D_SBA029_ACWD_PMI` |
+| `gw_pumping` | Groundwater pumping | `GP_71_NU` |
+| `diversion` | Water diversion | (future use) |
+| `unknown` | No CalSim variable found | N/A |
+
+Note: The **extraction category** (how to find the variable) is determined by group membership in `du_urban_group` (var_wba, var_swp_contractor, etc.), not by `variable_type`.
 
 ## Canonical CWS Demand Units (71 units)
 

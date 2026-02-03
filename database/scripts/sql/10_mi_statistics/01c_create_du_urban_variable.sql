@@ -42,7 +42,7 @@ CREATE TABLE du_urban_variable (
     shortage_variable VARCHAR(100),               -- CalSim variable for shortage (SHRTG_*, GW_SHORT_*)
     
     -- Variable metadata
-    variable_type VARCHAR(20) NOT NULL DEFAULT 'DL',  -- 'DL' (total delivery), 'D' (arc delivery), 'GP' (groundwater only)
+    variable_type VARCHAR(20) NOT NULL DEFAULT 'delivery',  -- 'delivery', 'gw_pumping', 'diversion', etc.
     requires_sum BOOLEAN DEFAULT FALSE,           -- TRUE if multiple D_* arcs need summing
     
     -- Notes
@@ -111,7 +111,7 @@ COMMENT ON TABLE du_urban_variable IS 'Maps urban demand units to their CalSim d
 COMMENT ON COLUMN du_urban_variable.du_id IS 'Reference to du_urban_entity.du_id (e.g., 02_PU, FRFLD)';
 COMMENT ON COLUMN du_urban_variable.delivery_variable IS 'Primary CalSim delivery variable. For DL type: DL_{du_id}. For D type: D_*_{du_id} or specific arc.';
 COMMENT ON COLUMN du_urban_variable.shortage_variable IS 'CalSim shortage variable. Can be SHRTG_{du_id} or GW_SHORT_{du_id} depending on unit type.';
-COMMENT ON COLUMN du_urban_variable.variable_type IS 'DL = uses DL_* total delivery, D = uses D_* arc delivery (may need summing), GP = groundwater pumping only (no surface delivery)';
+COMMENT ON COLUMN du_urban_variable.variable_type IS 'Type of water supply measurement: delivery (surface water), gw_pumping (groundwater), diversion, etc.';
 COMMENT ON COLUMN du_urban_variable.requires_sum IS 'TRUE if delivery is sum of multiple D_* arcs (e.g., FRFLD = D_WTPNBR_FRFLD + D_WTPWMN_FRFLD)';
 
 COMMENT ON TABLE du_urban_delivery_arc IS 'Delivery arcs for demand units with multiple sources. Sum all arcs for total delivery.';

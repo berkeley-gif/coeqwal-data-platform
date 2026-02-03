@@ -57,52 +57,52 @@ TRUNCATE TABLE du_urban_variable CASCADE;
 
 INSERT INTO du_urban_variable (du_id, delivery_variable, shortage_variable, variable_type, requires_sum, notes) VALUES
 -- Sacramento Region (02-03)
-('02_PU', 'DL_02_PU', 'SHRTG_02_PU', 'DL', FALSE, 'Zone 02 Project Urban'),
-('02_SU', 'DL_02_SU', 'SHRTG_02_SU', 'DL', FALSE, 'Zone 02 Settlement Urban'),
-('03_PU1', 'DL_03_PU1', 'SHRTG_03_PU1', 'DL', FALSE, 'Zone 03 Project Urban 1'),
-('03_PU2', 'DL_03_PU2', 'SHRTG_03_PU2', 'DL', FALSE, 'Zone 03 Project Urban 2'),
-('03_SU', 'DL_03_SU', 'SHRTG_03_SU', 'DL', FALSE, 'Zone 03 Settlement Urban'),
+('02_PU', 'DL_02_PU', 'SHRTG_02_PU', 'delivery', FALSE, 'Zone 02 Project Urban'),
+('02_SU', 'DL_02_SU', 'SHRTG_02_SU', 'delivery', FALSE, 'Zone 02 Settlement Urban'),
+('03_PU1', 'DL_03_PU1', 'SHRTG_03_PU1', 'delivery', FALSE, 'Zone 03 Project Urban 1'),
+('03_PU2', 'DL_03_PU2', 'SHRTG_03_PU2', 'delivery', FALSE, 'Zone 03 Project Urban 2'),
+('03_SU', 'DL_03_SU', 'SHRTG_03_SU', 'delivery', FALSE, 'Zone 03 Settlement Urban'),
 -- Feather/Yuba Region (11-16)
-('11_NU1', 'DL_11_NU1', 'SHRTG_11_NU1', 'DL', FALSE, 'Zone 11 Non-project Urban 1'),
-('12_NU1', 'DL_12_NU1', 'SHRTG_12_NU1', 'DL', FALSE, 'Zone 12 Non-project Urban 1'),
-('13_NU1', 'DL_13_NU1', 'SHRTG_13_NU1', 'DL', FALSE, 'Zone 13 Non-project Urban 1'),
-('16_PU', 'DL_16_PU', 'SHRTG_16_PU', 'DL', FALSE, 'Zone 16 Project Urban'),
+('11_NU1', 'DL_11_NU1', 'SHRTG_11_NU1', 'delivery', FALSE, 'Zone 11 Non-project Urban 1'),
+('12_NU1', 'DL_12_NU1', 'SHRTG_12_NU1', 'delivery', FALSE, 'Zone 12 Non-project Urban 1'),
+('13_NU1', 'DL_13_NU1', 'SHRTG_13_NU1', 'delivery', FALSE, 'Zone 13 Non-project Urban 1'),
+('16_PU', 'DL_16_PU', 'SHRTG_16_PU', 'delivery', FALSE, 'Zone 16 Project Urban'),
 -- Sacramento Metro Region (20-26)
-('20_NU1', 'DL_20_NU1', 'SHRTG_20_NU1', 'DL', FALSE, 'Zone 20 Non-project Urban 1'),
-('21_PU', 'DL_21_PU', 'SHRTG_21_PU', 'DL', FALSE, 'Zone 21 Project Urban'),
-('24_NU1', 'DL_24_NU1', 'SHRTG_24_NU1', 'DL', FALSE, 'Zone 24 Non-project Urban 1'),
-('24_NU2', 'DL_24_NU2', 'SHRTG_24_NU2', 'DL', FALSE, 'Zone 24 Non-project Urban 2'),
-('24_NU3', 'DL_24_NU3', 'SHRTG_24_NU3', 'DL', FALSE, 'Zone 24 Non-project Urban 3'),
-('25_PU', 'DL_25_PU', 'SHRTG_25_PU', 'DL', FALSE, 'Zone 25 Project Urban'),
-('26N_NU1', 'DL_26N_NU1', 'SHRTG_26N_NU1', 'DL', FALSE, 'Zone 26N Non-project Urban 1'),
-('26N_NU2', 'DL_26N_NU2', 'SHRTG_26N_NU2', 'DL', FALSE, 'Zone 26N Non-project Urban 2'),
-('26N_NU3', 'DL_26N_NU3', 'SHRTG_26N_NU3', 'DL', FALSE, 'Zone 26N Non-project Urban 3'),
-('26N_PU1', 'DL_26N_PU1', 'SHRTG_26N_PU1', 'DL', FALSE, 'Zone 26N Project Urban 1'),
-('26N_PU2', 'DL_26N_PU2', 'SHRTG_26N_PU2', 'DL', FALSE, 'Zone 26N Project Urban 2'),
-('26N_PU3', 'DL_26N_PU3', 'SHRTG_26N_PU3', 'DL', FALSE, 'Zone 26N Project Urban 3'),
-('26S_NU1', 'DL_26S_NU1', 'SHRTG_26S_NU1', 'DL', FALSE, 'Zone 26S Non-project Urban 1'),
-('26S_NU3', 'DL_26S_NU3', 'SHRTG_26S_NU3', 'DL', FALSE, 'Zone 26S Non-project Urban 3'),
-('26S_PU1', 'DL_26S_PU1', 'SHRTG_26S_PU1', 'DL', FALSE, 'Zone 26S Project Urban 1'),
-('26S_PU2', 'DL_26S_PU2', 'SHRTG_26S_PU2', 'DL', FALSE, 'Zone 26S Project Urban 2'),
-('26S_PU4', 'DL_26S_PU4', 'SHRTG_26S_PU4', 'DL', FALSE, 'Zone 26S Project Urban 4'),
-('26S_PU5', 'DL_26S_PU5', 'SHRTG_26S_PU5', 'DL', FALSE, 'Zone 26S Project Urban 5'),
-('26S_PU6', 'DL_26S_PU6', 'SHRTG_26S_PU6', 'DL', FALSE, 'Zone 26S Project Urban 6'),
+('20_NU1', 'DL_20_NU1', 'SHRTG_20_NU1', 'delivery', FALSE, 'Zone 20 Non-project Urban 1'),
+('21_PU', 'DL_21_PU', 'SHRTG_21_PU', 'delivery', FALSE, 'Zone 21 Project Urban'),
+('24_NU1', 'DL_24_NU1', 'SHRTG_24_NU1', 'delivery', FALSE, 'Zone 24 Non-project Urban 1'),
+('24_NU2', 'DL_24_NU2', 'SHRTG_24_NU2', 'delivery', FALSE, 'Zone 24 Non-project Urban 2'),
+('24_NU3', 'DL_24_NU3', 'SHRTG_24_NU3', 'delivery', FALSE, 'Zone 24 Non-project Urban 3'),
+('25_PU', 'DL_25_PU', 'SHRTG_25_PU', 'delivery', FALSE, 'Zone 25 Project Urban'),
+('26N_NU1', 'DL_26N_NU1', 'SHRTG_26N_NU1', 'delivery', FALSE, 'Zone 26N Non-project Urban 1'),
+('26N_NU2', 'DL_26N_NU2', 'SHRTG_26N_NU2', 'delivery', FALSE, 'Zone 26N Non-project Urban 2'),
+('26N_NU3', 'DL_26N_NU3', 'SHRTG_26N_NU3', 'delivery', FALSE, 'Zone 26N Non-project Urban 3'),
+('26N_PU1', 'DL_26N_PU1', 'SHRTG_26N_PU1', 'delivery', FALSE, 'Zone 26N Project Urban 1'),
+('26N_PU2', 'DL_26N_PU2', 'SHRTG_26N_PU2', 'delivery', FALSE, 'Zone 26N Project Urban 2'),
+('26N_PU3', 'DL_26N_PU3', 'SHRTG_26N_PU3', 'delivery', FALSE, 'Zone 26N Project Urban 3'),
+('26S_NU1', 'DL_26S_NU1', 'SHRTG_26S_NU1', 'delivery', FALSE, 'Zone 26S Non-project Urban 1'),
+('26S_NU3', 'DL_26S_NU3', 'SHRTG_26S_NU3', 'delivery', FALSE, 'Zone 26S Non-project Urban 3'),
+('26S_PU1', 'DL_26S_PU1', 'SHRTG_26S_PU1', 'delivery', FALSE, 'Zone 26S Project Urban 1'),
+('26S_PU2', 'DL_26S_PU2', 'SHRTG_26S_PU2', 'delivery', FALSE, 'Zone 26S Project Urban 2'),
+('26S_PU4', 'DL_26S_PU4', 'SHRTG_26S_PU4', 'delivery', FALSE, 'Zone 26S Project Urban 4'),
+('26S_PU5', 'DL_26S_PU5', 'SHRTG_26S_PU5', 'delivery', FALSE, 'Zone 26S Project Urban 5'),
+('26S_PU6', 'DL_26S_PU6', 'SHRTG_26S_PU6', 'delivery', FALSE, 'Zone 26S Project Urban 6'),
 -- San Joaquin Region (50-62)
-('50_PU', 'DL_50_PU', 'GW_SHORT_50_PU', 'DL', FALSE, 'Zone 50 Project Urban - uses GW_SHORT'),
-('60N_NU1', 'DL_60N_NU1', 'SHRTG_60N_NU1', 'DL', FALSE, 'Zone 60N Non-project Urban 1'),
-('60N_NU2', 'DL_60N_NU2', 'GW_SHORT_60N_NU2', 'DL', FALSE, 'Zone 60N Non-project Urban 2 - uses GW_SHORT'),
-('60S_NU1', 'DL_60S_NU1', 'GW_SHORT_60S_NU1', 'DL', FALSE, 'Zone 60S Non-project Urban 1 - uses GW_SHORT'),
-('61_NU2', 'DL_61_NU2', 'GW_SHORT_61_NU2', 'DL', FALSE, 'Zone 61 Non-project Urban 2 - uses GW_SHORT'),
-('62_NU', 'DL_62_NU', 'GW_SHORT_62_NU', 'DL', FALSE, 'Zone 62 Non-project Urban - uses GW_SHORT'),
+('50_PU', 'DL_50_PU', 'GW_SHORT_50_PU', 'delivery', FALSE, 'Zone 50 Project Urban - uses GW_SHORT'),
+('60N_NU1', 'DL_60N_NU1', 'SHRTG_60N_NU1', 'delivery', FALSE, 'Zone 60N Non-project Urban 1'),
+('60N_NU2', 'DL_60N_NU2', 'GW_SHORT_60N_NU2', 'delivery', FALSE, 'Zone 60N Non-project Urban 2 - uses GW_SHORT'),
+('60S_NU1', 'DL_60S_NU1', 'GW_SHORT_60S_NU1', 'delivery', FALSE, 'Zone 60S Non-project Urban 1 - uses GW_SHORT'),
+('61_NU2', 'DL_61_NU2', 'GW_SHORT_61_NU2', 'delivery', FALSE, 'Zone 61 Non-project Urban 2 - uses GW_SHORT'),
+('62_NU', 'DL_62_NU', 'GW_SHORT_62_NU', 'delivery', FALSE, 'Zone 62 Non-project Urban - uses GW_SHORT'),
 -- Tulare Region (90)
-('90_PU', 'DL_90_PU', 'GW_SHORT_90_PU', 'DL', FALSE, 'Zone 90 Project Urban - uses GW_SHORT'),
+('90_PU', 'DL_90_PU', 'GW_SHORT_90_PU', 'delivery', FALSE, 'Zone 90 Project Urban - uses GW_SHORT'),
 -- El Dorado (ELDID)
-('ELDID_NU1', 'DL_ELDID_NU1', 'SHRTG_ELDID_NU1', 'DL', FALSE, 'El Dorado ID Non-project Urban 1'),
-('ELDID_NU2', 'DL_ELDID_NU2', 'SHRTG_ELDID_NU2', 'DL', FALSE, 'El Dorado ID Non-project Urban 2'),
-('ELDID_NU3', 'DL_ELDID_NU3', NULL, 'DL', FALSE, 'El Dorado ID Non-project Urban 3 - no shortage var found'),
+('ELDID_NU1', 'DL_ELDID_NU1', 'SHRTG_ELDID_NU1', 'delivery', FALSE, 'El Dorado ID Non-project Urban 1'),
+('ELDID_NU2', 'DL_ELDID_NU2', 'SHRTG_ELDID_NU2', 'delivery', FALSE, 'El Dorado ID Non-project Urban 2'),
+('ELDID_NU3', 'DL_ELDID_NU3', NULL, 'delivery', FALSE, 'El Dorado ID Non-project Urban 3 - no shortage var found'),
 -- Other named units with DL_*
-('GDPUD_NU', 'DL_GDPUD_NU', 'SHRTG_GDPUD_NU', 'DL', FALSE, 'Georgetown Divide PUD Non-project Urban'),
-('PCWA3', 'DL_PCWA3', 'SHRTG_PCWA3', 'DL', FALSE, 'Placer County Water Agency 3')
+('GDPUD_NU', 'DL_GDPUD_NU', 'SHRTG_GDPUD_NU', 'delivery', FALSE, 'Georgetown Divide PUD Non-project Urban'),
+('PCWA3', 'DL_PCWA3', 'SHRTG_PCWA3', 'delivery', FALSE, 'Placer County Water Agency 3')
 ON CONFLICT (du_id) DO UPDATE SET
     delivery_variable = EXCLUDED.delivery_variable,
     shortage_variable = EXCLUDED.shortage_variable,
@@ -121,9 +121,9 @@ ON CONFLICT (du_id) DO UPDATE SET
 \echo 'Inserting Category 2: Groundwater-only units...'
 
 INSERT INTO du_urban_variable (du_id, delivery_variable, shortage_variable, variable_type, requires_sum, notes) VALUES
-('71_NU', 'GP_71_NU', 'GW_SHORT_71_NU', 'GP', FALSE, 'Zone 71 Non-project Urban - groundwater only, no surface delivery'),
-('72_NU', 'GP_72_NU', 'GW_SHORT_72_NU', 'GP', FALSE, 'Zone 72 Non-project Urban - groundwater only, no surface delivery'),
-('72_PU', 'GP_72_PU', 'GW_SHORT_72_PU', 'GP', FALSE, 'Zone 72 Project Urban - groundwater only, no surface delivery')
+('71_NU', 'GP_71_NU', 'GW_SHORT_71_NU', 'gw_pumping', FALSE, 'Zone 71 Non-project Urban - groundwater only, no surface delivery'),
+('72_NU', 'GP_72_NU', 'GW_SHORT_72_NU', 'gw_pumping', FALSE, 'Zone 72 Non-project Urban - groundwater only, no surface delivery'),
+('72_PU', 'GP_72_PU', 'GW_SHORT_72_PU', 'gw_pumping', FALSE, 'Zone 72 Project Urban - groundwater only, no surface delivery')
 ON CONFLICT (du_id) DO UPDATE SET
     delivery_variable = EXCLUDED.delivery_variable,
     shortage_variable = EXCLUDED.shortage_variable,
@@ -142,17 +142,17 @@ ON CONFLICT (du_id) DO UPDATE SET
 \echo 'Inserting Category 3: SWP contractor deliveries...'
 
 INSERT INTO du_urban_variable (du_id, delivery_variable, shortage_variable, variable_type, requires_sum, notes) VALUES
-('CSB038', 'D_CSB038_OBISPO_PMI', 'SHORT_D_CSB038_OBISPO_PMI', 'D', FALSE, 'San Luis Obispo - SWP contractor'),
-('CSB103', 'D_CSB103_BRBRA_PMI', 'SHORT_D_CSB103_BRBRA_PMI', 'D', FALSE, 'Santa Barbara - SWP contractor'),
-('CSTIC', 'D_CSTIC_VNTRA_PMI', 'SHORT_D_CSTIC_VNTRA_PMI', 'D', FALSE, 'Ventura (Castaic) - SWP contractor'),
-('ESB324', 'D_ESB324_AVEK_PMI', 'SHORT_D_ESB324_AVEK_PMI', 'D', FALSE, 'Antelope Valley-East Kern - SWP contractor'),
-('ESB347', 'D_ESB347_PLMDL_PMI', 'SHORT_D_ESB347_PLMDL_PMI', 'D', FALSE, 'Palmdale - SWP contractor'),
-('ESB414', 'D_ESB414_BRDNO_PMI', 'SHORT_D_ESB414_BRDNO_PMI', 'D', FALSE, 'San Bernardino - SWP contractor'),
-('ESB415', 'D_ESB415_GABRL_PMI', 'SHORT_D_ESB415_GABRL_PMI', 'D', FALSE, 'San Gabriel - SWP contractor'),
-('ESB420', 'D_ESB420_GRGNO_PMI', 'SHORT_D_ESB420_GRGNO_PMI', 'D', FALSE, 'San Gorgonio - SWP contractor'),
-('SBA029', 'D_SBA029_ACWD_PMI', 'SHORT_D_SBA029_ACWD_PMI', 'D', FALSE, 'Alameda County Water District - SWP contractor'),
-('SBA036', 'D_SBA036_SCVWD_PMI', 'SHORT_D_SBA036_SCVWD_PMI', 'D', FALSE, 'Santa Clara Valley WD - SWP contractor'),
-('SCVWD', 'D_SBA036_SCVWD_PMI', 'SHORT_D_SBA036_SCVWD_PMI', 'D', FALSE, 'Santa Clara Valley WD - alias for SBA036')
+('CSB038', 'D_CSB038_OBISPO_PMI', 'SHORT_D_CSB038_OBISPO_PMI', 'delivery', FALSE, 'San Luis Obispo - SWP contractor'),
+('CSB103', 'D_CSB103_BRBRA_PMI', 'SHORT_D_CSB103_BRBRA_PMI', 'delivery', FALSE, 'Santa Barbara - SWP contractor'),
+('CSTIC', 'D_CSTIC_VNTRA_PMI', 'SHORT_D_CSTIC_VNTRA_PMI', 'delivery', FALSE, 'Ventura (Castaic) - SWP contractor'),
+('ESB324', 'D_ESB324_AVEK_PMI', 'SHORT_D_ESB324_AVEK_PMI', 'delivery', FALSE, 'Antelope Valley-East Kern - SWP contractor'),
+('ESB347', 'D_ESB347_PLMDL_PMI', 'SHORT_D_ESB347_PLMDL_PMI', 'delivery', FALSE, 'Palmdale - SWP contractor'),
+('ESB414', 'D_ESB414_BRDNO_PMI', 'SHORT_D_ESB414_BRDNO_PMI', 'delivery', FALSE, 'San Bernardino - SWP contractor'),
+('ESB415', 'D_ESB415_GABRL_PMI', 'SHORT_D_ESB415_GABRL_PMI', 'delivery', FALSE, 'San Gabriel - SWP contractor'),
+('ESB420', 'D_ESB420_GRGNO_PMI', 'SHORT_D_ESB420_GRGNO_PMI', 'delivery', FALSE, 'San Gorgonio - SWP contractor'),
+('SBA029', 'D_SBA029_ACWD_PMI', 'SHORT_D_SBA029_ACWD_PMI', 'delivery', FALSE, 'Alameda County Water District - SWP contractor'),
+('SBA036', 'D_SBA036_SCVWD_PMI', 'SHORT_D_SBA036_SCVWD_PMI', 'delivery', FALSE, 'Santa Clara Valley WD - SWP contractor'),
+('SCVWD', 'D_SBA036_SCVWD_PMI', 'SHORT_D_SBA036_SCVWD_PMI', 'delivery', FALSE, 'Santa Clara Valley WD - alias for SBA036')
 ON CONFLICT (du_id) DO UPDATE SET
     delivery_variable = EXCLUDED.delivery_variable,
     shortage_variable = EXCLUDED.shortage_variable,
@@ -172,17 +172,17 @@ ON CONFLICT (du_id) DO UPDATE SET
 
 -- Units with single delivery arc
 INSERT INTO du_urban_variable (du_id, delivery_variable, shortage_variable, variable_type, requires_sum, notes) VALUES
-('BNCIA', 'D_WTPBNC_BNCIA', NULL, 'D', FALSE, 'Benicia - water treatment plant delivery'),
-('CCWD', 'D_CCC019_CCWD', NULL, 'D', FALSE, 'Contra Costa WD - single arc delivery'),
-('GRSVL', 'D_CSD014_GRSVL', 'SHRTG_GRSVL', 'D', TRUE, 'Grass Valley - multiple arcs, has shortage var'),
-('MWD', 'DEL_SWP_MWD', 'SHORT_SWP_MWD', 'D', FALSE, 'Metropolitan Water District - aggregate variable'),
-('NAPA', 'D_BKR004_NBA009_NAPA_PMI', NULL, 'D', FALSE, 'Napa - NBA arc PMI delivery'),
-('NAPA2', 'D_BRYSA_NAPA2', NULL, 'D', FALSE, 'Napa 2 - BRYSA arc delivery'),
-('PLMAS', 'D_BGC002_PLMAS', NULL, 'D', FALSE, 'Plumas - BGC arc delivery'),
-('SUISN', 'D_WTPCMT_SUISN', NULL, 'D', FALSE, 'Suisun - CMT water treatment plant'),
-('TVAFB', 'D_WTPTAB_TVAFB', NULL, 'D', FALSE, 'Travis AFB - TAB water treatment plant'),
-('VLLJO', 'D_WTPFMH_VLLJO', NULL, 'D', FALSE, 'Vallejo - FMH water treatment plant'),
-('WLDWD', 'D_NWT013_WLDWD', 'SHRTG_WLDWD', 'D', FALSE, 'Wildwood - NWT arc delivery')
+('BNCIA', 'D_WTPBNC_BNCIA', NULL, 'delivery', FALSE, 'Benicia - water treatment plant delivery'),
+('CCWD', 'D_CCC019_CCWD', NULL, 'delivery', FALSE, 'Contra Costa WD - single arc delivery'),
+('GRSVL', 'D_CSD014_GRSVL', 'SHRTG_GRSVL', 'delivery', TRUE, 'Grass Valley - multiple arcs, has shortage var'),
+('MWD', 'DEL_SWP_MWD', 'SHORT_SWP_MWD', 'delivery', FALSE, 'Metropolitan Water District - aggregate variable'),
+('NAPA', 'D_BKR004_NBA009_NAPA_PMI', NULL, 'delivery', FALSE, 'Napa - NBA arc PMI delivery'),
+('NAPA2', 'D_BRYSA_NAPA2', NULL, 'delivery', FALSE, 'Napa 2 - BRYSA arc delivery'),
+('PLMAS', 'D_BGC002_PLMAS', NULL, 'delivery', FALSE, 'Plumas - BGC arc delivery'),
+('SUISN', 'D_WTPCMT_SUISN', NULL, 'delivery', FALSE, 'Suisun - CMT water treatment plant'),
+('TVAFB', 'D_WTPTAB_TVAFB', NULL, 'delivery', FALSE, 'Travis AFB - TAB water treatment plant'),
+('VLLJO', 'D_WTPFMH_VLLJO', NULL, 'delivery', FALSE, 'Vallejo - FMH water treatment plant'),
+('WLDWD', 'D_NWT013_WLDWD', 'SHRTG_WLDWD', 'delivery', FALSE, 'Wildwood - NWT arc delivery')
 ON CONFLICT (du_id) DO UPDATE SET
     delivery_variable = EXCLUDED.delivery_variable,
     shortage_variable = EXCLUDED.shortage_variable,
@@ -193,10 +193,10 @@ ON CONFLICT (du_id) DO UPDATE SET
 
 -- Units that require summing multiple arcs
 INSERT INTO du_urban_variable (du_id, delivery_variable, shortage_variable, variable_type, requires_sum, notes) VALUES
-('AMADR', 'D_TBAUD_AMADR_NU', NULL, 'D', TRUE, 'Amador - sum of TBAUD and TGC003 arcs'),
-('AMCYN', 'D_WTPAMC_AMCYN', NULL, 'D', TRUE, 'American Canyon - sum of WTPAMC and WTPJAC arcs'),
-('ANTOC', 'D_CCC007_ANTOC', NULL, 'D', TRUE, 'Antioch - sum of CCC007 and SJR006 arcs'),
-('FRFLD', 'D_WTPNBR_FRFLD', NULL, 'D', TRUE, 'Fairfield - sum of WTPNBR and WTPWMN arcs')
+('AMADR', 'D_TBAUD_AMADR_NU', NULL, 'delivery', TRUE, 'Amador - sum of TBAUD and TGC003 arcs'),
+('AMCYN', 'D_WTPAMC_AMCYN', NULL, 'delivery', TRUE, 'American Canyon - sum of WTPAMC and WTPJAC arcs'),
+('ANTOC', 'D_CCC007_ANTOC', NULL, 'delivery', TRUE, 'Antioch - sum of CCC007 and SJR006 arcs'),
+('FRFLD', 'D_WTPNBR_FRFLD', NULL, 'delivery', TRUE, 'Fairfield - sum of WTPNBR and WTPWMN arcs')
 ON CONFLICT (du_id) DO UPDATE SET
     delivery_variable = EXCLUDED.delivery_variable,
     shortage_variable = EXCLUDED.shortage_variable,
@@ -215,8 +215,8 @@ ON CONFLICT (du_id) DO UPDATE SET
 \echo 'Inserting Category 5: Units without CalSim variables...'
 
 INSERT INTO du_urban_variable (du_id, delivery_variable, shortage_variable, variable_type, requires_sum, notes) VALUES
-('JLIND', 'NOT_FOUND', NULL, 'MISSING', FALSE, 'No matching CalSim variables found in s0020 output'),
-('UPANG', 'NOT_FOUND', NULL, 'MISSING', FALSE, 'No matching CalSim variables found in s0020 output')
+('JLIND', 'NOT_FOUND', NULL, 'unknown', FALSE, 'No matching CalSim variables found in s0020 output'),
+('UPANG', 'NOT_FOUND', NULL, 'unknown', FALSE, 'No matching CalSim variables found in s0020 output')
 ON CONFLICT (du_id) DO UPDATE SET
     delivery_variable = EXCLUDED.delivery_variable,
     shortage_variable = EXCLUDED.shortage_variable,
