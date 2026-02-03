@@ -33,6 +33,14 @@ try:
 except ImportError:
     HAS_BOTO3 = False
 
+# Optional: psycopg2 for database access
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+
 # Logging setup
 logging.basicConfig(
     level=logging.INFO,
@@ -688,8 +696,114 @@ def main():
             'period_summary': all_period_summary,
         }
         print(json.dumps(output, indent=2))
+        return
 
-    log.info("Total rows generated:")
+    # Save to database
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        log.error("DATABASE_URL not set. Cannot save to database.")
+        log.info("Use --output-json to output results as JSON instead.")
+        return
+
+    if not HAS_PSYCOPG2:
+        log.error("psycopg2 not installed. Cannot save to database.")
+        return
+
+    def convert_numpy(val):
+        """Convert numpy types to Python native types."""
+        if val is None:
+            return None
+        if isinstance(val, (np.integer, np.int64, np.int32)):
+            return int(val)
+        if isinstance(val, (np.floating, np.float64, np.float32)):
+            return float(val)
+        return val
+
+    try:
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor()
+
+        # Delete existing data for these scenarios
+        scenario_ids = list(set(row['scenario_short_code'] for row in all_delivery_monthly))
+        for scenario_id in scenario_ids:
+            cur.execute("DELETE FROM mi_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute("DELETE FROM mi_shortage_monthly WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute("DELETE FROM mi_contractor_period_summary WHERE scenario_short_code = %s", (scenario_id,))
+            log.info(f"Cleared existing data for scenario {scenario_id}")
+
+        # Insert delivery monthly rows
+        if all_delivery_monthly:
+            monthly_cols = [
+                'scenario_short_code', 'mi_contractor_code', 'water_month',
+                'delivery_avg_taf', 'delivery_cv',
+                'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+                'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+                'sample_count'
+            ]
+            monthly_values = [
+                tuple(convert_numpy(row.get(col)) for col in monthly_cols)
+                for row in all_delivery_monthly
+            ]
+            insert_sql = f"""
+                INSERT INTO mi_delivery_monthly ({', '.join(monthly_cols)})
+                VALUES %s
+            """
+            execute_values(cur, insert_sql, monthly_values)
+            log.info(f"Inserted {len(monthly_values)} delivery monthly rows")
+
+        # Insert shortage monthly rows
+        if all_shortage_monthly:
+            shortage_cols = [
+                'scenario_short_code', 'mi_contractor_code', 'water_month',
+                'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
+                'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+                'sample_count'
+            ]
+            shortage_values = [
+                tuple(convert_numpy(row.get(col)) for col in shortage_cols)
+                for row in all_shortage_monthly
+            ]
+            insert_sql = f"""
+                INSERT INTO mi_shortage_monthly ({', '.join(shortage_cols)})
+                VALUES %s
+            """
+            execute_values(cur, insert_sql, shortage_values)
+            log.info(f"Inserted {len(shortage_values)} shortage monthly rows")
+
+        # Insert period summary rows
+        if all_period_summary:
+            summary_cols = [
+                'scenario_short_code', 'mi_contractor_code',
+                'simulation_start_year', 'simulation_end_year', 'total_years',
+                'annual_delivery_avg_taf', 'annual_delivery_cv',
+                'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
+                'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
+                'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
+                'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
+                'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
+                'reliability_pct'
+            ]
+            summary_values = [
+                tuple(convert_numpy(row.get(col)) for col in summary_cols)
+                for row in all_period_summary
+            ]
+            insert_sql = f"""
+                INSERT INTO mi_contractor_period_summary ({', '.join(summary_cols)})
+                VALUES %s
+            """
+            execute_values(cur, insert_sql, summary_values)
+            log.info(f"Inserted {len(summary_values)} period summary rows")
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info("Database save complete")
+
+    except Exception as e:
+        log.error(f"Database error: {e}")
+        raise
+
+    log.info("Total rows saved:")
     log.info(f"  Delivery monthly: {len(all_delivery_monthly)}")
     log.info(f"  Shortage monthly: {len(all_shortage_monthly)}")
     log.info(f"  Period summary: {len(all_period_summary)}")
