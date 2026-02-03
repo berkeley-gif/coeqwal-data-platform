@@ -57,6 +57,11 @@ S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 DELIVERY_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
+# Minimum threshold for counting a year as having a "shortage" (in TAF)
+# This filters out floating-point precision artifacts from CalSim's linear programming solver.
+# 0.1 TAF = 100 acre-feet, which is < 0.05% of typical CVP North M&I delivery (~240 TAF/yr)
+SHORTAGE_THRESHOLD_TAF = 0.1
+
 
 # =============================================================================
 # CWS AGGREGATE DEFINITIONS
@@ -242,7 +247,7 @@ def calculate_aggregate_monthly(
         if not shortage_data.empty:
             row['shortage_avg_taf'] = round(float(shortage_data.mean()), 2)
             row['shortage_cv'] = round(float(shortage_data.std() / shortage_data.mean()), 4) if shortage_data.mean() > 0 else 0
-            row['shortage_frequency_pct'] = round(((shortage_data > 0).sum() / len(shortage_data)) * 100, 2)
+            row['shortage_frequency_pct'] = round(((shortage_data > SHORTAGE_THRESHOLD_TAF).sum() / len(shortage_data)) * 100, 2)
 
             for p in DELIVERY_PERCENTILES:
                 row[f'shortage_q{p}'] = round(float(np.percentile(shortage_data, p)), 2)
@@ -283,7 +288,7 @@ def calculate_aggregate_monthly(
             if not shortage_data.empty:
                 row['shortage_avg_taf'] = round(float(shortage_data.mean()), 2)
                 row['shortage_cv'] = round(float(shortage_data.std() / shortage_data.mean()), 4) if shortage_data.mean() > 0 else 0
-                row['shortage_frequency_pct'] = round(((shortage_data > 0).sum() / len(shortage_data)) * 100, 2)
+                row['shortage_frequency_pct'] = round(((shortage_data > SHORTAGE_THRESHOLD_TAF).sum() / len(shortage_data)) * 100, 2)
 
                 for p in DELIVERY_PERCENTILES:
                     row[f'shortage_q{p}'] = round(float(np.percentile(shortage_data, p)), 2)
@@ -340,7 +345,8 @@ def calculate_aggregate_period_summary(
     has_shortage = shortage_var in df.columns
     if has_shortage:
         annual_shortage = df.groupby('WaterYear')[shortage_var].sum()
-        shortage_years = (annual_shortage > 0).sum()
+        # Use threshold to filter out floating-point noise from CalSim solver
+        shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
         result['annual_shortage_avg_taf'] = round(float(annual_shortage.mean()), 2)
         result['shortage_years_count'] = int(shortage_years)

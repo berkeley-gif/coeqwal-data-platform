@@ -64,6 +64,11 @@ CWS_SHORTAGE_CSV = PROJECT_ROOT / "etl/pipelines/CWS/CWS_shortage_variables.csv"
 DELIVERY_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
+# Minimum threshold for counting a year as having a "shortage" (in TAF)
+# This filters out floating-point precision artifacts from CalSim's linear programming solver.
+# 0.1 TAF = 100 acre-feet, which is < 0.05% of typical CVP North M&I delivery (~240 TAF/yr)
+SHORTAGE_THRESHOLD_TAF = 0.1
+
 
 # =============================================================================
 # CONTRACTOR VARIABLE MAPPINGS
@@ -477,7 +482,8 @@ def calculate_contractor_shortage_monthly(
         if data.empty:
             return []
 
-        shortage_count = (data > 0).sum()
+        # Use threshold to filter out floating-point noise from CalSim solver
+        shortage_count = (data > SHORTAGE_THRESHOLD_TAF).sum()
 
         row = {
             'mi_contractor_code': contractor_code,
@@ -498,7 +504,8 @@ def calculate_contractor_shortage_monthly(
             if month_data.empty:
                 continue
 
-            shortage_count = (month_data > 0).sum()
+            # Use threshold to filter out floating-point noise from CalSim solver
+            shortage_count = (month_data > SHORTAGE_THRESHOLD_TAF).sum()
 
             row = {
                 'mi_contractor_code': contractor_code,
@@ -557,7 +564,8 @@ def calculate_contractor_period_summary(
     if available_shortage:
         df_copy['total_shortage'] = df_copy[available_shortage].sum(axis=1)
         annual_shortage = df_copy.groupby('WaterYear')['total_shortage'].sum()
-        shortage_years = (annual_shortage > 0).sum()
+        # Use threshold to filter out floating-point noise from CalSim solver
+        shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
         result['annual_shortage_avg_taf'] = round(float(annual_shortage.mean()), 2)
         result['shortage_years_count'] = int(shortage_years)

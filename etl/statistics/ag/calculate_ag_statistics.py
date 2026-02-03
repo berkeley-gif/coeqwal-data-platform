@@ -62,6 +62,11 @@ DU_AGRICULTURE_CSV = PROJECT_ROOT / "database/seed_tables/04_calsim_data/du_agri
 DELIVERY_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
+# Minimum threshold for counting a year as having a "shortage" (in TAF)
+# This filters out floating-point precision artifacts from CalSim's linear programming solver.
+# 0.1 TAF = 100 acre-feet, which is < 0.05% of typical delivery
+SHORTAGE_THRESHOLD_TAF = 0.1
+
 # Pre-computed aggregate definitions
 # These aggregates have direct CalSim variables
 AG_AGGREGATES = {
@@ -346,7 +351,8 @@ def calculate_du_shortage_monthly(
         if shortage_data.empty:
             return []
 
-        shortage_count = (shortage_data > 0).sum()
+        # Use threshold to filter out floating-point noise from CalSim solver
+        shortage_count = (shortage_data > SHORTAGE_THRESHOLD_TAF).sum()
 
         # Calculate demand and shortage % of demand
         demand_data = delivery_data + shortage_data
@@ -381,7 +387,8 @@ def calculate_du_shortage_monthly(
             if shortage_data.empty:
                 continue
 
-            shortage_count = (shortage_data > 0).sum()
+            # Use threshold to filter out floating-point noise from CalSim solver
+            shortage_count = (shortage_data > SHORTAGE_THRESHOLD_TAF).sum()
 
             # Calculate shortage % of demand for this month
             demand_data = delivery_data.values + shortage_data.values
@@ -455,7 +462,8 @@ def calculate_du_period_summary(
     if has_shortage:
         df_copy['shortage'] = df_copy[shortage_var]
         annual_shortage = df_copy.groupby('WaterYear')['shortage'].sum()
-        shortage_years = (annual_shortage > 0).sum()
+        # Use threshold to filter out floating-point noise from CalSim solver
+        shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
         result['annual_shortage_avg_taf'] = round(float(annual_shortage.mean()), 2)
         result['shortage_years_count'] = int(shortage_years)

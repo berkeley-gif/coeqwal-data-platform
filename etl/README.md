@@ -471,7 +471,45 @@ Reliability % = (1 - Average Annual Shortage / Average Annual Delivery) × 100
 
 This represents the percentage of requested water that was actually delivered across the simulation period (1922-2021).
 
-**Note:** This differs from the `Percent_of_Demand` calculation used for individual CWS contractors (documented below), which uses PERDV allocation variables to back-calculate demand. The aggregate reliability formula directly compares shortage to delivery without the PERDV adjustment.
+### Shortage frequency calculation
+
+**Shortage frequency** is the percentage of years (or months) with a meaningful shortage:
+
+```
+Shortage Frequency % = (Years with annual shortage > 0.1 TAF / Total years) × 100
+```
+
+**Why the 0.1 TAF threshold?**
+
+CalSim uses a linear programming solver that can produce floating-point precision artifacts (e.g., shortage values of 0.0000001 TAF). Without a threshold, these artifacts would be counted as "shortage years," producing misleading high frequencies.
+
+The 0.1 TAF (100 acre-feet) threshold:
+- Filters out numerical noise from the solver
+- Is small enough to catch real shortages (< 0.05% of typical delivery)
+- Approximately equals 1 day of supply for a small M&I contractor
+
+### Shortage data provenance
+
+Shortage variables in CalSim output (e.g., `SHORT_CVP_PMI_N`) are calculated in the model's WRESL files.
+
+**Source file:** `Run/DeliveryLogic/output/deliv_short_cvp_n.wresl`
+
+**Formula:** For each contractor, shortage is computed as:
+```
+Shortage = Surface Water Delivery Target - Actual Delivery
+```
+
+Where:
+- **Surface Water Delivery Target** = min(demand based on urban/ag water needs, contract allocation)
+- **Actual Delivery** = what was actually delivered (`D_*` variables)
+
+The aggregate shortage variables (e.g., `SHORT_CVP_PMI_N`) sum the individual contractor shortages:
+```wresl
+define short_cvp_pmi_n {alias X_WTPCSD_02_PU + X_WKYTN_02_PU + X_SHSTA_03_PU1 + X_WTPBLV_03_PU2 
+                        kind 'delivery-shortage-cvp' units 'cfs'}
+```
+
+**Note:** The COEQWAL Jupyter notebooks use shortage differently - they back-calculate demand using the formula `Demand = (Shortage + Delivery) / percent_delivery`. Our ETL uses the shortage variables directly without this transformation.
 
 ### Prerequisites
 
