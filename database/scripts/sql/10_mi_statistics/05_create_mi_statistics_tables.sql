@@ -33,7 +33,7 @@ DROP TABLE IF EXISTS mi_delivery_monthly CASCADE;
 CREATE TABLE mi_delivery_monthly (
     id SERIAL PRIMARY KEY,
     scenario_short_code VARCHAR(20) NOT NULL,
-    mi_contractor_id INTEGER NOT NULL,          -- FK → mi_contractor(id)
+    mi_contractor_code VARCHAR(50) NOT NULL,    -- References mi_contractor.short_code
     water_month INTEGER NOT NULL,               -- 1-12 (Oct=1, Sep=12)
 
     -- Delivery statistics (TAF)
@@ -68,10 +68,8 @@ CREATE TABLE mi_delivery_monthly (
     updated_by INTEGER NOT NULL DEFAULT 1,
 
     -- Constraints
-    CONSTRAINT fk_mi_delivery_contractor
-        FOREIGN KEY (mi_contractor_id) REFERENCES mi_contractor(id),
     CONSTRAINT uq_mi_delivery_monthly
-        UNIQUE(scenario_short_code, mi_contractor_id, water_month),
+        UNIQUE(scenario_short_code, mi_contractor_code, water_month),
     CONSTRAINT chk_mi_delivery_water_month
         CHECK (water_month BETWEEN 1 AND 12)
 );
@@ -85,7 +83,7 @@ CREATE TABLE mi_delivery_monthly (
 CREATE TABLE mi_shortage_monthly (
     id SERIAL PRIMARY KEY,
     scenario_short_code VARCHAR(20) NOT NULL,
-    mi_contractor_id INTEGER NOT NULL,
+    mi_contractor_code VARCHAR(50) NOT NULL,    -- References mi_contractor.short_code
     water_month INTEGER NOT NULL,
 
     -- Shortage statistics (TAF)
@@ -112,10 +110,8 @@ CREATE TABLE mi_shortage_monthly (
     updated_by INTEGER NOT NULL DEFAULT 1,
 
     -- Constraints
-    CONSTRAINT fk_mi_shortage_contractor
-        FOREIGN KEY (mi_contractor_id) REFERENCES mi_contractor(id),
     CONSTRAINT uq_mi_shortage_monthly
-        UNIQUE(scenario_short_code, mi_contractor_id, water_month),
+        UNIQUE(scenario_short_code, mi_contractor_code, water_month),
     CONSTRAINT chk_mi_shortage_water_month
         CHECK (water_month BETWEEN 1 AND 12)
 );
@@ -129,7 +125,7 @@ CREATE TABLE mi_shortage_monthly (
 CREATE TABLE mi_contractor_period_summary (
     id SERIAL PRIMARY KEY,
     scenario_short_code VARCHAR(20) NOT NULL,
-    mi_contractor_id INTEGER NOT NULL,
+    mi_contractor_code VARCHAR(50) NOT NULL,    -- References mi_contractor.short_code
 
     -- Simulation period
     simulation_start_year INTEGER NOT NULL,
@@ -179,10 +175,8 @@ CREATE TABLE mi_contractor_period_summary (
     updated_by INTEGER NOT NULL DEFAULT 1,
 
     -- Constraints
-    CONSTRAINT fk_mi_period_contractor
-        FOREIGN KEY (mi_contractor_id) REFERENCES mi_contractor(id),
     CONSTRAINT uq_mi_period_summary
-        UNIQUE(scenario_short_code, mi_contractor_id)
+        UNIQUE(scenario_short_code, mi_contractor_code)
 );
 
 -- ============================================
@@ -193,17 +187,17 @@ CREATE TABLE mi_contractor_period_summary (
 
 -- mi_delivery_monthly indexes
 CREATE INDEX idx_mi_delivery_monthly_scenario ON mi_delivery_monthly(scenario_short_code);
-CREATE INDEX idx_mi_delivery_monthly_contractor ON mi_delivery_monthly(mi_contractor_id);
-CREATE INDEX idx_mi_delivery_monthly_combined ON mi_delivery_monthly(scenario_short_code, mi_contractor_id);
+CREATE INDEX idx_mi_delivery_monthly_contractor ON mi_delivery_monthly(mi_contractor_code);
+CREATE INDEX idx_mi_delivery_monthly_combined ON mi_delivery_monthly(scenario_short_code, mi_contractor_code);
 
 -- mi_shortage_monthly indexes
 CREATE INDEX idx_mi_shortage_monthly_scenario ON mi_shortage_monthly(scenario_short_code);
-CREATE INDEX idx_mi_shortage_monthly_contractor ON mi_shortage_monthly(mi_contractor_id);
-CREATE INDEX idx_mi_shortage_monthly_combined ON mi_shortage_monthly(scenario_short_code, mi_contractor_id);
+CREATE INDEX idx_mi_shortage_monthly_contractor ON mi_shortage_monthly(mi_contractor_code);
+CREATE INDEX idx_mi_shortage_monthly_combined ON mi_shortage_monthly(scenario_short_code, mi_contractor_code);
 
 -- mi_contractor_period_summary indexes
 CREATE INDEX idx_mi_period_summary_scenario ON mi_contractor_period_summary(scenario_short_code);
-CREATE INDEX idx_mi_period_summary_contractor ON mi_contractor_period_summary(mi_contractor_id);
+CREATE INDEX idx_mi_period_summary_contractor ON mi_contractor_period_summary(mi_contractor_code);
 
 -- ============================================
 -- COMMENTS
@@ -212,6 +206,7 @@ COMMENT ON TABLE mi_delivery_monthly IS 'Monthly delivery statistics for SWP/CVP
 COMMENT ON TABLE mi_shortage_monthly IS 'Monthly shortage statistics for SWP/CVP contractors. Source: SHORT_* variables in CalSim output.';
 COMMENT ON TABLE mi_contractor_period_summary IS 'Period-of-record summary statistics for SWP/CVP contractors including reliability metrics.';
 
+COMMENT ON COLUMN mi_delivery_monthly.mi_contractor_code IS 'Contractor short code, references mi_contractor.short_code';
 COMMENT ON COLUMN mi_delivery_monthly.water_month IS 'Water month: 1=October, 2=November, ..., 12=September';
 COMMENT ON COLUMN mi_delivery_monthly.exc_p5 IS 'Value exceeded 5% of time (high delivery conditions)';
 COMMENT ON COLUMN mi_delivery_monthly.exc_p95 IS 'Value exceeded 95% of time (low delivery conditions)';
