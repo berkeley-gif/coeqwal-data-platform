@@ -32,13 +32,13 @@ TRUNCATE TABLE du_urban_entity CASCADE;
 
 -- Note: CSV columns map to table columns as follows:
 -- CSV: DU_ID, WBA_ID, hydrologic_region, Dups, Class, CS3_Type, total_acres, polygon_count,
---      community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data
+--      community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data, primary_contractor_short_code
 -- Table: du_id, wba_id, hydrologic_region, dups, du_class, cs3_type, total_acres, polygon_count,
---        community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data
+--        community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data, primary_contractor_short_code
 
 SELECT aws_s3.table_import_from_s3(
     'du_urban_entity',
-    'du_id, wba_id, hydrologic_region, dups, du_class, cs3_type, total_acres, polygon_count, community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data',
+    'du_id, wba_id, hydrologic_region, dups, du_class, cs3_type, total_acres, polygon_count, community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data, primary_contractor_short_code',
     '(format csv, header true)',
     'coeqwal-seeds-dev',
     '04_calsim_data/du_urban_entity.csv',
