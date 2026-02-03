@@ -108,12 +108,12 @@ CWS_AGGREGATES = {
         'shortage_var': 'SHORT_CVP_PMI_S',
         'description': 'CVP M&I deliveries - South of Delta',
     },
-    # MWD - delivery available, shortage may not be in this exact form
+    # MWD - Metropolitan Water District
     'mwd': {
         'id': 4,
         'label': 'Metropolitan Water District',
         'delivery_var': 'DEL_SWP_MWD',
-        'shortage_var': None,  # SHORT_MWD_PMI may need to be calculated from components
+        'shortage_var': 'SHORT_SWP_MWD',
         'description': 'MWD Southern California aggregate',
     },
 }

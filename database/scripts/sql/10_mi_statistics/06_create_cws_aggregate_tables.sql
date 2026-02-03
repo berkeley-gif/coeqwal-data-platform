@@ -230,7 +230,7 @@ VALUES
     (1, 'swp_total', 'SWP Total M&I', 'Total State Water Project Municipal & Industrial deliveries', 'SWP', 'total', 'DEL_SWP_PMI', 'SHORT_SWP_PMI', 1),
     (2, 'cvp_nod', 'CVP North', 'Central Valley Project M&I deliveries - North of Delta', 'CVP', 'nod', 'DEL_CVP_PMI_N', 'SHORT_CVP_PMI_N', 3),
     (3, 'cvp_sod', 'CVP South', 'Central Valley Project M&I deliveries - South of Delta', 'CVP', 'sod', 'DEL_CVP_PMI_S', 'SHORT_CVP_PMI_S', 4),
-    (4, 'mwd', 'Metropolitan Water District', 'MWD Southern California aggregate deliveries', 'MWD', NULL, 'DEL_SWP_MWD', NULL, 6),
+    (4, 'mwd', 'Metropolitan Water District', 'MWD Southern California aggregate deliveries', 'MWD', NULL, 'DEL_SWP_MWD', 'SHORT_SWP_MWD', 6),
     (5, 'swp_nod', 'SWP North', 'State Water Project M&I deliveries - North of Delta', 'SWP', 'nod', 'DEL_SWP_PMI_N', 'SHORT_SWP_PMI_N', 2),
     (6, 'swp_sod', 'SWP South', 'State Water Project M&I deliveries - South of Delta', 'SWP', 'sod', 'DEL_SWP_PMI_S', 'SHORT_SWP_PMI_S', 5)
 ON CONFLICT (short_code) DO UPDATE SET
