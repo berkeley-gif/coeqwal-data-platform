@@ -7,6 +7,7 @@ Runs all statistics calculations for a scenario in the correct order:
 2. Urban demand unit (DU) statistics (delivery, shortage)
 3. M&I contractor statistics (delivery, shortage)
 4. CWS aggregate statistics (SWP, CVP, MWD totals)
+5. Agricultural (AG) statistics (delivery, shortage, aggregates)
 
 Usage:
     # Run all statistics for a scenario
@@ -49,7 +50,7 @@ ETL_MODULES = {
     'reservoirs': {
         'path': SCRIPT_DIR / 'main.py',
         'name': 'Reservoir Statistics',
-        'tables': ['reservoir_monthly_percentile', 'reservoir_storage_monthly', 
+        'tables': ['reservoir_monthly_percentile', 'reservoir_storage_monthly',
                    'reservoir_spill_monthly', 'reservoir_period_summary'],
     },
     'du_urban': {
@@ -66,6 +67,12 @@ ETL_MODULES = {
         'path': SCRIPT_DIR / 'cws_aggregate' / 'main.py',
         'name': 'CWS Aggregate Statistics',
         'tables': ['cws_aggregate_monthly', 'cws_aggregate_period_summary'],
+    },
+    'ag': {
+        'path': SCRIPT_DIR / 'ag' / 'main.py',
+        'name': 'Agricultural Statistics',
+        'tables': ['ag_du_delivery_monthly', 'ag_du_shortage_monthly', 'ag_du_period_summary',
+                   'ag_aggregate_monthly', 'ag_aggregate_period_summary'],
     },
 }
 
