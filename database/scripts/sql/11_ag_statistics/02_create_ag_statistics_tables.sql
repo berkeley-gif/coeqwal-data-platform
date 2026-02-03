@@ -44,7 +44,7 @@ CREATE TABLE ag_du_delivery_monthly (
 
     -- Delivery statistics (TAF)
     delivery_avg_taf NUMERIC(10,2),
-    delivery_cv NUMERIC(6,4),                 -- Coefficient of variation
+    delivery_cv NUMERIC(10,4),                -- Coefficient of variation (can exceed 100)
 
     -- Delivery percentiles (TAF) - for box plots
     q0 NUMERIC(10,2),                         -- Minimum
@@ -106,7 +106,7 @@ CREATE TABLE ag_du_shortage_monthly (
 
     -- Shortage statistics (TAF)
     shortage_avg_taf NUMERIC(10,2),
-    shortage_cv NUMERIC(6,4),
+    shortage_cv NUMERIC(10,4),
     shortage_frequency_pct NUMERIC(5,2),      -- % months with shortage > 0
     shortage_pct_of_demand_avg NUMERIC(6,2),  -- Average shortage as % of demand
 
@@ -158,7 +158,7 @@ CREATE TABLE ag_du_period_summary (
 
     -- Annual delivery statistics
     annual_delivery_avg_taf NUMERIC(10,2),
-    annual_delivery_cv NUMERIC(6,4),
+    annual_delivery_cv NUMERIC(10,4),
 
     -- Annual delivery exceedance percentiles
     delivery_exc_p5 NUMERIC(10,2),
@@ -212,7 +212,7 @@ CREATE TABLE ag_aggregate_monthly (
 
     -- Delivery statistics (TAF)
     delivery_avg_taf NUMERIC(10,2),
-    delivery_cv NUMERIC(6,4),
+    delivery_cv NUMERIC(10,4),
 
     -- Delivery percentiles (TAF)
     q0 NUMERIC(10,2),
@@ -234,7 +234,7 @@ CREATE TABLE ag_aggregate_monthly (
 
     -- Shortage statistics (from SHORT_CVP_PAG_*, SHORT_SWP_PAG_*)
     shortage_avg_taf NUMERIC(10,2),
-    shortage_cv NUMERIC(6,4),
+    shortage_cv NUMERIC(10,4),                 -- CV can exceed 100 when mean is small
     shortage_frequency_pct NUMERIC(5,2),       -- % of months with shortage > 0.1 TAF
 
     sample_count INTEGER,
@@ -275,7 +275,7 @@ CREATE TABLE ag_aggregate_period_summary (
 
     -- Annual delivery statistics
     annual_delivery_avg_taf NUMERIC(10,2),
-    annual_delivery_cv NUMERIC(6,4),
+    annual_delivery_cv NUMERIC(10,4),
 
     -- Annual delivery exceedance percentiles
     delivery_exc_p5 NUMERIC(10,2),
