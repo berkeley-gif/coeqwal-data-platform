@@ -962,7 +962,6 @@ async def get_period_summary(
         "SHSTA": {
           "name": "Shasta",
           "capacity_taf": 4552.0,
-          "simulation_years": {"start": 1922, "end": 2021, "total": 100},
           "storage_exceedance": {"p5": 35.2, "p10": 42.1, "p25": 55.3, "p50": 68.7, "p75": 81.2, "p90": 91.5, "p95": 96.2},
           "thresholds": {"dead_pool_taf": 115.0, "dead_pool_pct": 2.5, "spill_threshold_pct": 95.2},
           "spill": {"frequency_pct": 45.0, "years_count": 45, "mean_cfs": 5000, "peak_cfs": 25000, ...}
@@ -977,7 +976,6 @@ async def get_period_summary(
         query = """
         SELECT
             re.short_code, re.name,
-            rps.simulation_start_year, rps.simulation_end_year, rps.total_years,
             rps.storage_exc_p5, rps.storage_exc_p10, rps.storage_exc_p25, rps.storage_exc_p50,
             rps.storage_exc_p75, rps.storage_exc_p90, rps.storage_exc_p95,
             rps.dead_pool_taf, rps.dead_pool_pct, rps.spill_threshold_pct,
@@ -1007,11 +1005,6 @@ async def get_period_summary(
                 "capacity_taf": float(row["capacity_taf"])
                 if row["capacity_taf"]
                 else 0.0,
-                "simulation_years": {
-                    "start": row["simulation_start_year"],
-                    "end": row["simulation_end_year"],
-                    "total": row["total_years"],
-                },
                 "storage_exceedance": {
                     "p5": float(row["storage_exc_p5"])
                     if row["storage_exc_p5"]

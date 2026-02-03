@@ -70,11 +70,17 @@ curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/period-summary?rese
 
 **Available Reservoir Groups:**
 
-| Group | Description | Reservoirs |
-|-------|-------------|------------|
-| `major` | 8 major California reservoirs | SHSTA, TRNTY, OROVL, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP |
-| `cvp` | Central Valley Project reservoirs | SHSTA, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP |
-| `swp` | State Water Project reservoirs | OROVL, SLUIS_SWP |
+| Group | Description |
+|-------|-------------|
+| `major` | 8 major California reservoirs |
+| `cvp` | Central Valley Project reservoirs |
+| `swp` | State Water Project reservoirs |
+
+**Major Reservoirs:** SHSTA, TRNTY, OROVL, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP
+
+**CVP Reservoirs:** SHSTA, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP
+
+**SWP Reservoirs:** OROVL, SLUIS_SWP
 
 **Endpoints supporting these filters:**
 

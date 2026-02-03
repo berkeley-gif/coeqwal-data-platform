@@ -1312,6 +1312,318 @@ ETL: etl/statistics/calculate_reservoir_statistics.py
 
 ---
 
+### **M&I (Municipal & Industrial) Statistics**
+
+The M&I statistics layer provides delivery and shortage statistics at two levels:
+1. **Urban Demand Units (du_urban_entity)** - 126 geographic demand units
+2. **M&I Contractors (mi_contractor)** - 30 SWP water agency contractors
+
+#### **du_urban_group (demand unit groupings)**
+```
+Table: du_urban_group
+├── id                    INTEGER PRIMARY KEY
+├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- "tier", "nod", "sod", "swp_served"
+├── label                 VARCHAR(100) NOT NULL        -- "Tier Matrix DUs"
+├── description           TEXT                         -- Purpose of this grouping
+├── display_order         INTEGER DEFAULT 0
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1            -- FK → developer.id
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Records: 6 groups (tier, nod, sod, swp_served, cvp_served, swp_delivery_point)
+
+DDL: database/scripts/sql/10_mi_statistics/02b_create_du_urban_group_tables.sql
+```
+
+#### **du_urban_group_member (demand unit group memberships)**
+```
+Table: du_urban_group_member
+├── id                    SERIAL PRIMARY KEY
+├── du_urban_group_id     INTEGER NOT NULL             -- FK → du_urban_group.id
+├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── display_order         INTEGER DEFAULT 0
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+└── Unique: (du_urban_group_id, du_id)
+
+Records: 71 rows (tier group members from tier matrix)
+
+DDL: database/scripts/sql/10_mi_statistics/02b_create_du_urban_group_tables.sql
+```
+
+#### **mi_contractor_group (M&I contractor groupings)**
+```
+Table: mi_contractor_group
+├── id                    INTEGER PRIMARY KEY
+├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- "swp", "cvp_nod", "cvp_sod", "all_mi"
+├── label                 VARCHAR(100) NOT NULL
+├── description           TEXT
+├── display_order         INTEGER DEFAULT 0
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Records: 6 groups (swp, cvp_nod, cvp_sod, all_mi, swp_mi, swp_ag)
+
+DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+```
+
+#### **mi_contractor (SWP/CVP water agency contractors)**
+```
+Table: mi_contractor
+├── id                    SERIAL PRIMARY KEY
+├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- "ACWD", "MWD", "YUBA"
+├── contractor_name       VARCHAR(100) NOT NULL        -- "ALAMEDA COUNTY WD"
+├── project               VARCHAR(10) NOT NULL         -- "SWP" or "CVP"
+├── region                VARCHAR(10)                  -- "NOD" or "SOD"
+├── contractor_type       VARCHAR(10) NOT NULL         -- "MI", "MWD", "AG"
+├── contract_amount_taf   NUMERIC(10,2)                -- Table A contract amount
+├── source_contractor_id  INTEGER                      -- Original ID from wresl files
+├── source_file           VARCHAR(100)                 -- "swp_contractor_perdel_A.wresl"
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Records: 30 SWP contractors (22 MI, 1 MWD, 7 AG)
+
+Source: /data/raw/model_run/.../DeliveryLogic/SWP/Allocation/swp_contractor_perdel_A.wresl
+
+DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+```
+
+#### **mi_contractor_group_member (contractor group memberships)**
+```
+Table: mi_contractor_group_member
+├── id                    SERIAL PRIMARY KEY
+├── mi_contractor_group_id INTEGER NOT NULL            -- FK → mi_contractor_group.id
+├── mi_contractor_id      INTEGER NOT NULL             -- FK → mi_contractor.id
+├── display_order         INTEGER DEFAULT 0
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+└── Unique: (mi_contractor_group_id, mi_contractor_id)
+
+Records: 60 memberships
+
+DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+```
+
+#### **mi_contractor_delivery_arc (delivery variable mappings)**
+```
+Table: mi_contractor_delivery_arc
+├── id                    SERIAL PRIMARY KEY
+├── mi_contractor_id      INTEGER NOT NULL             -- FK → mi_contractor.id
+├── delivery_arc          VARCHAR(50) NOT NULL         -- "D_SBA029_ACWD", "D_PRRIS_MWDSC"
+├── arc_type              VARCHAR(20)                  -- "PMI", "PAG"
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+└── Unique: (delivery_arc)
+
+Records: 39 delivery arcs
+
+DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+```
+
+#### **du_delivery_monthly (urban demand unit delivery statistics)**
+```
+Table: du_delivery_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── delivery_avg_taf      NUMERIC(10,2)
+├── delivery_cv           NUMERIC(6,4)
+├── q0                    NUMERIC(10,2)                -- Percentiles for box plots
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/10_mi_statistics/02_create_du_statistics_tables.sql
+```
+
+#### **du_shortage_monthly (urban demand unit shortage statistics)**
+```
+Table: du_shortage_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL
+├── water_month           INTEGER NOT NULL
+├── shortage_avg_taf      NUMERIC(10,2)
+├── shortage_cv           NUMERIC(6,4)
+├── shortage_frequency_pct NUMERIC(5,2)                -- % months with shortage > 0
+├── q0 - q100             NUMERIC(10,2)                -- Percentiles
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/10_mi_statistics/02_create_du_statistics_tables.sql
+```
+
+#### **du_period_summary (urban demand unit period summary)**
+```
+Table: du_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_delivery_avg_taf NUMERIC(10,2)
+├── annual_delivery_cv    NUMERIC(6,4)
+├── delivery_exc_p5-p95   NUMERIC(10,2)                -- Exceedance percentiles
+├── annual_shortage_avg_taf NUMERIC(10,2)
+├── shortage_years_count  INTEGER
+├── shortage_frequency_pct NUMERIC(5,2)
+├── reliability_pct       NUMERIC(5,2)                 -- % months meeting full demand
+├── avg_pct_demand_met    NUMERIC(5,2)
+├── annual_demand_avg_taf NUMERIC(10,2)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+└── Unique: (scenario_short_code, du_id)
+
+DDL: database/scripts/sql/10_mi_statistics/02_create_du_statistics_tables.sql
+```
+
+#### **mi_delivery_monthly (contractor delivery statistics)**
+```
+Table: mi_delivery_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── mi_contractor_id      INTEGER NOT NULL             -- FK → mi_contractor.id
+├── water_month           INTEGER NOT NULL
+├── delivery_avg_taf      NUMERIC(10,2)
+├── delivery_cv           NUMERIC(6,4)
+├── q0 - q100             NUMERIC(10,2)                -- Percentiles
+├── exc_p5 - exc_p95      NUMERIC(10,2)                -- Exceedance percentiles
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: mi_contractor_id → mi_contractor.id
+├── Unique: (scenario_short_code, mi_contractor_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
+```
+
+#### **mi_shortage_monthly (contractor shortage statistics)**
+```
+Table: mi_shortage_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── mi_contractor_id      INTEGER NOT NULL
+├── water_month           INTEGER NOT NULL
+├── shortage_avg_taf      NUMERIC(10,2)
+├── shortage_cv           NUMERIC(6,4)
+├── shortage_frequency_pct NUMERIC(5,2)
+├── q0 - q100             NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: mi_contractor_id → mi_contractor.id
+├── Unique: (scenario_short_code, mi_contractor_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
+```
+
+#### **mi_contractor_period_summary (contractor period summary)**
+```
+Table: mi_contractor_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── mi_contractor_id      INTEGER NOT NULL
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_delivery_avg_taf NUMERIC(10,2)
+├── annual_delivery_cv    NUMERIC(6,4)
+├── delivery_exc_p5-p95   NUMERIC(10,2)                -- Exceedance percentiles
+├── annual_shortage_avg_taf NUMERIC(10,2)
+├── shortage_years_count  INTEGER
+├── shortage_frequency_pct NUMERIC(5,2)
+├── shortage_exc_p5-p95   NUMERIC(10,2)
+├── reliability_pct       NUMERIC(5,2)
+├── avg_pct_demand_met    NUMERIC(5,2)
+├── contract_amount_taf   NUMERIC(10,2)                -- Table A amount
+├── annual_demand_avg_taf NUMERIC(10,2)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: mi_contractor_id → mi_contractor.id
+└── Unique: (scenario_short_code, mi_contractor_id)
+
+DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
+ETL: etl/statistics/mi/ (pending)
+```
+
+---
+
 ## **10_TIER LAYER**
 
 ### **1. tier_definition**
@@ -2040,24 +2352,36 @@ Table: inflow_entity
 #### **du_urban_entity (community demand unit management)**
 ```
 Table: du_urban_entity
-├── id                   SERIAL PRIMARY KEY
-├── du_id                VARCHAR UNIQUE NOT NULL    -- Demand unit identifier
-├── network_node_id      INTEGER NOT NULL           -- FK → network.id (service location)
-├── wba_id               VARCHAR
-├── du_class             VARCHAR DEFAULT 'Urban'
-├── total_acre           NUMERIC
-├── polygon_count        INTEGER DEFAULT 1
-├── community_agency     VARCHAR                    -- Urban specific
-├── gw                   VARCHAR                    -- Urban specific
-├── sw                   VARCHAR                    -- Urban specific
-├── point_of_diversion   VARCHAR                    -- Urban specific
-├── entity_type_id       INTEGER NOT NULL           -- FK → calsim_entity_type.id
-├── entity_version_id    INTEGER NOT NULL           -- FK → version.id (entity family)
-├── attribute_source     JSONB NOT NULL             -- {"community_agency": "du_system", "gw": "operational"}
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── du_id                VARCHAR(20) PRIMARY KEY    -- Demand unit identifier (e.g., "16_PU", "AMCYN")
+├── wba_id               VARCHAR(10)                -- Water Budget Area ID
+├── hydrologic_region    VARCHAR(10)                -- SAC, SJR, TULARE
+├── dups                 VARCHAR(10)                -- Duplicate indicator
+├── class                VARCHAR(20) DEFAULT 'Urban'
+├── cs3_type             VARCHAR(10)                -- NU, PU, SU (Non-project, Project, Settlement Urban)
+├── total_acres          NUMERIC(15,10)
+├── polygon_count        INTEGER DEFAULT 0
+├── community_agency     TEXT                       -- Community/agency description
+├── gw                   VARCHAR(10)                -- Groundwater indicator (0/1)
+├── sw                   VARCHAR(10)                -- Surface water indicator (0/1)
+├── point_of_diversion   TEXT                       -- Water source description
+├── source               VARCHAR(50)                -- Data source (geopackage, calsim_report, tier_matrix)
+├── model_source         VARCHAR(20) DEFAULT 'calsim3'
+├── has_gis_data         BOOLEAN DEFAULT FALSE
+├── primary_contractor_short_code VARCHAR(20)       -- FK → mi_contractor.short_code (for SWP-served units)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER DEFAULT 1
+
+Records: 126 urban demand units (107 original + 19 tier matrix additions)
+
+Relationships:
+├── du_urban_group_member.du_id → du_urban_entity.du_id (group memberships)
+└── primary_contractor_short_code → mi_contractor.short_code (optional SWP contractor link)
+
+DDL: database/scripts/sql/10_mi_statistics/01_create_du_urban_entity.sql
+Seed: s3://coeqwal-seeds-dev/04_calsim_data/du_urban_entity.csv
 ```
 
 #### **du_agriculture_entity (dgriculture demand unit management)**
