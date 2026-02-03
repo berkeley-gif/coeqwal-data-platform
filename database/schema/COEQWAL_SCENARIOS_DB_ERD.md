@@ -1444,6 +1444,64 @@ Records: 39 delivery arcs
 DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
 ```
 
+#### **du_urban_variable (demand unit variable mappings)**
+```
+Table: du_urban_variable
+├── id                    SERIAL PRIMARY KEY
+├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── delivery_variable     VARCHAR(100) NOT NULL        -- CalSim variable (DL_*, D_*, GP_*)
+├── shortage_variable     VARCHAR(100)                 -- CalSim variable (SHRTG_*, GW_SHORT_*)
+├── variable_type         VARCHAR(20) DEFAULT 'DL'     -- 'DL', 'D', 'GP', 'MISSING'
+├── requires_sum          BOOLEAN DEFAULT FALSE        -- TRUE if multiple arcs need summing
+├── notes                 TEXT                         -- Mapping context
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: du_id → du_urban_entity.du_id
+└── Unique: (du_id)
+
+Records: 71 mappings (canonical CWS demand units from tier matrix)
+
+Variable types:
+├── DL: Uses DL_* total delivery variable (e.g., DL_02_PU)
+├── D: Uses D_* arc delivery variable (e.g., D_CSB038_OBISPO_PMI)
+├── GP: Groundwater pumping only, no surface delivery (e.g., GP_71_NU)
+└── MISSING: No CalSim variable found (JLIND, UPANG)
+
+DDL: database/scripts/sql/10_mi_statistics/01c_create_du_urban_variable.sql
+Seed: database/scripts/sql/10_mi_statistics/01d_load_du_urban_variable.sql
+```
+
+#### **du_urban_delivery_arc (multi-arc delivery mappings)**
+```
+Table: du_urban_delivery_arc
+├── id                    SERIAL PRIMARY KEY
+├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── delivery_arc          VARCHAR(100) NOT NULL        -- CalSim arc variable (D_*)
+├── arc_order             INTEGER DEFAULT 1            -- Order for summing
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: du_id → du_urban_entity.du_id
+└── Unique: (du_id, delivery_arc)
+
+Records: 10 arcs for 5 multi-arc units (AMADR, AMCYN, ANTOC, FRFLD, GRSVL)
+
+Purpose: For demand units requiring sum of multiple delivery arcs.
+Example: FRFLD = D_WTPNBR_FRFLD + D_WTPWMN_FRFLD
+
+DDL: database/scripts/sql/10_mi_statistics/01c_create_du_urban_variable.sql
+Seed: database/scripts/sql/10_mi_statistics/01d_load_du_urban_variable.sql
+```
+
 #### **du_delivery_monthly (urban demand unit delivery statistics)**
 ```
 Table: du_delivery_monthly
