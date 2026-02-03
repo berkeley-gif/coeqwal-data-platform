@@ -279,7 +279,8 @@ def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> pd.DataFr
     """
     Load CalSim output CSV from S3 bucket.
 
-    Memory optimization: Only loads needed columns.
+    Handles the DSS export format with 7 header rows.
+    Variable names are in row 1 (0-indexed).
     """
     if not HAS_BOTO3:
         raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
@@ -296,11 +297,18 @@ def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> pd.DataFr
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+            df = pd.read_csv(response['Body'], header=None, nrows=8)
 
-            # Read with variable selection
-            df = pd.read_csv(response['Body'])
-            log.info(f"Loaded: {df.shape[0]} rows, {df.shape[1]} columns")
-            return df
+            # Get variable names from row 1
+            col_names = df.iloc[1].tolist()
+
+            # Re-fetch and read data portion (skip 7 header rows)
+            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+            data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
+            data_df.columns = col_names
+
+            log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
+            return data_df
 
         except s3.exceptions.NoSuchKey:
             continue
@@ -312,45 +320,69 @@ def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> pd.DataFr
 
 
 def load_calsim_csv_from_file(file_path: str) -> pd.DataFrame:
-    """Load CalSim output CSV from local file."""
+    """
+    Load CalSim output CSV from local file.
+
+    Handles the DSS export format with 7 header rows.
+    """
     log.info(f"Loading from file: {file_path}")
-    df = pd.read_csv(file_path)
-    log.info(f"Loaded: {df.shape[0]} rows, {df.shape[1]} columns")
-    return df
+
+    # Read header to get column names
+    header_df = pd.read_csv(file_path, header=None, nrows=8)
+    col_names = header_df.iloc[1].tolist()
+
+    # Read data portion (skip 7 header rows)
+    data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
+    data_df.columns = col_names
+
+    log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
+    return data_df
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
-    """Add water year and water month columns."""
+    """
+    Add water year and water month columns.
+
+    Handles both:
+    - DSS format dates (e.g., "31OCT1921 2400")
+    - Simple year values (e.g., 1921, 1922)
+    """
     df = df.copy()
 
-    # Try to find date column
-    date_col = None
-    for col_name in ['Date', 'DateTime', 'date', 'datetime']:
-        if col_name in df.columns:
-            date_col = col_name
-            break
+    # Find date column (first column in DSS format)
+    first_col = df.columns[0]
+    date_values = df[first_col]
 
-    if date_col is None:
-        raise ValueError("No date column found in CalSim output")
-
-    # Try to parse as annual or monthly
-    date_values = df[date_col]
-    date_numeric = pd.to_numeric(date_values, errors='coerce')
-
-    if date_numeric.notna().all() and (date_numeric >= 1900).all() and (date_numeric <= 2100).all():
-        # Annual data
-        df['WaterYear'] = date_numeric.astype(int)
-        df['WaterMonth'] = 0
-        log.info(f"Detected annual data: years {df['WaterYear'].min()}-{df['WaterYear'].max()}")
-    else:
-        # Monthly data - parse as datetime
+    # Try to parse as datetime (handles DSS format like "31OCT1921 2400")
+    try:
         df['DateTime'] = pd.to_datetime(date_values, errors='coerce')
-        df['CalendarMonth'] = df['DateTime'].dt.month
-        df['CalendarYear'] = df['DateTime'].dt.year
-        df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
-        df['WaterYear'] = df['CalendarYear']
-        df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
-        log.info("Detected monthly data format")
+
+        if df['DateTime'].notna().sum() > 0:
+            # Successfully parsed as datetime - monthly data
+            df['CalendarMonth'] = df['DateTime'].dt.month
+            df['CalendarYear'] = df['DateTime'].dt.year
+
+            # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
+            df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
+
+            # Water year: Oct-Dec belong to next water year
+            df['WaterYear'] = df['CalendarYear']
+            df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
+
+            log.info(f"Detected monthly data: {df['DateTime'].min()} to {df['DateTime'].max()}")
+            return df
+    except Exception as e:
+        log.debug(f"Could not parse as datetime: {e}")
+
+    # Fallback: check if values are years (annual data)
+    date_numeric = pd.to_numeric(date_values, errors='coerce')
+    if date_numeric.notna().all() and (date_numeric >= 1900).all() and (date_numeric <= 2100).all():
+        df['WaterYear'] = date_numeric.astype(int)
+        df['WaterMonth'] = 0  # 0 indicates annual data
+        log.info(f"Detected annual data: years {df['WaterYear'].min()}-{df['WaterYear'].max()}")
+        return df
+
+    raise ValueError(f"Could not parse date column '{first_col}' as datetime or year values")
 
     return df
 

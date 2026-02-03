@@ -51,6 +51,14 @@ from routes.cws_aggregate_endpoints import (
     router as cws_aggregate_router,
     set_db_pool as set_cws_aggregate_db_pool,
 )
+from routes.mi_contractor_endpoints import (
+    router as mi_contractor_router,
+    set_db_pool as set_mi_contractor_db_pool,
+)
+from routes.demand_unit_endpoints import (
+    router as demand_unit_router,
+    set_db_pool as set_demand_unit_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -143,6 +151,8 @@ async def lifespan(app: FastAPI):
 
     # Set the database pool for CWS aggregate router
     set_cws_aggregate_db_pool(db_pool)
+    set_mi_contractor_db_pool(db_pool)
+    set_demand_unit_db_pool(db_pool)
 
     yield
 
@@ -182,6 +192,12 @@ app.include_router(reservoir_stats_router)
 
 # Include CWS aggregate statistics endpoints
 app.include_router(cws_aggregate_router)
+
+# M&I contractor statistics router
+app.include_router(mi_contractor_router)
+
+# Demand unit statistics router
+app.include_router(demand_unit_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
