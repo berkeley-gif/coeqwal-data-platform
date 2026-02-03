@@ -563,7 +563,7 @@ def main():
                 'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
                 'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
                 'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
-                'reliability_pct', 'avg_pct_demand_met'
+                'reliability_pct', 'avg_pct_allocation_met'
             ]
             summary_values = [
                 tuple(convert_numpy(row.get(col)) for col in summary_cols)
