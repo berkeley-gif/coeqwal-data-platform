@@ -393,3 +393,71 @@ Table A contracts represent the maximum annual water entitlement each SWP contra
 Variable mappings derived from:
 - `COEQWAL_repo/coeqwal/notebooks/coeqwalpackage/DataExtraction.py` (lines 1061-1330)
 - `/etl/pipelines/MI_variable_list_comparison.md` (list comparison analysis)
+
+---
+
+## Statistics ETL
+
+The statistics ETL calculates derived metrics from CalSim scenario output CSVs and loads them into the database for API consumption.
+
+### Consolidated runner
+
+Use `run_all.py` to run all statistics modules for a scenario:
+
+```bash
+cd etl/statistics
+
+# Run all statistics for a scenario
+python run_all.py --scenario s0029
+
+# Dry run (calculate but don't write to DB)
+python run_all.py --scenario s0029 --dry-run
+
+# Run only specific modules
+python run_all.py --scenario s0029 --only reservoirs,du_urban
+
+# Run all scenarios
+python run_all.py --all-scenarios
+
+# List available modules
+python run_all.py --list-modules
+```
+
+### Modules (run in order)
+
+| Order | Module | Script | Database Tables |
+|-------|--------|--------|-----------------|
+| 1 | **reservoirs** | `main.py` | `reservoir_monthly_percentile`, `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_period_summary` |
+| 2 | **du_urban** | `du_urban/main.py` | `du_delivery_monthly`, `du_shortage_monthly`, `du_period_summary` |
+| 3 | **mi** | `mi/main.py` | `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary` |
+| 4 | **cws_aggregate** | `cws_aggregate/main.py` | `cws_aggregate_monthly`, `cws_aggregate_period_summary` |
+
+### Individual module usage
+
+Each module can also be run standalone:
+
+```bash
+# Reservoir statistics
+python main.py --scenario s0029
+
+# Urban demand unit statistics
+cd du_urban && python main.py --scenario s0029
+
+# M&I contractor statistics  
+cd mi && python main.py --scenario s0029
+
+# CWS aggregate statistics
+cd cws_aggregate && python main.py --scenario s0029
+```
+
+### Available scenarios
+
+```
+s0011, s0020, s0021, s0023, s0024, s0025, s0027, s0029
+```
+
+### Prerequisites
+
+- `DATABASE_URL` environment variable set
+- CalSim output CSV available in S3: `s3://coeqwal-model-run/scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv`
+- Python packages: `pandas`, `numpy`, `psycopg2`, `boto3`

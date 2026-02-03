@@ -7,8 +7,8 @@ This document describes the API endpoints for M&I (Municipal & Industrial) water
 | Level | Entity | Count | Description |
 |-------|--------|-------|-------------|
 | 1 | **CWS Aggregates** | 4 | High-level project totals (SWP M&I, CVP North, CVP South, MWD) |
-| 2 | **M&I Contractors** | 30 | SWP water agency contractors |
-| 3 | **Demand Units** | 125 | Geographic urban demand units |
+| 2 | **M&I Contractors** | 30 (23 with data) | SWP water agency contractors |
+| 3 | **Demand Units** | 46 | Urban demand units (tier matrix subset) |
 
 ---
 
@@ -30,7 +30,7 @@ This document describes the API endpoints for M&I (Municipal & Industrial) water
 
 ### 1. CWS Aggregate Endpoints (Project-Level Totals)
 
-**Status: Data loaded, endpoints need to be created**
+**Status: ✅ Complete - Data loaded for all 7 scenarios, endpoints working**
 
 #### List Aggregates
 ```
@@ -130,7 +130,7 @@ GET /api/statistics/scenarios/{scenario_id}/cws-aggregates/period-summary?aggreg
 
 ### 2. M&I Contractor Endpoints (SWP Agency Level)
 
-**Status: Entity data loaded, statistics ETL pending**
+**Status: ✅ Complete - Data loaded for all 7 scenarios, endpoints working**
 
 #### List Contractors
 ```
@@ -170,7 +170,7 @@ GET /api/statistics/scenarios/{scenario_id}/mi-contractors/period-summary
 
 ### 3. Urban Demand Unit Endpoints (Geographic Level)
 
-**Status: Entity data loaded, statistics ETL pending**
+**Status: ✅ Complete - Data loaded for all 7 scenarios (46 tier matrix DUs), endpoints working**
 
 #### List Demand Units
 ```
@@ -279,9 +279,15 @@ Filter period summary by `shortage_frequency_pct > threshold` or use lower excee
 
 | Component | Entity Data | Statistics Data | API Endpoints |
 |-----------|-------------|-----------------|---------------|
-| CWS Aggregates | Loaded (4) | Loaded (s0020) | Pending |
-| M&I Contractors | Loaded (30) | Pending ETL | Pending |
-| Demand Units | Loaded (125) | Pending ETL | Pending |
+| CWS Aggregates | ✅ Loaded (4) | ✅ All 7 scenarios | ✅ Working |
+| M&I Contractors | ✅ Loaded (30) | ✅ All 7 scenarios (23 with data) | ✅ Working |
+| Demand Units | ✅ Loaded (46 from tier matrix) | ✅ All 7 scenarios | ✅ Working |
+
+### Available Scenarios
+- s0011, s0020, s0021, s0023, s0024, s0025, s0027
+
+### Last Updated
+- 2026-02-03
 
 ---
 
