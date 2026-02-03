@@ -47,6 +47,10 @@ from routes.reservoir_statistics_endpoints import (
     router as reservoir_stats_router,
     set_db_pool as set_reservoir_stats_db_pool,
 )
+from routes.cws_aggregate_endpoints import (
+    router as cws_aggregate_router,
+    set_db_pool as set_cws_aggregate_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -99,7 +103,7 @@ TAGS_METADATA = [
     },
     {
         "name": "statistics",
-        "description": "**Reservoir statistics.** Monthly percentile data for reservoir storage band charts.",
+        "description": "**Water system statistics.** Reservoir storage and M&I delivery/shortage percentile data for band charts.",
     },
     {
         "name": "system",
@@ -137,6 +141,9 @@ async def lifespan(app: FastAPI):
     # Set the database pool for reservoir statistics router
     set_reservoir_stats_db_pool(db_pool)
 
+    # Set the database pool for CWS aggregate router
+    set_cws_aggregate_db_pool(db_pool)
+
     yield
 
     # Shutdown
@@ -172,6 +179,9 @@ app.include_router(download_router)
 
 # Include reservoir statistics endpoints
 app.include_router(reservoir_stats_router)
+
+# Include CWS aggregate statistics endpoints
+app.include_router(cws_aggregate_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
