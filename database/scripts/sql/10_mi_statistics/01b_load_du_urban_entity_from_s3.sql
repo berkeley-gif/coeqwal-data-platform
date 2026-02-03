@@ -39,7 +39,7 @@ TRUNCATE TABLE du_urban_entity CASCADE;
 SELECT aws_s3.table_import_from_s3(
     'du_urban_entity',
     'du_id, wba_id, hydrologic_region, dups, du_class, cs3_type, total_acres, polygon_count, community_agency, gw, sw, point_of_diversion, source, model_source, has_gis_data, primary_contractor_short_code',
-    '(format csv, header true, null '''')',
+    '(format csv, header true, force_null (dups, wba_id, cs3_type, total_acres, polygon_count, primary_contractor_short_code))',
     'coeqwal-seeds-dev',
     '04_calsim_data/du_urban_entity.csv',
     'us-west-2'
