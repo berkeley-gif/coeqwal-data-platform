@@ -31,6 +31,14 @@ try:
 except ImportError:
     HAS_BOTO3 = False
 
+# Optional: psycopg2 for database access
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+
 # Logging setup
 logging.basicConfig(
     level=logging.INFO,
@@ -487,8 +495,87 @@ def main():
             'period_summary': all_period_summary,
         }
         print(json.dumps(output, indent=2))
+        return
 
-    log.info("Total rows generated:")
+    # Save to database
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        log.error("DATABASE_URL not set. Cannot save to database.")
+        log.info("Use --output-json to output results as JSON instead.")
+        return
+
+    if not HAS_PSYCOPG2:
+        log.error("psycopg2 not installed. Cannot save to database.")
+        return
+
+    try:
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor()
+
+        # Delete existing data for these scenarios
+        scenario_ids = list(set(row['scenario_short_code'] for row in all_monthly))
+        for scenario_id in scenario_ids:
+            cur.execute("DELETE FROM cws_aggregate_monthly WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute("DELETE FROM cws_aggregate_period_summary WHERE scenario_short_code = %s", (scenario_id,))
+            log.info(f"Cleared existing data for scenario {scenario_id}")
+
+        # Insert monthly rows
+        if all_monthly:
+            monthly_cols = [
+                'scenario_short_code', 'cws_aggregate_id', 'water_month',
+                'delivery_avg_taf', 'delivery_cv',
+                'delivery_q0', 'delivery_q10', 'delivery_q30', 'delivery_q50',
+                'delivery_q70', 'delivery_q90', 'delivery_q100',
+                'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
+                'shortage_q0', 'shortage_q10', 'shortage_q30', 'shortage_q50',
+                'shortage_q70', 'shortage_q90', 'shortage_q100',
+                'sample_count'
+            ]
+            monthly_values = [
+                tuple(row.get(col) for col in monthly_cols)
+                for row in all_monthly
+            ]
+            insert_sql = f"""
+                INSERT INTO cws_aggregate_monthly ({', '.join(monthly_cols)})
+                VALUES %s
+            """
+            execute_values(cur, insert_sql, monthly_values)
+            log.info(f"Inserted {len(monthly_values)} monthly rows")
+
+        # Insert period summary rows
+        if all_period_summary:
+            summary_cols = [
+                'scenario_short_code', 'cws_aggregate_id',
+                'simulation_start_year', 'simulation_end_year', 'total_years',
+                'annual_delivery_avg_taf', 'annual_delivery_cv',
+                'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
+                'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
+                'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
+                'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
+                'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
+                'reliability_pct', 'avg_pct_demand_met'
+            ]
+            summary_values = [
+                tuple(row.get(col) for col in summary_cols)
+                for row in all_period_summary
+            ]
+            insert_sql = f"""
+                INSERT INTO cws_aggregate_period_summary ({', '.join(summary_cols)})
+                VALUES %s
+            """
+            execute_values(cur, insert_sql, summary_values)
+            log.info(f"Inserted {len(summary_values)} period summary rows")
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        log.info("Database save complete")
+
+    except Exception as e:
+        log.error(f"Database error: {e}")
+        raise
+
+    log.info("Total rows saved:")
     log.info(f"  Monthly: {len(all_monthly)}")
     log.info(f"  Period summary: {len(all_period_summary)}")
 
