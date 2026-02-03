@@ -531,8 +531,18 @@ def main():
                 'shortage_q70', 'shortage_q90', 'shortage_q100',
                 'sample_count'
             ]
+            def convert_numpy(val):
+                """Convert numpy types to Python native types."""
+                if val is None:
+                    return None
+                if isinstance(val, (np.integer, np.int64, np.int32)):
+                    return int(val)
+                if isinstance(val, (np.floating, np.float64, np.float32)):
+                    return float(val)
+                return val
+
             monthly_values = [
-                tuple(row.get(col) for col in monthly_cols)
+                tuple(convert_numpy(row.get(col)) for col in monthly_cols)
                 for row in all_monthly
             ]
             insert_sql = f"""
@@ -556,7 +566,7 @@ def main():
                 'reliability_pct', 'avg_pct_demand_met'
             ]
             summary_values = [
-                tuple(row.get(col) for col in summary_cols)
+                tuple(convert_numpy(row.get(col)) for col in summary_cols)
                 for row in all_period_summary
             ]
             insert_sql = f"""
