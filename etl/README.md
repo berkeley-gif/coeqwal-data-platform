@@ -456,6 +456,23 @@ cd cws_aggregate && python main.py --scenario s0029
 s0011, s0020, s0021, s0023, s0024, s0025, s0027, s0029
 ```
 
+### Reliability calculation
+
+For CWS aggregates and M&I contractors, **reliability** is calculated as:
+
+```
+Reliability % = (1 - Average Annual Shortage / Average Annual Delivery) × 100
+```
+
+**Example:**
+- Average annual delivery = 1,000 TAF
+- Average annual shortage = 50 TAF
+- Reliability = (1 - 50/1000) × 100 = **95%**
+
+This represents the percentage of requested water that was actually delivered across the simulation period (1922-2021).
+
+**Note:** This differs from the `Percent_of_Demand` calculation used for individual CWS contractors (documented below), which uses PERDV allocation variables to back-calculate demand. The aggregate reliability formula directly compares shortage to delivery without the PERDV adjustment.
+
 ### Prerequisites
 
 - `DATABASE_URL` environment variable set

@@ -59,6 +59,10 @@ from routes.demand_unit_endpoints import (
     router as demand_unit_router,
     set_db_pool as set_demand_unit_db_pool,
 )
+from routes.ag_endpoints import (
+    router as ag_router,
+    set_db_pool as set_ag_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -153,6 +157,7 @@ async def lifespan(app: FastAPI):
     set_cws_aggregate_db_pool(db_pool)
     set_mi_contractor_db_pool(db_pool)
     set_demand_unit_db_pool(db_pool)
+    set_ag_db_pool(db_pool)
 
     yield
 
@@ -198,6 +203,9 @@ app.include_router(mi_contractor_router)
 
 # Demand unit statistics router
 app.include_router(demand_unit_router)
+
+# Agricultural statistics router
+app.include_router(ag_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
