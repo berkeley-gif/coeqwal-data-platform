@@ -2,16 +2,16 @@
 """
 Calculate delivery statistics for urban demand units (tier matrix DUs).
 
-Simplified approach:
+Approach:
 1. Read tier matrix to get list of 71 DU_IDs
-2. Read DELIVERIES file directly
+2. Read CalSim output CSV from S3 (DSS format with 7 header rows)
 3. Map DU_IDs to column names (DN_*, D_*, GP_*)
 4. Calculate statistics (percentiles, averages, etc.)
 5. Return data for database insertion
 
 Usage:
     python calculate_du_statistics.py --scenario s0020
-    python calculate_du_statistics.py --scenario s0020 --csv-path /path/to/DELIVERIES.csv
+    python calculate_du_statistics.py --scenario s0020 --csv-path /path/to/calsim_output.csv
 """
 
 import argparse
@@ -206,91 +206,116 @@ def load_tier_matrix_dus(csv_path: Optional[Path] = None) -> List[str]:
     return du_ids
 
 
-def load_deliveries_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
     """
-    Load DELIVERIES CSV from S3 bucket.
+    Load CalSim output CSV from S3 bucket.
 
-    Expected path: scenario/{scenario_id}/csv/{scenario_id}_*_DELIVERIES_tier_input.csv
+    Handles the DSS export format with 7 header rows.
+    Variable names are in row 1 (0-indexed).
 
     Returns:
-        DataFrame with Date column and delivery columns
+        DataFrame with date column and all CalSim variables
     """
     if not HAS_BOTO3:
         raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
 
     s3 = boto3.client('s3')
 
-    # Try to list objects to find the DELIVERIES file
-    prefix = f"scenario/{scenario_id}/csv/"
-    response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
+    possible_keys = [
+        f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
+        f"scenario/{scenario_id}/csv/{scenario_id}_DV.csv",
+    ]
 
-    deliveries_key = None
-    for obj in response.get('Contents', []):
-        key = obj['Key']
-        if '_DELIVERIES_tier_input.csv' in key:
-            deliveries_key = key
-            break
+    for key in possible_keys:
+        try:
+            log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
+            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+            df = pd.read_csv(response['Body'], header=None, nrows=8)
 
-    if not deliveries_key:
-        raise FileNotFoundError(
-            f"Could not find DELIVERIES file for {scenario_id} in s3://{S3_BUCKET}/{prefix}"
-        )
+            # Get variable names from row 1
+            col_names = df.iloc[1].tolist()
 
-    log.info(f"Loading from s3://{S3_BUCKET}/{deliveries_key}")
-    response = s3.get_object(Bucket=S3_BUCKET, Key=deliveries_key)
-    df = pd.read_csv(response['Body'])
+            # Re-fetch and read data portion
+            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+            data_df = pd.read_csv(response['Body'], header=None, skiprows=7)
+            data_df.columns = col_names
 
-    log.info(f"Loaded DELIVERIES: {df.shape[0]} rows, {df.shape[1]} columns")
-    return df
+            log.info(f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
+            return data_df
+
+        except s3.exceptions.NoSuchKey:
+            continue
+        except Exception as e:
+            log.warning(f"Error loading {key}: {e}")
+            continue
+
+    raise FileNotFoundError(f"Could not find CalSim output for {scenario_id} in S3")
 
 
-def load_deliveries_csv_from_file(file_path: str) -> pd.DataFrame:
-    """Load DELIVERIES CSV from local file."""
+def load_calsim_csv_from_file(file_path: str) -> pd.DataFrame:
+    """
+    Load CalSim output CSV from local file.
+
+    Handles the DSS export format with 7 header rows.
+    """
     log.info(f"Loading from file: {file_path}")
-    df = pd.read_csv(file_path)
-    log.info(f"Loaded DELIVERIES: {df.shape[0]} rows, {df.shape[1]} columns")
-    return df
+
+    # Read header to get column names
+    header_df = pd.read_csv(file_path, header=None, nrows=8)
+    col_names = header_df.iloc[1].tolist()
+
+    # Read data portion
+    data_df = pd.read_csv(file_path, header=None, skiprows=7)
+    data_df.columns = col_names
+
+    log.info(f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
+    return data_df
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add water year and water month columns.
 
-    The DELIVERIES file has a 'Date' column with year values (1921, 1922, ...).
-    These are water years, and each row represents annual data.
-
-    For monthly files, we would parse DateTime and compute water month.
+    Handles both:
+    - DSS format dates (e.g., "31OCT1921 2400")
+    - Simple year values (e.g., 1921, 1922)
     """
     df = df.copy()
 
-    # Check if Date column exists
-    if 'Date' not in df.columns:
-        raise ValueError("Date column not found in DELIVERIES file")
+    # Find date column (first column)
+    first_col = df.columns[0]
+    date_values = df[first_col]
 
-    # Convert Date column to numeric - if it succeeds and values are in year range, it's annual
-    date_numeric = pd.to_numeric(df['Date'], errors='coerce')
+    # Try to parse as datetime (handles DSS format like "31OCT1921 2400")
+    try:
+        df['DateTime'] = pd.to_datetime(date_values, errors='coerce')
 
-    # Check if data is annual (integer years 1900-2100) or monthly (datetime)
+        if df['DateTime'].notna().sum() > 0:
+            # Successfully parsed as datetime - monthly data
+            df['CalendarMonth'] = df['DateTime'].dt.month
+            df['CalendarYear'] = df['DateTime'].dt.year
+
+            # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
+            df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
+
+            # Water year: Oct-Dec belong to next water year
+            df['WaterYear'] = df['CalendarYear']
+            df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
+
+            log.info(f"Detected monthly data: {df['DateTime'].min()} to {df['DateTime'].max()}")
+            return df
+    except Exception as e:
+        log.debug(f"Could not parse as datetime: {e}")
+
+    # Fallback: check if values are years (annual data)
+    date_numeric = pd.to_numeric(date_values, errors='coerce')
     if date_numeric.notna().all() and (date_numeric >= 1900).all() and (date_numeric <= 2100).all():
-        # Annual data - Date is just the year
         df['WaterYear'] = date_numeric.astype(int)
         df['WaterMonth'] = 0  # 0 indicates annual data
-        log.info(f"Detected annual data format: years {df['WaterYear'].min()}-{df['WaterYear'].max()}")
-    else:
-        # Monthly data - parse as datetime
-        df['DateTime'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['CalendarMonth'] = df['DateTime'].dt.month
-        df['CalendarYear'] = df['DateTime'].dt.year
+        log.info(f"Detected annual data: years {df['WaterYear'].min()}-{df['WaterYear'].max()}")
+        return df
 
-        # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
-        df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
-
-        # Water year: Oct-Dec belong to next water year
-        df['WaterYear'] = df['CalendarYear']
-        df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
-        log.info("Detected monthly data format")
-
-    return df
+    raise ValueError(f"Could not parse date column '{first_col}' as datetime or year values")
 
 
 def calculate_delivery_monthly(
@@ -437,11 +462,11 @@ def calculate_all_du_statistics(
     if du_ids is None:
         du_ids = load_tier_matrix_dus()
 
-    # Load DELIVERIES CSV
+    # Load CalSim output CSV
     if csv_path:
-        df = load_deliveries_csv_from_file(csv_path)
+        df = load_calsim_csv_from_file(csv_path)
     else:
-        df = load_deliveries_csv_from_s3(scenario_id)
+        df = load_calsim_csv_from_s3(scenario_id)
 
     # Add water year/month
     df = add_water_year_month(df)
@@ -504,7 +529,7 @@ def main():
     )
     parser.add_argument(
         '--csv-path',
-        help='Local DELIVERIES CSV file path (instead of S3)'
+        help='Local CalSim output CSV file path (instead of S3)'
     )
     parser.add_argument(
         '--output-json',
