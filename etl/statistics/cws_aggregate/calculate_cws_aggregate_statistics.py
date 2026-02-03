@@ -68,7 +68,7 @@ SHORTAGE_THRESHOLD_TAF = 0.1
 # =============================================================================
 
 CWS_AGGREGATES = {
-    # SWP Total - available in CalSim output
+    # SWP Total
     'swp_total': {
         'id': 1,
         'label': 'SWP Total M&I',
@@ -76,24 +76,37 @@ CWS_AGGREGATES = {
         'shortage_var': 'SHORT_SWP_PMI',
         'description': 'Total State Water Project M&I deliveries',
     },
-    # NOTE: SWP regional breakdown (NOD/SOD) not available in CalSim output
-    # Only the total DEL_SWP_PMI exists, not DEL_SWP_PMI_N/S
-
-    # CVP North - available in CalSim output
+    # SWP North of Delta
+    'swp_nod': {
+        'id': 5,
+        'label': 'SWP North',
+        'delivery_var': 'DEL_SWP_PMI_N',
+        'shortage_var': 'SHORT_SWP_PMI_N',
+        'description': 'SWP M&I deliveries - North of Delta',
+    },
+    # SWP South of Delta
+    'swp_sod': {
+        'id': 6,
+        'label': 'SWP South',
+        'delivery_var': 'DEL_SWP_PMI_S',
+        'shortage_var': 'SHORT_SWP_PMI_S',
+        'description': 'SWP M&I deliveries - South of Delta',
+    },
+    # CVP North of Delta
     'cvp_nod': {
         'id': 2,
         'label': 'CVP North',
         'delivery_var': 'DEL_CVP_PMI_N',
         'shortage_var': 'SHORT_CVP_PMI_N',
-        'description': 'CVP M&I deliveries - North',
+        'description': 'CVP M&I deliveries - North of Delta',
     },
-    # CVP South - available in CalSim output
+    # CVP South of Delta
     'cvp_sod': {
         'id': 3,
         'label': 'CVP South',
         'delivery_var': 'DEL_CVP_PMI_S',
         'shortage_var': 'SHORT_CVP_PMI_S',
-        'description': 'CVP M&I deliveries - South',
+        'description': 'CVP M&I deliveries - South of Delta',
     },
     # MWD - delivery available, shortage may not be in this exact form
     'mwd': {
