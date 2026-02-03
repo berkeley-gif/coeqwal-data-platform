@@ -23,6 +23,7 @@
 -- ============================================
 -- DROP IF EXISTS (for clean recreation)
 -- ============================================
+DROP TABLE IF EXISTS du_urban_delivery_arc CASCADE;
 DROP TABLE IF EXISTS du_urban_variable CASCADE;
 
 -- ============================================

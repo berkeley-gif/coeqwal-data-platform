@@ -87,6 +87,9 @@ ON CONFLICT (id) DO UPDATE SET
 -- Clear any existing variable group memberships (IDs 7-11)
 DELETE FROM du_urban_group_member WHERE du_urban_group_id >= 7;
 
+-- Reset the sequence to avoid conflicts with existing IDs
+SELECT setval('du_urban_group_member_id_seq', COALESCE((SELECT MAX(id) FROM du_urban_group_member), 0) + 1, false);
+
 -- ----------------------------------------
 -- GROUP 7: var_wba (40 members)
 -- WBA-style units with DL_* delivery variables
@@ -184,11 +187,11 @@ ORDER BY g.display_order;
 
 \echo ''
 \echo 'Variable category groups breakdown:'
-SELECT g.short_code, g.label, COUNT(gm.id) as members
+SELECT g.id, g.short_code, g.label, COUNT(gm.id) as members
 FROM du_urban_group g
 JOIN du_urban_group_member gm ON g.id = gm.du_urban_group_id
 WHERE g.short_code LIKE 'var_%'
-GROUP BY g.short_code, g.label
+GROUP BY g.id, g.short_code, g.label
 ORDER BY g.id;
 
 \echo ''
