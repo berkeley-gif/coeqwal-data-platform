@@ -1622,6 +1622,137 @@ DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
 ETL: etl/statistics/mi/ (pending)
 ```
 
+### **CWS (Community Water Systems) Aggregate Statistics**
+
+System-level aggregate statistics for SWP, CVP, and MWD deliveries using pre-calculated CalSim variables.
+
+#### **cws_aggregate_entity (aggregate definitions)**
+```
+Table: cws_aggregate_entity
+├── id                    INTEGER PRIMARY KEY
+├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- "swp_total", "cvp_nod", "cvp_sod", "mwd"
+├── label                 VARCHAR(100) NOT NULL        -- "SWP Total M&I"
+├── description           TEXT
+├── project               VARCHAR(10)                  -- "SWP", "CVP", "MWD"
+├── region                VARCHAR(10)                  -- "total", "nod", "sod", NULL
+├── delivery_variable     VARCHAR(50) NOT NULL         -- CalSim variable (DEL_SWP_PMI)
+├── shortage_variable     VARCHAR(50)                  -- CalSim variable (SHORT_SWP_PMI), NULL for MWD
+├── display_order         INTEGER DEFAULT 0
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1            -- FK → developer.id
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Records: 4 aggregates (swp_total, cvp_nod, cvp_sod, mwd)
+
+Indexes:
+├── cws_aggregate_entity_pkey (id)
+├── cws_aggregate_entity_short_code_key (short_code) UNIQUE
+└── idx_cws_aggregate_entity_project (project)
+
+DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
+```
+
+#### **cws_aggregate_monthly (monthly delivery/shortage statistics)**
+```
+Table: cws_aggregate_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── cws_aggregate_id      INTEGER NOT NULL             -- FK → cws_aggregate_entity.id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── delivery_avg_taf      NUMERIC(10,2)
+├── delivery_cv           NUMERIC(6,4)
+├── delivery_q0           NUMERIC(10,2)                -- Percentiles for box plots
+├── delivery_q10          NUMERIC(10,2)
+├── delivery_q30          NUMERIC(10,2)
+├── delivery_q50          NUMERIC(10,2)
+├── delivery_q70          NUMERIC(10,2)
+├── delivery_q90          NUMERIC(10,2)
+├── delivery_q100         NUMERIC(10,2)
+├── shortage_avg_taf      NUMERIC(10,2)
+├── shortage_cv           NUMERIC(6,4)
+├── shortage_frequency_pct NUMERIC(5,2)                -- % months with shortage > 0
+├── shortage_q0           NUMERIC(10,2)
+├── shortage_q10          NUMERIC(10,2)
+├── shortage_q30          NUMERIC(10,2)
+├── shortage_q50          NUMERIC(10,2)
+├── shortage_q70          NUMERIC(10,2)
+├── shortage_q90          NUMERIC(10,2)
+├── shortage_q100         NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: cws_aggregate_id → cws_aggregate_entity.id
+├── Unique: (scenario_short_code, cws_aggregate_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+Indexes:
+├── idx_cws_agg_monthly_scenario (scenario_short_code)
+├── idx_cws_agg_monthly_aggregate (cws_aggregate_id)
+└── idx_cws_agg_monthly_combined (scenario_short_code, cws_aggregate_id)
+
+Expected Records: 48 rows per scenario (4 aggregates × 12 months)
+
+DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
+ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
+```
+
+#### **cws_aggregate_period_summary (period-of-record summary)**
+```
+Table: cws_aggregate_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── cws_aggregate_id      INTEGER NOT NULL             -- FK → cws_aggregate_entity.id
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_delivery_avg_taf NUMERIC(10,2)
+├── annual_delivery_cv    NUMERIC(6,4)
+├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p10      NUMERIC(10,2)
+├── delivery_exc_p25      NUMERIC(10,2)
+├── delivery_exc_p50      NUMERIC(10,2)
+├── delivery_exc_p75      NUMERIC(10,2)
+├── delivery_exc_p90      NUMERIC(10,2)
+├── delivery_exc_p95      NUMERIC(10,2)
+├── annual_shortage_avg_taf NUMERIC(10,2)
+├── shortage_years_count  INTEGER
+├── shortage_frequency_pct NUMERIC(5,2)                -- % of years with any shortage
+├── shortage_exc_p5       NUMERIC(10,2)
+├── shortage_exc_p10      NUMERIC(10,2)
+├── shortage_exc_p25      NUMERIC(10,2)
+├── shortage_exc_p50      NUMERIC(10,2)
+├── shortage_exc_p75      NUMERIC(10,2)
+├── shortage_exc_p90      NUMERIC(10,2)
+├── shortage_exc_p95      NUMERIC(10,2)
+├── reliability_pct       NUMERIC(5,2)                 -- % months meeting full demand
+├── avg_pct_demand_met    NUMERIC(5,2)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER DEFAULT 1
+
+Constraints:
+├── FK: cws_aggregate_id → cws_aggregate_entity.id
+└── Unique: (scenario_short_code, cws_aggregate_id)
+
+Indexes:
+├── idx_cws_agg_period_scenario (scenario_short_code)
+└── idx_cws_agg_period_aggregate (cws_aggregate_id)
+
+Expected Records: 4 rows per scenario (4 aggregates)
+
+DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
+ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
+```
+
 ---
 
 ## **10_TIER LAYER**
