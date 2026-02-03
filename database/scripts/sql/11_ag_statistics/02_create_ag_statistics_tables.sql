@@ -88,9 +88,12 @@ COMMENT ON COLUMN ag_du_delivery_monthly.delivery_avg_taf IS 'Average monthly de
 
 -- ============================================
 -- 2. AG_DU_SHORTAGE_MONTHLY
--- Monthly groundwater shortage statistics (SJR/Tulare regions only)
+-- Monthly groundwater RESTRICTION shortage statistics (SJR/Tulare regions only)
 -- Source: GW_SHORT_{DU_ID} columns in CalSim output
--- Note: Sacramento region DUs have no shortage data
+-- IMPORTANT: These are GROUNDWATER RESTRICTION shortages, not total delivery shortages.
+--            For aggregate delivery shortages, see ag_aggregate_period_summary which uses
+--            SHORT_CVP_PAG_* and SHORT_SWP_PAG_* variables.
+-- Note: Sacramento region DUs have no shortage data, and not all scenarios include GW_SHORT.
 -- ============================================
 \echo ''
 \echo 'Creating ag_du_shortage_monthly table...'
@@ -133,7 +136,7 @@ CREATE TABLE ag_du_shortage_monthly (
 );
 
 -- Comments
-COMMENT ON TABLE ag_du_shortage_monthly IS 'Monthly groundwater shortage statistics for agricultural demand units. Only SJR/Tulare regions have shortage data. Source: GW_SHORT_* variables in CalSim output.';
+COMMENT ON TABLE ag_du_shortage_monthly IS 'Monthly groundwater RESTRICTION shortage statistics for agricultural demand units. This is NOT total delivery shortage - it represents shortage due to groundwater pumping restrictions. Only SJR/Tulare regions have data. Source: GW_SHORT_* variables (COEQWAL-added for testing gw restrictions).';
 COMMENT ON COLUMN ag_du_shortage_monthly.shortage_pct_of_demand_avg IS 'Average shortage as percentage of total demand: shortage / (delivery + shortage) * 100';
 
 -- ============================================
@@ -229,6 +232,11 @@ CREATE TABLE ag_aggregate_monthly (
     exc_p90 NUMERIC(10,2),
     exc_p95 NUMERIC(10,2),
 
+    -- Shortage statistics (from SHORT_CVP_PAG_*, SHORT_SWP_PAG_*)
+    shortage_avg_taf NUMERIC(10,2),
+    shortage_cv NUMERIC(6,4),
+    shortage_frequency_pct NUMERIC(5,2),       -- % of months with shortage > 0.1 TAF
+
     sample_count INTEGER,
 
     -- Audit fields
@@ -246,7 +254,7 @@ CREATE TABLE ag_aggregate_monthly (
 );
 
 -- Comments
-COMMENT ON TABLE ag_aggregate_monthly IS 'Monthly delivery statistics for agricultural project aggregates. Source: DEL_*_PAG variables in CalSim output.';
+COMMENT ON TABLE ag_aggregate_monthly IS 'Monthly delivery and shortage statistics for agricultural project aggregates. Source: DEL_*_PAG and SHORT_*_PAG variables in CalSim output.';
 
 -- ============================================
 -- 5. AG_AGGREGATE_PERIOD_SUMMARY
@@ -278,6 +286,23 @@ CREATE TABLE ag_aggregate_period_summary (
     delivery_exc_p90 NUMERIC(10,2),
     delivery_exc_p95 NUMERIC(10,2),
 
+    -- Annual shortage statistics (from SHORT_CVP_PAG_*, SHORT_SWP_PAG_*)
+    annual_shortage_avg_taf NUMERIC(10,2),
+    shortage_years_count INTEGER,               -- Years with shortage > 0.1 TAF
+    shortage_frequency_pct NUMERIC(5,2),        -- % years with meaningful shortage
+
+    -- Shortage exceedance percentiles
+    shortage_exc_p5 NUMERIC(10,2),
+    shortage_exc_p10 NUMERIC(10,2),
+    shortage_exc_p25 NUMERIC(10,2),
+    shortage_exc_p50 NUMERIC(10,2),
+    shortage_exc_p75 NUMERIC(10,2),
+    shortage_exc_p90 NUMERIC(10,2),
+    shortage_exc_p95 NUMERIC(10,2),
+
+    -- Reliability metric
+    reliability_pct NUMERIC(5,2),               -- 1 - (avg shortage / avg delivery)
+
     -- Audit fields
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -291,7 +316,9 @@ CREATE TABLE ag_aggregate_period_summary (
 );
 
 -- Comments
-COMMENT ON TABLE ag_aggregate_period_summary IS 'Period-of-record summary statistics for agricultural project aggregates.';
+COMMENT ON TABLE ag_aggregate_period_summary IS 'Period-of-record summary statistics for agricultural project aggregates. Shortage from SHORT_CVP_PAG_*, SHORT_SWP_PAG_* variables.';
+COMMENT ON COLUMN ag_aggregate_period_summary.shortage_years_count IS 'Number of years with annual shortage > 0.1 TAF (threshold to filter floating-point noise)';
+COMMENT ON COLUMN ag_aggregate_period_summary.reliability_pct IS 'Reliability = 1 - (avg shortage / avg delivery) * 100';
 
 -- ============================================
 -- INDEXES

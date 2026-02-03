@@ -68,26 +68,31 @@ EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 SHORTAGE_THRESHOLD_TAF = 0.1
 
 # Pre-computed aggregate definitions
-# These aggregates have direct CalSim variables
+# These aggregates have direct CalSim variables for both delivery and shortage
 AG_AGGREGATES = {
     'swp_pag': {
         'delivery_var': 'DEL_SWP_PAG',
+        'shortage_var': 'SHORT_SWP_PAG',
         'description': 'SWP Project AG - Total',
     },
     'swp_pag_n': {
         'delivery_var': 'DEL_SWP_PAG_N',
+        'shortage_var': 'SHORT_SWP_PAG_N',
         'description': 'SWP Project AG - North of Delta',
     },
     'swp_pag_s': {
         'delivery_var': 'DEL_SWP_PAG_S',
+        'shortage_var': 'SHORT_SWP_PAG_S',
         'description': 'SWP Project AG - South of Delta',
     },
     'cvp_pag_n': {
         'delivery_var': 'DEL_CVP_PAG_N',
+        'shortage_var': 'SHORT_CVP_PAG_N',
         'description': 'CVP Project AG - North of Delta',
     },
     'cvp_pag_s': {
         'delivery_var': 'DEL_CVP_PAG_S',
+        'shortage_var': 'SHORT_CVP_PAG_S',
         'description': 'CVP Project AG - South of Delta',
     },
 }
@@ -312,10 +317,17 @@ def calculate_du_shortage_monthly(
     du_info: Dict[str, Any]
 ) -> List[Dict[str, Any]]:
     """
-    Calculate monthly shortage statistics for an agricultural demand unit.
+    Calculate monthly groundwater restriction shortage for an agricultural demand unit.
 
-    Uses GW_SHORT_{DU_ID} variable from CalSim output.
-    Note: Only SJR/Tulare regions have shortage data.
+    IMPORTANT: Uses GW_SHORT_{DU_ID} (Groundwater Restriction Shortage), which represents
+    shortage due to groundwater pumping restrictions, NOT total agricultural delivery shortage.
+    This is a COEQWAL-specific variable added for testing groundwater restrictions.
+    
+    For aggregate delivery shortage (shortage = target - actual delivery), use the aggregate
+    statistics with SHORT_CVP_PAG_N/S and SHORT_SWP_PAG_N/S variables instead.
+
+    Note: Only SJR/Tulare regions have GW_SHORT data; Sacramento WBAs do not.
+    Not all scenarios include GW_SHORT variables (e.g., s0023, s0024 are missing them).
 
     Also calculates shortage_pct_of_demand = shortage / (delivery + shortage) * 100
     """
@@ -508,19 +520,24 @@ def calculate_du_period_summary(
 def calculate_aggregate_monthly(
     df: pd.DataFrame,
     aggregate_code: str,
-    delivery_var: str
+    delivery_var: str,
+    shortage_var: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Calculate monthly statistics for an agricultural aggregate.
 
-    Uses pre-computed aggregate variables like DEL_SWP_PAG.
+    Uses pre-computed aggregate variables like DEL_SWP_PAG and SHORT_SWP_PAG.
     """
     if delivery_var not in df.columns:
-        log.debug(f"No aggregate variable found: {delivery_var}")
+        log.debug(f"No aggregate delivery variable found: {delivery_var}")
         return []
 
     df_copy = df.copy()
     df_copy['delivery'] = df_copy[delivery_var]
+
+    has_shortage = shortage_var and shortage_var in df.columns
+    if has_shortage:
+        df_copy['shortage'] = df_copy[shortage_var]
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -544,6 +561,15 @@ def calculate_aggregate_monthly(
         for p in EXCEEDANCE_PERCENTILES:
             row[f'exc_p{p}'] = round(float(np.percentile(data, p)), 2)
 
+        # Shortage statistics
+        if has_shortage:
+            shortage_data = df_copy['shortage'].dropna()
+            if not shortage_data.empty:
+                row['shortage_avg_taf'] = round(float(shortage_data.mean()), 2)
+                row['shortage_cv'] = round(float(shortage_data.std() / shortage_data.mean()), 4) if shortage_data.mean() > 0 else 0
+                # Use threshold to filter floating-point noise
+                row['shortage_frequency_pct'] = round(((shortage_data > SHORTAGE_THRESHOLD_TAF).sum() / len(shortage_data)) * 100, 2)
+
         results.append(row)
     else:
         for wm in range(1, 13):
@@ -565,6 +591,15 @@ def calculate_aggregate_monthly(
             for p in EXCEEDANCE_PERCENTILES:
                 row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
 
+            # Shortage statistics
+            if has_shortage:
+                shortage_month = df_copy[df_copy['WaterMonth'] == wm]['shortage'].dropna()
+                if not shortage_month.empty:
+                    row['shortage_avg_taf'] = round(float(shortage_month.mean()), 2)
+                    row['shortage_cv'] = round(float(shortage_month.std() / shortage_month.mean()), 4) if shortage_month.mean() > 0 else 0
+                    # Use threshold to filter floating-point noise
+                    row['shortage_frequency_pct'] = round(((shortage_month > SHORTAGE_THRESHOLD_TAF).sum() / len(shortage_month)) * 100, 2)
+
             results.append(row)
 
     return results
@@ -573,16 +608,23 @@ def calculate_aggregate_monthly(
 def calculate_aggregate_period_summary(
     df: pd.DataFrame,
     aggregate_code: str,
-    delivery_var: str
+    delivery_var: str,
+    shortage_var: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Calculate period-of-record summary for an agricultural aggregate.
+    
+    Uses SHORT_CVP_PAG_N/S and SHORT_SWP_PAG_N/S for shortage statistics.
     """
     if delivery_var not in df.columns:
         return None
 
     df_copy = df.copy()
     df_copy['delivery'] = df_copy[delivery_var]
+
+    has_shortage = shortage_var and shortage_var in df.columns
+    if has_shortage:
+        df_copy['shortage'] = df_copy[shortage_var]
 
     water_years = sorted(df_copy['WaterYear'].unique())
 
@@ -602,6 +644,32 @@ def calculate_aggregate_period_summary(
 
     for p in EXCEEDANCE_PERCENTILES:
         result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, p)), 2)
+
+    # Shortage statistics
+    if has_shortage:
+        annual_shortage = df_copy.groupby('WaterYear')['shortage'].sum()
+        # Use threshold to filter floating-point noise from CalSim solver
+        shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
+
+        result['annual_shortage_avg_taf'] = round(float(annual_shortage.mean()), 2)
+        result['shortage_years_count'] = int(shortage_years)
+        result['shortage_frequency_pct'] = round((shortage_years / len(water_years)) * 100, 2)
+
+        for p in EXCEEDANCE_PERCENTILES:
+            result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, p)), 2)
+
+        # Reliability = 1 - (avg shortage / avg delivery)
+        if result['annual_delivery_avg_taf'] > 0:
+            result['reliability_pct'] = round(
+                (1 - result['annual_shortage_avg_taf'] / result['annual_delivery_avg_taf']) * 100, 2
+            )
+        else:
+            result['reliability_pct'] = None
+    else:
+        result['annual_shortage_avg_taf'] = None
+        result['shortage_years_count'] = None
+        result['shortage_frequency_pct'] = None
+        result['reliability_pct'] = None
 
     return result
 
@@ -695,15 +763,16 @@ def calculate_all_ag_statistics(
 
     for agg_code, agg_info in AG_AGGREGATES.items():
         delivery_var = agg_info['delivery_var']
+        shortage_var = agg_info.get('shortage_var')  # Now using SHORT_CVP_PAG_N/S etc.
 
         # Monthly
-        monthly_rows = calculate_aggregate_monthly(df, agg_code, delivery_var)
+        monthly_rows = calculate_aggregate_monthly(df, agg_code, delivery_var, shortage_var)
         for row in monthly_rows:
             row['scenario_short_code'] = scenario_id
         aggregate_monthly_rows.extend(monthly_rows)
 
         # Period summary
-        summary = calculate_aggregate_period_summary(df, agg_code, delivery_var)
+        summary = calculate_aggregate_period_summary(df, agg_code, delivery_var, shortage_var)
         if summary:
             summary['scenario_short_code'] = scenario_id
             aggregate_period_summary_rows.append(summary)
@@ -826,6 +895,7 @@ def save_to_database(
                 'delivery_avg_taf', 'delivery_cv',
                 'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
                 'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+                'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
                 'sample_count'
             ]
             values = [
@@ -843,7 +913,11 @@ def save_to_database(
                 'simulation_start_year', 'simulation_end_year', 'total_years',
                 'annual_delivery_avg_taf', 'annual_delivery_cv',
                 'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
-                'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95'
+                'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
+                'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
+                'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
+                'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
+                'reliability_pct'
             ]
             values = [
                 tuple(convert_numpy(row.get(col)) for col in cols)

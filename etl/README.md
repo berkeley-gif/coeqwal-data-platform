@@ -431,6 +431,7 @@ python run_all.py --list-modules
 | 2 | **du_urban** | `du_urban/main.py` | `du_delivery_monthly`, `du_shortage_monthly`, `du_period_summary` |
 | 3 | **mi** | `mi/main.py` | `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary` |
 | 4 | **cws_aggregate** | `cws_aggregate/main.py` | `cws_aggregate_monthly`, `cws_aggregate_period_summary` |
+| 5 | **ag** | `ag/main.py` | `ag_du_delivery_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary`, `ag_aggregate_monthly`, `ag_aggregate_period_summary` |
 
 ### Individual module usage
 
@@ -448,6 +449,9 @@ cd mi && python main.py --scenario s0029
 
 # CWS aggregate statistics
 cd cws_aggregate && python main.py --scenario s0029
+
+# Agricultural statistics
+cd ag && python main.py --scenario s0029
 ```
 
 ### Available scenarios
@@ -490,26 +494,65 @@ The 0.1 TAF (100 acre-feet) threshold:
 
 ### Shortage data provenance
 
-Shortage variables in CalSim output (e.g., `SHORT_CVP_PMI_N`) are calculated in the model's WRESL files.
+Shortage in CalSim represents unmet water delivery:
 
-**Source file:** `Run/DeliveryLogic/output/deliv_short_cvp_n.wresl`
-
-**Formula:** For each contractor, shortage is computed as:
 ```
-Shortage = Surface Water Delivery Target - Actual Delivery
+Shortage = Delivery Target − Actual Delivery
 ```
 
-Where:
-- **Surface Water Delivery Target** = min(demand based on urban/ag water needs, contract allocation)
-- **Actual Delivery** = what was actually delivered (`D_*` variables)
+Where **Delivery Target** = Demand × Contract Allocation % (not raw demand).
 
-The aggregate shortage variables (e.g., `SHORT_CVP_PMI_N`) sum the individual contractor shortages:
+#### CWS (Community Water Systems / M&I) shortage
+
+**Variables:** `SHORT_CVP_PMI_N`, `SHORT_CVP_PMI_S`, `SHORT_SWP_PMI_N`, `SHORT_SWP_PMI_S`, `SHORT_SWP_PMI`
+
+**Source:** `Run/DeliveryLogic/output/deliv_short_cvp_n.wresl`
+
+Individual contractor shortage is calculated as:
 ```wresl
-define short_cvp_pmi_n {alias X_WTPCSD_02_PU + X_WKYTN_02_PU + X_SHSTA_03_PU1 + X_WTPBLV_03_PU2 
+define X_WTPCSD_02_PU {alias target - D_WTPCSD_02_PU kind 'delivery-shortage' units 'cfs'}
+```
+
+Aggregate variables sum individual shortages:
+```wresl
+define short_cvp_pmi_n {alias X_WTPCSD_02_PU + X_WKYTN_02_PU + X_SHSTA_03_PU1 + ...
                         kind 'delivery-shortage-cvp' units 'cfs'}
 ```
 
-**Note:** The COEQWAL Jupyter notebooks use shortage differently - they back-calculate demand using the formula `Demand = (Shortage + Delivery) / percent_delivery`. Our ETL uses the shortage variables directly without this transformation.
+#### Agricultural (AG) shortage
+
+**Variables:** `SHORT_CVP_PAG_N`, `SHORT_CVP_PAG_S`, `SHORT_SWP_PAG_N`, `SHORT_SWP_PAG_S`, `SHORT_SWP_PAG`
+
+**Source:** `Run/DeliveryLogic/output/deliv_short_cvp_s.wresl`
+
+Individual contractor shortage:
+```wresl
+define X_50_PA1 {alias CLM_50_PA1 * taf_cfs * perdel_cvpag_s - D_DMC021_50_PA1
+                 kind 'delivery-shortage' units 'cfs'}
+```
+
+Where:
+- `CLM_*` = Climate-based demand
+- `perdel_cvpag_s` = Percent delivery allocation (e.g., 0.75 for 75%)
+- `D_*` = Actual delivery
+
+Aggregate variables sum individual shortages:
+```wresl
+define short_cvp_pag_s {alias X_50_PA1 + X_71_PA1 + X_71_PA2 + ...
+                        kind 'delivery-shortage-cvp' units 'cfs'}
+```
+
+#### Important distinctions
+
+| Concept | Definition |
+|---------|------------|
+| **Shortage** | Target − Delivery (accounts for allocation %) |
+| **Target** | Demand × Allocation % |
+| **Reliability** | 1 − (Avg Shortage / Avg Delivery) |
+
+**Note:** Individual DU `GW_SHORT_*` variables represent **groundwater restriction shortage** (a COEQWAL-specific variable for testing groundwater pumping limits), NOT total delivery shortage. For aggregate delivery shortage, use `SHORT_CVP_PAG_*` and `SHORT_SWP_PAG_*`.
+
+**Note:** The COEQWAL Jupyter notebooks back-calculate demand using `Demand = (Shortage + Delivery) / percent_delivery`. Our ETL uses the shortage variables directly without this transformation.
 
 ### Prerequisites
 
