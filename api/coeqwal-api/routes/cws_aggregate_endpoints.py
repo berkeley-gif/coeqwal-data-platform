@@ -197,6 +197,7 @@ async def get_cws_aggregate_monthly(
             m.shortage_avg_taf, m.shortage_cv, m.shortage_frequency_pct,
             m.shortage_q0, m.shortage_q10, m.shortage_q30, m.shortage_q50,
             m.shortage_q70, m.shortage_q90, m.shortage_q100,
+            m.demand_avg_taf, m.percent_of_demand_avg,
             m.sample_count
         FROM cws_aggregate_monthly m
         JOIN cws_aggregate_entity e ON m.cws_aggregate_id = e.id
@@ -235,6 +236,8 @@ async def get_cws_aggregate_monthly(
                 "q70": safe_float(row["delivery_q70"]),
                 "q90": safe_float(row["delivery_q90"]),
                 "q100": safe_float(row["delivery_q100"]),
+                "demand_avg_taf": safe_float(row["demand_avg_taf"]),
+                "percent_of_demand": safe_float(row["percent_of_demand_avg"]),
                 "sample_count": safe_int(row["sample_count"]),
             }
 
@@ -322,7 +325,8 @@ async def get_cws_aggregate_period_summary(
             p.annual_shortage_avg_taf, p.shortage_years_count, p.shortage_frequency_pct,
             p.shortage_exc_p5, p.shortage_exc_p10, p.shortage_exc_p25,
             p.shortage_exc_p50, p.shortage_exc_p75, p.shortage_exc_p90, p.shortage_exc_p95,
-            p.reliability_pct, p.avg_pct_allocation_met
+            p.reliability_pct, p.avg_pct_allocation_met,
+            p.annual_demand_avg_taf, p.avg_pct_demand_met
         FROM cws_aggregate_period_summary p
         JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
         WHERE p.scenario_short_code = $1 AND e.short_code = ANY($2)
@@ -370,6 +374,8 @@ async def get_cws_aggregate_period_summary(
                 },
                 "reliability_pct": safe_float(row["reliability_pct"]),
                 "avg_pct_allocation_met": safe_float(row["avg_pct_allocation_met"]),
+                "annual_demand_avg_taf": safe_float(row["annual_demand_avg_taf"]),
+                "avg_pct_demand_met": safe_float(row["avg_pct_demand_met"]),
             }
 
         return {"scenario_id": scenario_id, "aggregates": aggregates}
@@ -432,6 +438,7 @@ async def get_single_cws_aggregate_monthly(
             shortage_avg_taf, shortage_cv, shortage_frequency_pct,
             shortage_q0, shortage_q10, shortage_q30, shortage_q50,
             shortage_q70, shortage_q90, shortage_q100,
+            demand_avg_taf, percent_of_demand_avg,
             sample_count
         FROM cws_aggregate_monthly
         WHERE scenario_short_code = $1 AND cws_aggregate_id = $2
@@ -461,6 +468,8 @@ async def get_single_cws_aggregate_monthly(
                 "q70": safe_float(row["delivery_q70"]),
                 "q90": safe_float(row["delivery_q90"]),
                 "q100": safe_float(row["delivery_q100"]),
+                "demand_avg_taf": safe_float(row["demand_avg_taf"]),
+                "percent_of_demand": safe_float(row["percent_of_demand_avg"]),
                 "sample_count": safe_int(row["sample_count"]),
             }
 

@@ -287,7 +287,9 @@ async def get_mi_period_summary(
                 p.shortage_frequency_pct,
                 p.shortage_exc_p5, p.shortage_exc_p10, p.shortage_exc_p25,
                 p.shortage_exc_p50, p.shortage_exc_p75, p.shortage_exc_p90, p.shortage_exc_p95,
-                p.reliability_pct
+                p.reliability_pct,
+                p.annual_demand_avg_taf,
+                p.avg_pct_demand_met
             FROM mi_contractor_period_summary p
             LEFT JOIN mi_contractor c ON p.mi_contractor_code = c.short_code
             WHERE p.scenario_short_code = $1
@@ -350,6 +352,12 @@ async def get_mi_period_summary(
             },
             "reliability_pct": float(row["reliability_pct"])
             if row["reliability_pct"] is not None
+            else None,
+            "annual_demand_avg_taf": float(row["annual_demand_avg_taf"])
+            if row["annual_demand_avg_taf"] is not None
+            else None,
+            "avg_pct_demand_met": float(row["avg_pct_demand_met"])
+            if row["avg_pct_demand_met"] is not None
             else None,
         }
 

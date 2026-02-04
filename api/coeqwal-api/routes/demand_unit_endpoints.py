@@ -358,6 +358,7 @@ async def get_single_du_statistics(
                 water_month, delivery_avg_taf, delivery_cv,
                 q0, q10, q30, q50, q70, q90, q100,
                 exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,
+                demand_avg_taf, percent_of_demand_avg,
                 sample_count
             FROM du_delivery_monthly
             WHERE scenario_short_code = $1 AND du_id = $2
@@ -453,6 +454,8 @@ async def get_single_du_statistics(
             "exc_p75": safe_float(row["exc_p75"]),
             "exc_p90": safe_float(row["exc_p90"]),
             "exc_p95": safe_float(row["exc_p95"]),
+            "demand_avg_taf": safe_float(row["demand_avg_taf"]),
+            "percent_of_demand": safe_float(row["percent_of_demand_avg"]),
             "sample_count": safe_int(row["sample_count"]),
         }
     result["monthly_delivery"] = monthly_delivery if monthly_delivery else None
@@ -528,6 +531,7 @@ async def get_du_delivery_monthly(
                     m.delivery_cv,
                     m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
                     m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                    m.demand_avg_taf, m.percent_of_demand_avg,
                     m.sample_count
                 FROM du_delivery_monthly m
                 JOIN du_urban_group_member gm ON m.du_id = gm.du_id
@@ -550,6 +554,7 @@ async def get_du_delivery_monthly(
                     m.delivery_cv,
                     m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
                     m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                    m.demand_avg_taf, m.percent_of_demand_avg,
                     m.sample_count
                 FROM du_delivery_monthly m
                 LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
@@ -599,6 +604,8 @@ async def get_du_delivery_monthly(
             "exc_p75": safe_float(row["exc_p75"]),
             "exc_p90": safe_float(row["exc_p90"]),
             "exc_p95": safe_float(row["exc_p95"]),
+            "demand_avg_taf": safe_float(row["demand_avg_taf"]),
+            "percent_of_demand": safe_float(row["percent_of_demand_avg"]),
             "sample_count": safe_int(row["sample_count"]),
         }
 

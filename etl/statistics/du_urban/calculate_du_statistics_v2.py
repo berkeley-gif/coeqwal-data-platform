@@ -363,6 +363,17 @@ def calculate_du_statistics(
                 for p in EXCEEDANCE_PERCENTILES:
                     row[f'exc_p{p}'] = round(float(np.percentile(del_month, p)), 2)
             
+            # Monthly demand and percent of demand
+            row['demand_avg_taf'] = None
+            row['percent_of_demand_avg'] = None
+            if not dem_month.empty:
+                row['demand_avg_taf'] = round(float(dem_month.mean()), 2)
+                # Calculate percent of demand met for this month
+                if not del_month.empty and row['demand_avg_taf'] > 0:
+                    pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                    # Clip to 0-100 range (can exceed 100% if carryover/surplus is used)
+                    row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
+            
             delivery_monthly_rows.append(row)
         
         # Calculate period summary
@@ -469,12 +480,13 @@ def save_to_database(
     
     # Insert delivery monthly
     if delivery_monthly_rows:
-        # Columns matching existing schema
+        # Columns matching existing schema + new demand columns
         monthly_cols = [
             'scenario_short_code', 'du_id', 'water_month',
             'delivery_avg_taf', 'delivery_cv',
             'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
             'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+            'demand_avg_taf', 'percent_of_demand_avg',  # Demand metrics
             'sample_count'
         ]
         
@@ -495,6 +507,8 @@ def save_to_database(
                 exc_p5 = EXCLUDED.exc_p5, exc_p10 = EXCLUDED.exc_p10, exc_p25 = EXCLUDED.exc_p25,
                 exc_p50 = EXCLUDED.exc_p50, exc_p75 = EXCLUDED.exc_p75, exc_p90 = EXCLUDED.exc_p90,
                 exc_p95 = EXCLUDED.exc_p95,
+                demand_avg_taf = EXCLUDED.demand_avg_taf,
+                percent_of_demand_avg = EXCLUDED.percent_of_demand_avg,
                 sample_count = EXCLUDED.sample_count,
                 updated_at = NOW()
         """

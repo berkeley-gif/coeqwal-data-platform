@@ -1549,6 +1549,8 @@ Table: du_delivery_monthly
 ├── exc_p75               NUMERIC(10,2)
 ├── exc_p90               NUMERIC(10,2)
 ├── exc_p95               NUMERIC(10,2)
+├── demand_avg_taf        NUMERIC(10,2)                -- Average monthly demand
+├── percent_of_demand_avg NUMERIC(5,2)                 -- Average percent of demand met
 ├── sample_count          INTEGER
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -1726,7 +1728,7 @@ Table: cws_aggregate_entity
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
-Records: 4 aggregates (swp_total, cvp_nod, cvp_sod, mwd)
+Records: 6 aggregates (swp_total, swp_nod, swp_sod, cvp_nod, cvp_sod, mwd)
 
 Indexes:
 ├── cws_aggregate_entity_pkey (id)
@@ -1762,6 +1764,8 @@ Table: cws_aggregate_monthly
 ├── shortage_q70          NUMERIC(10,2)
 ├── shortage_q90          NUMERIC(10,2)
 ├── shortage_q100         NUMERIC(10,2)
+├── demand_avg_taf        NUMERIC(12,2)                -- Average monthly demand
+├── percent_of_demand_avg NUMERIC(5,2)                 -- Average percent of demand met
 ├── sample_count          INTEGER
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -1779,7 +1783,7 @@ Indexes:
 ├── idx_cws_agg_monthly_aggregate (cws_aggregate_id)
 └── idx_cws_agg_monthly_combined (scenario_short_code, cws_aggregate_id)
 
-Expected Records: 48 rows per scenario (4 aggregates × 12 months)
+Expected Records: 72 rows per scenario (6 aggregates × 12 months)
 
 DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
 ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
@@ -1814,7 +1818,9 @@ Table: cws_aggregate_period_summary
 ├── shortage_exc_p90      NUMERIC(10,2)
 ├── shortage_exc_p95      NUMERIC(10,2)
 ├── reliability_pct       NUMERIC(5,2)                 -- % months meeting full demand
-├── avg_pct_demand_met    NUMERIC(5,2)
+├── avg_pct_allocation_met NUMERIC(5,2)                -- avg delivery/allocation across period
+├── annual_demand_avg_taf NUMERIC(12,2)                -- Average annual demand
+├── avg_pct_demand_met    NUMERIC(5,2)                 -- Average percent of demand met
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
 ├── created_by            INTEGER DEFAULT 1
@@ -1829,7 +1835,7 @@ Indexes:
 ├── idx_cws_agg_period_scenario (scenario_short_code)
 └── idx_cws_agg_period_aggregate (cws_aggregate_id)
 
-Expected Records: 4 rows per scenario (4 aggregates)
+Expected Records: 6 rows per scenario (6 aggregates)
 
 DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
 ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py

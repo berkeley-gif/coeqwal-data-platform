@@ -58,6 +58,10 @@ CREATE TABLE du_delivery_monthly (
     exc_p90 NUMERIC(10,2),
     exc_p95 NUMERIC(10,2),                      -- Value exceeded 95% of time
 
+    -- Demand and percent of demand (TAF, %)
+    demand_avg_taf NUMERIC(10,2),               -- Average monthly demand
+    percent_of_demand_avg NUMERIC(5,2),         -- Average percent of demand met
+
     sample_count INTEGER,
 
     -- Audit fields

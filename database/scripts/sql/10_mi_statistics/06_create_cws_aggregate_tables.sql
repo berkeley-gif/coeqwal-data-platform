@@ -101,6 +101,10 @@ CREATE TABLE IF NOT EXISTS cws_aggregate_monthly (
     shortage_q90 NUMERIC(12,2),
     shortage_q100 NUMERIC(12,2),
 
+    -- Demand and percent of demand met (TAF, %)
+    demand_avg_taf NUMERIC(12,2),
+    percent_of_demand_avg NUMERIC(5,2),
+
     sample_count INTEGER,
 
     -- Audit fields
@@ -172,6 +176,10 @@ CREATE TABLE IF NOT EXISTS cws_aggregate_period_summary (
     -- Reliability metrics
     reliability_pct NUMERIC(5,2),               -- % of time meeting full allocation
     avg_pct_allocation_met NUMERIC(5,2),        -- avg delivery/demand across period
+
+    -- Demand metrics
+    annual_demand_avg_taf NUMERIC(12,2),        -- avg annual demand (TAF)
+    avg_pct_demand_met NUMERIC(5,2),            -- avg percent of demand met
 
     -- Audit fields
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
