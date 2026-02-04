@@ -560,12 +560,15 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 def calculate_contractor_delivery_monthly(
     df: pd.DataFrame,
     contractor_code: str,
-    delivery_vars: List[str]
+    delivery_vars: List[str],
+    demand_var: Optional[str] = None,
+    demand_df: Optional[pd.DataFrame] = None
 ) -> List[Dict[str, Any]]:
     """
     Calculate monthly delivery statistics for a contractor.
 
     Aggregates multiple delivery points if contractor has several.
+    Optionally includes demand and percent-of-demand calculations.
     """
     # Find which delivery vars exist in the data
     available_vars = [v for v in delivery_vars if v in df.columns]
@@ -599,10 +602,15 @@ def calculate_contractor_delivery_monthly(
         for p in EXCEEDANCE_PERCENTILES:
             row[f'exc_p{p}'] = round(float(np.percentile(data, p)), 2)
 
+        # Demand calculations for annual (if available)
+        row['demand_avg_taf'] = None
+        row['percent_of_demand_avg'] = None
+
         results.append(row)
     else:
         for wm in range(1, 13):
-            month_data = df_copy[df_copy['WaterMonth'] == wm]['total_delivery'].dropna()
+            wm_mask = df_copy['WaterMonth'] == wm
+            month_data = df_copy[wm_mask]['total_delivery'].dropna()
             if month_data.empty:
                 continue
 
@@ -619,6 +627,34 @@ def calculate_contractor_delivery_monthly(
 
             for p in EXCEEDANCE_PERCENTILES:
                 row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
+
+            # Demand calculations for monthly (if available)
+            row['demand_avg_taf'] = None
+            row['percent_of_demand_avg'] = None
+            
+            if demand_var and demand_df is not None and demand_var in demand_df.columns:
+                try:
+                    # Get demand for this month
+                    if 'WaterMonth' in demand_df.columns:
+                        demand_wm_mask = demand_df['WaterMonth'] == wm
+                        demand_month = demand_df[demand_wm_mask][demand_var].dropna()
+                        
+                        if not demand_month.empty:
+                            # Convert CFS to TAF if demand_df has DateTime
+                            if 'DateTime' in demand_df.columns:
+                                days_in_month = demand_df[demand_wm_mask]['DateTime'].dt.daysinmonth.mean()
+                                demand_taf = float(demand_month.mean()) * days_in_month * CFS_TO_TAF_PER_DAY
+                            else:
+                                demand_taf = float(demand_month.mean())
+                            
+                            row['demand_avg_taf'] = round(demand_taf, 2)
+                            
+                            # Calculate percent of demand met
+                            if row['demand_avg_taf'] > 0 and row['delivery_avg_taf'] is not None:
+                                pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                                row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
+                except Exception as e:
+                    log.debug(f"Error calculating monthly demand for {contractor_code} month {wm}: {e}")
 
             results.append(row)
 
@@ -877,9 +913,13 @@ def calculate_all_mi_statistics(
 
         mapped_count += 1
 
-        # Calculate delivery monthly
+        # Calculate delivery monthly (with demand if available)
         if has_delivery:
-            monthly_rows = calculate_contractor_delivery_monthly(df, code, delivery_vars)
+            monthly_rows = calculate_contractor_delivery_monthly(
+                df, code, delivery_vars,
+                demand_var=demand_var,
+                demand_df=demand_df
+            )
             for row in monthly_rows:
                 row['scenario_short_code'] = scenario_id
             delivery_monthly_rows.extend(monthly_rows)
@@ -1035,6 +1075,7 @@ def main():
                 'delivery_avg_taf', 'delivery_cv',
                 'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
                 'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+                'demand_avg_taf', 'percent_of_demand_avg',  # Demand metrics
                 'sample_count'
             ]
             monthly_values = [

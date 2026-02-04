@@ -116,6 +116,7 @@ async def get_mi_delivery_monthly(
                 m.delivery_cv,
                 m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
                 m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                m.demand_avg_taf, m.percent_of_demand_avg,
                 m.sample_count
             FROM mi_delivery_monthly m
             LEFT JOIN mi_contractor c ON m.mi_contractor_code = c.short_code
@@ -165,6 +166,8 @@ async def get_mi_delivery_monthly(
             "exc_p75": float(row["exc_p75"]) if row["exc_p75"] is not None else None,
             "exc_p90": float(row["exc_p90"]) if row["exc_p90"] is not None else None,
             "exc_p95": float(row["exc_p95"]) if row["exc_p95"] is not None else None,
+            "demand_avg_taf": float(row["demand_avg_taf"]) if row["demand_avg_taf"] is not None else None,
+            "percent_of_demand": float(row["percent_of_demand_avg"]) if row["percent_of_demand_avg"] is not None else None,
             "sample_count": row["sample_count"],
         }
 

@@ -288,15 +288,20 @@ def calculate_du_statistics(
     mappings: Dict[str, Dict],
     delivery_arcs: Dict[str, List[str]],
     scenario_id: str
-) -> Tuple[List[Dict], List[Dict]]:
+) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """
-    Calculate delivery and demand statistics for all DUs.
+    Calculate delivery, shortage, and demand statistics for all DUs.
     
     Returns:
-        Tuple of (delivery_monthly_rows, period_summary_rows)
+        Tuple of (delivery_monthly_rows, period_summary_rows, shortage_monthly_rows)
     """
     delivery_monthly_rows = []
     period_summary_rows = []
+    shortage_monthly_rows = []
+    
+    # Minimum threshold for counting a month as having a "shortage" (in TAF)
+    # This filters out floating-point precision artifacts from CalSim's linear programming solver.
+    SHORTAGE_THRESHOLD_TAF = 0.1
     
     processed = 0
     skipped = 0
@@ -375,6 +380,27 @@ def calculate_du_statistics(
                     row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
             
             delivery_monthly_rows.append(row)
+            
+            # Calculate monthly shortage statistics
+            short_month = shortage[wm_mask].dropna()
+            if not short_month.empty:
+                shortage_row = {
+                    'scenario_short_code': scenario_id,
+                    'du_id': du_id,
+                    'water_month': wm,
+                    'sample_count': len(short_month),
+                }
+                
+                shortage_row['shortage_avg_taf'] = round(float(short_month.mean()), 2)
+                shortage_row['shortage_cv'] = round(float(short_month.std() / short_month.mean()), 4) if short_month.mean() > 0 else 0
+                # Frequency: percentage of months with shortage above threshold
+                shortage_row['shortage_frequency_pct'] = round(((short_month > SHORTAGE_THRESHOLD_TAF).sum() / len(short_month)) * 100, 2)
+                
+                # Shortage percentiles
+                for p in PERCENTILES:
+                    shortage_row[f'q{p}'] = round(float(np.percentile(short_month, p)), 2)
+                
+                shortage_monthly_rows.append(shortage_row)
         
         # Calculate period summary
         water_years = sorted(output_df['WaterYear'].unique())
@@ -445,9 +471,9 @@ def calculate_du_statistics(
         period_summary_rows.append(summary)
     
     log.info(f"Processed {processed} DUs, skipped {skipped}")
-    log.info(f"Generated {len(delivery_monthly_rows)} monthly rows, {len(period_summary_rows)} summary rows")
+    log.info(f"Generated {len(delivery_monthly_rows)} delivery monthly, {len(shortage_monthly_rows)} shortage monthly, {len(period_summary_rows)} summary rows")
     
-    return delivery_monthly_rows, period_summary_rows
+    return delivery_monthly_rows, period_summary_rows, shortage_monthly_rows
 
 
 # =============================================================================
@@ -458,6 +484,7 @@ def save_to_database(
     conn,
     delivery_monthly_rows: List[Dict],
     period_summary_rows: List[Dict],
+    shortage_monthly_rows: List[Dict],
     scenario_id: str
 ):
     """Save results to database tables."""
@@ -465,6 +492,7 @@ def save_to_database(
     
     # Delete existing data for this scenario (uses scenario_short_code)
     cur.execute("DELETE FROM du_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,))
+    cur.execute("DELETE FROM du_shortage_monthly WHERE scenario_short_code = %s", (scenario_id,))
     cur.execute("DELETE FROM du_period_summary WHERE scenario_short_code = %s", (scenario_id,))
     log.info(f"Cleared existing data for scenario {scenario_id}")
     
@@ -514,6 +542,36 @@ def save_to_database(
         """
         execute_values(cur, insert_sql, values)
         log.info(f"Inserted {len(values)} delivery monthly rows")
+    
+    # Insert shortage monthly
+    if shortage_monthly_rows:
+        shortage_cols = [
+            'scenario_short_code', 'du_id', 'water_month',
+            'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
+            'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+            'sample_count'
+        ]
+        
+        values = [
+            tuple(convert_val(row.get(col)) for col in shortage_cols)
+            for row in shortage_monthly_rows
+        ]
+        
+        insert_sql = f"""
+            INSERT INTO du_shortage_monthly ({', '.join(shortage_cols)})
+            VALUES %s
+            ON CONFLICT (scenario_short_code, du_id, water_month) 
+            DO UPDATE SET
+                shortage_avg_taf = EXCLUDED.shortage_avg_taf,
+                shortage_cv = EXCLUDED.shortage_cv,
+                shortage_frequency_pct = EXCLUDED.shortage_frequency_pct,
+                q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,
+                q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90, q100 = EXCLUDED.q100,
+                sample_count = EXCLUDED.sample_count,
+                updated_at = NOW()
+        """
+        execute_values(cur, insert_sql, values)
+        log.info(f"Inserted {len(values)} shortage monthly rows")
     
     # Insert period summary
     if period_summary_rows:
@@ -593,14 +651,14 @@ def process_scenario(
     )
     
     # Calculate statistics
-    delivery_monthly, period_summary = calculate_du_statistics(
+    delivery_monthly, period_summary, shortage_monthly = calculate_du_statistics(
         output_df, demand_df, mappings, delivery_arcs, scenario_id
     )
     
     if not dry_run:
-        save_to_database(conn, delivery_monthly, period_summary, scenario_id)
+        save_to_database(conn, delivery_monthly, period_summary, shortage_monthly, scenario_id)
     
-    return delivery_monthly, period_summary
+    return delivery_monthly, period_summary, shortage_monthly
 
 
 def get_mock_mappings() -> Dict[str, Dict]:
@@ -638,6 +696,7 @@ def main():
     
     all_monthly = []
     all_summary = []
+    all_shortage = []
     
     if args.mock_mappings:
         # Use mock mappings for testing
@@ -658,12 +717,13 @@ def main():
                 )
                 
                 # Calculate statistics
-                monthly, summary = calculate_du_statistics(
+                monthly, summary, shortage = calculate_du_statistics(
                     output_df, demand_df, mappings, delivery_arcs, scenario_id
                 )
                 
                 all_monthly.extend(monthly)
                 all_summary.extend(summary)
+                all_shortage.extend(shortage)
                 
             except Exception as e:
                 log.error(f"Error processing {scenario_id}: {e}")
@@ -684,7 +744,7 @@ def main():
         
         for scenario_id in scenarios:
             try:
-                monthly, summary = process_scenario(
+                monthly, summary, shortage = process_scenario(
                     scenario_id,
                     conn,
                     use_local=args.local,
@@ -694,6 +754,7 @@ def main():
                 )
                 all_monthly.extend(monthly)
                 all_summary.extend(summary)
+                all_shortage.extend(shortage)
             except Exception as e:
                 log.error(f"Error processing {scenario_id}: {e}")
                 if not args.all_scenarios:
@@ -704,11 +765,12 @@ def main():
     if args.output_json:
         output = {
             'delivery_monthly': all_monthly,
+            'shortage_monthly': all_shortage,
             'period_summary': all_summary,
         }
         print(json.dumps(output, indent=2, default=str))
     
-    log.info(f"Complete. Total: {len(all_monthly)} monthly, {len(all_summary)} summary rows")
+    log.info(f"Complete. Total: {len(all_monthly)} delivery monthly, {len(all_shortage)} shortage monthly, {len(all_summary)} summary rows")
 
 
 if __name__ == '__main__':
