@@ -26,13 +26,13 @@ ON CONFLICT (du_id) DO UPDATE SET
 
 -- 60S_PU (no direct delivery arcs found - may be groundwater only)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('60S_PU', NULL, 'UD_60S_PU', NULL, 'PU', FALSE)
+VALUES ('60S_PU', 'NOT_FOUND', 'UD_60S_PU', NULL, 'PU', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 61_PU1 - has many delivery arcs
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('61_PU1', NULL, 'UD_61_PU', NULL, 'PU', TRUE)
+VALUES ('61_PU1', 'NOT_FOUND', 'UD_61_PU', NULL, 'PU', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -43,7 +43,7 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('61_P
 
 -- 61_PU2 - has many delivery arcs
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('61_PU2', NULL, 'UD_61_PU2', NULL, 'PU', TRUE)
+VALUES ('61_PU2', 'NOT_FOUND', 'UD_61_PU2', NULL, 'PU', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -54,19 +54,19 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('61_P
 
 -- 64_PU (no direct delivery arcs found)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('64_PU', NULL, 'UD_64_PU', NULL, 'PU', FALSE)
+VALUES ('64_PU', 'NOT_FOUND', 'UD_64_PU', NULL, 'PU', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 65_PU (no direct delivery arcs found)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('65_PU', NULL, 'UD_65_PU', NULL, 'PU', FALSE)
+VALUES ('65_PU', 'NOT_FOUND', 'UD_65_PU', NULL, 'PU', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 70_PU1 - has 11 delivery arcs
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('70_PU1', NULL, 'UD_70_PU', NULL, 'PU', TRUE)
+VALUES ('70_PU1', 'NOT_FOUND', 'UD_70_PU', NULL, 'PU', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -78,7 +78,7 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('70_P
 
 -- 72_PU1 - has 17 delivery arcs
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('72_PU1', NULL, 'UD_72_PU', NULL, 'PU', TRUE)
+VALUES ('72_PU1', 'NOT_FOUND', 'UD_72_PU', NULL, 'PU', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -97,7 +97,7 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('72_P
 
 -- 50_PA1
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('50_PA1', NULL, 'UD_50_PA1', NULL, 'PA', TRUE)
+VALUES ('50_PA1', 'NOT_FOUND', 'UD_50_PA1', NULL, 'PA', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -115,13 +115,13 @@ ON CONFLICT (du_id) DO UPDATE SET
 
 -- 60N_PA (no delivery arcs found)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('60N_PA', NULL, 'UD_60N_PA', NULL, 'PA', FALSE)
+VALUES ('60N_PA', 'NOT_FOUND', 'UD_60N_PA', NULL, 'PA', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 60S_PA
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('60S_PA', NULL, 'UD_60S_PA', NULL, 'PA', TRUE)
+VALUES ('60S_PA', 'NOT_FOUND', 'UD_60S_PA', NULL, 'PA', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -132,7 +132,7 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('60S_
 
 -- 61_PA
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('61_PA', NULL, 'UD_61_PA', NULL, 'PA', TRUE)
+VALUES ('61_PA', 'NOT_FOUND', 'UD_61_PA', NULL, 'PA', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -143,13 +143,13 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('61_P
 
 -- 63_PA (no delivery arcs found)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('63_PA', NULL, 'UD_63_PA', NULL, 'PA', FALSE)
+VALUES ('63_PA', 'NOT_FOUND', 'UD_63_PA', NULL, 'PA', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 63_PR (Project Refuge)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('63_PR', NULL, 'UD_63_PR', NULL, 'PR', TRUE)
+VALUES ('63_PR', 'NOT_FOUND', 'UD_63_PR', NULL, 'PR', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -160,7 +160,7 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('63_P
 
 -- 64_PA
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('64_PA', NULL, 'UD_64_PA', NULL, 'PA', TRUE)
+VALUES ('64_PA', 'NOT_FOUND', 'UD_64_PA', NULL, 'PA', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
@@ -172,19 +172,19 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('64_P
 
 -- 65_PA (no delivery arcs found)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('65_PA', NULL, 'UD_65_PA', NULL, 'PA', FALSE)
+VALUES ('65_PA', 'NOT_FOUND', 'UD_65_PA', NULL, 'PA', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 70_PA (no delivery arcs found)
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('70_PA', NULL, 'UD_70_PA', NULL, 'PA', FALSE)
+VALUES ('70_PA', 'NOT_FOUND', 'UD_70_PA', NULL, 'PA', FALSE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable;
 
 -- 71_PA
 INSERT INTO du_urban_variable (du_id, delivery_variable, demand_variable, shortage_variable, variable_type, requires_sum)
-VALUES ('71_PA', NULL, 'UD_71_PA', NULL, 'PA', TRUE)
+VALUES ('71_PA', 'NOT_FOUND', 'UD_71_PA', NULL, 'PA', TRUE)
 ON CONFLICT (du_id) DO UPDATE SET
     demand_variable = EXCLUDED.demand_variable,
     requires_sum = TRUE;
