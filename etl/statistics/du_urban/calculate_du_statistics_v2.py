@@ -62,6 +62,11 @@ LOCAL_DEMAND_DIR = PROJECT_ROOT / "etl/demands"
 PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
+# Unit conversion: CFS (cubic feet per second) to TAF (thousand acre-feet)
+# TAF = CFS * seconds_per_day * days / (43560 sq ft per acre) / 1000
+# Simplified: CFS * days * 86400 / 43560 / 1000 = CFS * days * 0.001983471
+CFS_TO_TAF_PER_DAY = 0.001983471
+
 
 # =============================================================================
 # DATABASE FUNCTIONS
@@ -178,7 +183,7 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
-    """Add water year and water month columns."""
+    """Add water year, water month, and days in month columns."""
     df = df.copy()
     
     if 'DateTime' not in df.columns or df['DateTime'].isna().all():
@@ -186,6 +191,7 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     
     df['CalendarMonth'] = df['DateTime'].dt.month
     df['CalendarYear'] = df['DateTime'].dt.year
+    df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
     
     # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
     df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
@@ -301,19 +307,24 @@ def calculate_du_statistics(
         shortage_var = mapping.get('shortage_variable')
         requires_sum = mapping.get('requires_sum', False)
         
-        # Get delivery values
+        # Get delivery values (in CFS)
         if requires_sum and du_id in delivery_arcs:
             # Sum multiple delivery arcs
             arc_series = [get_column_value(output_df, arc) for arc in delivery_arcs[du_id]]
-            delivery = sum(arc_series)
+            delivery_cfs = sum(arc_series)
         else:
-            delivery = get_column_value(output_df, delivery_var)
+            delivery_cfs = get_column_value(output_df, delivery_var)
         
-        # Get demand values (from demand CSV)
+        # Convert delivery from CFS to TAF (monthly)
+        # TAF = CFS * days_in_month * CFS_TO_TAF_PER_DAY
+        delivery = delivery_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        
+        # Get demand values (already in TAF from demand CSV)
         demand = get_column_value(demand_df, demand_var)
         
-        # Get shortage values
-        shortage = get_column_value(output_df, shortage_var)
+        # Get shortage values (in CFS, convert to TAF)
+        shortage_cfs = get_column_value(output_df, shortage_var)
+        shortage = shortage_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
         
         # Skip if no data
         if delivery.isna().all() and demand.isna().all():
