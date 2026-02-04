@@ -785,6 +785,30 @@ If you need "total water received regardless of allocation type," use `D_{loc}_{
 - Shortage metrics would need recalculation or removal
 - The interpretation changes from "allocation reliability" to "total supply"
 
+### Unit Conversion: Demands Are Already in TAF
+
+**IMPORTANT**: Unlike delivery variables (which are in CFS and need conversion), the **demand variables in the DEMANDS CSV are already in TAF**.
+
+| Data Type | Source | Units | Conversion |
+|-----------|--------|-------|------------|
+| Deliveries | Main CalSim output | CFS | `TAF = CFS × 0.001984 × days_in_month` |
+| Demands | DEMANDS CSV | **TAF** | None needed |
+| Shortages | Main CalSim output | TAF | None needed |
+
+This was identified in February 2026 when MWD showed `annual_demand_avg_taf = 14` and `avg_pct_demand_met = 1700%`. Investigation revealed:
+
+1. The demand variable `TABLEA_CONTRACT_MWD` had values of ~230-240 (already TAF)
+2. The code was incorrectly multiplying by `days × 0.001984` (treating as CFS)
+3. Result: 235 × 0.001984 × 30 ≈ 14 (far too small)
+
+**Fix applied**: Removed CFS→TAF conversion for demand variables in:
+- `calculate_contractor_statistics()` - annual demand calculation
+- Monthly demand calculations
+
+**Expected values after fix**:
+- MWD demand: ~230-240 TAF/year (not 14)
+- Percent of demand met: ~100% (not 1700%)
+
 ### Files
 
 | File | Purpose |

@@ -377,7 +377,7 @@ def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> p
     # Handle duplicate column names if requested
     unique_col_names = col_names
     duplicate_indices = []
-    
+
     if dedupe_columns:
         seen = set()
         unique_col_names = []
@@ -387,17 +387,17 @@ def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> p
             else:
                 seen.add(name)
                 unique_col_names.append(name)
-        
+
         if duplicate_indices:
             log.info(f"Found {len(duplicate_indices)} duplicate columns, keeping first occurrence")
 
     # Read data portion (skip 7 header rows)
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    
+
     # Drop duplicate columns if needed
     if duplicate_indices:
         data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
-    
+
     data_df.columns = unique_col_names
 
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
@@ -430,7 +430,7 @@ def load_demands_csv(
             return None
         # Demand CSV files often have duplicate columns - dedupe them
         return load_calsim_csv_from_file(demand_csv_path, dedupe_columns=True)
-    
+
     if use_local:
         # Try local paths - check both pipelines and demands folders
         possible_paths = [
@@ -441,40 +441,40 @@ def load_demands_csv(
             # Simplified demand CSV
             LOCAL_DEMANDS_DIR / f"{scenario_id}_demand.csv",
         ]
-        
+
         for path in possible_paths:
             if path.exists():
                 log.info(f"Loading demands from: {path}")
                 # Demand CSV files often have duplicate columns - dedupe them
                 return load_calsim_csv_from_file(str(path), dedupe_columns=True)
-        
+
         log.warning(f"No DEMANDS CSV found for scenario {scenario_id} locally")
         return None
-    
+
     # S3 access
     if not HAS_BOTO3:
         log.warning("boto3 not available for S3 access")
         return None
-    
+
     s3 = boto3.client('s3')
-    
+
     # Try different possible S3 locations
     possible_keys = [
         f"reference/{scenario_id}_demand.csv",
         f"scenario/{scenario_id}/csv/{scenario_id}_DEMANDS.csv",
     ]
-    
+
     for key in possible_keys:
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            
+
             # Read header
             import io
             content = response['Body'].read()
             header_df = pd.read_csv(io.BytesIO(content), header=None, nrows=8)
             col_names = header_df.iloc[1].tolist()
-            
+
             # Handle duplicate column names by keeping only the first occurrence
             seen = set()
             unique_col_names = []
@@ -485,26 +485,26 @@ def load_demands_csv(
                 else:
                     seen.add(name)
                     unique_col_names.append(name)
-            
+
             if duplicate_indices:
                 log.info(f"Found {len(duplicate_indices)} duplicate columns in demand CSV, keeping first occurrence")
-            
+
             # Read data
             data_df = pd.read_csv(io.BytesIO(content), header=None, skiprows=7, low_memory=False)
-            
+
             # Drop duplicate columns
             if duplicate_indices:
                 data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
-            
+
             data_df.columns = unique_col_names
-            
+
             log.info(f"Loaded demands from S3: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df
-            
+
         except Exception as e:
             log.debug(f"Could not load {key}: {e}")
             continue
-    
+
     log.warning(f"No DEMANDS CSV found for scenario {scenario_id} in S3")
     return None
 
@@ -629,26 +629,24 @@ def calculate_contractor_delivery_monthly(
                 row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
 
             # Demand calculations for monthly (if available)
+            # NOTE: Demand values in the DEMANDS CSV are already in TAF (not CFS)
+            # Do NOT convert - just use the values directly
             row['demand_avg_taf'] = None
             row['percent_of_demand_avg'] = None
-            
+
             if demand_var and demand_df is not None and demand_var in demand_df.columns:
                 try:
                     # Get demand for this month
                     if 'WaterMonth' in demand_df.columns:
                         demand_wm_mask = demand_df['WaterMonth'] == wm
                         demand_month = demand_df[demand_wm_mask][demand_var].dropna()
-                        
+
                         if not demand_month.empty:
-                            # Convert CFS to TAF if demand_df has DateTime
-                            if 'DateTime' in demand_df.columns:
-                                days_in_month = demand_df[demand_wm_mask]['DateTime'].dt.daysinmonth.mean()
-                                demand_taf = float(demand_month.mean()) * days_in_month * CFS_TO_TAF_PER_DAY
-                            else:
-                                demand_taf = float(demand_month.mean())
-                            
+                            # Demand values are already in TAF - no conversion needed
+                            demand_taf = float(demand_month.mean())
+
                             row['demand_avg_taf'] = round(demand_taf, 2)
-                            
+
                             # Calculate percent of demand met
                             if row['demand_avg_taf'] > 0 and row['delivery_avg_taf'] is not None:
                                 pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
@@ -805,40 +803,32 @@ def calculate_contractor_period_summary(
     # Demand and percent of demand statistics
     result['annual_demand_avg_taf'] = None
     result['avg_pct_demand_met'] = None
-    
+
     if demand_var and demand_df is not None and demand_var in demand_df.columns:
         try:
             # Ensure demand_df has water year column
             if 'WaterYear' not in demand_df.columns:
                 demand_df = add_water_year_month(demand_df)
-            
-            # Get demand values and calculate days in month for CFS to TAF conversion
+
+            # Get demand values - demand data is already in TAF (no conversion needed)
             demand_df_copy = demand_df.copy()
-            
-            # Check if demand data needs CFS to TAF conversion (if it has DateTime column)
-            if 'DateTime' in demand_df_copy.columns:
-                demand_df_copy['DaysInMonth'] = demand_df_copy['DateTime'].dt.daysinmonth
-                # Convert CFS to TAF: CFS * days * 0.001983471
-                demand_df_copy['demand_taf'] = (
-                    pd.to_numeric(demand_df_copy[demand_var], errors='coerce') * 
-                    demand_df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-                )
-            else:
-                # Assume data is already in TAF or needs no conversion
-                demand_df_copy['demand_taf'] = pd.to_numeric(demand_df_copy[demand_var], errors='coerce')
-            
+
+            # NOTE: DEMANDS CSV values are already in TAF, not CFS
+            # Do NOT apply CFS_TO_TAF conversion here
+            demand_df_copy['demand_taf'] = pd.to_numeric(demand_df_copy[demand_var], errors='coerce')
+
             # Calculate annual demand
             annual_demand = demand_df_copy.groupby('WaterYear')['demand_taf'].sum()
-            
+
             if not annual_demand.empty and annual_demand.mean() > 0:
                 result['annual_demand_avg_taf'] = round(float(annual_demand.mean()), 2)
-                
+
                 # Calculate percent of demand met
                 if result['annual_delivery_avg_taf'] and result['annual_demand_avg_taf'] > 0:
                     pct = (result['annual_delivery_avg_taf'] / result['annual_demand_avg_taf']) * 100
                     # Clip to 0-100 range (can exceed 100% if carryover/surplus is used)
                     result['avg_pct_demand_met'] = round(min(100.0, max(0.0, pct)), 2)
-                    
+
                 log.debug(f"{contractor_code}: demand_avg={result['annual_demand_avg_taf']}, pct_met={result['avg_pct_demand_met']}")
         except Exception as e:
             log.warning(f"Error calculating demand for {contractor_code}: {e}")
