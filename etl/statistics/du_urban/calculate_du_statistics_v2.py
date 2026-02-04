@@ -400,6 +400,10 @@ def calculate_du_statistics(
                 for p in PERCENTILES:
                     shortage_row[f'q{p}'] = round(float(np.percentile(short_month, p)), 2)
                 
+                # Shortage exceedance percentiles
+                for p in EXCEEDANCE_PERCENTILES:
+                    shortage_row[f'exc_p{p}'] = round(float(np.percentile(short_month, p)), 2)
+                
                 shortage_monthly_rows.append(shortage_row)
         
         # Calculate period summary
@@ -549,6 +553,7 @@ def save_to_database(
             'scenario_short_code', 'du_id', 'water_month',
             'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
             'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+            'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
             'sample_count'
         ]
         
@@ -567,6 +572,8 @@ def save_to_database(
                 shortage_frequency_pct = EXCLUDED.shortage_frequency_pct,
                 q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,
                 q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90, q100 = EXCLUDED.q100,
+                exc_p5 = EXCLUDED.exc_p5, exc_p10 = EXCLUDED.exc_p10, exc_p25 = EXCLUDED.exc_p25,
+                exc_p50 = EXCLUDED.exc_p50, exc_p75 = EXCLUDED.exc_p75, exc_p90 = EXCLUDED.exc_p90, exc_p95 = EXCLUDED.exc_p95,
                 sample_count = EXCLUDED.sample_count,
                 updated_at = NOW()
         """

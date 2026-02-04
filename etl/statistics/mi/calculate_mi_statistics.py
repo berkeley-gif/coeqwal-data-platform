@@ -694,6 +694,10 @@ def calculate_contractor_shortage_monthly(
         for p in DELIVERY_PERCENTILES:
             row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
 
+        # Exceedance percentiles for shortage
+        for p in EXCEEDANCE_PERCENTILES:
+            row[f'exc_p{p}'] = round(float(np.percentile(data, p)), 2)
+
         results.append(row)
     else:
         for wm in range(1, 13):
@@ -715,6 +719,10 @@ def calculate_contractor_shortage_monthly(
 
             for p in DELIVERY_PERCENTILES:
                 row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
+
+            # Exceedance percentiles for shortage
+            for p in EXCEEDANCE_PERCENTILES:
+                row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
 
             results.append(row)
 
@@ -1083,6 +1091,7 @@ def main():
                 'scenario_short_code', 'mi_contractor_code', 'water_month',
                 'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
                 'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+                'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
                 'sample_count'
             ]
             shortage_values = [
