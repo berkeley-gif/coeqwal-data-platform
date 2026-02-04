@@ -331,7 +331,12 @@ def extract_delivery_data(
     
     # Direct variable lookup
     if delivery_var in df.columns:
-        return df[delivery_var]
+        result = df[delivery_var]
+        # Handle duplicate column names (returns DataFrame instead of Series)
+        if isinstance(result, pd.DataFrame):
+            log.warning(f"{du_id}: Duplicate columns for '{delivery_var}', using first")
+            result = result.iloc[:, 0]
+        return result
     
     log.debug(f"{du_id}: Delivery variable '{delivery_var}' not in data")
     return pd.Series(dtype=float)
@@ -349,7 +354,12 @@ def extract_shortage_data(
         return pd.Series(dtype=float)
     
     if shortage_var in df.columns:
-        return df[shortage_var]
+        result = df[shortage_var]
+        # Handle duplicate column names (returns DataFrame instead of Series)
+        if isinstance(result, pd.DataFrame):
+            log.warning(f"{du_id}: Duplicate columns for '{shortage_var}', using first")
+            result = result.iloc[:, 0]
+        return result
     
     log.debug(f"{du_id}: Shortage variable '{shortage_var}' not in data")
     return pd.Series(dtype=float)
