@@ -215,6 +215,78 @@ Some demand units receive water from multiple sources that must be summed:
 
 These are tracked in `du_urban_delivery_arc` with `requires_sum = TRUE` in `du_urban_variable`.
 
+## ETL Processing
+
+The ETL script `etl/statistics/du/calculate_du_statistics.py` processes the 71 canonical CWS demand units:
+
+### Usage
+
+```bash
+# List available groups
+python etl/statistics/du/calculate_du_statistics.py --list-groups
+
+# Process a single scenario
+python etl/statistics/du/calculate_du_statistics.py --scenario s0020
+
+# Process only a specific group
+python etl/statistics/du/calculate_du_statistics.py --scenario s0020 --group var_wba
+
+# Process all scenarios
+python etl/statistics/du/calculate_du_statistics.py --all-scenarios
+
+# Dry run (calculate but don't save)
+python etl/statistics/du/calculate_du_statistics.py --scenario s0020 --dry-run
+```
+
+### Processing Summary (s0020 example)
+
+| Category | Units | With Delivery | With Shortage | Notes |
+|----------|-------|---------------|---------------|-------|
+| var_wba | 40 | 40 | 39 | ELDID_NU3 has no shortage variable |
+| var_gw_only | 3 | 3 | 3 | GP_* pumping, GW_SHORT_* restriction |
+| var_swp_contractor | 11 | 11 | 11 | D_*_PMI delivery |
+| var_named_locality | 15 | 15 | 3 | Many lack shortage variables |
+| var_missing | 2 | 0 | 0 | JLIND, UPANG - no CalSim data |
+| **Total** | **71** | **69** | **56** | |
+
+### Output Tables
+
+| Table | Rows per scenario | Description |
+|-------|-------------------|-------------|
+| `du_delivery_monthly` | 828 | 69 units × 12 months |
+| `du_shortage_monthly` | 672 | 56 units × 12 months |
+| `du_period_summary` | 69 | Annual summaries with reliability |
+
+## Known Data Characteristics
+
+### Aliases
+
+**SBA036 and SCVWD are aliases** for the same entity (Santa Clara Valley Water District):
+- Both map to the same CalSim variable: `D_SBA036_SCVWD_PMI`
+- They produce identical statistics (e.g., 688.75 TAF annual delivery in s0020)
+- This is intentional - the tier matrix includes both identifiers
+
+### Named Localities Without Shortage Data
+
+The following demand units have delivery data but **no shortage variables** in CalSim output:
+- CCWD, FRFLD, VLLJO, ANTOC, NAPA, NAPA2, BNCIA, SUISN, TVAFB, PLMAS, AMADR, AMCYN
+
+Their `shortage_frequency_pct` and `reliability_pct` will be NULL.
+
+### Groundwater-Only Characteristics
+
+The 3 groundwater-only units (71_NU, 72_NU, 72_PU) behave differently:
+
+| du_id | Typical Behavior | Interpretation |
+|-------|------------------|----------------|
+| 71_NU | 0 TAF delivery, 100% shortage | Fully restricted from GW pumping |
+| 72_NU | ~280 TAF delivery, 0% shortage | Can pump groundwater freely |
+| 72_PU | ~16 TAF delivery, 0% shortage | Can pump groundwater freely |
+
+- **"Delivery"** = groundwater pumping (GP_* variable)
+- **"Shortage"** = groundwater restriction (GW_SHORT_* variable)
+- These are NOT surface water deliveries
+
 ## Data Sources
 
 - **CalSim3 Main Report**: Variable naming conventions
