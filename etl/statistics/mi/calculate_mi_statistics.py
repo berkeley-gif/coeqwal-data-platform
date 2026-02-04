@@ -121,14 +121,12 @@ MI_CONTRACTOR_VARIABLES = {
         "description": "Santa Clara Valley Water District",
     },
 
-    # Metropolitan WDSC (multiple delivery points)
+    # Metropolitan WDSC - use DEL_SWP_MWD aggregate only
+    # DEL_SWP_MWD = D_PRRIS_MWDSC_PMI + D_CAA194_KERNB_PMI + D_ESB413_MWDSC_PMI + D_ESB433_MWDSC_PMI + D_WSB031_MWDSC_PMI
+    # (verified from Run/DeliveryLogic/output/deliv_short_swp.wresl)
     "MWD": {
         "delivery_vars": [
-            "D_ESB413_MWDSC_PMI",
-            "D_ESB433_MWDSC_PMI",
-            "D_PRRIS_MWDSC_PMI",
-            "D_WSB031_MWDSC_PMI",
-            "DEL_SWP_MWD",  # aggregate
+            "DEL_SWP_MWD",  # aggregate of all 5 MWD delivery arcs
         ],
         "shortage_vars": [
             "SHORT_D_ESB413_MWDSC_PMI",
