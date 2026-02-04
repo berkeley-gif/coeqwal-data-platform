@@ -703,3 +703,91 @@ TAF = CFS × 0.001984 × days_in_month
 | `du_urban/main.py` | CLI entry point |
 | `du_urban/calculate_du_statistics.py` | Main calculation module for tier matrix DUs |
 | `du_urban/calculate_du_statistics_v2.py` | Version 2 with database variable mappings |
+
+---
+
+## M&I Contractor Statistics
+
+The `mi/` module calculates delivery and shortage statistics for SWP (State Water Project) and CVP (Central Valley Project) M&I contractors.
+
+### CalSim Variable Naming Convention
+
+CalSim uses a structured naming convention for delivery variables:
+
+```
+D_{location}_{contractor}_{type}
+```
+
+| Suffix | Meaning | Description |
+|--------|---------|-------------|
+| `_PMI` | **Project M&I** | Table A allocation for Municipal & Industrial use |
+| `_PAG` | Project Ag | Table A allocation for Agricultural use |
+| `_PIN` | Project Interruptible | Article 21 / surplus water (when available) |
+| `_PCO` | Project Carryover | Water banked from previous year's unused allocation |
+| `_PRJ` | Project Total | Sum of all delivery types |
+
+**Example for Desert Water Agency:**
+```
+D_ESB408_DESRT       ← Total deliveries (all types)
+D_ESB408_DESRT_PMI   ← Table A M&I allocation only (what we track)
+D_ESB408_DESRT_PIN   ← Interruptible/Article 21
+D_ESB408_DESRT_PCO   ← Carryover from previous year
+D_ESB408_DESRT_PRJ   ← Project total
+```
+
+### Why We Use `_PMI` Variables
+
+We track `_PMI` (Project M&I) variables specifically, NOT total deliveries (`_PRJ`). This is intentional:
+
+1. **Scenario Comparison**: COEQWAL scenarios compare SWP reliability. Table A allocations (`_PMI`) show how allocation policies affect contractors, while total deliveries include carryover and interruptible water that obscure policy impacts.
+
+2. **Shortage Pairing**: Shortage variables (`SHORT_D_xxx_PMI`) are calculated against M&I demand. Using `_PRJ` delivery but `_PMI` shortage would produce inconsistent metrics.
+
+3. **Model Intent**: The CalSim model tracks Table A allocations to measure SWP reliability. Zeros in `_PMI` during dry years are the model's way of showing "100% allocation cut" scenarios.
+
+### Canonical Sources
+
+Variable mappings come from:
+
+| Source | Location | Content |
+|--------|----------|---------|
+| `swp_contractor_perdel_A.wresl` | CalSim model files | Contractor delivery logic definitions |
+| `CWS_shortage_variables.csv` | `etl/pipelines/CWS/` | Shortage variable list from DWR/COEQWAL |
+| `mi_contractor.csv` | `database/seed_tables/` | Contractor metadata (names, contracts) |
+
+### Understanding Zero Values in Percentiles
+
+When `q0` (minimum/0th percentile) = 0 for a contractor-month, it means:
+
+> **In at least one year of the 100-year simulation, that contractor received zero Table A M&I allocation for that month.**
+
+This is **legitimate model behavior**, not a data error:
+
+| Pattern | Meaning |
+|---------|---------|
+| `q0=0, q10>0` | Worst ~10% of years had zero delivery |
+| `q0=0, q10=0, q50>0` | Worst ~50% of years had zero delivery |
+| `q0=0, q10=0, q50=0, avg>0` | Most years had zero, but wet years brought up average |
+
+**Example - Coachella Valley WD (CCHLA):**
+```
+Month 1 (Oct): q0=0, q10=30, q50=133, avg=126 TAF
+Month 7 (Apr): q0=0.4, q10=4, q50=18, avg=24 TAF
+```
+
+Interpretation: In October during dry years, Table A allocations can be cut to 0%. In April (spring), even dry years get some water (minimum 0.4 TAF).
+
+### Alternative: Total Deliveries
+
+If you need "total water received regardless of allocation type," use `D_{loc}_{contractor}` or `D_{loc}_{contractor}_PRJ` variables instead. However:
+
+- This would require modifying `MI_CONTRACTOR_VARIABLES` in `calculate_mi_statistics.py`
+- Shortage metrics would need recalculation or removal
+- The interpretation changes from "allocation reliability" to "total supply"
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `mi/calculate_mi_statistics.py` | Main calculation module |
+| `mi/MI_CONTRACTOR_VARIABLES` | Built-in variable mappings (dict in code) |

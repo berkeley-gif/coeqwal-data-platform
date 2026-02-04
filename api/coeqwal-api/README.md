@@ -182,11 +182,55 @@ curl "http://localhost:8000/api/statistics/scenarios/s0020/storage-monthly?reser
 Deployment is handled via GitHub Actions → ECR → ECS Fargate.
 
 ```bash
-# Push to main triggers deployment
+# Push to main triggers deployment (only when api/** files change)
 git push origin main
 
 # Manual ECS update (if needed)
 aws ecs update-service --cluster coeqwal-api --service coeqwal-api-service --force-new-deployment --region us-west-2
+```
+
+### Manual Deployment (Troubleshooting)
+
+If the API is running old code despite pushes to main, the ECR `:latest` image may be stale. Manually rebuild and push from Cloud9:
+
+```bash
+cd ~/environment/coeqwal-backend
+git pull origin main
+
+# Verify version in code
+grep "API_VERSION" api/coeqwal-api/main.py
+
+# Login to ECR
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 533266975152.dkr.ecr.us-west-2.amazonaws.com
+
+# Build fresh (no cache)
+docker build --no-cache -f api/deployment/Dockerfile.production -t coeqwal-network-api:latest .
+
+# Tag and push to ECR
+docker tag coeqwal-network-api:latest 533266975152.dkr.ecr.us-west-2.amazonaws.com/coeqwal-network-api:latest
+docker push 533266975152.dkr.ecr.us-west-2.amazonaws.com/coeqwal-network-api:latest
+
+# Force new deployment
+aws ecs update-service --cluster coeqwal-api --service coeqwal-api-service --force-new-deployment --region us-west-2
+```
+
+Wait 3-5 minutes, then verify:
+```bash
+curl https://api.coeqwal.org/
+# Check "version" field matches expected version
+```
+
+### Checking Deployment Status
+
+```bash
+# Check ECS service events
+aws ecs describe-services --cluster coeqwal-api --services coeqwal-api-service --region us-west-2 --query 'services[0].events[0:5]'
+
+# Check running tasks
+aws ecs list-tasks --cluster coeqwal-api --service-name coeqwal-api-service --region us-west-2
+
+# Check recent logs
+aws logs tail /ecs/coeqwal-api --since 10m --region us-west-2
 ```
 
 ## Architecture

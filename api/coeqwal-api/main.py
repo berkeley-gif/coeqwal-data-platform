@@ -84,7 +84,7 @@ db_pool = None
 # =============================================================================
 
 API_TITLE = "COEQWAL API"
-API_VERSION = "2.1.0"
+API_VERSION = "2.1.1"
 API_DESCRIPTION = """
 Data API for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
 

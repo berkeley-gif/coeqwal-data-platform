@@ -16,6 +16,16 @@ from fastapi import APIRouter, HTTPException, Query
 
 log = logging.getLogger(__name__)
 
+
+def safe_float(val) -> Optional[float]:
+    """Safely convert value to float, returning None for NULL.
+    
+    Important: Uses explicit None check to preserve zero values.
+    """
+    if val is None:
+        return None
+    return float(val)
+
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 # Database pool - set by main.py at startup
@@ -139,22 +149,22 @@ async def get_mi_delivery_monthly(
             }
 
         contractors[code]["monthly_delivery"][str(row["water_month"])] = {
-            "avg_taf": float(row["delivery_avg_taf"]) if row["delivery_avg_taf"] else None,
-            "cv": float(row["delivery_cv"]) if row["delivery_cv"] else None,
-            "q0": float(row["q0"]) if row["q0"] else None,
-            "q10": float(row["q10"]) if row["q10"] else None,
-            "q30": float(row["q30"]) if row["q30"] else None,
-            "q50": float(row["q50"]) if row["q50"] else None,
-            "q70": float(row["q70"]) if row["q70"] else None,
-            "q90": float(row["q90"]) if row["q90"] else None,
-            "q100": float(row["q100"]) if row["q100"] else None,
-            "exc_p5": float(row["exc_p5"]) if row["exc_p5"] else None,
-            "exc_p10": float(row["exc_p10"]) if row["exc_p10"] else None,
-            "exc_p25": float(row["exc_p25"]) if row["exc_p25"] else None,
-            "exc_p50": float(row["exc_p50"]) if row["exc_p50"] else None,
-            "exc_p75": float(row["exc_p75"]) if row["exc_p75"] else None,
-            "exc_p90": float(row["exc_p90"]) if row["exc_p90"] else None,
-            "exc_p95": float(row["exc_p95"]) if row["exc_p95"] else None,
+            "avg_taf": float(row["delivery_avg_taf"]) if row["delivery_avg_taf"] is not None else None,
+            "cv": float(row["delivery_cv"]) if row["delivery_cv"] is not None else None,
+            "q0": float(row["q0"]) if row["q0"] is not None else None,
+            "q10": float(row["q10"]) if row["q10"] is not None else None,
+            "q30": float(row["q30"]) if row["q30"] is not None else None,
+            "q50": float(row["q50"]) if row["q50"] is not None else None,
+            "q70": float(row["q70"]) if row["q70"] is not None else None,
+            "q90": float(row["q90"]) if row["q90"] is not None else None,
+            "q100": float(row["q100"]) if row["q100"] is not None else None,
+            "exc_p5": float(row["exc_p5"]) if row["exc_p5"] is not None else None,
+            "exc_p10": float(row["exc_p10"]) if row["exc_p10"] is not None else None,
+            "exc_p25": float(row["exc_p25"]) if row["exc_p25"] is not None else None,
+            "exc_p50": float(row["exc_p50"]) if row["exc_p50"] is not None else None,
+            "exc_p75": float(row["exc_p75"]) if row["exc_p75"] is not None else None,
+            "exc_p90": float(row["exc_p90"]) if row["exc_p90"] is not None else None,
+            "exc_p95": float(row["exc_p95"]) if row["exc_p95"] is not None else None,
             "sample_count": row["sample_count"],
         }
 
@@ -223,18 +233,18 @@ async def get_mi_shortage_monthly(
             }
 
         contractors[code]["monthly_shortage"][str(row["water_month"])] = {
-            "avg_taf": float(row["shortage_avg_taf"]) if row["shortage_avg_taf"] else None,
-            "cv": float(row["shortage_cv"]) if row["shortage_cv"] else None,
+            "avg_taf": float(row["shortage_avg_taf"]) if row["shortage_avg_taf"] is not None else None,
+            "cv": float(row["shortage_cv"]) if row["shortage_cv"] is not None else None,
             "frequency_pct": float(row["shortage_frequency_pct"])
-            if row["shortage_frequency_pct"]
+            if row["shortage_frequency_pct"] is not None
             else None,
-            "q0": float(row["q0"]) if row["q0"] else None,
-            "q10": float(row["q10"]) if row["q10"] else None,
-            "q30": float(row["q30"]) if row["q30"] else None,
-            "q50": float(row["q50"]) if row["q50"] else None,
-            "q70": float(row["q70"]) if row["q70"] else None,
-            "q90": float(row["q90"]) if row["q90"] else None,
-            "q100": float(row["q100"]) if row["q100"] else None,
+            "q0": float(row["q0"]) if row["q0"] is not None else None,
+            "q10": float(row["q10"]) if row["q10"] is not None else None,
+            "q30": float(row["q30"]) if row["q30"] is not None else None,
+            "q50": float(row["q50"]) if row["q50"] is not None else None,
+            "q70": float(row["q70"]) if row["q70"] is not None else None,
+            "q90": float(row["q90"]) if row["q90"] is not None else None,
+            "q100": float(row["q100"]) if row["q100"] is not None else None,
             "sample_count": row["sample_count"],
         }
 
@@ -308,38 +318,38 @@ async def get_mi_period_summary(
             "simulation_end_year": row["simulation_end_year"],
             "total_years": row["total_years"],
             "annual_delivery_avg_taf": float(row["annual_delivery_avg_taf"])
-            if row["annual_delivery_avg_taf"]
+            if row["annual_delivery_avg_taf"] is not None
             else None,
             "annual_delivery_cv": float(row["annual_delivery_cv"])
-            if row["annual_delivery_cv"]
+            if row["annual_delivery_cv"] is not None
             else None,
             "delivery_exceedance": {
-                "p5": float(row["delivery_exc_p5"]) if row["delivery_exc_p5"] else None,
-                "p10": float(row["delivery_exc_p10"]) if row["delivery_exc_p10"] else None,
-                "p25": float(row["delivery_exc_p25"]) if row["delivery_exc_p25"] else None,
-                "p50": float(row["delivery_exc_p50"]) if row["delivery_exc_p50"] else None,
-                "p75": float(row["delivery_exc_p75"]) if row["delivery_exc_p75"] else None,
-                "p90": float(row["delivery_exc_p90"]) if row["delivery_exc_p90"] else None,
-                "p95": float(row["delivery_exc_p95"]) if row["delivery_exc_p95"] else None,
+                "p5": float(row["delivery_exc_p5"]) if row["delivery_exc_p5"] is not None else None,
+                "p10": float(row["delivery_exc_p10"]) if row["delivery_exc_p10"] is not None else None,
+                "p25": float(row["delivery_exc_p25"]) if row["delivery_exc_p25"] is not None else None,
+                "p50": float(row["delivery_exc_p50"]) if row["delivery_exc_p50"] is not None else None,
+                "p75": float(row["delivery_exc_p75"]) if row["delivery_exc_p75"] is not None else None,
+                "p90": float(row["delivery_exc_p90"]) if row["delivery_exc_p90"] is not None else None,
+                "p95": float(row["delivery_exc_p95"]) if row["delivery_exc_p95"] is not None else None,
             },
             "annual_shortage_avg_taf": float(row["annual_shortage_avg_taf"])
-            if row["annual_shortage_avg_taf"]
+            if row["annual_shortage_avg_taf"] is not None
             else None,
             "shortage_years_count": row["shortage_years_count"],
             "shortage_frequency_pct": float(row["shortage_frequency_pct"])
-            if row["shortage_frequency_pct"]
+            if row["shortage_frequency_pct"] is not None
             else None,
             "shortage_exceedance": {
-                "p5": float(row["shortage_exc_p5"]) if row["shortage_exc_p5"] else None,
-                "p10": float(row["shortage_exc_p10"]) if row["shortage_exc_p10"] else None,
-                "p25": float(row["shortage_exc_p25"]) if row["shortage_exc_p25"] else None,
-                "p50": float(row["shortage_exc_p50"]) if row["shortage_exc_p50"] else None,
-                "p75": float(row["shortage_exc_p75"]) if row["shortage_exc_p75"] else None,
-                "p90": float(row["shortage_exc_p90"]) if row["shortage_exc_p90"] else None,
-                "p95": float(row["shortage_exc_p95"]) if row["shortage_exc_p95"] else None,
+                "p5": float(row["shortage_exc_p5"]) if row["shortage_exc_p5"] is not None else None,
+                "p10": float(row["shortage_exc_p10"]) if row["shortage_exc_p10"] is not None else None,
+                "p25": float(row["shortage_exc_p25"]) if row["shortage_exc_p25"] is not None else None,
+                "p50": float(row["shortage_exc_p50"]) if row["shortage_exc_p50"] is not None else None,
+                "p75": float(row["shortage_exc_p75"]) if row["shortage_exc_p75"] is not None else None,
+                "p90": float(row["shortage_exc_p90"]) if row["shortage_exc_p90"] is not None else None,
+                "p95": float(row["shortage_exc_p95"]) if row["shortage_exc_p95"] is not None else None,
             },
             "reliability_pct": float(row["reliability_pct"])
-            if row["reliability_pct"]
+            if row["reliability_pct"] is not None
             else None,
         }
 
