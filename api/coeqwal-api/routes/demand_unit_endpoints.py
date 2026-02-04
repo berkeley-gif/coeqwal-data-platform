@@ -111,22 +111,19 @@ async def list_demand_units_by_group() -> Dict[str, Any]:
                 e.community_agency,
                 e.hydrologic_region,
                 e.cs3_type,
-                e.primary_contractor_short_code,
                 v.variable_type,
                 v.delivery_variable,
                 v.notes as variable_notes,
-                COALESCE(mc.project, 
-                    CASE 
-                        WHEN g.short_code = 'var_swp_contractor' THEN 'SWP'
-                        WHEN e.hydrologic_region IN ('SAC', 'SJR') THEN 'CVP'
-                        ELSE NULL
-                    END
-                ) as project
+                CASE 
+                    WHEN g.short_code = 'var_swp_contractor' THEN 'SWP'
+                    WHEN g.short_code = 'var_gw_only' THEN 'GW'
+                    WHEN e.hydrologic_region IN ('SAC', 'SJR') THEN 'CVP'
+                    ELSE NULL
+                END as project
             FROM du_urban_group g
             JOIN du_urban_group_member gm ON g.id = gm.du_urban_group_id
             LEFT JOIN du_urban_entity e ON gm.du_id = e.du_id
             LEFT JOIN du_urban_variable v ON gm.du_id = v.du_id
-            LEFT JOIN mi_contractor mc ON e.primary_contractor_short_code = mc.short_code
             WHERE g.short_code LIKE 'var_%'
               AND g.is_active = TRUE
               AND gm.is_active = TRUE
@@ -323,19 +320,15 @@ async def get_single_du_statistics(
                 e.community_agency,
                 e.hydrologic_region,
                 e.cs3_type,
-                e.primary_contractor_short_code,
                 v.variable_type,
                 v.delivery_variable,
                 v.shortage_variable,
-                COALESCE(mc.project, 
-                    CASE 
-                        WHEN v.variable_type = 'gw_pumping' THEN 'GW'
-                        ELSE NULL
-                    END
-                ) as project
+                CASE 
+                    WHEN v.variable_type = 'gw_pumping' THEN 'GW'
+                    ELSE NULL
+                END as project
             FROM du_urban_entity e
             LEFT JOIN du_urban_variable v ON e.du_id = v.du_id
-            LEFT JOIN mi_contractor mc ON e.primary_contractor_short_code = mc.short_code
             WHERE e.du_id = $1
         """
         entity = await conn.fetchrow(entity_query, du_id)
@@ -372,18 +365,23 @@ async def get_single_du_statistics(
         """
         delivery_rows = await conn.fetch(delivery_query, scenario_id, du_id)
 
-        # Get monthly shortage stats
-        shortage_query = """
-            SELECT
-                water_month, shortage_avg_taf, shortage_cv, shortage_frequency_pct,
-                q0, q10, q30, q50, q70, q90, q100,
-                exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,
-                sample_count
-            FROM du_shortage_monthly
-            WHERE scenario_short_code = $1 AND du_id = $2
-            ORDER BY water_month
-        """
-        shortage_rows = await conn.fetch(shortage_query, scenario_id, du_id)
+        # Get monthly shortage stats (table may not exist)
+        shortage_rows = []
+        try:
+            shortage_query = """
+                SELECT
+                    water_month, shortage_avg_taf, shortage_cv, shortage_frequency_pct,
+                    q0, q10, q30, q50, q70, q90, q100,
+                    exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,
+                    sample_count
+                FROM du_shortage_monthly
+                WHERE scenario_short_code = $1 AND du_id = $2
+                ORDER BY water_month
+            """
+            shortage_rows = await conn.fetch(shortage_query, scenario_id, du_id)
+        except Exception:
+            # Table may not exist yet
+            pass
 
     # Build response
     result: Dict[str, Any] = {
