@@ -18,11 +18,20 @@ UPDATE du_urban_variable SET delivery_variable = 'D_WTPBTB_21_PU' WHERE du_id = 
 UPDATE du_urban_variable SET delivery_variable = 'D_WTPBJM_26N_NU2' WHERE du_id = '26N_NU2';
 UPDATE du_urban_variable SET delivery_variable = 'D_WTPRSV_26N_PU1' WHERE du_id = '26N_PU1';
 UPDATE du_urban_variable SET delivery_variable = 'D_WTPFBN_26S_NU2' WHERE du_id = '26S_NU2';
-UPDATE du_urban_variable SET delivery_variable = 'D_CAA002_50_PA2' WHERE du_id = '50_PA2';
 UPDATE du_urban_variable SET delivery_variable = 'D_MOK035_60N_NU1' WHERE du_id = '60N_NU1';
 UPDATE du_urban_variable SET delivery_variable = 'D_RNCHO_60N_NU2' WHERE du_id = '60N_NU2';
 UPDATE du_urban_variable SET delivery_variable = 'D_CAA012_71_PU1' WHERE du_id = '71_PU1';
-UPDATE du_urban_variable SET delivery_variable = 'D_XCC025_72_PA' WHERE du_id = '72_PA';
+
+-- 26S_PU sub-entities (map each to their specific arc)
+UPDATE du_urban_variable SET delivery_variable = 'D_WTPFOL_26S_PU1' WHERE du_id = '26S_PU1';
+UPDATE du_urban_variable SET delivery_variable = 'D_WTPBJM_26S_PU2' WHERE du_id = '26S_PU2';
+UPDATE du_urban_variable SET delivery_variable = 'D_FOLSM_26S_PU3' WHERE du_id = '26S_PU3';
+UPDATE du_urban_variable SET delivery_variable = 'D_WTPSAC_26S_PU4' WHERE du_id = '26S_PU4';
+UPDATE du_urban_variable SET delivery_variable = 'D_WTPVNY_26S_PU5' WHERE du_id = '26S_PU5';
+UPDATE du_urban_variable SET delivery_variable = 'D_WTPVNY_26S_PU6' WHERE du_id = '26S_PU6';
+
+-- 72 entities
+UPDATE du_urban_variable SET delivery_variable = 'D_XCC025_72_PA' WHERE du_id = '72_PU';
 
 -- ============================================================================
 -- MULTI-ARC DUs: Set requires_sum = TRUE and add delivery arcs
@@ -63,24 +72,6 @@ UPDATE du_urban_variable SET requires_sum = TRUE WHERE du_id = '26S_NU1';
 INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_NU1', 'D_WTPFBN_26S_NU1', 1) ON CONFLICT DO NOTHING;
 INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_NU1', 'D_WTPSAC_26S_NU1', 2) ON CONFLICT DO NOTHING;
 
--- 26S_PU: 9 arcs (multiple water treatment plants serving Sacramento area)
-UPDATE du_urban_variable SET requires_sum = TRUE WHERE du_id = '26S_PU';
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_FOLSM_26S_PU3', 1) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPBJM_26S_PU2', 2) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPCOL_26S_PU2', 3) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPFOL_26S_PU1', 4) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPSAC_26S_PU4', 5) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPVNY_26S_PU1', 6) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPVNY_26S_PU4', 7) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPVNY_26S_PU5', 8) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('26S_PU', 'D_WTPVNY_26S_PU6', 9) ON CONFLICT DO NOTHING;
-
--- 50_PA1: 3 arcs
-UPDATE du_urban_variable SET requires_sum = TRUE WHERE du_id = '50_PA1';
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('50_PA1', 'D_DMC021_50_PA1', 1) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('50_PA1', 'D_RFS71A_50_PA1', 2) ON CONFLICT DO NOTHING;
-INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('50_PA1', 'D_SJR062_50_PA1', 3) ON CONFLICT DO NOTHING;
-
 -- 50_PU: 2 arcs
 UPDATE du_urban_variable SET requires_sum = TRUE WHERE du_id = '50_PU';
 INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('50_PU', 'D_WTPDGT_50_PU', 1) ON CONFLICT DO NOTHING;
@@ -92,30 +83,13 @@ INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('60S_
 INSERT INTO du_urban_delivery_arc (du_id, delivery_arc, arc_order) VALUES ('60S_NU1', 'D_WTPWDH_60S_NU1', 2) ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- DUs with NO SURFACE WATER DELIVERY ARCS (may rely on groundwater only)
--- These are noted for reference - no changes needed
--- ============================================================================
--- 60N_PA: No D_* arcs found
--- 60S_NU2: No D_* arcs found  
--- 60S_PA: Has arcs but ends in _PA1, _PA2 (project agricultural, not urban)
--- 60S_PU: No D_* arcs found
--- 61_PA: Has arcs but ends in _PA1, _PA2, _PA3 (project agricultural)
--- 63_PA: No D_* arcs found
--- 63_PR: Has arcs but ends in _PR (project refuge)
--- 64_PA: Has arcs but ends in _PA (project agricultural)
--- 64_PU: No D_* arcs found
--- 65_PA: No D_* arcs found
--- 65_PU: No D_* arcs found
--- 70_PA: No D_* arcs found
-
--- ============================================================================
 -- VERIFICATION
 -- ============================================================================
 
 -- Show updated mappings
 SELECT du_id, delivery_variable, requires_sum, demand_variable 
 FROM du_urban_variable 
-WHERE du_id IN ('02_PU', '02_SU', '03_PU1', '13_NU1', '26S_PU')
+WHERE delivery_variable LIKE 'D_%'
 ORDER BY du_id;
 
 -- Show delivery arcs
