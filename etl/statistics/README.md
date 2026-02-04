@@ -641,3 +641,65 @@ python verify_metrics.py --reservoirs SHSTA OROVL
 Two reservoirs are skipped (no storage data in CalSim CSV):
 - **EBMUD** - EBMUD Terminal Reservoirs
 - **RELIE** - Relief Reservoir
+
+---
+
+## Urban Demand Unit Statistics
+
+The `du_urban/` module calculates delivery statistics for the 71 urban demand units in the tier matrix.
+
+### Unit Conversion: CFS to TAF
+
+CalSim outputs demands and deliveries in **CFS** (cubic feet per second). We convert to **TAF** (thousand acre-feet) using the formula from the COEQWAL notebook (`metrics.py`):
+
+```python
+TAF = CFS × 0.001984 × days_in_month
+```
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Conversion factor | `0.001984` | Acre-feet per CFS per day (÷1000 for TAF) |
+| Days in month | 28-31 | Calculated per row, handles leap years |
+
+**Derivation:** 1 CFS for 1 day = 86,400 ft³ ÷ 43,560 ft³/acre = 1.9835 acre-feet ≈ 0.001984 TAF
+
+### Calculated Metrics
+
+| Metric | Formula | Units |
+|--------|---------|-------|
+| `demand_taf` | `SWDEM × 0.001984 × days` | TAF |
+| `delivery_taf` | `DN × 0.001984 × days` | TAF |
+| `percent_delivered` | `(delivery_taf / demand_taf) × 100` | % |
+
+### Demand Variable Availability by Category
+
+| Category | Units | Demand Variable | Source |
+|----------|-------|-----------------|--------|
+| **WBA-style** | 40 | `DN_{zone}` (e.g., `DN_02_PU`) | ✅ Main CalSim output |
+| **GW-only** | 3 | N/A | No surface demand (GW only) |
+| **SWP contractors** | 11 | `DEM_D_*_PMI` (e.g., `DEM_D_SBA029_ACWD_PMI`) | ⚠️ DEMANDS CSV only |
+| **Named localities** | 15 | `UD_*` (e.g., `UD_NAPA`, `UD_BNCIA`) | ⚠️ DEMANDS CSV only |
+| **MWD** | 1 | `D_MWD_PMI` or `TABLEA_CONTRACT_MWD` | ⚠️ DEMANDS CSV only |
+| **Missing** | 2 | N/A | No CalSim data |
+
+### Data Source Summary
+
+| Source | Content | Coverage |
+|--------|---------|----------|
+| **Main CalSim output** | `DN_*` (WBA demand), `SUMUD_*` (some localities) | ~44 units |
+| **DEMANDS CSV** | `DEM_D_*_PMI`, `UD_*` (all urban demands) | All 71 units |
+| **WRESL lookup table** | Static demand patterns | Template only |
+
+### Key Points
+
+- **40 WBA units**: Demand is in the main CalSim output (`DN_*`) - directly usable
+- **26 other units**: Demand requires loading the separate `*_DEMANDS.csv` file
+- **5 units**: No demand data (3 GW-only + 2 missing)
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `du_urban/main.py` | CLI entry point |
+| `du_urban/calculate_du_statistics.py` | Main calculation module for tier matrix DUs |
+| `du_urban/calculate_du_statistics_v2.py` | Version 2 with database variable mappings |
