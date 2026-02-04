@@ -174,11 +174,16 @@ def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
     raise FileNotFoundError(f"Could not find CalSim output for {scenario_id} in S3")
 
 
-def load_calsim_csv_from_file(file_path: str) -> pd.DataFrame:
+def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> pd.DataFrame:
     """
     Load CalSim output CSV from local file.
 
     Handles the 7-header-row DSS format.
+    
+    Args:
+        file_path: Path to the CSV file
+        dedupe_columns: If True, remove duplicate column names (keeping first occurrence).
+                       Useful for DEMANDS CSV files which may have duplicates.
     """
     log.info(f"Loading from file: {file_path}")
 
@@ -186,9 +191,31 @@ def load_calsim_csv_from_file(file_path: str) -> pd.DataFrame:
     header_df = pd.read_csv(file_path, header=None, nrows=8)
     col_names = header_df.iloc[1].tolist()
 
+    # Handle duplicate column names if requested
+    unique_col_names = col_names
+    duplicate_indices = []
+    
+    if dedupe_columns:
+        seen = set()
+        unique_col_names = []
+        for i, name in enumerate(col_names):
+            if name in seen:
+                duplicate_indices.append(i)
+            else:
+                seen.add(name)
+                unique_col_names.append(name)
+        
+        if duplicate_indices:
+            log.info(f"Found {len(duplicate_indices)} duplicate columns, keeping first occurrence")
+
     # Read data portion
     data_df = pd.read_csv(file_path, header=None, skiprows=7)
-    data_df.columns = col_names
+    
+    # Drop duplicate columns if needed
+    if duplicate_indices:
+        data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
+    
+    data_df.columns = unique_col_names
 
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df
@@ -218,7 +245,8 @@ def load_demands_csv(
         if not Path(demand_csv_path).exists():
             log.warning(f"Demand CSV not found at: {demand_csv_path}")
             return None
-        return load_calsim_csv_from_file(demand_csv_path)
+        # Demand CSV files often have duplicate columns - dedupe them
+        return load_calsim_csv_from_file(demand_csv_path, dedupe_columns=True)
     
     if use_local:
         # Try local paths - check both pipelines and demands folders
@@ -234,7 +262,8 @@ def load_demands_csv(
         for path in possible_paths:
             if path.exists():
                 log.info(f"Loading demands from: {path}")
-                return load_calsim_csv_from_file(str(path))
+                # Demand CSV files often have duplicate columns - dedupe them
+                return load_calsim_csv_from_file(str(path), dedupe_columns=True)
         
         log.warning(f"No DEMANDS CSV found for scenario {scenario_id} locally")
         return None
@@ -263,9 +292,28 @@ def load_demands_csv(
             header_df = pd.read_csv(io.BytesIO(content), header=None, nrows=8)
             col_names = header_df.iloc[1].tolist()
             
+            # Handle duplicate column names by keeping only the first occurrence
+            seen = set()
+            unique_col_names = []
+            duplicate_indices = []
+            for i, name in enumerate(col_names):
+                if name in seen:
+                    duplicate_indices.append(i)
+                else:
+                    seen.add(name)
+                    unique_col_names.append(name)
+            
+            if duplicate_indices:
+                log.info(f"Found {len(duplicate_indices)} duplicate columns in demand CSV, keeping first occurrence")
+            
             # Read data
             data_df = pd.read_csv(io.BytesIO(content), header=None, skiprows=7, low_memory=False)
-            data_df.columns = col_names
+            
+            # Drop duplicate columns
+            if duplicate_indices:
+                data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
+            
+            data_df.columns = unique_col_names
             
             log.info(f"Loaded demands from S3: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df
