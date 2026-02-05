@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 """
-Calculate delivery and shortage statistics for agricultural demand units.
+Calculate demand, delivery, and shortage statistics for agricultural demand units.
 
-This module processes agricultural demand unit data using:
-- AW_{DU_ID} delivery variables (Applied Water)
-- GW_SHORT_{DU_ID} shortage variables (SJR/Tulare regions only)
+IMPORTANT - CalSim Variable Semantics (from COEQWAL modeler notebooks):
+- AW_{DU_ID} = Applied Water = DEMAND (from SV input file)
+- DN_{DU_ID} = Net Delivery = SURFACE WATER DELIVERY (from DV output file)
+- GP_{DU_ID} = Groundwater Pumping (explicit for some DUs)
+- Groundwater Pumping = AW - DN (calculated for most DUs)
+- GW_SHORT_{DU_ID} = Groundwater RESTRICTION Shortage (COEQWAL-specific)
+
+In CalSim, agricultural demand is assumed to be fully met:
+  Demand (AW) = Surface Water Delivery (DN) + Groundwater Pumping (GP)
+
+This module processes:
+- AW_{DU_ID} for demand statistics
+- DN_{DU_ID} for surface water delivery statistics  
+- GP_{DU_ID} or (AW - DN) for groundwater pumping statistics
+- GW_SHORT_{DU_ID} for groundwater restriction shortage (SJR/Tulare only)
 - DEL_*_PAG aggregate delivery variables
 
-Note: Sacramento region DUs (WBAs 02-26) do NOT have shortage data in CalSim output.
+Note: Sacramento region DUs (WBAs 02-26) do NOT have GW_SHORT shortage data.
 
 Usage:
     python calculate_ag_statistics.py --scenario s0020
@@ -245,37 +257,38 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 # DEMAND UNIT STATISTICS
 # =============================================================================
 
-def calculate_du_delivery_monthly(
+def calculate_du_demand_monthly(
     df: pd.DataFrame,
     du_id: str
 ) -> List[Dict[str, Any]]:
     """
-    Calculate monthly delivery statistics for an agricultural demand unit.
+    Calculate monthly DEMAND statistics for an agricultural demand unit.
 
-    Uses AW_{DU_ID} variable from CalSim output.
+    Uses AW_{DU_ID} (Applied Water) variable from CalSim SV input file.
+    This is the DEMAND (water requirement), not delivery.
     """
-    delivery_var = f"AW_{du_id}"
+    demand_var = f"AW_{du_id}"
 
-    if delivery_var not in df.columns:
-        log.debug(f"No delivery variable found for {du_id}: {delivery_var}")
+    if demand_var not in df.columns:
+        log.debug(f"No demand variable found for {du_id}: {demand_var}")
         return []
 
     df_copy = df.copy()
-    df_copy['delivery'] = df_copy[delivery_var]
+    df_copy['demand'] = df_copy[demand_var]
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
 
     if is_annual:
-        data = df_copy['delivery'].dropna()
+        data = df_copy['demand'].dropna()
         if data.empty:
             return []
 
         row = {
             'du_id': du_id,
             'water_month': 0,
-            'delivery_avg_taf': round(float(data.mean()), 2),
-            'delivery_cv': round(float(data.std() / data.mean()), 4) if data.mean() > 0 else 0,
+            'demand_avg_taf': round(float(data.mean()), 2),
+            'demand_cv': round(float(data.std() / data.mean()), 4) if data.mean() > 0 else 0,
             'sample_count': len(data),
         }
 
@@ -289,15 +302,184 @@ def calculate_du_delivery_monthly(
         results.append(row)
     else:
         for wm in range(1, 13):
-            month_data = df_copy[df_copy['WaterMonth'] == wm]['delivery'].dropna()
+            month_data = df_copy[df_copy['WaterMonth'] == wm]['demand'].dropna()
             if month_data.empty:
                 continue
 
             row = {
                 'du_id': du_id,
                 'water_month': wm,
-                'delivery_avg_taf': round(float(month_data.mean()), 2),
-                'delivery_cv': round(float(month_data.std() / month_data.mean()), 4) if month_data.mean() > 0 else 0,
+                'demand_avg_taf': round(float(month_data.mean()), 2),
+                'demand_cv': round(float(month_data.std() / month_data.mean()), 4) if month_data.mean() > 0 else 0,
+                'sample_count': len(month_data),
+            }
+
+            for p in DELIVERY_PERCENTILES:
+                row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
+
+            # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
+            for p in EXCEEDANCE_PERCENTILES:
+                row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
+
+            results.append(row)
+
+    return results
+
+
+def calculate_du_sw_delivery_monthly(
+    df: pd.DataFrame,
+    du_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Calculate monthly SURFACE WATER DELIVERY statistics for an agricultural demand unit.
+
+    Uses DN_{DU_ID} (Net Delivery) variable from CalSim DV output file.
+    For groundwater-only DUs (no DN_* variable), returns empty list.
+    """
+    sw_delivery_var = f"DN_{du_id}"
+
+    if sw_delivery_var not in df.columns:
+        log.debug(f"No SW delivery variable found for {du_id}: {sw_delivery_var} (may be GW-only DU)")
+        return []
+
+    df_copy = df.copy()
+    df_copy['sw_delivery'] = df_copy[sw_delivery_var]
+
+    results = []
+    is_annual = (df_copy['WaterMonth'] == 0).all()
+
+    if is_annual:
+        data = df_copy['sw_delivery'].dropna()
+        if data.empty:
+            return []
+
+        row = {
+            'du_id': du_id,
+            'water_month': 0,
+            'sw_delivery_avg_taf': round(float(data.mean()), 2),
+            'sw_delivery_cv': round(float(data.std() / data.mean()), 4) if data.mean() > 0 else 0,
+            'sample_count': len(data),
+        }
+
+        for p in DELIVERY_PERCENTILES:
+            row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
+
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
+        for p in EXCEEDANCE_PERCENTILES:
+            row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
+
+        results.append(row)
+    else:
+        for wm in range(1, 13):
+            month_data = df_copy[df_copy['WaterMonth'] == wm]['sw_delivery'].dropna()
+            if month_data.empty:
+                continue
+
+            row = {
+                'du_id': du_id,
+                'water_month': wm,
+                'sw_delivery_avg_taf': round(float(month_data.mean()), 2),
+                'sw_delivery_cv': round(float(month_data.std() / month_data.mean()), 4) if month_data.mean() > 0 else 0,
+                'sample_count': len(month_data),
+            }
+
+            for p in DELIVERY_PERCENTILES:
+                row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
+
+            # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
+            for p in EXCEEDANCE_PERCENTILES:
+                row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
+
+            results.append(row)
+
+    return results
+
+
+def calculate_du_gw_pumping_monthly(
+    df: pd.DataFrame,
+    du_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Calculate monthly GROUNDWATER PUMPING statistics for an agricultural demand unit.
+
+    Uses GP_{DU_ID} if available (explicit GW pumping variable).
+    Otherwise calculates as AW_{DU_ID} - DN_{DU_ID} (Demand - SW Delivery).
+    
+    For groundwater-only DUs (no DN_*), GW pumping equals demand (AW_*).
+    """
+    demand_var = f"AW_{du_id}"
+    sw_delivery_var = f"DN_{du_id}"
+    gw_pumping_var = f"GP_{du_id}"
+
+    # Determine source of GW pumping data
+    has_explicit_gp = gw_pumping_var in df.columns
+    has_demand = demand_var in df.columns
+    has_sw_delivery = sw_delivery_var in df.columns
+
+    if not has_demand and not has_explicit_gp:
+        log.debug(f"No data to calculate GW pumping for {du_id}")
+        return []
+
+    df_copy = df.copy()
+
+    if has_explicit_gp:
+        # Use explicit GP_* variable
+        df_copy['gw_pumping'] = df_copy[gw_pumping_var]
+        is_calculated = False
+        log.debug(f"Using explicit GP variable for {du_id}")
+    elif has_demand:
+        # Calculate as AW - DN
+        df_copy['demand'] = df_copy[demand_var]
+        if has_sw_delivery:
+            df_copy['sw_delivery'] = df_copy[sw_delivery_var]
+            df_copy['gw_pumping'] = df_copy['demand'] - df_copy['sw_delivery']
+        else:
+            # Groundwater-only DU: GW = Demand
+            df_copy['gw_pumping'] = df_copy['demand']
+        is_calculated = True
+    else:
+        return []
+
+    # Ensure non-negative (handle floating-point artifacts)
+    df_copy['gw_pumping'] = df_copy['gw_pumping'].clip(lower=0)
+
+    results = []
+    is_annual = (df_copy['WaterMonth'] == 0).all()
+
+    if is_annual:
+        data = df_copy['gw_pumping'].dropna()
+        if data.empty:
+            return []
+
+        row = {
+            'du_id': du_id,
+            'water_month': 0,
+            'gw_pumping_avg_taf': round(float(data.mean()), 2),
+            'gw_pumping_cv': round(float(data.std() / data.mean()), 4) if data.mean() > 0 else 0,
+            'is_calculated': is_calculated,
+            'sample_count': len(data),
+        }
+
+        for p in DELIVERY_PERCENTILES:
+            row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
+
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
+        for p in EXCEEDANCE_PERCENTILES:
+            row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
+
+        results.append(row)
+    else:
+        for wm in range(1, 13):
+            month_data = df_copy[df_copy['WaterMonth'] == wm]['gw_pumping'].dropna()
+            if month_data.empty:
+                continue
+
+            row = {
+                'du_id': du_id,
+                'water_month': wm,
+                'gw_pumping_avg_taf': round(float(month_data.mean()), 2),
+                'gw_pumping_cv': round(float(month_data.std() / month_data.mean()), 4) if month_data.mean() > 0 else 0,
+                'is_calculated': is_calculated,
                 'sample_count': len(month_data),
             }
 
@@ -447,15 +629,37 @@ def calculate_du_period_summary(
 ) -> Optional[Dict[str, Any]]:
     """
     Calculate period-of-record summary for an agricultural demand unit.
+    
+    Now correctly distinguishes:
+    - AW_* = Demand (applied water requirement)
+    - DN_* = Surface Water Delivery
+    - GP_* or (AW - DN) = Groundwater Pumping
+    - GW_SHORT_* = Groundwater Restriction Shortage
     """
-    delivery_var = f"AW_{du_id}"
+    demand_var = f"AW_{du_id}"
+    sw_delivery_var = f"DN_{du_id}"
+    gw_pumping_var = f"GP_{du_id}"
     shortage_var = f"GW_SHORT_{du_id}"
 
-    if delivery_var not in df.columns:
+    if demand_var not in df.columns:
         return None
 
     df_copy = df.copy()
-    df_copy['delivery'] = df_copy[delivery_var]
+    df_copy['demand'] = df_copy[demand_var]
+
+    # Surface water delivery
+    has_sw_delivery = sw_delivery_var in df.columns
+    if has_sw_delivery:
+        df_copy['sw_delivery'] = df_copy[sw_delivery_var]
+    else:
+        df_copy['sw_delivery'] = 0
+
+    # Groundwater pumping: use GP_* if available, otherwise calculate as AW - DN
+    has_explicit_gp = gw_pumping_var in df.columns
+    if has_explicit_gp:
+        df_copy['gw_pumping'] = df_copy[gw_pumping_var]
+    else:
+        df_copy['gw_pumping'] = (df_copy['demand'] - df_copy['sw_delivery']).clip(lower=0)
 
     water_years = sorted(df_copy['WaterYear'].unique())
 
@@ -466,19 +670,43 @@ def calculate_du_period_summary(
         'total_years': len(water_years),
     }
 
-    # Annual delivery statistics
-    annual_delivery = df_copy.groupby('WaterYear')['delivery'].sum()
-    result['annual_delivery_avg_taf'] = round(float(annual_delivery.mean()), 2)
-    if annual_delivery.mean() > 0:
-        result['annual_delivery_cv'] = round(float(annual_delivery.std() / annual_delivery.mean()), 4)
+    # Annual DEMAND statistics (from AW_*)
+    annual_demand = df_copy.groupby('WaterYear')['demand'].sum()
+    result['annual_demand_avg_taf'] = round(float(annual_demand.mean()), 2)
+    if annual_demand.mean() > 0:
+        result['annual_demand_cv'] = round(float(annual_demand.std() / annual_demand.mean()), 4)
     else:
-        result['annual_delivery_cv'] = 0
+        result['annual_demand_cv'] = 0
 
-    # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
+    # Exceedance percentiles for DEMAND: exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
-        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
+        result[f'demand_exc_p{p}'] = round(float(np.percentile(annual_demand, 100 - p)), 2)
 
-    # Shortage statistics (only for non-Sacramento regions)
+    # Annual SW DELIVERY statistics (from DN_*)
+    annual_sw_delivery = df_copy.groupby('WaterYear')['sw_delivery'].sum()
+    result['annual_sw_delivery_avg_taf'] = round(float(annual_sw_delivery.mean()), 2)
+    if annual_sw_delivery.mean() > 0:
+        result['annual_sw_delivery_cv'] = round(float(annual_sw_delivery.std() / annual_sw_delivery.mean()), 4)
+    else:
+        result['annual_sw_delivery_cv'] = 0
+
+    # Annual GW PUMPING statistics (from GP_* or calculated)
+    annual_gw_pumping = df_copy.groupby('WaterYear')['gw_pumping'].sum()
+    result['annual_gw_pumping_avg_taf'] = round(float(annual_gw_pumping.mean()), 2)
+    if annual_gw_pumping.mean() > 0:
+        result['annual_gw_pumping_cv'] = round(float(annual_gw_pumping.std() / annual_gw_pumping.mean()), 4)
+    else:
+        result['annual_gw_pumping_cv'] = 0
+
+    # GW pumping as percentage of demand
+    if result['annual_demand_avg_taf'] > 0:
+        result['gw_pumping_pct_of_demand'] = round(
+            (result['annual_gw_pumping_avg_taf'] / result['annual_demand_avg_taf']) * 100, 2
+        )
+    else:
+        result['gw_pumping_pct_of_demand'] = 0
+
+    # Shortage statistics (only for non-Sacramento regions with GW_SHORT data)
     wba_id = du_info.get('wba_id', '')
     has_shortage = shortage_var in df.columns and wba_id not in SACRAMENTO_WBAS
 
@@ -493,7 +721,6 @@ def calculate_du_period_summary(
         result['shortage_frequency_pct'] = round((shortage_years / len(water_years)) * 100, 2)
 
         # Calculate annual shortage % of demand
-        annual_demand = annual_delivery + annual_shortage
         shortage_pct = []
         for s, d in zip(annual_shortage.values, annual_demand.values):
             if d > 0:
@@ -502,24 +729,24 @@ def calculate_du_period_summary(
                 shortage_pct.append(0)
         result['annual_shortage_pct_of_demand'] = round(float(np.mean(shortage_pct)), 2)
 
-        # Reliability = % of demand met = delivery / demand * 100
-        if result['annual_delivery_avg_taf'] + result['annual_shortage_avg_taf'] > 0:
-            demand_avg = result['annual_delivery_avg_taf'] + result['annual_shortage_avg_taf']
-            result['reliability_pct'] = round((result['annual_delivery_avg_taf'] / demand_avg) * 100, 2)
+        # Reliability = % of demand met (considering GW restriction shortage)
+        # In CalSim, AG demand is always met (via SW + GW), but with GW restrictions
+        # there can be shortage. Reliability = (demand - shortage) / demand
+        if result['annual_demand_avg_taf'] > 0:
+            met = result['annual_demand_avg_taf'] - result['annual_shortage_avg_taf']
+            result['reliability_pct'] = round((met / result['annual_demand_avg_taf']) * 100, 2)
             result['avg_pct_demand_met'] = result['reliability_pct']
-            result['annual_demand_avg_taf'] = round(float(demand_avg), 2)
         else:
             result['reliability_pct'] = 100.0
             result['avg_pct_demand_met'] = 100.0
-            result['annual_demand_avg_taf'] = result['annual_delivery_avg_taf']
     else:
         result['annual_shortage_avg_taf'] = None
         result['shortage_years_count'] = None
         result['shortage_frequency_pct'] = None
         result['annual_shortage_pct_of_demand'] = None
-        result['reliability_pct'] = None
-        result['avg_pct_demand_met'] = None
-        result['annual_demand_avg_taf'] = None
+        # Without shortage data, assume 100% reliability (CalSim assumption)
+        result['reliability_pct'] = 100.0
+        result['avg_pct_demand_met'] = 100.0
 
     return result
 
@@ -696,14 +923,16 @@ def calculate_aggregate_period_summary(
 def calculate_all_ag_statistics(
     scenario_id: str,
     csv_path: Optional[str] = None
-) -> Tuple[List[Dict], List[Dict], List[Dict], List[Dict], List[Dict]]:
+) -> Tuple[List[Dict], List[Dict], List[Dict], List[Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Calculate all statistics for agricultural demand units for a scenario.
 
     Returns:
         Tuple of (
-            du_delivery_monthly_rows,
-            du_shortage_monthly_rows,
+            du_demand_monthly_rows,      # AW_* demand data
+            du_sw_delivery_monthly_rows, # DN_* surface water delivery data
+            du_gw_pumping_monthly_rows,  # GP_* or calculated GW pumping data
+            du_shortage_monthly_rows,    # GW_SHORT_* shortage data
             du_period_summary_rows,
             aggregate_monthly_rows,
             aggregate_period_summary_rows
@@ -726,18 +955,30 @@ def calculate_all_ag_statistics(
     available_columns = list(df.columns)
     log.info(f"Available columns: {len(available_columns)}")
 
-    # Find all AW_* columns to get the list of DUs in this scenario
+    # Find all AW_* columns to get the list of DUs in this scenario (demand data)
     aw_columns = [c for c in available_columns if c.startswith('AW_') and not any(
         suffix in c for suffix in ['_ANN_DV', '_WLOSS', '_ADD_DV', '_ANNDV']
     )]
     du_ids_in_data = [c.replace('AW_', '') for c in aw_columns]
-    log.info(f"Found {len(du_ids_in_data)} agricultural demand units with delivery data")
+    log.info(f"Found {len(du_ids_in_data)} agricultural demand units with demand data")
 
-    du_delivery_monthly_rows = []
+    # Also find DN_* columns (surface water delivery)
+    dn_columns = [c for c in available_columns if c.startswith('DN_') and not c.endswith('_ANN_DV')]
+    log.info(f"Found {len(dn_columns)} DN_* columns for surface water delivery")
+
+    # Find GP_* columns (explicit groundwater pumping)
+    gp_columns = [c for c in available_columns if c.startswith('GP_') and not c.endswith('_NU')]
+    log.info(f"Found {len(gp_columns)} GP_* columns for explicit GW pumping")
+
+    du_demand_monthly_rows = []
+    du_sw_delivery_monthly_rows = []
+    du_gw_pumping_monthly_rows = []
     du_shortage_monthly_rows = []
     du_period_summary_rows = []
 
-    delivery_count = 0
+    demand_count = 0
+    sw_delivery_count = 0
+    gw_pumping_count = 0
     shortage_count = 0
 
     for du_id in du_ids_in_data:
@@ -748,15 +989,31 @@ def calculate_all_ag_statistics(
             'cs3_type': '',
         })
 
-        # Calculate delivery monthly
-        monthly_rows = calculate_du_delivery_monthly(df, du_id)
-        if monthly_rows:
-            delivery_count += 1
-            for row in monthly_rows:
+        # Calculate DEMAND monthly (from AW_*)
+        demand_rows = calculate_du_demand_monthly(df, du_id)
+        if demand_rows:
+            demand_count += 1
+            for row in demand_rows:
                 row['scenario_short_code'] = scenario_id
-            du_delivery_monthly_rows.extend(monthly_rows)
+            du_demand_monthly_rows.extend(demand_rows)
 
-        # Calculate shortage monthly (only for non-Sacramento)
+        # Calculate SW DELIVERY monthly (from DN_*)
+        sw_delivery_rows = calculate_du_sw_delivery_monthly(df, du_id)
+        if sw_delivery_rows:
+            sw_delivery_count += 1
+            for row in sw_delivery_rows:
+                row['scenario_short_code'] = scenario_id
+            du_sw_delivery_monthly_rows.extend(sw_delivery_rows)
+
+        # Calculate GW PUMPING monthly (from GP_* or calculated as AW - DN)
+        gw_pumping_rows = calculate_du_gw_pumping_monthly(df, du_id)
+        if gw_pumping_rows:
+            gw_pumping_count += 1
+            for row in gw_pumping_rows:
+                row['scenario_short_code'] = scenario_id
+            du_gw_pumping_monthly_rows.extend(gw_pumping_rows)
+
+        # Calculate SHORTAGE monthly (from GW_SHORT_*, only for non-Sacramento)
         shortage_rows = calculate_du_shortage_monthly(df, du_id, du_info)
         if shortage_rows:
             shortage_count += 1
@@ -770,7 +1027,8 @@ def calculate_all_ag_statistics(
             summary['scenario_short_code'] = scenario_id
             du_period_summary_rows.append(summary)
 
-    log.info(f"Processed {delivery_count} DUs with delivery data, {shortage_count} DUs with shortage data")
+    log.info(f"Processed {demand_count} DUs with demand, {sw_delivery_count} with SW delivery, "
+             f"{gw_pumping_count} with GW pumping, {shortage_count} with shortage data")
 
     # Calculate aggregate statistics
     aggregate_monthly_rows = []
@@ -794,14 +1052,18 @@ def calculate_all_ag_statistics(
 
     log.info(f"Processed {len(AG_AGGREGATES)} aggregates")
 
-    log.info(f"Generated: {len(du_delivery_monthly_rows)} DU delivery monthly, "
+    log.info(f"Generated: {len(du_demand_monthly_rows)} DU demand monthly, "
+             f"{len(du_sw_delivery_monthly_rows)} DU SW delivery monthly, "
+             f"{len(du_gw_pumping_monthly_rows)} DU GW pumping monthly, "
              f"{len(du_shortage_monthly_rows)} DU shortage monthly, "
              f"{len(du_period_summary_rows)} DU period summary, "
              f"{len(aggregate_monthly_rows)} aggregate monthly, "
              f"{len(aggregate_period_summary_rows)} aggregate period summary rows")
 
     return (
-        du_delivery_monthly_rows,
+        du_demand_monthly_rows,
+        du_sw_delivery_monthly_rows,
+        du_gw_pumping_monthly_rows,
         du_shortage_monthly_rows,
         du_period_summary_rows,
         aggregate_monthly_rows,
@@ -822,13 +1084,25 @@ def convert_numpy(val):
 
 def save_to_database(
     scenario_ids: List[str],
-    du_delivery_monthly: List[Dict],
+    du_demand_monthly: List[Dict],
+    du_sw_delivery_monthly: List[Dict],
+    du_gw_pumping_monthly: List[Dict],
     du_shortage_monthly: List[Dict],
     du_period_summary: List[Dict],
     aggregate_monthly: List[Dict],
     aggregate_period_summary: List[Dict]
 ):
-    """Save all statistics to database."""
+    """Save all statistics to database.
+    
+    Tables used (after migration 04_add_sw_delivery_gw_pumping_tables.sql):
+    - ag_du_demand_monthly (renamed from ag_du_delivery_monthly)
+    - ag_du_sw_delivery_monthly (NEW)
+    - ag_du_gw_pumping_monthly (NEW)
+    - ag_du_shortage_monthly
+    - ag_du_period_summary
+    - ag_aggregate_monthly
+    - ag_aggregate_period_summary
+    """
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         log.error("DATABASE_URL not set. Cannot save to database.")
@@ -844,29 +1118,65 @@ def save_to_database(
 
         # Delete existing data for these scenarios
         for scenario_id in scenario_ids:
-            cur.execute("DELETE FROM ag_du_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute("DELETE FROM ag_du_demand_monthly WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute("DELETE FROM ag_du_sw_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute("DELETE FROM ag_du_gw_pumping_monthly WHERE scenario_short_code = %s", (scenario_id,))
             cur.execute("DELETE FROM ag_du_shortage_monthly WHERE scenario_short_code = %s", (scenario_id,))
             cur.execute("DELETE FROM ag_du_period_summary WHERE scenario_short_code = %s", (scenario_id,))
             cur.execute("DELETE FROM ag_aggregate_monthly WHERE scenario_short_code = %s", (scenario_id,))
             cur.execute("DELETE FROM ag_aggregate_period_summary WHERE scenario_short_code = %s", (scenario_id,))
             log.info(f"Cleared existing data for scenario {scenario_id}")
 
-        # Insert DU delivery monthly
-        if du_delivery_monthly:
+        # Insert DU DEMAND monthly (from AW_* - renamed from delivery)
+        if du_demand_monthly:
             cols = [
                 'scenario_short_code', 'du_id', 'water_month',
-                'delivery_avg_taf', 'delivery_cv',
+                'demand_avg_taf', 'demand_cv',
                 'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
                 'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
                 'sample_count'
             ]
             values = [
                 tuple(convert_numpy(row.get(col)) for col in cols)
-                for row in du_delivery_monthly
+                for row in du_demand_monthly
             ]
-            insert_sql = f"INSERT INTO ag_du_delivery_monthly ({', '.join(cols)}) VALUES %s"
+            insert_sql = f"INSERT INTO ag_du_demand_monthly ({', '.join(cols)}) VALUES %s"
             execute_values(cur, insert_sql, values)
-            log.info(f"Inserted {len(values)} DU delivery monthly rows")
+            log.info(f"Inserted {len(values)} DU demand monthly rows")
+
+        # Insert DU SW DELIVERY monthly (from DN_* - NEW)
+        if du_sw_delivery_monthly:
+            cols = [
+                'scenario_short_code', 'du_id', 'water_month',
+                'sw_delivery_avg_taf', 'sw_delivery_cv',
+                'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+                'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+                'sample_count'
+            ]
+            values = [
+                tuple(convert_numpy(row.get(col)) for col in cols)
+                for row in du_sw_delivery_monthly
+            ]
+            insert_sql = f"INSERT INTO ag_du_sw_delivery_monthly ({', '.join(cols)}) VALUES %s"
+            execute_values(cur, insert_sql, values)
+            log.info(f"Inserted {len(values)} DU SW delivery monthly rows")
+
+        # Insert DU GW PUMPING monthly (from GP_* or calculated - NEW)
+        if du_gw_pumping_monthly:
+            cols = [
+                'scenario_short_code', 'du_id', 'water_month',
+                'gw_pumping_avg_taf', 'gw_pumping_cv',
+                'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+                'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+                'is_calculated', 'sample_count'
+            ]
+            values = [
+                tuple(convert_numpy(row.get(col)) for col in cols)
+                for row in du_gw_pumping_monthly
+            ]
+            insert_sql = f"INSERT INTO ag_du_gw_pumping_monthly ({', '.join(cols)}) VALUES %s"
+            execute_values(cur, insert_sql, values)
+            log.info(f"Inserted {len(values)} DU GW pumping monthly rows")
 
         # Insert DU shortage monthly
         if du_shortage_monthly:
@@ -885,16 +1195,18 @@ def save_to_database(
             execute_values(cur, insert_sql, values)
             log.info(f"Inserted {len(values)} DU shortage monthly rows")
 
-        # Insert DU period summary
+        # Insert DU period summary (with updated column names)
         if du_period_summary:
             cols = [
                 'scenario_short_code', 'du_id',
                 'simulation_start_year', 'simulation_end_year', 'total_years',
-                'annual_delivery_avg_taf', 'annual_delivery_cv',
-                'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
-                'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
+                'annual_demand_avg_taf', 'annual_demand_cv',
+                'demand_exc_p5', 'demand_exc_p10', 'demand_exc_p25',
+                'demand_exc_p50', 'demand_exc_p75', 'demand_exc_p90', 'demand_exc_p95',
+                'annual_sw_delivery_avg_taf', 'annual_sw_delivery_cv',
+                'annual_gw_pumping_avg_taf', 'annual_gw_pumping_cv', 'gw_pumping_pct_of_demand',
                 'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
-                'annual_shortage_pct_of_demand', 'reliability_pct', 'avg_pct_demand_met', 'annual_demand_avg_taf'
+                'annual_shortage_pct_of_demand', 'reliability_pct', 'avg_pct_demand_met'
             ]
             values = [
                 tuple(convert_numpy(row.get(col)) for col in cols)
@@ -957,7 +1269,7 @@ def save_to_database(
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Calculate delivery and shortage statistics for agricultural demand units'
+        description='Calculate demand, delivery, and shortage statistics for agricultural demand units'
     )
     parser.add_argument(
         '--scenario', '-s',
@@ -990,7 +1302,9 @@ def main():
 
     scenarios_to_process = SCENARIOS if args.all_scenarios else [args.scenario]
 
-    all_du_delivery = []
+    all_du_demand = []
+    all_du_sw_delivery = []
+    all_du_gw_pumping = []
     all_du_shortage = []
     all_du_summary = []
     all_agg_monthly = []
@@ -1002,9 +1316,12 @@ def main():
                 scenario_id,
                 csv_path=args.csv_path
             )
-            du_delivery, du_shortage, du_summary, agg_monthly, agg_summary = results
+            (du_demand, du_sw_delivery, du_gw_pumping, du_shortage, 
+             du_summary, agg_monthly, agg_summary) = results
 
-            all_du_delivery.extend(du_delivery)
+            all_du_demand.extend(du_demand)
+            all_du_sw_delivery.extend(du_sw_delivery)
+            all_du_gw_pumping.extend(du_gw_pumping)
             all_du_shortage.extend(du_shortage)
             all_du_summary.extend(du_summary)
             all_agg_monthly.extend(agg_monthly)
@@ -1017,7 +1334,9 @@ def main():
 
     if args.dry_run:
         log.info("Dry run complete. Statistics calculated but not saved.")
-        log.info(f"Total: {len(all_du_delivery)} DU delivery monthly, "
+        log.info(f"Total: {len(all_du_demand)} DU demand monthly, "
+                 f"{len(all_du_sw_delivery)} DU SW delivery monthly, "
+                 f"{len(all_du_gw_pumping)} DU GW pumping monthly, "
                  f"{len(all_du_shortage)} DU shortage monthly, "
                  f"{len(all_du_summary)} DU period summary, "
                  f"{len(all_agg_monthly)} aggregate monthly, "
@@ -1026,7 +1345,9 @@ def main():
 
     if args.output_json:
         output = {
-            'du_delivery_monthly': all_du_delivery,
+            'du_demand_monthly': all_du_demand,
+            'du_sw_delivery_monthly': all_du_sw_delivery,
+            'du_gw_pumping_monthly': all_du_gw_pumping,
             'du_shortage_monthly': all_du_shortage,
             'du_period_summary': all_du_summary,
             'aggregate_monthly': all_agg_monthly,
@@ -1036,10 +1357,12 @@ def main():
         return
 
     # Save to database
-    scenario_ids = list(set(row['scenario_short_code'] for row in all_du_delivery))
+    scenario_ids = list(set(row['scenario_short_code'] for row in all_du_demand))
     save_to_database(
         scenario_ids,
-        all_du_delivery,
+        all_du_demand,
+        all_du_sw_delivery,
+        all_du_gw_pumping,
         all_du_shortage,
         all_du_summary,
         all_agg_monthly,
@@ -1047,7 +1370,9 @@ def main():
     )
 
     log.info("Total rows saved:")
-    log.info(f"  DU delivery monthly: {len(all_du_delivery)}")
+    log.info(f"  DU demand monthly: {len(all_du_demand)}")
+    log.info(f"  DU SW delivery monthly: {len(all_du_sw_delivery)}")
+    log.info(f"  DU GW pumping monthly: {len(all_du_gw_pumping)}")
     log.info(f"  DU shortage monthly: {len(all_du_shortage)}")
     log.info(f"  DU period summary: {len(all_du_summary)}")
     log.info(f"  Aggregate monthly: {len(all_agg_monthly)}")
