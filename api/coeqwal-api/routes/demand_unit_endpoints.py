@@ -613,6 +613,132 @@ async def get_du_delivery_monthly(
 
 
 # =============================================================================
+# SHORTAGE MONTHLY (bulk)
+# =============================================================================
+
+
+@router.get(
+    "/scenarios/{scenario_id}/demand-units/shortage-monthly",
+    summary="Get monthly shortage statistics for demand units",
+)
+async def get_du_shortage_monthly(
+    scenario_id: str,
+    du_id: Optional[str] = Query(
+        None, description="Comma-separated DU IDs to filter"
+    ),
+    group: Optional[str] = Query(
+        None, description="Filter by group short_code (e.g., var_wba)"
+    ),
+):
+    """
+    Get monthly shortage statistics for urban demand units.
+
+    **Examples:**
+    - `GET /api/statistics/scenarios/s0020/demand-units/shortage-monthly` - All units
+    - `GET /api/statistics/scenarios/s0020/demand-units/shortage-monthly?du_id=ACWA,SCVWD`
+    - `GET /api/statistics/scenarios/s0020/demand-units/shortage-monthly?group=var_swp_contractor`
+    """
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with _db_pool.acquire() as conn:
+        if group:
+            # Filter by group membership
+            query = """
+                SELECT
+                    m.du_id,
+                    e.community_agency,
+                    e.hydrologic_region,
+                    m.water_month,
+                    m.shortage_avg_taf,
+                    m.shortage_cv,
+                    m.shortage_frequency_pct,
+                    m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                    m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                    m.demand_avg_taf, m.percent_of_demand_avg,
+                    m.sample_count
+                FROM du_shortage_monthly m
+                JOIN du_urban_group_member gm ON m.du_id = gm.du_id
+                JOIN du_urban_group g ON gm.du_urban_group_id = g.id
+                LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
+                WHERE m.scenario_short_code = $1
+                  AND g.short_code = $2
+                  AND g.is_active = TRUE
+                ORDER BY gm.display_order, m.water_month
+            """
+            rows = await conn.fetch(query, scenario_id, group)
+        else:
+            query = """
+                SELECT
+                    m.du_id,
+                    e.community_agency,
+                    e.hydrologic_region,
+                    m.water_month,
+                    m.shortage_avg_taf,
+                    m.shortage_cv,
+                    m.shortage_frequency_pct,
+                    m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                    m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                    m.demand_avg_taf, m.percent_of_demand_avg,
+                    m.sample_count
+                FROM du_shortage_monthly m
+                LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
+                WHERE m.scenario_short_code = $1
+            """
+            params: List[Any] = [scenario_id]
+
+            if du_id:
+                ids = [d.strip() for d in du_id.split(",")]
+                query += f" AND m.du_id = ANY(${len(params) + 1})"
+                params.append(ids)
+
+            query += " ORDER BY m.du_id, m.water_month"
+            rows = await conn.fetch(query, *params)
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No shortage data found for scenario {scenario_id}",
+        )
+
+    # Group by DU
+    demand_units: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        du = row["du_id"]
+        if du not in demand_units:
+            demand_units[du] = {
+                "community_agency": row["community_agency"],
+                "hydrologic_region": row["hydrologic_region"],
+                "monthly_shortage": {},
+            }
+
+        demand_units[du]["monthly_shortage"][str(row["water_month"])] = {
+            "avg_taf": safe_float(row["shortage_avg_taf"]),
+            "cv": safe_float(row["shortage_cv"]),
+            "frequency_pct": safe_float(row["shortage_frequency_pct"]),
+            "q0": safe_float(row["q0"]),
+            "q10": safe_float(row["q10"]),
+            "q30": safe_float(row["q30"]),
+            "q50": safe_float(row["q50"]),
+            "q70": safe_float(row["q70"]),
+            "q90": safe_float(row["q90"]),
+            "q100": safe_float(row["q100"]),
+            "exc_p5": safe_float(row["exc_p5"]),
+            "exc_p10": safe_float(row["exc_p10"]),
+            "exc_p25": safe_float(row["exc_p25"]),
+            "exc_p50": safe_float(row["exc_p50"]),
+            "exc_p75": safe_float(row["exc_p75"]),
+            "exc_p90": safe_float(row["exc_p90"]),
+            "exc_p95": safe_float(row["exc_p95"]),
+            "demand_avg_taf": safe_float(row["demand_avg_taf"]),
+            "percent_of_demand": safe_float(row["percent_of_demand_avg"]),
+            "sample_count": safe_int(row["sample_count"]),
+        }
+
+    return {"scenario_id": scenario_id, "demand_units": demand_units}
+
+
+# =============================================================================
 # PERIOD SUMMARY (bulk)
 # =============================================================================
 
