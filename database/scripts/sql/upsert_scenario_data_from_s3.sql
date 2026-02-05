@@ -89,8 +89,7 @@ ON CONFLICT (id) DO UPDATE SET
     hydroclimate_id = EXCLUDED.hydroclimate_id,
     scenario_author_id = EXCLUDED.scenario_author_id,
     scenario_version_id = EXCLUDED.scenario_version_id,
-    updated_by = EXCLUDED.updated_by,
-    updated_at = NOW();
+    updated_by = EXCLUDED.updated_by;
 
 DROP TABLE scenario_staging;
 
