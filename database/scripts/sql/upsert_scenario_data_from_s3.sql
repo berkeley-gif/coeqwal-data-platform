@@ -70,7 +70,7 @@ INSERT INTO scenario (
     hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by
 )
 SELECT 
-    id, scenario_id, short_code, is_active::boolean, name, subtitle, short_title,
+    id, scenario_id, short_code, is_active, name, subtitle, short_title,
     simple_description, description, narrative, baseline_scenario_id,
     hydroclimate_id, scenario_author_id, scenario_version_id, 
     COALESCE(created_by, 1), COALESCE(updated_by, 1)
