@@ -54,8 +54,9 @@ SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027', 's00
 
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+TIER_MATRIX_S3_KEY = "reference/cws/all_scenarios_tier_matrix.csv"
 
-# Paths relative to project
+# Paths relative to project (fallback for local development)
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 TIER_MATRIX_CSV = PROJECT_ROOT / "etl/pipelines/all_scenarios_tier_matrix.csv"
 
@@ -184,16 +185,34 @@ def load_tier_matrix_dus(csv_path: Optional[Path] = None) -> List[str]:
     """
     Load list of DU_IDs from tier matrix CSV.
 
+    Tries S3 first, then falls back to local file.
     The tier matrix has DU_IDs as column headers (after scenario_id).
 
     Returns:
         List of DU_ID strings (e.g., ["02_PU", "02_SU", ..., "AMADR", ...])
     """
+    # Try S3 first
+    if HAS_BOTO3 and csv_path is None:
+        try:
+            import io
+            s3 = boto3.client('s3')
+            log.info(f"Loading tier matrix from S3: s3://{S3_BUCKET}/{TIER_MATRIX_S3_KEY}")
+            response = s3.get_object(Bucket=S3_BUCKET, Key=TIER_MATRIX_S3_KEY)
+            content = response['Body'].read().decode('utf-8')
+            reader = csv.reader(io.StringIO(content))
+            header = next(reader)
+            du_ids = [col.strip().strip('"') for col in header[1:] if col.strip()]
+            log.info(f"Loaded {len(du_ids)} DU_IDs from S3 tier matrix")
+            return du_ids
+        except Exception as e:
+            log.warning(f"Could not load tier matrix from S3: {e}, trying local file")
+
+    # Fall back to local file
     if csv_path is None:
         csv_path = TIER_MATRIX_CSV
 
     if not csv_path.exists():
-        raise FileNotFoundError(f"Tier matrix not found at {csv_path}")
+        raise FileNotFoundError(f"Tier matrix not found at {csv_path} (and S3 load failed)")
 
     with open(csv_path, 'r') as f:
         reader = csv.reader(f)
@@ -202,7 +221,7 @@ def load_tier_matrix_dus(csv_path: Optional[Path] = None) -> List[str]:
     # First column is scenario_id, rest are DU_IDs
     du_ids = [col.strip().strip('"') for col in header[1:] if col.strip()]
 
-    log.info(f"Loaded {len(du_ids)} DU_IDs from tier matrix")
+    log.info(f"Loaded {len(du_ids)} DU_IDs from local tier matrix")
     return du_ids
 
 
