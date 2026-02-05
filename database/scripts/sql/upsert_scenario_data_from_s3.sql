@@ -39,7 +39,7 @@ CREATE TEMP TABLE scenario_staging (
     scenario_id VARCHAR,
     short_code VARCHAR,
     is_active INTEGER,
-    title TEXT,
+    name TEXT,
     subtitle TEXT,
     short_title TEXT,
     simple_description TEXT,
@@ -56,7 +56,7 @@ CREATE TEMP TABLE scenario_staging (
 -- Load from S3
 SELECT aws_s3.table_import_from_s3(
     'scenario_staging',
-    'id, scenario_id, short_code, is_active, title, subtitle, short_title, simple_description, description, narrative, baseline_scenario_id, hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by',
+    'id, scenario_id, short_code, is_active, name, subtitle, short_title, simple_description, description, narrative, baseline_scenario_id, hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by',
     '(format csv, header true)',
     'coeqwal-seeds-dev',
     '05_themes_scenarios/scenario.csv',
@@ -65,12 +65,12 @@ SELECT aws_s3.table_import_from_s3(
 
 -- Upsert from staging to scenario
 INSERT INTO scenario (
-    id, scenario_id, short_code, is_active, title, subtitle, short_title, 
+    id, scenario_id, short_code, is_active, name, subtitle, short_title, 
     simple_description, description, narrative, baseline_scenario_id, 
     hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by
 )
 SELECT 
-    id, scenario_id, short_code, is_active::boolean, title, subtitle, short_title,
+    id, scenario_id, short_code, is_active::boolean, name, subtitle, short_title,
     simple_description, description, narrative, baseline_scenario_id,
     hydroclimate_id, scenario_author_id, scenario_version_id, 
     COALESCE(created_by, 1), COALESCE(updated_by, 1)
@@ -79,7 +79,7 @@ ON CONFLICT (id) DO UPDATE SET
     scenario_id = EXCLUDED.scenario_id,
     short_code = EXCLUDED.short_code,
     is_active = EXCLUDED.is_active,
-    title = EXCLUDED.title,
+    name = EXCLUDED.name,
     subtitle = EXCLUDED.subtitle,
     short_title = EXCLUDED.short_title,
     simple_description = EXCLUDED.simple_description,
@@ -166,7 +166,7 @@ ORDER BY id;
 
 \echo ''
 \echo '📊 Theme assignments:'
-SELECT s.scenario_id, t.short_code as theme, t.title as theme_title
+SELECT s.scenario_id, t.short_code as theme, t.name as theme_name
 FROM theme_scenario_link tsl
 JOIN scenario s ON tsl.scenario_id = s.id
 JOIN theme t ON tsl.theme_id = t.id
