@@ -142,6 +142,44 @@ def run_module(
         return False
 
 
+def cleanup_temp_files(scenario_id: str):
+    """
+    Clean up temporary files to free memory on Cloud9.
+    
+    CalSim CSV files are large and can exhaust memory if not cleaned up
+    between scenarios.
+    """
+    import glob
+    import shutil
+    
+    # Clean up /tmp/s0* files (downloaded CSVs)
+    tmp_pattern = f"/tmp/{scenario_id}*"
+    tmp_files = glob.glob(tmp_pattern)
+    if tmp_files:
+        for f in tmp_files:
+            try:
+                if os.path.isdir(f):
+                    shutil.rmtree(f)
+                else:
+                    os.remove(f)
+            except Exception as e:
+                log.warning(f"Could not remove {f}: {e}")
+        log.info(f"Cleaned up {len(tmp_files)} temp files matching {tmp_pattern}")
+    
+    # Also clean up any /tmp/s0* pattern (catches all scenario temp files)
+    all_scenario_tmp = glob.glob("/tmp/s0*")
+    if all_scenario_tmp:
+        for f in all_scenario_tmp:
+            try:
+                if os.path.isdir(f):
+                    shutil.rmtree(f)
+                else:
+                    os.remove(f)
+            except Exception as e:
+                log.warning(f"Could not remove {f}: {e}")
+        log.info(f"Cleaned up {len(all_scenario_tmp)} additional temp files")
+
+
 def run_all_modules(
     scenario_id: str,
     modules: Optional[List[str]] = None,
@@ -172,6 +210,9 @@ def run_all_modules(
         if not success and not continue_on_error:
             log.error(f"Stopping due to failure in {module_name}")
             break
+    
+    # Clean up temp files after processing each scenario to free memory
+    cleanup_temp_files(scenario_id)
     
     # Summary
     log.info(f"\n{'='*60}")
