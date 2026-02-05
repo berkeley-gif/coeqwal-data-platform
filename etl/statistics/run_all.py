@@ -76,12 +76,13 @@ ETL_MODULES = {
     },
 }
 
-# All known scenarios (22 scenarios for full run)
+# All known scenarios (20 scenarios ready, 2 pending extraction: s0045, s0065)
 SCENARIOS = [
     's0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0026', 's0027',
     's0028', 's0029', 's0030', 's0031', 's0032', 's0033', 's0039', 's0040',
-    's0041', 's0042', 's0044', 's0045', 's0046', 's0065'
+    's0041', 's0042', 's0044', 's0046'
 ]
+# TODO: Add s0045 and s0065 when extraction is fixed
 
 
 def run_module(
