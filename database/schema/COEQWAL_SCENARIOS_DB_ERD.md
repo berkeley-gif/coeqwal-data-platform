@@ -1631,6 +1631,8 @@ Table: mi_delivery_monthly
 ├── delivery_cv           NUMERIC(6,4)
 ├── q0 - q100             NUMERIC(10,2)                -- Percentiles
 ├── exc_p5 - exc_p95      NUMERIC(10,2)                -- Exceedance percentiles
+├── demand_avg_taf        NUMERIC(10,2)                -- Average monthly demand
+├── percent_of_demand_avg NUMERIC(5,2)                 -- Avg percent of demand met
 ├── sample_count          INTEGER
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()

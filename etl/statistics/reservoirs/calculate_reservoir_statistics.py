@@ -367,6 +367,14 @@ def calculate_storage_monthly(
             row[f'q{p}'] = round(pct_value, 2)          # Percent of capacity
             row[f'q{p}_taf'] = round(taf_value, 2)      # TAF
 
+        # Add exceedance percentiles in both units
+        for p in EXCEEDANCE_PERCENTILES:
+            taf_value = float(np.percentile(month_data, p))
+            pct_value = (taf_value / capacity_taf) * 100
+
+            row[f'exc_p{p}'] = round(pct_value, 2)      # Percent of capacity
+            row[f'exc_p{p}_taf'] = round(taf_value, 2)  # TAF
+
         results.append(row)
 
     return results
@@ -743,6 +751,10 @@ def generate_sql_inserts(
         lines.append("    q0, q10, q30, q50, q70, q90, q100,")
         lines.append("    -- TAF values")
         lines.append("    q0_taf, q10_taf, q30_taf, q50_taf, q70_taf, q90_taf, q100_taf,")
+        lines.append("    -- Exceedance percentiles (percent of capacity)")
+        lines.append("    exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,")
+        lines.append("    -- Exceedance percentiles (TAF)")
+        lines.append("    exc_p5_taf, exc_p10_taf, exc_p25_taf, exc_p50_taf, exc_p75_taf, exc_p90_taf, exc_p95_taf,")
         lines.append("    capacity_taf, sample_count, created_by, updated_by")
         lines.append(") VALUES")
 
@@ -758,6 +770,14 @@ def generate_sql_inserts(
                 f"{row.get('q0_taf', 'NULL')}, {row.get('q10_taf', 'NULL')}, {row.get('q30_taf', 'NULL')}, "
                 f"{row.get('q50_taf', 'NULL')}, {row.get('q70_taf', 'NULL')}, {row.get('q90_taf', 'NULL')}, "
                 f"{row.get('q100_taf', 'NULL')}, "
+                # Exceedance percentiles (percent of capacity)
+                f"{row.get('exc_p5', 'NULL')}, {row.get('exc_p10', 'NULL')}, {row.get('exc_p25', 'NULL')}, "
+                f"{row.get('exc_p50', 'NULL')}, {row.get('exc_p75', 'NULL')}, {row.get('exc_p90', 'NULL')}, "
+                f"{row.get('exc_p95', 'NULL')}, "
+                # Exceedance percentiles (TAF)
+                f"{row.get('exc_p5_taf', 'NULL')}, {row.get('exc_p10_taf', 'NULL')}, {row.get('exc_p25_taf', 'NULL')}, "
+                f"{row.get('exc_p50_taf', 'NULL')}, {row.get('exc_p75_taf', 'NULL')}, {row.get('exc_p90_taf', 'NULL')}, "
+                f"{row.get('exc_p95_taf', 'NULL')}, "
                 f"{row['capacity_taf']}, {row['sample_count']}, 1, 1)"
             )
             value_rows.append(value_row)
@@ -774,6 +794,12 @@ def generate_sql_inserts(
         lines.append("    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,")
         lines.append("    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,")
         lines.append("    q100_taf = EXCLUDED.q100_taf,")
+        lines.append("    exc_p5 = EXCLUDED.exc_p5, exc_p10 = EXCLUDED.exc_p10, exc_p25 = EXCLUDED.exc_p25,")
+        lines.append("    exc_p50 = EXCLUDED.exc_p50, exc_p75 = EXCLUDED.exc_p75, exc_p90 = EXCLUDED.exc_p90,")
+        lines.append("    exc_p95 = EXCLUDED.exc_p95,")
+        lines.append("    exc_p5_taf = EXCLUDED.exc_p5_taf, exc_p10_taf = EXCLUDED.exc_p10_taf, exc_p25_taf = EXCLUDED.exc_p25_taf,")
+        lines.append("    exc_p50_taf = EXCLUDED.exc_p50_taf, exc_p75_taf = EXCLUDED.exc_p75_taf, exc_p90_taf = EXCLUDED.exc_p90_taf,")
+        lines.append("    exc_p95_taf = EXCLUDED.exc_p95_taf,")
         lines.append("    capacity_taf = EXCLUDED.capacity_taf,")
         lines.append("    sample_count = EXCLUDED.sample_count,")
         lines.append("    updated_at = NOW(), updated_by = 1;")

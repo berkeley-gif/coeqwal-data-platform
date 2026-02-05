@@ -425,6 +425,10 @@ def calculate_aggregate_monthly(
 
             for p in DELIVERY_PERCENTILES:
                 row[f'shortage_q{p}'] = round(float(np.percentile(shortage_data, p)), 2)
+
+            # Add exceedance percentiles for shortage
+            for p in EXCEEDANCE_PERCENTILES:
+                row[f'shortage_exc_p{p}'] = round(float(np.percentile(shortage_data, p)), 2)
         else:
             row['shortage_avg_taf'] = None
             row['shortage_cv'] = None
@@ -480,6 +484,10 @@ def calculate_aggregate_monthly(
 
                 for p in DELIVERY_PERCENTILES:
                     row[f'shortage_q{p}'] = round(float(np.percentile(shortage_data, p)), 2)
+
+                # Add exceedance percentiles for shortage
+                for p in EXCEEDANCE_PERCENTILES:
+                    row[f'shortage_exc_p{p}'] = round(float(np.percentile(shortage_data, p)), 2)
             else:
                 row['shortage_avg_taf'] = None
                 row['shortage_cv'] = None
@@ -833,9 +841,13 @@ def main():
                 'delivery_avg_taf', 'delivery_cv',
                 'delivery_q0', 'delivery_q10', 'delivery_q30', 'delivery_q50',
                 'delivery_q70', 'delivery_q90', 'delivery_q100',
+                'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25', 'delivery_exc_p50',
+                'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
                 'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
                 'shortage_q0', 'shortage_q10', 'shortage_q30', 'shortage_q50',
                 'shortage_q70', 'shortage_q90', 'shortage_q100',
+                'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25', 'shortage_exc_p50',
+                'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
                 'demand_avg_taf', 'percent_of_demand_avg',  # Demand metrics
                 'sample_count'
             ]
