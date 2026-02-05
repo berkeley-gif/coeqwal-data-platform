@@ -410,6 +410,28 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
+def convert_wba_id_to_mapbox_format(wba_col: str) -> str:
+    """
+    Convert WBA column names to Mapbox tileset format.
+    
+    WBA column format: WBA2, WBA7N, WBA10, WBA60N, DETAW
+    Mapbox format: 02, 07N, 10, 60N, DETAW (leading zeros for single digits)
+    """
+    if wba_col == 'DETAW':
+        return 'DETAW'
+    
+    if wba_col.startswith('WBA'):
+        suffix = wba_col[3:]  # Remove 'WBA' prefix
+        # Check if it starts with a single digit (not followed by another digit)
+        if len(suffix) >= 1 and suffix[0].isdigit():
+            # Single digit cases: 2, 3, 4, 5, 6, 7N, 7S, 8N, 8S, 9
+            if len(suffix) == 1 or (len(suffix) == 2 and suffix[1] in 'NS'):
+                return '0' + suffix
+        return suffix
+    
+    return wba_col
+
+
 def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
     """
     Load GW_STOR (Groundwater Storage) tier data.
@@ -452,12 +474,14 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             tier_counts[tier] += 1
             
             wba_name = WBA_NAMES.get(wba_col, wba_col)
+            # Convert WBA2 -> 02, WBA10 -> 10, etc. to match Mapbox tileset
+            mapbox_wba_id = convert_wba_id_to_mapbox_format(wba_col)
             
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'GW_STOR',
                 'location_type': 'wba',
-                'location_id': wba_col,
+                'location_id': mapbox_wba_id,
                 'location_name': wba_name,
                 'tier_level': tier,
                 'tier_value': 1,
