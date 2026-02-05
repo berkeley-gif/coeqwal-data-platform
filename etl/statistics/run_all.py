@@ -76,8 +76,12 @@ ETL_MODULES = {
     },
 }
 
-# All known scenarios
-SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027', 's0029']
+# All known scenarios (22 scenarios for full run)
+SCENARIOS = [
+    's0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0026', 's0027',
+    's0028', 's0029', 's0030', 's0031', 's0032', 's0033', 's0039', 's0040',
+    's0041', 's0042', 's0044', 's0045', 's0046', 's0065'
+]
 
 
 def run_module(
@@ -271,16 +275,140 @@ Examples:
         )
         all_results[scenario_id] = results
     
-    # Final summary
-    if len(scenarios) > 1:
-        log.info("\n" + "#" * 60)
-        log.info("# FINAL SUMMARY - ALL SCENARIOS")
-        log.info("#" * 60)
-        for scenario_id, results in all_results.items():
-            successes = sum(1 for s in results.values() if s == 'success')
-            total = len(results)
-            icon = '✅' if successes == total else '⚠️' if successes > 0 else '❌'
-            log.info(f"  {icon} {scenario_id}: {successes}/{total} modules succeeded")
+    # Print comprehensive scorecard at the end
+    print_scorecard(all_results, scenarios, modules or list(ETL_MODULES.keys()))
+
+
+def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str]):
+    """
+    Print a comprehensive scorecard showing results for all scenarios and modules.
+    
+    This is displayed at the very end so it's visible after logs scroll away.
+    """
+    # Build the scorecard
+    print("\n")
+    print("=" * 80)
+    print("=" * 80)
+    print("                         ETL PROCESSING SCORECARD")
+    print("=" * 80)
+    print("=" * 80)
+    print()
+    
+    # Module abbreviations for compact display
+    module_abbrev = {
+        'reservoirs': 'RES',
+        'du_urban': 'DU',
+        'mi': 'M&I',
+        'cws_aggregate': 'CWS',
+        'ag': 'AG',
+    }
+    
+    # Legend
+    print("Legend: ✅ = Success, ❌ = Failed, ⏭️ = Skipped, ⚪ = Not Run")
+    print()
+    
+    # Header row
+    header = "Scenario    │"
+    for mod in modules:
+        abbrev = module_abbrev.get(mod, mod[:4].upper())
+        header += f" {abbrev:^5} │"
+    header += " Status"
+    print(header)
+    print("─" * len(header))
+    
+    # Data rows
+    total_success = 0
+    total_failed = 0
+    total_skipped = 0
+    scenario_status = {}
+    
+    for scenario_id in scenarios:
+        results = all_results.get(scenario_id, {})
+        row = f"{scenario_id:^11} │"
+        
+        scenario_successes = 0
+        scenario_failures = 0
+        scenario_skipped = 0
+        
+        for mod in modules:
+            status = results.get(mod, 'not_run')
+            if status == 'success':
+                row += "  ✅   │"
+                scenario_successes += 1
+                total_success += 1
+            elif status == 'failed':
+                row += "  ❌   │"
+                scenario_failures += 1
+                total_failed += 1
+            elif status == 'skipped':
+                row += "  ⏭️   │"
+                scenario_skipped += 1
+                total_skipped += 1
+            else:
+                row += "  ⚪   │"
+        
+        # Scenario overall status
+        if scenario_failures > 0:
+            row += " ❌ FAILED"
+            scenario_status[scenario_id] = 'failed'
+        elif scenario_skipped == len(modules):
+            row += " ⚪ NOT RUN"
+            scenario_status[scenario_id] = 'not_run'
+        elif scenario_successes == len(modules):
+            row += " ✅ COMPLETE"
+            scenario_status[scenario_id] = 'complete'
+        else:
+            row += " ⚠️ PARTIAL"
+            scenario_status[scenario_id] = 'partial'
+        
+        print(row)
+    
+    print("─" * len(header))
+    print()
+    
+    # Summary statistics
+    total_scenarios = len(scenarios)
+    complete_scenarios = sum(1 for s in scenario_status.values() if s == 'complete')
+    failed_scenarios = sum(1 for s in scenario_status.values() if s == 'failed')
+    partial_scenarios = sum(1 for s in scenario_status.values() if s == 'partial')
+    
+    print("SUMMARY")
+    print("─" * 40)
+    print(f"  Scenarios:  {complete_scenarios}/{total_scenarios} complete")
+    if failed_scenarios > 0:
+        print(f"              {failed_scenarios} failed")
+    if partial_scenarios > 0:
+        print(f"              {partial_scenarios} partial")
+    print()
+    print(f"  Tasks:      {total_success} succeeded")
+    if total_failed > 0:
+        print(f"              {total_failed} failed")
+    if total_skipped > 0:
+        print(f"              {total_skipped} skipped")
+    print()
+    
+    # List of failures for easy reference
+    if total_failed > 0:
+        print("FAILURES (need attention)")
+        print("─" * 40)
+        for scenario_id in scenarios:
+            results = all_results.get(scenario_id, {})
+            failures = [mod for mod, status in results.items() if status == 'failed']
+            if failures:
+                for mod in failures:
+                    print(f"  • {scenario_id} / {ETL_MODULES[mod]['name']}")
+        print()
+    
+    # Final status
+    print("=" * 80)
+    if total_failed == 0 and total_success > 0:
+        print("                    🎉 ALL TASKS COMPLETED SUCCESSFULLY! 🎉")
+    elif total_failed > 0:
+        print(f"                    ⚠️  {total_failed} TASK(S) FAILED - REVIEW ABOVE ⚠️")
+    else:
+        print("                    ⚪ NO TASKS WERE RUN")
+    print("=" * 80)
+    print()
 
 
 if __name__ == '__main__':

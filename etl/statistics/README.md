@@ -815,3 +815,114 @@ This was identified in February 2026 when MWD showed `annual_demand_avg_taf = 14
 |------|---------|
 | `mi/calculate_mi_statistics.py` | Main calculation module |
 | `mi/MI_CONTRACTOR_VARIABLES` | Built-in variable mappings (dict in code) |
+
+---
+
+## Agricultural Demand Unit Statistics
+
+The `ag/` module calculates delivery, pumping, and shortage statistics for 144 agricultural demand units.
+
+### Applied Water (AW_*) Variable Audit
+
+**Audit Date**: February 2026
+
+Applied Water (`AW_*`) variables represent agricultural demand/water requirement. There are **three sources** for these variables, with important differences in naming conventions and units.
+
+#### Source 1: SV Input (Modeler-Recommended)
+
+| Attribute | Value |
+|-----------|-------|
+| **S3 Path** | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv` |
+| **Local Copy** | `etl/pipelines/s0020_coeqwal_sv_input.csv` |
+| **Variable Naming** | **AWO_*** (e.g., `AWO_02_NA`, `AWO_02_PA`) |
+| **Units** | **TAF** (Thousand Acre-Feet) |
+| **Column Count** | 153 AWO_* columns |
+| **Sample Value (Oct 1921)** | `AWO_02_NA` = 1.7665 TAF |
+| **Modeler Recommended** | ✅ YES |
+
+> ⚠️ **Note**: SV Input uses `AWO_*` naming (Applied Water Output?), NOT `AW_*`.
+
+#### Source 2: Main CalSim Output (DV)
+
+| Attribute | Value |
+|-----------|-------|
+| **S3 Path** | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv` |
+| **Local Copy** | `etl/pipelines/s0020_coeqwal_calsim_output.csv` |
+| **Variable Naming** | **AW_*** (e.g., `AW_02_NA`, `AW_02_PA`) |
+| **Units** | **CFS** (Cubic Feet per Second) |
+| **Column Count** | 183 AW_* columns |
+| **Sample Value (Oct 1921)** | `AW_02_NA` = 9.2913 CFS (= 0.5715 TAF after conversion) |
+
+**Conversion formula**: `TAF = CFS × days_in_month × 0.001984`
+
+#### Source 3: Demands CSV (Processed Reference)
+
+| Attribute | Value |
+|-----------|-------|
+| **S3 Path** | `s3://coeqwal-model-run/reference/s0020_demand.csv` |
+| **Local Copy** | `etl/demands/s0020_demand.csv` |
+| **Variable Naming** | **AW_*** (same as Main Output) |
+| **Contains** | **DUPLICATE columns** - both CFS and TAF versions |
+| **Column Count** | 298 total AW_* columns (149 in CFS, 149 in TAF) |
+
+**Structure of Demands CSV**:
+| Column Range | Variable | Units | Sample Value (Oct 1921, AW_02_NA) |
+|--------------|----------|-------|-----------------------------------|
+| ~105-250 | AW_* | CFS | 9.2913 (matches Main Output) |
+| ~283-438 | AW_* | TAF | 0.5715 (pre-converted) |
+
+#### Key Discrepancy: AWO vs AW
+
+**Critical finding**: SV Input (`AWO_*`) and Main Output (`AW_*`) contain **DIFFERENT VALUES**:
+
+| Variable | Source | Units | Oct 1921 Value | Notes |
+|----------|--------|-------|----------------|-------|
+| AWO_02_NA | SV Input | TAF | **1.7665** | Higher value |
+| AW_02_NA | Main Output | CFS | 9.2913 (= **0.5715** TAF) | Lower value |
+
+**Ratio**: AWO / AW ≈ **3:1**
+
+This significant difference suggests **AWO_*** and **AW_*** are semantically different variables:
+- **AW_*** = Applied Water as calculated/optimized by the model
+- **AWO_*** = Original Applied Water input/requirement (before optimization?)
+
+⚠️ **Action Required**: Clarify with COEQWAL modeling team which variable represents:
+1. Agricultural water **demand** (requirement)
+2. Agricultural water **delivery** (what was actually applied)
+
+### Canonical Source Recommendation
+
+| Use Case | Recommended Source | Variable | Units | Notes |
+|----------|-------------------|----------|-------|-------|
+| **Simple TAF values** | Demands CSV (cols 283+) | AW_* | TAF | Pre-converted, matches Main Output |
+| **Raw model output** | Main CalSim Output | AW_* | CFS | Requires conversion |
+| **Modeler preference** | SV Input | AWO_* | TAF | Different values - needs clarification |
+
+### Current ETL Implementation
+
+The `ag/calculate_ag_statistics.py` module currently:
+- Loads from **Main CalSim Output** (`*_coeqwal_calsim_output.csv`)
+- Uses **AW_*** variables for demand
+- Assumes AW_* is in **TAF** (from SV input pattern)
+
+**Important**: If loading from Main Output (where AW_* is in CFS), conversion is needed.
+The code now correctly handles this case.
+
+### Variable Summary for Agricultural Statistics
+
+| CalSim Variable | Description | Source | Units | Conversion Needed |
+|-----------------|-------------|--------|-------|-------------------|
+| AW_* | Applied Water (Demand) | SV Input / Demands CSV | TAF | No |
+| AW_* | Applied Water (Demand) | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+| DN_* | Net Surface Water Delivery | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+| GP_* | Groundwater Pumping | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+| GW_SHORT_* | Groundwater Restriction Shortage | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+| DEL_SWP_PAG | SWP Ag Delivery (aggregate) | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+| SHORT_CVP_PAG | CVP Ag Shortage (aggregate) | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `ag/calculate_ag_statistics.py` | Main calculation module |
+| `ag/main.py` | CLI entry point |
