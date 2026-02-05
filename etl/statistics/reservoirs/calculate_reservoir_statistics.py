@@ -368,8 +368,9 @@ def calculate_storage_monthly(
             row[f'q{p}_taf'] = round(taf_value, 2)      # TAF
 
         # Add exceedance percentiles in both units
+        # exc_pX = "value exceeded X% of the time" = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            taf_value = float(np.percentile(month_data, p))
+            taf_value = float(np.percentile(month_data, 100 - p))
             pct_value = (taf_value / capacity_taf) * 100
 
             row[f'exc_p{p}'] = round(pct_value, 2)      # Percent of capacity
@@ -483,9 +484,9 @@ def calculate_period_summary(
     if not storage_data.empty:
         storage_pct = (storage_data / capacity_taf) * 100
 
-        # Exceedance percentiles
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            result[f'storage_exc_p{p}'] = round(float(np.percentile(storage_pct, p)), 2)
+            result[f'storage_exc_p{p}'] = round(float(np.percentile(storage_pct, 100 - p)), 2)
     else:
         for p in EXCEEDANCE_PERCENTILES:
             result[f'storage_exc_p{p}'] = None

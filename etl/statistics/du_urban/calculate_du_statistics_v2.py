@@ -364,9 +364,9 @@ def calculate_du_statistics(
                 # Percentiles use q0, q10, etc. not delivery_q0
                 for p in PERCENTILES:
                     row[f'q{p}'] = round(float(np.percentile(del_month, p)), 2)
-                # Exceedance percentiles
+                # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
                 for p in EXCEEDANCE_PERCENTILES:
-                    row[f'exc_p{p}'] = round(float(np.percentile(del_month, p)), 2)
+                    row[f'exc_p{p}'] = round(float(np.percentile(del_month, 100 - p)), 2)
             
             # Monthly demand and percent of demand
             row['demand_avg_taf'] = None
@@ -400,9 +400,9 @@ def calculate_du_statistics(
                 for p in PERCENTILES:
                     shortage_row[f'q{p}'] = round(float(np.percentile(short_month, p)), 2)
                 
-                # Shortage exceedance percentiles
+                # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
                 for p in EXCEEDANCE_PERCENTILES:
-                    shortage_row[f'exc_p{p}'] = round(float(np.percentile(short_month, p)), 2)
+                    shortage_row[f'exc_p{p}'] = round(float(np.percentile(short_month, 100 - p)), 2)
                 
                 shortage_monthly_rows.append(shortage_row)
         
@@ -444,8 +444,9 @@ def calculate_du_statistics(
         if not ad.empty:
             summary['annual_delivery_avg_taf'] = round(float(ad.mean()), 2)
             summary['annual_delivery_cv'] = round(float(ad.std() / ad.mean()), 4) if ad.mean() > 0 else 0
+            # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                summary[f'delivery_exc_p{p}'] = round(float(np.percentile(ad, p)), 2)
+                summary[f'delivery_exc_p{p}'] = round(float(np.percentile(ad, 100 - p)), 2)
         
         # Annual demand stats
         adm = annual_demand.dropna()

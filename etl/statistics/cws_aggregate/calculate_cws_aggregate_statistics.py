@@ -413,9 +413,9 @@ def calculate_aggregate_monthly(
         for p in DELIVERY_PERCENTILES:
             row[f'delivery_q{p}'] = round(float(np.percentile(delivery_data, p)), 2)
 
-        # Delivery exceedance percentiles
+        # Delivery exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            row[f'delivery_exc_p{p}'] = round(float(np.percentile(delivery_data, p)), 2)
+            row[f'delivery_exc_p{p}'] = round(float(np.percentile(delivery_data, 100 - p)), 2)
 
         # Shortage statistics
         if not shortage_data.empty:
@@ -426,9 +426,9 @@ def calculate_aggregate_monthly(
             for p in DELIVERY_PERCENTILES:
                 row[f'shortage_q{p}'] = round(float(np.percentile(shortage_data, p)), 2)
 
-            # Add exceedance percentiles for shortage
+            # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                row[f'shortage_exc_p{p}'] = round(float(np.percentile(shortage_data, p)), 2)
+                row[f'shortage_exc_p{p}'] = round(float(np.percentile(shortage_data, 100 - p)), 2)
         else:
             row['shortage_avg_taf'] = None
             row['shortage_cv'] = None
@@ -472,9 +472,9 @@ def calculate_aggregate_monthly(
             for p in DELIVERY_PERCENTILES:
                 row[f'delivery_q{p}'] = round(float(np.percentile(delivery_data, p)), 2)
 
-            # Delivery exceedance percentiles
+            # Delivery exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                row[f'delivery_exc_p{p}'] = round(float(np.percentile(delivery_data, p)), 2)
+                row[f'delivery_exc_p{p}'] = round(float(np.percentile(delivery_data, 100 - p)), 2)
 
             # Shortage statistics
             if not shortage_data.empty:
@@ -485,9 +485,9 @@ def calculate_aggregate_monthly(
                 for p in DELIVERY_PERCENTILES:
                     row[f'shortage_q{p}'] = round(float(np.percentile(shortage_data, p)), 2)
 
-                # Add exceedance percentiles for shortage
+                # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
                 for p in EXCEEDANCE_PERCENTILES:
-                    row[f'shortage_exc_p{p}'] = round(float(np.percentile(shortage_data, p)), 2)
+                    row[f'shortage_exc_p{p}'] = round(float(np.percentile(shortage_data, 100 - p)), 2)
             else:
                 row['shortage_avg_taf'] = None
                 row['shortage_cv'] = None
@@ -572,9 +572,9 @@ def calculate_aggregate_period_summary(
     result['annual_delivery_min_taf'] = round(float(annual_delivery.min()), 2)
     result['annual_delivery_max_taf'] = round(float(annual_delivery.max()), 2)
 
-    # Delivery exceedance percentiles
+    # Delivery exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
-        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, p)), 2)
+        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
 
     # Shortage statistics
     has_shortage = shortage_var in df.columns
@@ -587,8 +587,9 @@ def calculate_aggregate_period_summary(
         result['shortage_years_count'] = int(shortage_years)
         result['shortage_frequency_pct'] = round((shortage_years / len(water_years)) * 100, 2)
 
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, p)), 2)
+            result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
 
         # Reliability = 1 - (avg shortage / avg delivery)
         if result['annual_delivery_avg_taf'] > 0:

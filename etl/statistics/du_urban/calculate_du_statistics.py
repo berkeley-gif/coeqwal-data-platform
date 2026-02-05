@@ -375,9 +375,9 @@ def calculate_delivery_monthly(
         for p in DELIVERY_PERCENTILES:
             row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
 
-        # Add exceedance percentiles
+        # Add exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            row[f'exc_p{p}'] = round(float(np.percentile(data, p)), 2)
+            row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
 
         results.append(row)
     else:
@@ -400,9 +400,9 @@ def calculate_delivery_monthly(
             for p in DELIVERY_PERCENTILES:
                 row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
 
-            # Add exceedance percentiles
+            # Add exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
+                row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
 
             results.append(row)
 
@@ -443,9 +443,9 @@ def calculate_period_summary(
     else:
         result['annual_delivery_cv'] = 0
 
-    # Exceedance percentiles (annual)
+    # Exceedance percentiles (annual): exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
-        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, p)), 2)
+        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
 
     # Note: shortage statistics would require shortage columns (SHORT_DN_*, etc.)
     # These may be in a separate file or need to be calculated

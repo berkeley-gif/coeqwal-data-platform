@@ -597,8 +597,9 @@ def calculate_contractor_delivery_monthly(
         for p in DELIVERY_PERCENTILES:
             row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
 
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            row[f'exc_p{p}'] = round(float(np.percentile(data, p)), 2)
+            row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
 
         # Demand calculations for annual (if available)
         row['demand_avg_taf'] = None
@@ -623,8 +624,9 @@ def calculate_contractor_delivery_monthly(
             for p in DELIVERY_PERCENTILES:
                 row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
 
+            # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
+                row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
 
             # Demand calculations for monthly (if available)
             # NOTE: Demand values in the DEMANDS CSV are already in TAF (not CFS)
@@ -694,9 +696,9 @@ def calculate_contractor_shortage_monthly(
         for p in DELIVERY_PERCENTILES:
             row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
 
-        # Exceedance percentiles for shortage
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            row[f'exc_p{p}'] = round(float(np.percentile(data, p)), 2)
+            row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
 
         results.append(row)
     else:
@@ -720,9 +722,9 @@ def calculate_contractor_shortage_monthly(
             for p in DELIVERY_PERCENTILES:
                 row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
 
-            # Exceedance percentiles for shortage
+            # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                row[f'exc_p{p}'] = round(float(np.percentile(month_data, p)), 2)
+                row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
 
             results.append(row)
 
@@ -776,8 +778,9 @@ def calculate_contractor_period_summary(
     else:
         result['annual_delivery_cv'] = 0
 
+    # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
-        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, p)), 2)
+        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
 
     # Shortage statistics
     if available_shortage:
@@ -790,8 +793,9 @@ def calculate_contractor_period_summary(
         result['shortage_years_count'] = int(shortage_years)
         result['shortage_frequency_pct'] = round((shortage_years / len(water_years)) * 100, 2)
 
+        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, p)), 2)
+            result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
 
         # Reliability = 1 - (shortage / delivery)
         if result['annual_delivery_avg_taf'] > 0:
