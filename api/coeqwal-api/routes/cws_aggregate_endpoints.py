@@ -197,6 +197,8 @@ async def get_cws_aggregate_monthly(
             m.shortage_avg_taf, m.shortage_cv, m.shortage_frequency_pct,
             m.shortage_q0, m.shortage_q10, m.shortage_q30, m.shortage_q50,
             m.shortage_q70, m.shortage_q90, m.shortage_q100,
+            m.shortage_exc_p5, m.shortage_exc_p10, m.shortage_exc_p25, m.shortage_exc_p50,
+            m.shortage_exc_p75, m.shortage_exc_p90, m.shortage_exc_p95,
             m.demand_avg_taf, m.percent_of_demand_avg,
             m.sample_count
         FROM cws_aggregate_monthly m
@@ -253,6 +255,14 @@ async def get_cws_aggregate_monthly(
                 "q70": safe_float(row["shortage_q70"]),
                 "q90": safe_float(row["shortage_q90"]),
                 "q100": safe_float(row["shortage_q100"]),
+                # Exceedance percentiles
+                "exc_p5": safe_float(row["shortage_exc_p5"]),
+                "exc_p10": safe_float(row["shortage_exc_p10"]),
+                "exc_p25": safe_float(row["shortage_exc_p25"]),
+                "exc_p50": safe_float(row["shortage_exc_p50"]),
+                "exc_p75": safe_float(row["shortage_exc_p75"]),
+                "exc_p90": safe_float(row["shortage_exc_p90"]),
+                "exc_p95": safe_float(row["shortage_exc_p95"]),
             }
 
         return {"scenario_id": scenario_id, "aggregates": aggregates}
@@ -438,6 +448,8 @@ async def get_single_cws_aggregate_monthly(
             shortage_avg_taf, shortage_cv, shortage_frequency_pct,
             shortage_q0, shortage_q10, shortage_q30, shortage_q50,
             shortage_q70, shortage_q90, shortage_q100,
+            shortage_exc_p5, shortage_exc_p10, shortage_exc_p25, shortage_exc_p50,
+            shortage_exc_p75, shortage_exc_p90, shortage_exc_p95,
             demand_avg_taf, percent_of_demand_avg,
             sample_count
         FROM cws_aggregate_monthly
@@ -484,6 +496,14 @@ async def get_single_cws_aggregate_monthly(
                 "q70": safe_float(row["shortage_q70"]),
                 "q90": safe_float(row["shortage_q90"]),
                 "q100": safe_float(row["shortage_q100"]),
+                # Exceedance percentiles
+                "exc_p5": safe_float(row["shortage_exc_p5"]),
+                "exc_p10": safe_float(row["shortage_exc_p10"]),
+                "exc_p25": safe_float(row["shortage_exc_p25"]),
+                "exc_p50": safe_float(row["shortage_exc_p50"]),
+                "exc_p75": safe_float(row["shortage_exc_p75"]),
+                "exc_p90": safe_float(row["shortage_exc_p90"]),
+                "exc_p95": safe_float(row["shortage_exc_p95"]),
             }
 
         return {

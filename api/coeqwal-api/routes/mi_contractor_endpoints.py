@@ -203,6 +203,7 @@ async def get_mi_shortage_monthly(
                 m.shortage_cv,
                 m.shortage_frequency_pct,
                 m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
                 m.sample_count
             FROM mi_shortage_monthly m
             LEFT JOIN mi_contractor c ON m.mi_contractor_code = c.short_code
@@ -248,6 +249,14 @@ async def get_mi_shortage_monthly(
             "q70": float(row["q70"]) if row["q70"] is not None else None,
             "q90": float(row["q90"]) if row["q90"] is not None else None,
             "q100": float(row["q100"]) if row["q100"] is not None else None,
+            # Exceedance percentiles
+            "exc_p5": float(row["exc_p5"]) if row["exc_p5"] is not None else None,
+            "exc_p10": float(row["exc_p10"]) if row["exc_p10"] is not None else None,
+            "exc_p25": float(row["exc_p25"]) if row["exc_p25"] is not None else None,
+            "exc_p50": float(row["exc_p50"]) if row["exc_p50"] is not None else None,
+            "exc_p75": float(row["exc_p75"]) if row["exc_p75"] is not None else None,
+            "exc_p90": float(row["exc_p90"]) if row["exc_p90"] is not None else None,
+            "exc_p95": float(row["exc_p95"]) if row["exc_p95"] is not None else None,
             "sample_count": row["sample_count"],
         }
 

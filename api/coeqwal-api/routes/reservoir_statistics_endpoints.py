@@ -757,6 +757,8 @@ async def get_storage_monthly(
             rsm.storage_avg_taf, rsm.storage_cv, rsm.storage_pct_capacity,
             rsm.q0, rsm.q10, rsm.q30, rsm.q50, rsm.q70, rsm.q90, rsm.q100,
             rsm.q0_taf, rsm.q10_taf, rsm.q30_taf, rsm.q50_taf, rsm.q70_taf, rsm.q90_taf, rsm.q100_taf,
+            rsm.exc_p5, rsm.exc_p10, rsm.exc_p25, rsm.exc_p50, rsm.exc_p75, rsm.exc_p90, rsm.exc_p95,
+            rsm.exc_p5_taf, rsm.exc_p10_taf, rsm.exc_p25_taf, rsm.exc_p50_taf, rsm.exc_p75_taf, rsm.exc_p90_taf, rsm.exc_p95_taf,
             rsm.capacity_taf, rsm.sample_count
         FROM reservoir_storage_monthly rsm
         JOIN reservoir_entity re ON rsm.reservoir_entity_id = re.id
@@ -798,6 +800,14 @@ async def get_storage_monthly(
                 "mean": float(row["storage_pct_capacity"])
                 if row["storage_pct_capacity"]
                 else 0.0,
+                # Exceedance percentiles (percent of capacity)
+                "exc_p5": float(row["exc_p5"]) if row["exc_p5"] else None,
+                "exc_p10": float(row["exc_p10"]) if row["exc_p10"] else None,
+                "exc_p25": float(row["exc_p25"]) if row["exc_p25"] else None,
+                "exc_p50": float(row["exc_p50"]) if row["exc_p50"] else None,
+                "exc_p75": float(row["exc_p75"]) if row["exc_p75"] else None,
+                "exc_p90": float(row["exc_p90"]) if row["exc_p90"] else None,
+                "exc_p95": float(row["exc_p95"]) if row["exc_p95"] else None,
             }
 
             # Volume in TAF
@@ -812,6 +822,14 @@ async def get_storage_monthly(
                 "mean": float(row["storage_avg_taf"])
                 if row["storage_avg_taf"]
                 else 0.0,
+                # Exceedance percentiles (TAF)
+                "exc_p5": float(row["exc_p5_taf"]) if row["exc_p5_taf"] else None,
+                "exc_p10": float(row["exc_p10_taf"]) if row["exc_p10_taf"] else None,
+                "exc_p25": float(row["exc_p25_taf"]) if row["exc_p25_taf"] else None,
+                "exc_p50": float(row["exc_p50_taf"]) if row["exc_p50_taf"] else None,
+                "exc_p75": float(row["exc_p75_taf"]) if row["exc_p75_taf"] else None,
+                "exc_p90": float(row["exc_p90_taf"]) if row["exc_p90_taf"] else None,
+                "exc_p95": float(row["exc_p95_taf"]) if row["exc_p95_taf"] else None,
             }
 
         response = {"scenario_id": scenario_id, "reservoirs": result}

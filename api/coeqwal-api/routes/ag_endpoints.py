@@ -414,6 +414,7 @@ async def get_ag_du_shortage_monthly(
                 m.shortage_frequency_pct,
                 m.shortage_pct_of_demand_avg,
                 m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
                 m.sample_count
             FROM ag_du_shortage_monthly m
             LEFT JOIN du_agriculture_entity e ON m.du_id = e.du_id
@@ -464,6 +465,14 @@ async def get_ag_du_shortage_monthly(
             "q70": safe_float(row["q70"]),
             "q90": safe_float(row["q90"]),
             "q100": safe_float(row["q100"]),
+            # Exceedance percentiles
+            "exc_p5": safe_float(row["exc_p5"]),
+            "exc_p10": safe_float(row["exc_p10"]),
+            "exc_p25": safe_float(row["exc_p25"]),
+            "exc_p50": safe_float(row["exc_p50"]),
+            "exc_p75": safe_float(row["exc_p75"]),
+            "exc_p90": safe_float(row["exc_p90"]),
+            "exc_p95": safe_float(row["exc_p95"]),
             "sample_count": safe_int(row["sample_count"]),
         }
 
