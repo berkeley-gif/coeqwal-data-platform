@@ -13,7 +13,7 @@ Example:
 
 import asyncio
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
