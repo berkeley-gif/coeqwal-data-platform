@@ -52,19 +52,19 @@ async def fetch_storage_monthly(conn, scenario_id: str) -> Dict[str, Any]:
     SELECT
         re.short_code as reservoir_id,
         re.name as reservoir_name,
-        re.capacity_taf,
-        re.dead_pool_taf,
-        sm.water_month,
-        sm.pct_q0, sm.pct_q10, sm.pct_q30, sm.pct_q50,
-        sm.pct_q70, sm.pct_q90, sm.pct_q100, sm.pct_mean,
-        sm.taf_q0, sm.taf_q10, sm.taf_q30, sm.taf_q50,
-        sm.taf_q70, sm.taf_q90, sm.taf_q100, sm.taf_mean
-    FROM reservoir_storage_monthly sm
-    JOIN reservoir_entity re ON sm.reservoir_entity_id = re.id
+        rsm.capacity_taf,
+        rsm.water_month,
+        rsm.q0, rsm.q10, rsm.q30, rsm.q50, rsm.q70, rsm.q90, rsm.q100,
+        rsm.storage_pct_capacity,
+        rsm.q0_taf, rsm.q10_taf, rsm.q30_taf, rsm.q50_taf,
+        rsm.q70_taf, rsm.q90_taf, rsm.q100_taf,
+        rsm.storage_avg_taf
+    FROM reservoir_storage_monthly rsm
+    JOIN reservoir_entity re ON rsm.reservoir_entity_id = re.id
     JOIN reservoir_group_member rgm ON rgm.reservoir_entity_id = re.id
     JOIN reservoir_group rg ON rg.id = rgm.reservoir_group_id
-    WHERE sm.scenario_short_code = $1 AND rg.short_code = 'major'
-    ORDER BY re.short_code, sm.water_month
+    WHERE rsm.scenario_short_code = $1 AND rg.short_code = 'major'
+    ORDER BY re.short_code, rsm.water_month
     """
     rows = await conn.fetch(query, scenario_id)
 
@@ -75,31 +75,30 @@ async def fetch_storage_monthly(conn, scenario_id: str) -> Dict[str, Any]:
             reservoirs[rid] = {
                 "name": row["reservoir_name"],
                 "capacity_taf": safe_float(row["capacity_taf"]),
-                "dead_pool_taf": safe_float(row["dead_pool_taf"]),
                 "monthly_percent": {},
                 "monthly_taf": {},
             }
 
         wm = str(row["water_month"])
         reservoirs[rid]["monthly_percent"][wm] = {
-            "q0": safe_float(row["pct_q0"]),
-            "q10": safe_float(row["pct_q10"]),
-            "q30": safe_float(row["pct_q30"]),
-            "q50": safe_float(row["pct_q50"]),
-            "q70": safe_float(row["pct_q70"]),
-            "q90": safe_float(row["pct_q90"]),
-            "q100": safe_float(row["pct_q100"]),
-            "mean": safe_float(row["pct_mean"]),
+            "q0": safe_float(row["q0"]),
+            "q10": safe_float(row["q10"]),
+            "q30": safe_float(row["q30"]),
+            "q50": safe_float(row["q50"]),
+            "q70": safe_float(row["q70"]),
+            "q90": safe_float(row["q90"]),
+            "q100": safe_float(row["q100"]),
+            "mean": safe_float(row["storage_pct_capacity"]),
         }
         reservoirs[rid]["monthly_taf"][wm] = {
-            "q0": safe_float(row["taf_q0"]),
-            "q10": safe_float(row["taf_q10"]),
-            "q30": safe_float(row["taf_q30"]),
-            "q50": safe_float(row["taf_q50"]),
-            "q70": safe_float(row["taf_q70"]),
-            "q90": safe_float(row["taf_q90"]),
-            "q100": safe_float(row["taf_q100"]),
-            "mean": safe_float(row["taf_mean"]),
+            "q0": safe_float(row["q0_taf"]),
+            "q10": safe_float(row["q10_taf"]),
+            "q30": safe_float(row["q30_taf"]),
+            "q50": safe_float(row["q50_taf"]),
+            "q70": safe_float(row["q70_taf"]),
+            "q90": safe_float(row["q90_taf"]),
+            "q100": safe_float(row["q100_taf"]),
+            "mean": safe_float(row["storage_avg_taf"]),
         }
 
     return {"scenario_id": scenario_id, "reservoirs": reservoirs}
