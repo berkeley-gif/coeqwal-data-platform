@@ -376,3 +376,4 @@ async def get_batch_statistics(
             response["ag"][scenario_id][subtype] = result
 
     return response
+
