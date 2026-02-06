@@ -455,10 +455,25 @@ async def get_tier_map_data(
                      FROM wba 
                      WHERE wba_id = tl.location_id)
                 -- WBA (aquifer) lookup
+                -- tier_location_result uses WBA2, WBA7N, WBA10, WBA60N, DETAW etc
+                -- wba table uses 02, 07N, 10, 60N, DETAW (leading zeros for single digits)
                 WHEN tl.location_type = 'wba' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 
                      FROM wba 
-                     WHERE wba_id = tl.location_id)
+                     WHERE wba_id = CASE 
+                         WHEN tl.location_id = 'DETAW' THEN 'DETAW'
+                         WHEN tl.location_id LIKE 'WBA%' THEN 
+                             CASE 
+                                 -- Single digit: WBA2 -> 02, WBA7N -> 07N, WBA9 -> 09
+                                 WHEN SUBSTRING(tl.location_id FROM 4 FOR 1) ~ '[0-9]'
+                                      AND (LENGTH(tl.location_id) = 4 
+                                           OR SUBSTRING(tl.location_id FROM 5 FOR 1) ~ '[NS]')
+                                 THEN '0' || SUBSTRING(tl.location_id FROM 4)
+                                 -- Multi digit: WBA10 -> 10, WBA60N -> 60N
+                                 ELSE SUBSTRING(tl.location_id FROM 4)
+                             END
+                         ELSE tl.location_id
+                     END)
                 -- Compliance station lookup
                 WHEN tl.location_type = 'compliance_station' THEN
                     (SELECT ST_AsGeoJSON(geom)::jsonb 

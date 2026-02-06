@@ -63,6 +63,10 @@ from routes.ag_endpoints import (
     router as ag_router,
     set_db_pool as set_ag_db_pool,
 )
+from routes.batch_statistics_endpoints import (
+    router as batch_stats_router,
+    set_db_pool as set_batch_stats_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -158,6 +162,7 @@ async def lifespan(app: FastAPI):
     set_mi_contractor_db_pool(db_pool)
     set_demand_unit_db_pool(db_pool)
     set_ag_db_pool(db_pool)
+    set_batch_stats_db_pool(db_pool)
 
     yield
 
@@ -206,6 +211,9 @@ app.include_router(demand_unit_router)
 
 # Agricultural statistics router
 app.include_router(ag_router)
+
+# Batch statistics router (for Data Explorer performance)
+app.include_router(batch_stats_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
