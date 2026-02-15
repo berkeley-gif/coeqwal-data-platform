@@ -315,9 +315,9 @@ Table: calsim_variable_type
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Values (3 total):
-├── output: Output (Model output variable)
-├── state: State (State variable)
-└── decision: Decision (Decision variable)
+├── output: output (model output variable)
+├── state: state (state variable)
+└── decision: decision (decision variable)
 ```
 
 ### **9. variable_type**
@@ -334,12 +334,12 @@ Table: variable_type
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Values (6 total):
-├── delivery: Delivery (Water delivery)
-├── gw_pumping: Groundwater pumping (Groundwater pumping)
-├── PA: Project agricultural (Project agricultural water use)
-├── PR: Project wildlife refuge (Project wildlife refuge water use)
-├── PU: Project community water system (Project community water system - M&I)
-└── unknown: Unknown (Unknown or unclassified)
+├── delivery: delivery (water delivery)
+├── gw_pumping: groundwater pumping (groundwater pumping)
+├── PA: project agricultural (project agricultural water use)
+├── PR: project wildlife refuge (project wildlife refuge water use)
+├── PU: project community water system (project community water system - M&I)
+└── unknown: unknown (unknown or unclassified)
 ```
 
 ### **10. unit**

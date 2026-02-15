@@ -55,8 +55,8 @@ VALUES ('Example',
 ### 3. Capitalization
 
 - [ ] `short_code`: lowercase, except acronyms (e.g., `delivery`, `gw_pumping`, `PA`, `SAC`, `MEAN`)
-- [ ] `label`: Sentence case - capitalize first word, acronyms, and proper nouns only (e.g., `Groundwater pumping`, `Sacramento`)
-- [ ] `description`: Sentence case (e.g., `Project agricultural water use`)
+- [ ] `label`: lowercase, except acronyms and proper nouns (e.g., `groundwater pumping`, `Sacramento`)
+- [ ] `description`: lowercase, except acronyms and proper nouns (e.g., `project agricultural water use`)
 
 ### 4. Audit trigger
 
@@ -180,19 +180,19 @@ SELECT id, source, description FROM source ORDER BY id;
 **calsim_variable_type** (technical CalSim classification):
 | short_code | label | description |
 |------------|-------|-------------|
-| output | Output | Model output variable |
-| state | State | State variable |
-| decision | Decision | Decision variable |
+| output | output | model output variable |
+| state | state | state variable |
+| decision | decision | decision variable |
 
 **variable_type** (colloquial/domain classification):
 | short_code | label | description |
 |------------|-------|-------------|
-| delivery | Delivery | Water delivery |
-| gw_pumping | Groundwater pumping | Groundwater pumping |
-| PA | Project agricultural | Project agricultural water use |
-| PR | Project wildlife refuge | Project wildlife refuge water use |
-| PU | Project community water system | Project community water system (M&I) |
-| unknown | Unknown | Unknown or unclassified |
+| delivery | delivery | water delivery |
+| gw_pumping | groundwater pumping | groundwater pumping |
+| PA | project agricultural | project agricultural water use |
+| PR | project wildlife refuge | project wildlife refuge water use |
+| PU | project community water system | project community water system (M&I) |
+| unknown | unknown | unknown or unclassified |
 
 ---
 
