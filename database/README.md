@@ -65,7 +65,7 @@ Arrows indicate **dependency** - each layer depends on layers above it.
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     03_ENTITY (Management)                          │
+│                     03_ENTITY                          │
 │  reservoir_entity, channel_entity, inflow_entity                    │
 │  du_urban_entity, du_agriculture_entity, du_refuge_entity           │
 │  calsim_entity_type                                                 │
@@ -74,7 +74,7 @@ Arrows indicate **dependency** - each layer depends on layers above it.
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     04_CALSIM_DATA (Variables)                      │
+│                     04_CALSIM_DATA                      │
 │  reservoir_variable, channel_variable, inflow_variable              │
 │  reservoir_group, reservoir_group_member                            │
 │  Purpose: CalSim model variables linked to entities                 │
