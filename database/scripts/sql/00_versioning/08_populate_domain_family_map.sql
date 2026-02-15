@@ -19,9 +19,9 @@ INSERT INTO version_family (id, short_code, label, is_active)
 VALUES (14, 'infrastructure', 'Infrastructure', true)
 ON CONFLICT (id) DO UPDATE SET short_code = EXCLUDED.short_code, label = EXCLUDED.label;
 
-INSERT INTO version (id, version_family_id, version_number, short_code, is_active)
-VALUES (14, 14, '1.0.0', 'infrastructure', true)
-ON CONFLICT (id) DO UPDATE SET version_family_id = EXCLUDED.version_family_id, short_code = EXCLUDED.short_code;
+INSERT INTO version (id, version_family_id, version_number, is_active)
+VALUES (14, 14, '1.0.0', true)
+ON CONFLICT (id) DO UPDATE SET version_family_id = EXCLUDED.version_family_id;
 
 -- =============================================================================
 -- 2. Insert all domain_family_map records
