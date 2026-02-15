@@ -5,7 +5,7 @@ assumption,Assumption,Scenario assumptions and parameters,true
 operation,Operation,Operational policies and rules,true
 hydroclimate,Hydroclimate,Hydroclimate conditions and projections,true
 variable,Variable,CalSim model variables and definitions,true
-outcome,Outcome,Outcome categories and measurement systems,true
+statistics,Statistics,Statistics categories and measurement systems,true
 tier,Tier,Tier definitions and classification systems,true
 geospatial,Geospatial,Geographic and spatial data definitions,true
 interpretive,Interpretive,Analysis and interpretive frameworks,true

@@ -84,7 +84,7 @@ Values (13 total):
 ├── operation: Operational policies and rules
 ├── hydroclimate: Hydroclimate conditions and projections
 ├── variable: CalSim model variables and definitions
-├── outcome: Outcome categories and measurement systems
+├── statistics: Statistics categories and measurement systems
 ├── tier: Tier definitions and classification systems
 ├── geospatial: Geographic and spatial data definitions
 ├── interpretive: Analysis and interpretive frameworks
@@ -759,7 +759,7 @@ Table: outcome_category
 ├── short_code            TEXT UNIQUE NOT NULL       -- "reservoir_storage", "groundwater_storage", etc.
 ├── label                 TEXT                       -- "Reservoir Storage", etc.
 ├── description           TEXT                       -- Detailed description
-├── outcome_version_id    INTEGER NOT NULL           -- FK → version.id (outcome family, version_family_id=7)
+├── outcome_version_id    INTEGER NOT NULL           -- FK → version.id (statistics family, version_family_id=7)
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
 ├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (1 = system)

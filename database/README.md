@@ -24,6 +24,7 @@ database/
 │   └── 10_tier/               # Tier results (layer 10)
 ├── scripts/
 │   ├── sql/                   # SQL scripts
+│   │   ├── 00_versioning/     # Audit triggers and versioning
 │   │   ├── 11_reservoir_statistics/
 │   │   ├── 12_mi_statistics/
 │   │   ├── 13_ag_statistics/
@@ -176,9 +177,11 @@ Arrows indicate **dependency** - each layer depends on layers above it.
   - Implemented: `water_month BETWEEN 1 AND 12`, `tier_level BETWEEN 1 AND 4`
   - Implemented: `is_active`, `short_code` are NOT NULL where required
 
-- [ ] **Audit Fields** - `created_at`, `created_by`, `updated_at`, `updated_by` on all tables
+- [x] **Audit Fields** - `created_at`, `created_by`, `updated_at`, `updated_by` on all tables
   - Implemented: All domain tables include audit fields
-  - Implemented: `coeqwal_current_operator()` function auto-populates `created_by`/`updated_by`
+  - Implemented: `set_audit_fields()` trigger auto-populates all audit fields on INSERT/UPDATE
+  - Implemented: `coeqwal_current_operator()` function identifies current user via SSO
+  - Implemented: `audit_log` table tracks all INSERT/UPDATE/DELETE with old/new values
 
 - [ ] **Indexes** - On FKs, frequently queried columns, unique constraints
   - Implemented: All `short_code` columns have unique indexes
@@ -267,14 +270,82 @@ The versioning layer provides audit trails and version control for all other lay
 ```
 
 **Key functions:**
-- `coeqwal_current_operator()` - Returns developer.id for audit fields
+- `coeqwal_current_operator()` - Returns developer.id for audit fields (SSO-aware)
 - `get_active_version(family)` - Returns active version.id for a family
+- `set_audit_fields()` - Trigger function for automatic audit field population
 
 **Expected records:**
-- `developer`: 2 (system + admin bootstrap users)
-- `version_family`: 13 (one per domain)
+- `developer`: 2+ (system + admin bootstrap users + SSO users)
+- `version_family`: 13 (one per domain, including 'statistics' for id=7)
 - `version`: 13 (one active version per family)
-- `domain_family_map`: 35 (maps tables to families)
+- `domain_family_map`: 11+ (maps tables to version families)
+
+---
+
+## Automatic audit triggers
+
+All tables have automatic audit field population via database triggers.
+
+### How it works
+
+| Event | created_at | created_by | updated_at | updated_by |
+|-------|------------|------------|------------|------------|
+| INSERT | `NOW()` | `coeqwal_current_operator()` | `NOW()` | `coeqwal_current_operator()` |
+| UPDATE | preserved | preserved | `NOW()` | `coeqwal_current_operator()` |
+
+### Developer detection
+
+`coeqwal_current_operator()` identifies the current user through multiple strategies:
+1. Match `aws_sso_username` column
+2. Match email containing database username
+3. Match name/display_name containing database username
+4. If postgres user, find jfantauzza
+5. Fallback to system user (id=1)
+
+### audit_log table
+
+All changes are recorded in the `audit_log` table:
+
+```sql
+-- Recent changes
+SELECT table_name, operation, changed_fields, changed_by, changed_at
+FROM audit_log
+ORDER BY changed_at DESC
+LIMIT 20;
+
+-- Changes to a specific table
+SELECT * FROM audit_log WHERE table_name = 'scenario';
+
+-- Changes by a specific user
+SELECT * FROM audit_log WHERE changed_by = 2;
+```
+
+### Scripts
+
+Audit trigger scripts are in `scripts/sql/00_versioning/`:
+- `00_create_audit_trigger_function.sql` - Creates `set_audit_fields()` trigger function
+- `01_create_audit_log_table.sql` - Creates `audit_log` table for change tracking
+- `03_apply_audit_triggers.sql` - Applies triggers to all tables
+
+### Verification queries
+
+```sql
+-- Check triggers are applied
+SELECT trigger_name, event_object_table 
+FROM information_schema.triggers 
+WHERE trigger_name LIKE 'audit_%';
+
+-- Check audit log entries
+SELECT table_name, operation, COUNT(*) 
+FROM audit_log 
+GROUP BY table_name, operation;
+
+-- Enable audit logging on sensitive tables (run once)
+SELECT apply_audit_log_trigger_to_table('developer');
+SELECT apply_audit_log_trigger_to_table('version');
+SELECT apply_audit_log_trigger_to_table('version_family');
+SELECT apply_audit_log_trigger_to_table('scenario');
+```
 
 ---
 
@@ -400,6 +471,46 @@ Tables include CHECK constraints for data validation:
 ---
 
 ## Development setup
+
+### Cloud9 development workflow
+
+The recommended workflow for database changes:
+
+```
+┌──────────────┐     git push     ┌──────────────┐     git pull     ┌──────────────┐
+│   Local Dev  │ ───────────────► │    GitHub    │ ◄─────────────── │   Cloud9     │
+│   (Cursor)   │                  │  (main repo) │                  │   (AWS)      │
+└──────────────┘                  └──────────────┘                  └──────┬───────┘
+                                                                          │
+                                                                          │ psql
+                                                                          ▼
+                                                                   ┌──────────────┐
+                                                                   │   RDS        │
+                                                                   │  (Postgres)  │
+                                                                   └──────────────┘
+```
+
+1. **Local**: Edit SQL scripts in Cursor
+2. **GitHub**: Push changes to main branch
+3. **Cloud9**: Pull latest from GitHub
+4. **RDS**: Run SQL scripts via psql
+
+### Running SQL scripts in Cloud9
+
+```bash
+# Pull latest from GitHub
+cd ~/environment/coeqwal-backend
+git pull origin main
+
+# Connect to database
+psql -h coeqwal-scenario-database-1.xxxxx.us-west-2.rds.amazonaws.com \
+     -U postgres -d coeqwal_scenario
+
+# Run scripts
+\i database/scripts/sql/00_versioning/00_create_audit_trigger_function.sql
+\i database/scripts/sql/00_versioning/01_create_audit_log_table.sql
+-- etc.
+```
 
 ### Connect to production (read-only)
 

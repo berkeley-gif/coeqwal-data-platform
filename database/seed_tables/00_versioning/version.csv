@@ -5,7 +5,7 @@ assumption,1.0.0,{},"Initial assumption version",true
 operation,1.0.0,{},"Initial operation version",true
 hydroclimate,1.0.0,{},"Initial hydroclimate version",true
 variable,1.0.0,{},"Initial variable version",true
-outcome,1.0.0,{},"Initial outcome version",true
+statistics,1.0.0,{},"Initial statistics version",true
 tier,1.0.0,{},"Initial tier version",true
 geospatial,1.0.0,{},"Initial geospatial version",true
 interpretive,1.0.0,{},"Initial interpretive version",true
