@@ -272,8 +272,8 @@ Values (8 total):
 ```
 Table: statistic_type
 ├── id                   SERIAL PRIMARY KEY
-├── code                 TEXT UNIQUE NOT NULL       -- "MEAN", "MEDIAN", "MIN", "MAX", etc.
-├── name                 TEXT NOT NULL              -- "Mean", "Median", etc.
+├── short_code           TEXT UNIQUE NOT NULL       -- "MEAN", "MEDIAN", "MIN", "MAX", etc.
+├── label                TEXT NOT NULL              -- "Mean", "Median", etc.
 ├── description          TEXT                       -- Statistic description
 ├── is_percentile        BOOLEAN DEFAULT FALSE      -- Whether this is a percentile measure
 ├── created_at           TIMESTAMP DEFAULT NOW()
@@ -281,11 +281,24 @@ Table: statistic_type
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (6 total):
+Values (13 total):
+
+Non-percentile (is_percentile = false):
 ├── MEAN: Mean (Average value)
 ├── MEDIAN: Median (50th percentile)
 ├── MIN: Minimum (Minimum value)
-└── ... (3 more statistics)
+├── MAX: Maximum (Maximum value)
+├── STDEV: Standard deviation (Absolute spread around mean)
+└── CV: Coefficient of variation (Relative variability: stdev/mean)
+
+Percentile bands (is_percentile = true):
+├── Q0: 0th percentile (Minimum in band context)
+├── Q10: 10th percentile (Dry conditions)
+├── Q30: 30th percentile (Below normal)
+├── Q50: 50th percentile (Median in band context)
+├── Q70: 70th percentile (Above normal)
+├── Q90: 90th percentile (Wet conditions)
+└── Q100: 100th percentile (Maximum in band context)
 ```
 
 ### **8. unit**

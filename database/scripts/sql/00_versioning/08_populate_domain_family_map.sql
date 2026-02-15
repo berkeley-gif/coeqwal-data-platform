@@ -86,7 +86,7 @@ VALUES
     ('public', 'spatial_ref_sys', 9, 'PostGIS spatial reference systems'),
     
     -- metadata (11) - lookup tables
-    ('public', 'geometry_type', 11, 'Geometry type lookup'),
+    ('public', 'geometry_type', 9, 'Geometry type definitions'),
     ('public', 'hydrologic_region', 11, 'Hydrologic region lookup'),
     ('public', 'model_source', 11, 'Model source lookup'),
     ('public', 'source', 11, 'Data source lookup'),
