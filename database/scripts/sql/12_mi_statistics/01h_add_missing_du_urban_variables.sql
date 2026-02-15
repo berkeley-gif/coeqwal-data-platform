@@ -1,7 +1,7 @@
 -- ADD DU_URBAN_VARIABLE RECORDS FOR NEW ENTITIES
 -- Creates variable mappings for entities added in 01g_add_missing_du_urban_entities.sql
 -- Run AFTER 01g script
--- Run with: psql "$DATABASE_URL" -f database/scripts/sql/10_mi_statistics/01h_add_missing_du_urban_variables.sql
+-- Run with: psql "$DATABASE_URL" -f database/scripts/sql/12_mi_statistics/01h_add_missing_du_urban_variables.sql
 
 \echo ''
 \echo '========================================='

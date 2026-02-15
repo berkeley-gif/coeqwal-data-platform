@@ -1,6 +1,6 @@
 -- ADD MISSING DU_URBAN_ENTITY RECORDS
 -- These DUs exist in CalSim output with delivery arcs but were not in the original entity table
--- Run with: psql "$DATABASE_URL" -f database/scripts/sql/10_mi_statistics/01g_add_missing_du_urban_entities.sql
+-- Run with: psql "$DATABASE_URL" -f database/scripts/sql/12_mi_statistics/01g_add_missing_du_urban_entities.sql
 
 \echo ''
 \echo '========================================='

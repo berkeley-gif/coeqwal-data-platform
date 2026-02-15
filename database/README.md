@@ -12,11 +12,21 @@ database/
 │   └── README.md
 ├── schema/                    # ERD and schema documentation
 │   └── COEQWAL_SCENARIOS_DB_ERD.md
+├── seed_tables/               # CSV seed data organized by layer
+│   ├── 00_versioning/         # Version & developer seeds
+│   ├── 01_lookup/             # Reference data
+│   ├── 02_network/            # Network infrastructure
+│   ├── 03_entity/             # Entity definitions
+│   ├── 04_calsim_data/        # CalSim variables & entities
+│   ├── 05_themes_scenarios/   # Theme & scenario definitions
+│   ├── 06_assumptions_operations/
+│   ├── 07_hydroclimate/
+│   └── 10_tier/               # Tier results (layer 10)
 ├── scripts/
 │   ├── sql/                   # SQL scripts
-│   │   ├── 09_statistics/     # Reservoir statistics tables
-│   │   ├── 10_mi_statistics/  # Municipal & Industrial statistics
-│   │   ├── 11_ag_statistics/  # Agricultural statistics
+│   │   ├── 11_reservoir_statistics/
+│   │   ├── 12_mi_statistics/
+│   │   ├── 13_ag_statistics/
 │   │   └── validate_data_integrity.sql
 └── utils/
     └── db_audit_lambda/       # Database audit Lambda function
@@ -24,27 +34,247 @@ database/
 
 ## Schema layers
 
-The database follows a layered architecture:
+The database follows a layered architecture separating **foundational data** (00-08) from **derived results** (10+).
 
-| Layer | Prefix | Purpose |
-|-------|--------|---------|
-| 00_VERSIONING | `version_*`, `developer` | Version control and developer tracking |
-| 01_LOOKUP | Various | Reference/lookup tables |
-| 05_THEMES_SCENARIOS | `theme`, `scenario`, etc. | Scenario management |
-| 09_STATISTICS | `reservoir_*` | Reservoir statistics |
-| 10_MI_STATISTICS | `du_*`, `mi_*`, `cws_*` | Municipal & Industrial statistics |
-| 11_AG_STATISTICS | `ag_*` | Agricultural statistics |
+Arrows indicate **dependency** - each layer depends on layers above it.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        00_VERSIONING                                │
+│  version_family, version, developer, domain_family_map              │
+│  Purpose: Version control, audit trails, developer tracking         │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                        01_LOOKUP                                    │
+│  hydrologic_region, source, model_source, unit, spatial_scale,      │
+│  temporal_scale, statistic_type, geometry_type, variable_type       │
+│  Purpose: Reference/lookup tables shared across all layers          │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     02_NETWORK (Infrastructure)                     │
+│  network, network_gis, network_arc_attribute, network_node_attribute│
+│  network_physical_connectivity, network_operational_connectivity    │
+│  network_entity_type, network_arc_type, network_node_type           │
+│  Purpose: Physical water infrastructure (arcs, nodes, connectivity) │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     03_ENTITY (Management)                          │
+│  reservoir_entity, channel_entity, inflow_entity                    │
+│  du_urban_entity, du_agriculture_entity, du_refuge_entity           │
+│  calsim_entity_type                                                 │
+│  Purpose: Operational/management entities built on network          │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     04_CALSIM_DATA (Variables)                      │
+│  reservoir_variable, channel_variable, inflow_variable              │
+│  reservoir_group, reservoir_group_member                            │
+│  Purpose: CalSim model variables linked to entities                 │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     05_THEMES_SCENARIOS                             │
+│  theme, scenario, scenario_author, theme_scenario_link              │
+│  Purpose: Scenario definitions and research themes                  │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  06_ASSUMPTIONS_OPERATIONS                          │
+│  assumption_category, assumption_definition, operation_category,    │
+│  operation_definition, scenario_assumption, scenario_operation      │
+│  Purpose: Scenario inputs and operational rules                     │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     07_HYDROCLIMATE                                 │
+│  hydroclimate, hydroclimate_source, climate_projection              │
+│  Purpose: Environmental boundary conditions (historical, projected) │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  08_TIER_DEFINITIONS (Classification)               │
+│  tier_definition, variable_tier                                     │
+│  Purpose: Define tier categories and how variables map to tiers     │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+══════════════════════════════════════════════════════════════════════
+               FOUNDATIONAL (00-08) ▲  │  ▼ DERIVED (10+)
+══════════════════════════════════════════════════════════════════════
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  10_TIER_RESULTS (Outcomes)                         │
+│  tier_result, tier_location_result                                  │
+│  Purpose: Aggregated scenario outcomes (tier levels 1-4)            │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  11_RESERVOIR_STATISTICS                            │
+│  reservoir_monthly_percentile, reservoir_storage_monthly,           │
+│  reservoir_spill_monthly, reservoir_period_summary                  │
+│  Purpose: Reservoir storage and spill statistics from CalSim runs   │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  12_MI_STATISTICS                                   │
+│  mi_contractor, mi_contractor_period_summary, du_delivery_monthly,  │
+│  cws_aggregate_entity, cws_aggregate_period_summary                 │
+│  Purpose: Municipal & Industrial water delivery statistics          │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  13_AG_STATISTICS                                   │
+│  ag_aggregate_entity, ag_aggregate_period_summary,                  │
+│  ag_delivery_monthly, ag_shortage_monthly                           │
+│  Purpose: Agricultural water delivery statistics                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ## Schema implementation status
 
-| ERD Section | Key Tables | SQL Scripts | Status |
-|-------------|------------|-------------|--------|
+| Layer | Key Tables | SQL Scripts | Status |
+|-------|------------|-------------|--------|
 | 00_VERSIONING | version_family, version, developer | 00_create_helper_functions.sql | Implemented |
 | 01_LOOKUP | hydrologic_region, source, model_source | 03_create_and_load_network_lookups.sql | Implemented |
+| 02_NETWORK | network, network_gis | seed_tables/02_network/ | Implemented |
+| 03_ENTITY | reservoir_entity, channel_entity | seed_tables/03_entity/ | Implemented |
+| 04_CALSIM_DATA | calsim_entity_type, *_variable | seed_tables/04_calsim_data/ | Implemented |
 | 05_THEMES_SCENARIOS | theme, scenario, hydroclimate | create_scenario_tables.sql | Implemented |
-| 09_STATISTICS | reservoir_entity, reservoir_monthly_percentile | 09_statistics/*.sql | Implemented |
-| 10_MI_STATISTICS | du_urban_entity, mi_contractor | 10_mi_statistics/*.sql | Implemented |
-| 11_AG_STATISTICS | du_agriculture_entity, ag_aggregate_entity | 11_ag_statistics/*.sql | Implemented |
+| 06_ASSUMPTIONS_OPERATIONS | assumption_definition, operation_definition | seed_tables/06_assumptions_operations/ | Partial |
+| 07_HYDROCLIMATE | hydroclimate | seed_tables/07_hydroclimate/ | Implemented |
+| 08_TIER_DEFINITIONS | tier_definition, variable_tier | create_tier_location_result_table.sql | Implemented |
+| 10_TIER_RESULTS | tier_result, tier_location_result | upsert_tier_data_from_s3.sql | Implemented |
+| 11_RESERVOIR_STATISTICS | reservoir_monthly_percentile, reservoir_period_summary | 11_reservoir_statistics/*.sql | Implemented |
+| 12_MI_STATISTICS | mi_contractor, du_delivery_monthly | 12_mi_statistics/*.sql | Implemented |
+| 13_AG_STATISTICS | ag_aggregate_entity, ag_aggregate_period_summary | 13_ag_statistics/*.sql | Implemented |
+
+---
+
+## Best practices checklist
+
+### Database best practices
+
+- [ ] **Referential Integrity** - All FKs reference valid PKs
+  - Implemented: All tables use explicit FK constraints with `REFERENCES` clause
+  - Audit: `validate_data_integrity.sql` checks for orphaned records
+
+- [ ] **Constraints** - CHECK constraints for valid ranges, NOT NULL for required fields
+  - Implemented: `water_month BETWEEN 1 AND 12`, `tier_level BETWEEN 1 AND 4`
+  - Implemented: `is_active`, `short_code` are NOT NULL where required
+
+- [ ] **Audit Fields** - `created_at`, `created_by`, `updated_at`, `updated_by` on all tables
+  - Implemented: All domain tables include audit fields
+  - Implemented: `coeqwal_current_operator()` function auto-populates `created_by`/`updated_by`
+
+- [ ] **Indexes** - On FKs, frequently queried columns, unique constraints
+  - Implemented: All `short_code` columns have unique indexes
+  - Implemented: FK columns indexed for join performance
+
+- [ ] **Naming Conventions** - Consistent table/column naming
+  - Implemented: `snake_case` for all tables and columns
+  - Implemented: `*_id` suffix for FK columns, `*_entity` suffix for entity tables
+
+### Data integrity best practices
+
+- [ ] **Completeness** - No unexpected NULLs, all required records present
+  - Audit: Check record counts match expected (see layer audits)
+  - Audit: Check required fields are populated
+
+- [ ] **Consistency** - References match across tables, no orphans
+  - Audit: `validate_data_integrity.sql` orphan checks
+  - Audit: Version family consistency (each family has exactly 1 active version)
+
+- [ ] **Validity** - Values within expected ranges/enums
+  - Implemented: CHECK constraints enforce ranges
+  - Audit: Validate `water_month`, `tier_level`, `location_type`
+
+- [ ] **Accuracy** - Data matches source of truth
+  - Audit: Compare database records against seed CSVs
+  - Audit: ERD verification against actual schema
+
+### API best practices
+
+- [ ] **Validation** - Reject invalid data at API layer before DB
+  - Implemented: FastAPI Pydantic models validate input
+  - Implemented: Type checking and range validation
+
+- [ ] **Error Handling** - Clear error messages, proper HTTP codes
+  - Implemented: Structured error responses with details
+
+- [ ] **Consistency** - Same response format across endpoints
+  - Implemented: Standard response envelope with `data`, `meta`, `errors`
+
+---
+
+## Layer 00_VERSIONING schema
+
+The versioning layer provides audit trails and version control for all other layers.
+
+```
+┌─────────────────────────────────┐       ┌─────────────────────────────────┐
+│        developer                │       │       version_family            │
+├─────────────────────────────────┤       ├─────────────────────────────────┤
+│ id (PK)                         │       │ id (PK)                         │
+│ email (UNIQUE)                  │       │ short_code (UNIQUE, NOT NULL)   │
+│ display_name (NOT NULL)         │       │ label                           │
+│ role                            │       │ description                     │
+│ aws_sso_username (UNIQUE)       │◄──────│ created_by (FK)                 │
+│ is_bootstrap                    │       │ updated_by (FK)                 │
+│ sync_source                     │       │ is_active                       │
+│ is_active                       │       │ created_at, updated_at          │
+│ created_at, updated_at          │       └─────────────────────────────────┘
+└─────────────────────────────────┘                      │
+         ▲                                               │ 1:N
+         │                                               ▼
+         │                           ┌─────────────────────────────────┐
+         │                           │          version                │
+         │                           ├─────────────────────────────────┤
+         │                           │ id (PK)                         │
+         │                           │ version_family_id (FK)          │
+         │                           │ version_number                  │
+         └───────────────────────────│ created_by (FK)                 │
+                                     │ updated_by (FK)                 │
+                                     │ manifest (JSONB)                │
+                                     │ changelog                       │
+                                     │ is_active                       │
+                                     └─────────────────────────────────┘
+                                                         │
+                                                         │ 1:N
+                                                         ▼
+                                     ┌─────────────────────────────────┐
+                                     │     domain_family_map           │
+                                     ├─────────────────────────────────┤
+                                     │ schema_name (PK)                │
+                                     │ table_name (PK)                 │
+                                     │ version_family_id (FK)          │
+                                     │ target_version_column           │
+                                     │ note                            │
+                                     └─────────────────────────────────┘
+```
+
+**Key functions:**
+- `coeqwal_current_operator()` - Returns developer.id for audit fields
+- `get_active_version(family)` - Returns active version.id for a family
+
+**Expected records:**
+- `developer`: 2 (system + admin bootstrap users)
+- `version_family`: 13 (one per domain)
+- `version`: 13 (one active version per family)
+- `domain_family_map`: 35 (maps tables to families)
 
 ---
 

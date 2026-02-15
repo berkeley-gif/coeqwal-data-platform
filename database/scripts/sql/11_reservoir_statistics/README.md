@@ -1,6 +1,6 @@
-# 09_STATISTICS Layer SQL Scripts
+# 11_RESERVOIR_STATISTICS Layer SQL Scripts
 
-SQL scripts for creating and loading the Statistics Layer tables.
+SQL scripts for creating and loading the Reservoir Statistics tables (Layer 11).
 
 ## Tables
 
@@ -33,21 +33,21 @@ aws s3 cp database/seed_tables/04_calsim_data/reservoir_group_member.csv \
     s3://coeqwal-seeds-dev/04_calsim_data/reservoir_group_member.csv
 ```
 
-### Step 2: Create Tables
+### Step 2: Create tables
 
 ```bash
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/01_create_reservoir_entity_tables.sql
+    -f database/scripts/sql/11_reservoir_statistics/01_create_reservoir_entity_tables.sql
 ```
 
-### Step 3: Load Data from S3
+### Step 3: Load data from S3
 
 ```bash
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/02_load_reservoir_entity_from_s3.sql
+    -f database/scripts/sql/11_reservoir_statistics/02_load_reservoir_entity_from_s3.sql
 ```
 
-## Quick Start (All Steps)
+## Quick start (all steps)
 
 ```bash
 # Set connection variables
@@ -63,13 +63,13 @@ done
 
 # Create tables and load data
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/01_create_reservoir_entity_tables.sql
+    -f database/scripts/sql/11_reservoir_statistics/01_create_reservoir_entity_tables.sql
 
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/02_load_reservoir_entity_from_s3.sql
+    -f database/scripts/sql/11_reservoir_statistics/02_load_reservoir_entity_from_s3.sql
 ```
 
-## Verification Queries
+## Verification queries
 
 ```sql
 -- Check major reservoirs (via reservoir_group)
@@ -110,22 +110,22 @@ WHERE rg.short_code = 'major'
 GROUP BY 1;
 ```
 
-## Reservoir Percentile Table
+## Reservoir percentile table
 
-### Step 4: Create Percentile Table
+### Step 4: Create percentile table
 
 ```bash
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/03_create_reservoir_percentile_table.sql
+    -f database/scripts/sql/11_reservoir_statistics/03_create_reservoir_percentile_table.sql
 ```
 
-### Step 5: Load Percentile Data (via ETL)
+### Step 5: Load percentile data (via ETL)
 
 ```bash
 python etl/statistics/calculate_reservoir_percentiles.py --scenario s0020
 ```
 
-### Percentile Table Structure
+### Percentile table structure
 
 | Column | Description |
 |--------|-------------|
@@ -139,7 +139,7 @@ python etl/statistics/calculate_reservoir_percentiles.py --scenario s0020
 
 Note: Statistics tables reference reservoirs via `reservoir_entity_id` FK. The API JOINs on `reservoir_entity` to return short_codes (SHSTA) and enrich responses with capacity/dead_pool.
 
-### Percentile Verification Queries
+### Percentile verification queries
 
 ```sql
 -- Check percentile data for a scenario (with JOIN)
@@ -157,36 +157,36 @@ WHERE rmp.scenario_short_code = 's0020' AND re.short_code = 'SHSTA'
 ORDER BY rmp.water_month;
 ```
 
-## New Reservoir Statistics Tables (All 92 Reservoirs)
+## New Reservoir statistics tables (All 92 Reservoirs)
 
-### Step 6: Create Storage Monthly Table
-
-```bash
-psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/04_create_reservoir_storage_monthly.sql
-```
-
-### Step 7: Create Spill Monthly Table
+### Step 6: Create storage monthly table
 
 ```bash
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/05_create_reservoir_spill_monthly.sql
+    -f database/scripts/sql/11_reservoir_statistics/04_create_reservoir_storage_monthly.sql
 ```
 
-### Step 8: Create Period Summary Table
+### Step 7: Create Spill monthly table
 
 ```bash
 psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
-    -f database/scripts/sql/09_statistics/06_create_reservoir_period_summary.sql
+    -f database/scripts/sql/11_reservoir_statistics/05_create_reservoir_spill_monthly.sql
 ```
 
-### Step 9: Load Statistics Data (via ETL)
+### Step 8: Create Period Summary table
+
+```bash
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME \
+    -f database/scripts/sql/11_reservoir_statistics/06_create_reservoir_period_summary.sql
+```
+
+### Step 9: Load statistics data (via ETL)
 
 ```bash
 python etl/statistics/calculate_reservoir_statistics.py --scenario s0020
 ```
 
-### Storage Monthly Table Structure
+### Storage monthly table structure
 
 | Column | Description |
 |--------|-------------|
@@ -198,7 +198,7 @@ python etl/statistics/calculate_reservoir_statistics.py --scenario s0020
 | `storage_pct_capacity` | Mean as % of capacity |
 | `q0-q100` | Percentile bands (% of capacity) |
 
-### Spill Monthly Table Structure
+### Spill monthly table structure
 
 | Column | Description |
 |--------|-------------|
@@ -210,7 +210,7 @@ python etl/statistics/calculate_reservoir_statistics.py --scenario s0020
 | `spill_q50, q90, q100` | Percentiles when spilling |
 | `storage_at_spill_avg_pct` | Avg storage % when spill occurs |
 
-### Period Summary Table Structure
+### Period summary table structure
 
 **Storage Exceedance (for full-period exceedance curves):**
 | Column | Description |

@@ -2,19 +2,21 @@
 
 SQL scripts for database schema management, data operations, and validation.
 
-## Script Organization
+## Script organization
 
-Scripts are numbered for execution order and organized by feature:
+Scripts are numbered to match the database layer architecture:
 
-| Directory | Purpose |
-|-----------|---------|
-| `00_*` - `03_*` | Foundation: helper functions, lookup tables |
-| `09_statistics/` | Reservoir statistics tables |
-| `10_mi_statistics/` | Municipal & Industrial statistics |
-| `11_ag_statistics/` | Agricultural statistics |
-| `.archive/` | Deprecated/historical scripts |
+| Directory | Layer | Purpose |
+|-----------|-------|---------|
+| `00_*` - `03_*` | 00-03 | Foundation: helper functions, lookup tables |
+| `11_reservoir_statistics/` | 11 | Reservoir storage & spill statistics |
+| `12_mi_statistics/` | 12 | Municipal & Industrial delivery statistics |
+| `13_ag_statistics/` | 13 | Agricultural delivery statistics |
+| `.archive/` | — | Deprecated/historical scripts |
 
-## Key Scripts
+See [../README.md](../README.md) for the full layer architecture.
+
+## Key scripts
 
 | Script | Purpose |
 |--------|---------|
@@ -22,7 +24,7 @@ Scripts are numbered for execution order and organized by feature:
 | `create_tier_location_result_table.sql` | Tier location results |
 | `validate_data_integrity.sql` | Data quality validation queries |
 
-## Running Validation
+## Running validation
 
 After ETL runs, validate data integrity:
 
@@ -32,7 +34,7 @@ psql $DATABASE_URL -f validate_data_integrity.sql
 
 Review results for any non-zero counts in integrity checks.
 
-## Naming Conventions
+## Naming conventions
 
 - `create_*.sql` - Creates new tables
 - `*_from_s3.sql` - Loads data from S3
@@ -41,9 +43,10 @@ Review results for any non-zero counts in integrity checks.
 - `upsert_*.sql` - Insert or update operations
 - `migrate_*.sql` - Schema migrations
 
-## Adding New Scripts
+## Adding new scripts
 
-1. Use appropriate numbering (e.g., `09_statistics/11_new_feature.sql`)
+1. Place in the appropriate layer directory (e.g., `11_reservoir_statistics/`)
+
 2. Include table comments and audit fields
 3. Add CHECK constraints for data validation
 4. Update the ERD documentation

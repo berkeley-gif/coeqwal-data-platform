@@ -1071,8 +1071,8 @@ Constraints:
 
 Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
 
-DDL: database/scripts/sql/09_statistics/04_create_reservoir_storage_monthly.sql
-     database/scripts/sql/09_statistics/09_add_taf_percentile_columns.sql (ALTER)
+DDL: database/scripts/sql/11_reservoir_statistics/04_create_reservoir_storage_monthly.sql
+     database/scripts/sql/11_reservoir_statistics/09_add_taf_percentile_columns.sql (ALTER)
 ETL: etl/statistics/calculate_reservoir_statistics.py
 
 Note: TAF percentile columns (q0_taf through q100_taf) added to support COEQWAL research
@@ -1136,7 +1136,7 @@ Constraints:
 
 Expected Records: 8,832 rows (92 reservoirs × 12 months × 8 scenarios)
 
-DDL: database/scripts/sql/09_statistics/05_create_reservoir_spill_monthly.sql
+DDL: database/scripts/sql/11_reservoir_statistics/05_create_reservoir_spill_monthly.sql
 ETL: etl/statistics/calculate_reservoir_statistics.py
 ```
 
@@ -1305,8 +1305,8 @@ Constraints:
 
 Expected Records: 736 rows (92 reservoirs × 8 scenarios)
 
-DDL: database/scripts/sql/09_statistics/06_create_reservoir_period_summary.sql
-     database/scripts/sql/09_statistics/08_add_probability_metrics_to_period_summary.sql (ALTER)
+DDL: database/scripts/sql/11_reservoir_statistics/06_create_reservoir_period_summary.sql
+     database/scripts/sql/11_reservoir_statistics/08_add_probability_metrics_to_period_summary.sql (ALTER)
 ETL: etl/statistics/calculate_reservoir_statistics.py
 ```
 
@@ -1349,9 +1349,9 @@ Variable Extraction Category Groups (IDs 7-11):
 ├── var_named_locality    Named locality D_* arcs (15 members)
 └── var_missing           No CalSim variables found (2 members)
 
-DDL: database/scripts/sql/10_mi_statistics/02b_create_du_urban_group_tables.sql
-Seed (analytical): database/scripts/sql/10_mi_statistics/02c_load_du_urban_group_from_s3.sql
-Seed (variable): database/scripts/sql/10_mi_statistics/02d_load_du_variable_groups.sql
+DDL: database/scripts/sql/12_mi_statistics/02b_create_du_urban_group_tables.sql
+Seed (analytical): database/scripts/sql/12_mi_statistics/02c_load_du_urban_group_from_s3.sql
+Seed (variable): database/scripts/sql/12_mi_statistics/02d_load_du_variable_groups.sql
 ```
 
 #### **du_urban_group_member (demand unit group memberships)**
@@ -1376,7 +1376,7 @@ Note: A demand unit can belong to multiple groups. For example, 02_PU is in:
 ├── tier (analytical group)
 └── var_wba (variable extraction category)
 
-DDL: database/scripts/sql/10_mi_statistics/02b_create_du_urban_group_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/02b_create_du_urban_group_tables.sql
 ```
 
 #### **mi_contractor_group (M&I contractor groupings)**
@@ -1395,7 +1395,7 @@ Table: mi_contractor_group
 
 Records: 6 groups (swp, cvp_nod, cvp_sod, all_mi, swp_mi, swp_ag)
 
-DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables.sql
 ```
 
 #### **mi_contractor (SWP/CVP water agency contractors)**
@@ -1420,7 +1420,7 @@ Records: 30 SWP contractors (22 MI, 1 MWD, 7 AG)
 
 Source: /data/raw/model_run/.../DeliveryLogic/SWP/Allocation/swp_contractor_perdel_A.wresl
 
-DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables.sql
 ```
 
 #### **mi_contractor_group_member (contractor group memberships)**
@@ -1441,7 +1441,7 @@ Constraints:
 
 Records: 60 memberships
 
-DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables.sql
 ```
 
 #### **mi_contractor_delivery_arc (delivery variable mappings)**
@@ -1462,7 +1462,7 @@ Constraints:
 
 Records: 39 delivery arcs
 
-DDL: database/scripts/sql/10_mi_statistics/03_create_mi_contractor_entity_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables.sql
 ```
 
 #### **du_urban_variable (demand unit variable mappings)**
@@ -1496,8 +1496,8 @@ Variable types (type of water supply measurement):
 Note: The extraction category (how to find the CalSim variable) is determined by
 group membership in du_urban_group (var_wba, var_swp_contractor, etc.).
 
-DDL: database/scripts/sql/10_mi_statistics/01c_create_du_urban_variable.sql
-Seed: database/scripts/sql/10_mi_statistics/01d_load_du_urban_variable.sql
+DDL: database/scripts/sql/12_mi_statistics/01c_create_du_urban_variable.sql
+Seed: database/scripts/sql/12_mi_statistics/01d_load_du_urban_variable.sql
 ```
 
 #### **du_urban_delivery_arc (multi-arc delivery mappings)**
@@ -1522,8 +1522,8 @@ Records: 10 arcs for 5 multi-arc units (AMADR, AMCYN, ANTOC, FRFLD, GRSVL)
 Purpose: For demand units requiring sum of multiple delivery arcs.
 Example: FRFLD = D_WTPNBR_FRFLD + D_WTPWMN_FRFLD
 
-DDL: database/scripts/sql/10_mi_statistics/01c_create_du_urban_variable.sql
-Seed: database/scripts/sql/10_mi_statistics/01d_load_du_urban_variable.sql
+DDL: database/scripts/sql/12_mi_statistics/01c_create_du_urban_variable.sql
+Seed: database/scripts/sql/12_mi_statistics/01d_load_du_urban_variable.sql
 ```
 
 #### **du_delivery_monthly (urban demand unit delivery statistics)**
@@ -1562,7 +1562,7 @@ Constraints:
 ├── Unique: (scenario_short_code, du_id, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
-DDL: database/scripts/sql/10_mi_statistics/02_create_du_statistics_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/02_create_du_statistics_tables.sql
 ```
 
 #### **du_shortage_monthly (urban demand unit shortage statistics)**
@@ -1587,7 +1587,7 @@ Constraints:
 ├── Unique: (scenario_short_code, du_id, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
-DDL: database/scripts/sql/10_mi_statistics/02_create_du_statistics_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/02_create_du_statistics_tables.sql
 ```
 
 #### **du_period_summary (urban demand unit period summary)**
@@ -1617,7 +1617,7 @@ Table: du_period_summary
 Constraints:
 └── Unique: (scenario_short_code, du_id)
 
-DDL: database/scripts/sql/10_mi_statistics/02_create_du_statistics_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/02_create_du_statistics_tables.sql
 ```
 
 #### **mi_delivery_monthly (contractor delivery statistics)**
@@ -1645,7 +1645,7 @@ Constraints:
 ├── Unique: (scenario_short_code, mi_contractor_id, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
-DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
 ```
 
 #### **mi_shortage_monthly (contractor shortage statistics)**
@@ -1671,7 +1671,7 @@ Constraints:
 ├── Unique: (scenario_short_code, mi_contractor_id, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
-DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
 ```
 
 #### **mi_contractor_period_summary (contractor period summary)**
@@ -1704,7 +1704,7 @@ Constraints:
 ├── FK: mi_contractor_id → mi_contractor.id
 └── Unique: (scenario_short_code, mi_contractor_id)
 
-DDL: database/scripts/sql/10_mi_statistics/05_create_mi_statistics_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
 ETL: etl/statistics/mi/ (pending)
 ```
 
@@ -1737,7 +1737,7 @@ Indexes:
 ├── cws_aggregate_entity_short_code_key (short_code) UNIQUE
 └── idx_cws_aggregate_entity_project (project)
 
-DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql
 ```
 
 #### **cws_aggregate_monthly (monthly delivery/shortage statistics)**
@@ -1787,7 +1787,7 @@ Indexes:
 
 Expected Records: 72 rows per scenario (6 aggregates × 12 months)
 
-DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql
 ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
 ```
 
@@ -1839,7 +1839,7 @@ Indexes:
 
 Expected Records: 6 rows per scenario (6 aggregates)
 
-DDL: database/scripts/sql/10_mi_statistics/06_create_cws_aggregate_tables.sql
+DDL: database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql
 ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
 ```
 
@@ -2601,7 +2601,7 @@ Relationships:
 ├── du_urban_group_member.du_id → du_urban_entity.du_id (group memberships)
 └── primary_contractor_short_code → mi_contractor.short_code (optional SWP contractor link)
 
-DDL: database/scripts/sql/10_mi_statistics/01_create_du_urban_entity.sql
+DDL: database/scripts/sql/12_mi_statistics/01_create_du_urban_entity.sql
 Seed: s3://coeqwal-seeds-dev/04_calsim_data/du_urban_entity.csv
 ```
 
