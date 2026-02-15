@@ -235,16 +235,18 @@ SELECT 'variable_type', short_code, COUNT(*) FROM variable_type GROUP BY short_c
 
 SELECT 
     9 as total_tables,
-    (SELECT COUNT(DISTINCT t.table_name) 
-     FROM information_schema.tables t
-     JOIN information_schema.columns c ON t.table_name = c.table_name
-     WHERE t.table_schema = 'public' 
-     AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
-                          'spatial_scale', 'temporal_scale', 'statistic_type', 
-                          'geometry_type', 'variable_type')
-     AND c.column_name IN ('created_at', 'created_by', 'updated_at', 'updated_by')
-     GROUP BY t.table_name
-     HAVING COUNT(DISTINCT c.column_name) = 4) as tables_with_audit_cols,
+    (SELECT COUNT(*) FROM (
+        SELECT t.table_name
+        FROM information_schema.tables t
+        JOIN information_schema.columns c ON t.table_name = c.table_name
+        WHERE t.table_schema = 'public' 
+        AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
+                             'spatial_scale', 'temporal_scale', 'statistic_type', 
+                             'geometry_type', 'variable_type')
+        AND c.column_name IN ('created_at', 'created_by', 'updated_at', 'updated_by')
+        GROUP BY t.table_name
+        HAVING COUNT(DISTINCT c.column_name) = 4
+    ) sub) as tables_with_audit_cols,
     (SELECT COUNT(DISTINCT event_object_table) 
      FROM information_schema.triggers 
      WHERE trigger_schema = 'public' AND trigger_name LIKE 'audit_fields_%'

@@ -301,7 +301,48 @@ Percentile bands (is_percentile = true):
 └── Q100: 100th percentile (Maximum in band context)
 ```
 
-### **8. unit**
+### **8. calsim_variable_type**
+```
+Table: calsim_variable_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "output", "state", "decision"
+├── label                TEXT NOT NULL              -- "output", "state", "decision"
+├── description          TEXT                       -- Variable type description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (3 total):
+├── output: Output (Model output variable)
+├── state: State (State variable)
+└── decision: Decision (Decision variable)
+```
+
+### **9. variable_type**
+```
+Table: variable_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "delivery", "gw_pumping", "PA", etc.
+├── label                TEXT NOT NULL              -- "delivery", "groundwater pumping", etc.
+├── description          TEXT                       -- Variable type description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (6 total):
+├── delivery: Delivery (Water delivery)
+├── gw_pumping: Groundwater pumping (Groundwater pumping)
+├── PA: Project agricultural (Project agricultural water use)
+├── PR: Project wildlife refuge (Project wildlife refuge water use)
+├── PU: Project community water system (Project community water system - M&I)
+└── unknown: Unknown (Unknown or unclassified)
+```
+
+### **10. unit**
 ```
 Table: unit
 ├── id                   SERIAL PRIMARY KEY
@@ -321,10 +362,10 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
-### **9. watersheds (watershed regions)**
+### **11. watershed**
 
 ```
-Table: watersheds
+Table: watershed
 ├── id                              SERIAL PRIMARY KEY
 ├── short_code                      VARCHAR UNIQUE NOT NULL    -- Watershed identifier (UPPER_AMERICAN, SAC_RIVER)
 ├── name                            VARCHAR NOT NULL           -- Full watershed name (Upper American River Watershed)
@@ -1947,8 +1988,8 @@ Constraints:
 Location Type Reference:
 ├── 'network_node' → network.short_code (ENV_FLOWS, FW_EXP evaluation points)
 ├── 'wba' → wba.wba_id (GW_STOR aquifer polygons)
-├── 'reservoir' → reservoirs.calsim_short_code (RES_STOR lake polygons)  
-├── 'compliance_station' → compliance_stations.station_code (FW_DELTA_USES monitoring)
+├── 'reservoir' → reservoir.calsim_short_code (RES_STOR lake polygons)  
+├── 'compliance_station' → compliance_station.station_code (FW_DELTA_USES monitoring)
 └── 'region' → hydrologic_region.short_code (DELTA_ECO, WRC_SALMON_AB regional)
 
 Example: ENV_FLOWS s0011 has 17 location records (one per evaluation node) with tier_levels 2-3

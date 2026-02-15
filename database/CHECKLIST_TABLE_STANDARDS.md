@@ -1,6 +1,37 @@
 # Table standards checklist
 
-Use this checklist when creating new tables or auditing existing tables.
+Use this checklist when creating new tables, auditing existing tables, or uploading data.
+
+---
+
+## Quick reference: data upload checklist
+
+Use this every time you upload data to the database.
+
+### Before uploading
+
+- [ ] **Audit fields** - Does the target table have audit triggers? (If not, data won't be tracked)
+- [ ] **Lookup values** - Do all referenced lookup values exist? (See lookup tables below)
+- [ ] **FK relationships** - Are you using FK IDs, not text values?
+- [ ] **Developer identity** - Is your database user registered? (Run `SELECT coeqwal_current_operator();`)
+
+### During upload
+
+```sql
+-- Use subqueries to reference lookups
+INSERT INTO your_table (name, hydrologic_region_id, source_id)
+VALUES ('Example', 
+        (SELECT id FROM hydrologic_region WHERE short_code = 'SAC'),
+        (SELECT id FROM source WHERE source = 'calsim_report'));
+```
+
+### After uploading
+
+- [ ] **Verify counts** - `SELECT COUNT(*) FROM your_table;`
+- [ ] **Check nulls** - `SELECT * FROM your_table WHERE some_fk_id IS NULL;`
+- [ ] **Audit trail** - `SELECT created_at, created_by FROM your_table ORDER BY created_at DESC LIMIT 5;`
+
+---
 
 ## Table creation checklist
 
@@ -21,14 +52,20 @@ Use this checklist when creating new tables or auditing existing tables.
 - [ ] Short codes: `short_code` TEXT UNIQUE NOT NULL
 - [ ] Display names: `label` TEXT NOT NULL
 
-### 3. Audit trigger
+### 3. Capitalization
+
+- [ ] `short_code`: lowercase, except acronyms (e.g., `delivery`, `gw_pumping`, `PA`, `SAC`, `MEAN`)
+- [ ] `label`: Sentence case - capitalize first word, acronyms, and proper nouns only (e.g., `Groundwater pumping`, `Sacramento`)
+- [ ] `description`: Sentence case (e.g., `Project agricultural water use`)
+
+### 4. Audit trigger
 
 - [ ] Apply `set_audit_fields` trigger after table creation:
   ```sql
   SELECT apply_audit_trigger_to_table('your_table_name');
   ```
 
-### 4. Domain family mapping
+### 5. Domain family mapping
 
 - [ ] Add entry to `domain_family_map`:
   ```sql
@@ -36,7 +73,7 @@ Use this checklist when creating new tables or auditing existing tables.
   VALUES ('public', 'your_table_name', {version_family_id}, 'Description');
   ```
 
-### 5. Foreign key relationships
+### 6. Foreign key relationships
 
 Use FK IDs, **never store lookup values as text**.
 
@@ -50,7 +87,8 @@ Use FK IDs, **never store lookup values as text**.
 | Temporal scale | `temporal_scale` | `temporal_scale_id` |
 | Statistic type | `statistic_type` | `statistic_type_id` |
 | Geometry type | `geometry_type` | `geometry_type_id` |
-| Variable type | `variable_type` | `variable_type_id` |
+| CalSim technical type | `calsim_variable_type` | `calsim_variable_type_id` |
+| Colloquial variable type | `variable_type` | `variable_type_id` |
 
 Example:
 ```sql
@@ -118,17 +156,43 @@ VALUES ('Example', (SELECT id FROM hydrologic_region WHERE short_code = 'NEW_REG
 
 ## Lookup tables reference
 
-| Lookup Table | Key Column | Display Column | Values |
-|--------------|------------|----------------|--------|
-| `hydrologic_region` | `short_code` | `label` | SAC, SJR, DELTA, TULARE, SOCAL, EXTERNAL |
-| `source` | `source` | `description` | calsim_report, james_gilbert, etc. |
+Query any lookup table to see current values:
+```sql
+SELECT id, short_code, label FROM hydrologic_region ORDER BY id;
+SELECT id, source, description FROM source ORDER BY id;
+```
+
+| Lookup Table | Key Column | Display Column | Current Values |
+|--------------|------------|----------------|----------------|
+| `hydrologic_region` | `short_code` | `label` | SAC, SJR, DELTA, TULARE |
+| `source` | `source` | `description` | calsim_report, james_gilbert, calsim_variables, geopackage, trend_report, metadata, cvm_docs, network_schematic, manual, NHD, DWR_CDEC |
 | `model_source` | `short_code` | `name` | calsim3 |
 | `unit` | `short_code` | `full_name` | TAF, CFS, acres, mm, km |
 | `spatial_scale` | `short_code` | `label` | system_wide, regional, basin, etc. |
 | `temporal_scale` | `short_code` | `label` | daily, weekly, monthly, etc. |
 | `statistic_type` | `short_code` | `label` | MEAN, MEDIAN, MIN, MAX, STDEV, CV, Q0, Q10, Q30, Q50, Q70, Q90, Q100 |
 | `geometry_type` | `short_code` | `label` | POINT, LINESTRING, POLYGON, MULTIPOLYGON |
-| `variable_type` | `short_code` | `label` | output, input, decision |
+| `calsim_variable_type` | `short_code` | `label` | output, state, decision |
+| `variable_type` | `short_code` | `label` | delivery, gw_pumping, PA, PR, PU, unknown |
+
+### Variable type details
+
+**calsim_variable_type** (technical CalSim classification):
+| short_code | label | description |
+|------------|-------|-------------|
+| output | Output | Model output variable |
+| state | State | State variable |
+| decision | Decision | Decision variable |
+
+**variable_type** (colloquial/domain classification):
+| short_code | label | description |
+|------------|-------|-------------|
+| delivery | Delivery | Water delivery |
+| gw_pumping | Groundwater pumping | Groundwater pumping |
+| PA | Project agricultural | Project agricultural water use |
+| PR | Project wildlife refuge | Project wildlife refuge water use |
+| PU | Project community water system | Project community water system (M&I) |
+| unknown | Unknown | Unknown or unclassified |
 
 ---
 
