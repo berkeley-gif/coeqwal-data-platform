@@ -5,9 +5,9 @@
 -- Run in Cloud9: \i database/scripts/sql/01_lookup/09_verify_level01.sql
 -- =============================================================================
 --
--- Level 01 Tables:
+-- Level 01 Tables (10 total):
 --   hydrologic_region, source, model_source, unit, spatial_scale,
---   temporal_scale, statistic_type, geometry_type, variable_type
+--   temporal_scale, statistic_type, geometry_type, calsim_variable_type, variable_type
 --
 -- Verification Checks (matching Level 00 pattern):
 --   1. Audit columns exist
@@ -17,6 +17,7 @@
 --   5. Row counts
 --   6. Schema accuracy
 --   7. Data integrity
+--   8. Naming conventions
 -- =============================================================================
 
 \echo '============================================================================'
@@ -46,7 +47,7 @@ LEFT JOIN information_schema.columns c
 WHERE t.table_schema = 'public' 
 AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                      'spatial_scale', 'temporal_scale', 'statistic_type', 
-                     'geometry_type', 'variable_type')
+                     'geometry_type', 'calsim_variable_type', 'variable_type')
 GROUP BY t.table_name
 ORDER BY t.table_name;
 
@@ -59,7 +60,7 @@ LEFT JOIN information_schema.columns c
 WHERE t.table_schema = 'public' 
 AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                      'spatial_scale', 'temporal_scale', 'statistic_type', 
-                     'geometry_type', 'variable_type')
+                     'geometry_type', 'calsim_variable_type', 'variable_type')
 GROUP BY t.table_name
 HAVING COUNT(DISTINCT c.column_name) < 4;
 
@@ -77,7 +78,7 @@ WHERE trigger_schema = 'public'
 AND trigger_name LIKE 'audit_fields_%'
 AND event_object_table IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                            'spatial_scale', 'temporal_scale', 'statistic_type', 
-                           'geometry_type', 'variable_type');
+                           'geometry_type', 'calsim_variable_type', 'variable_type');
 
 SELECT 'Tables WITHOUT audit triggers (should be 0):' as check;
 SELECT t.table_name
@@ -85,7 +86,7 @@ FROM information_schema.tables t
 WHERE t.table_schema = 'public' 
 AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                      'spatial_scale', 'temporal_scale', 'statistic_type', 
-                     'geometry_type', 'variable_type')
+                     'geometry_type', 'calsim_variable_type', 'variable_type')
 AND NOT EXISTS (
     SELECT 1 FROM information_schema.triggers tr 
     WHERE tr.event_object_table = t.table_name 
@@ -109,7 +110,7 @@ FROM domain_family_map dfm
 JOIN version_family vf ON dfm.version_family_id = vf.id
 WHERE dfm.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                          'spatial_scale', 'temporal_scale', 'statistic_type', 
-                         'geometry_type', 'variable_type')
+                         'geometry_type', 'calsim_variable_type', 'variable_type')
 ORDER BY dfm.table_name;
 
 SELECT 'Tables NOT in domain_family_map (should be 0):' as check;
@@ -118,15 +119,16 @@ FROM information_schema.tables t
 WHERE t.table_schema = 'public' 
 AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                      'spatial_scale', 'temporal_scale', 'statistic_type', 
-                     'geometry_type', 'variable_type')
+                     'geometry_type', 'calsim_variable_type', 'variable_type')
 AND t.table_name NOT IN (SELECT table_name FROM domain_family_map);
 
 -- Expected mappings:
 \echo ''
 \echo 'Expected version family mappings for Level 01:'
-\echo '  geometry_type     -> geospatial (9)'
-\echo '  variable_type     -> variable (6)'
-\echo '  All others        -> metadata (11)'
+\echo '  geometry_type          -> geospatial (9)'
+\echo '  calsim_variable_type   -> variable (6)'
+\echo '  variable_type          -> variable (6)'
+\echo '  All others             -> metadata (11)'
 
 -- =============================================================================
 -- 4. FK RELATIONSHIPS (created_by, updated_by -> developer)
@@ -148,7 +150,7 @@ JOIN information_schema.constraint_column_usage ccu
 WHERE tc.constraint_type = 'FOREIGN KEY'
 AND tc.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                       'spatial_scale', 'temporal_scale', 'statistic_type', 
-                      'geometry_type', 'variable_type')
+                      'geometry_type', 'calsim_variable_type', 'variable_type')
 AND ccu.table_name = 'developer'
 ORDER BY tc.table_name, kcu.column_name;
 
@@ -168,7 +170,8 @@ UNION ALL SELECT 'spatial_scale', COUNT(*), COUNT(*) FROM spatial_scale  -- no i
 UNION ALL SELECT 'temporal_scale', COUNT(*), COUNT(*) FROM temporal_scale  -- no is_active
 UNION ALL SELECT 'statistic_type', COUNT(*), COUNT(*) FROM statistic_type  -- no is_active
 UNION ALL SELECT 'geometry_type', COUNT(*), COUNT(*) FROM geometry_type  -- no is_active
-UNION ALL SELECT 'variable_type', COUNT(*), COUNT(*) FROM variable_type  -- no is_active
+UNION ALL SELECT 'calsim_variable_type', COUNT(*), SUM(CASE WHEN is_active THEN 1 ELSE 0 END) FROM calsim_variable_type
+UNION ALL SELECT 'variable_type', COUNT(*), SUM(CASE WHEN is_active THEN 1 ELSE 0 END) FROM variable_type
 ORDER BY table_name;
 
 -- =============================================================================
@@ -194,7 +197,7 @@ LEFT JOIN information_schema.columns c ON t.table_name = c.table_name
 WHERE t.table_schema = 'public' 
 AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                      'spatial_scale', 'temporal_scale', 'statistic_type', 
-                     'geometry_type', 'variable_type')
+                     'geometry_type', 'calsim_variable_type', 'variable_type')
 GROUP BY t.table_name
 ORDER BY t.table_name;
 
@@ -223,18 +226,35 @@ SELECT 'statistic_type', short_code, COUNT(*) FROM statistic_type GROUP BY short
 UNION ALL
 SELECT 'geometry_type', short_code, COUNT(*) FROM geometry_type GROUP BY short_code HAVING COUNT(*) > 1
 UNION ALL
+SELECT 'calsim_variable_type', short_code, COUNT(*) FROM calsim_variable_type GROUP BY short_code HAVING COUNT(*) > 1
+UNION ALL
 SELECT 'variable_type', short_code, COUNT(*) FROM variable_type GROUP BY short_code HAVING COUNT(*) > 1;
 
 -- =============================================================================
--- 8. SUMMARY
+-- 8. NAMING CONVENTIONS
+-- =============================================================================
+\echo ''
+\echo '8. NAMING CONVENTIONS'
+\echo '---------------------'
+
+SELECT 'Plural table names (should be 0):' as check;
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+AND table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
+                   'spatial_scale', 'temporal_scale', 'statistic_type', 
+                   'geometry_type', 'calsim_variable_type', 'variable_type')
+AND (table_name LIKE '%s' AND table_name NOT LIKE '%ss' AND table_name NOT LIKE '%ics');
+
+-- =============================================================================
+-- 9. SUMMARY
 -- =============================================================================
 \echo ''
 \echo '============================================================================'
-\echo '8. SUMMARY'
+\echo '9. SUMMARY'
 \echo '============================================================================'
 
 SELECT 
-    9 as total_tables,
+    10 as total_tables,
     (SELECT COUNT(*) FROM (
         SELECT t.table_name
         FROM information_schema.tables t
@@ -242,7 +262,7 @@ SELECT
         WHERE t.table_schema = 'public' 
         AND t.table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                              'spatial_scale', 'temporal_scale', 'statistic_type', 
-                             'geometry_type', 'variable_type')
+                             'geometry_type', 'calsim_variable_type', 'variable_type')
         AND c.column_name IN ('created_at', 'created_by', 'updated_at', 'updated_by')
         GROUP BY t.table_name
         HAVING COUNT(DISTINCT c.column_name) = 4
@@ -252,18 +272,18 @@ SELECT
      WHERE trigger_schema = 'public' AND trigger_name LIKE 'audit_fields_%'
      AND event_object_table IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                                 'spatial_scale', 'temporal_scale', 'statistic_type', 
-                                'geometry_type', 'variable_type')) as tables_with_triggers,
+                                'geometry_type', 'calsim_variable_type', 'variable_type')) as tables_with_triggers,
     (SELECT COUNT(*) FROM domain_family_map 
      WHERE table_name IN ('hydrologic_region', 'source', 'model_source', 'unit', 
                           'spatial_scale', 'temporal_scale', 'statistic_type', 
-                          'geometry_type', 'variable_type')) as tables_in_domain_map;
+                          'geometry_type', 'calsim_variable_type', 'variable_type')) as tables_in_domain_map;
 
 \echo ''
 \echo 'Expected values:'
-\echo '  - total_tables: 9'
-\echo '  - tables_with_audit_cols: 9'
-\echo '  - tables_with_triggers: 9'
-\echo '  - tables_in_domain_map: 9'
+\echo '  - total_tables: 10'
+\echo '  - tables_with_audit_cols: 10'
+\echo '  - tables_with_triggers: 10'
+\echo '  - tables_in_domain_map: 10'
 \echo '============================================================================'
 \echo 'VERIFICATION COMPLETE'
 \echo '============================================================================'
