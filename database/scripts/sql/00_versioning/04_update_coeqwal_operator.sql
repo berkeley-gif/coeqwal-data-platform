@@ -36,6 +36,12 @@ BEGIN
     -- Get current database user
     current_db_user := current_user;
     
+    -- Special case: postgres superuser maps to system account
+    -- This allows administrative operations while maintaining audit trail
+    IF current_db_user = 'postgres' THEN
+        RETURN 1;  -- system@coeqwal.local (id=1)
+    END IF;
+    
     -- Try multiple strategies to find the developer
     
     -- Strategy 1: Match by AWS SSO username
@@ -85,6 +91,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 COMMENT ON FUNCTION coeqwal_current_operator() IS 
 'Returns developer.id for current session user. STRICT MODE: Fails if user cannot be identified.
 
+Special cases:
+- postgres superuser -> returns 1 (system@coeqwal.local)
+
 Detection strategies (in order):
 1. Match aws_sso_username column
 2. Match email containing database username
@@ -93,6 +102,7 @@ Detection strategies (in order):
 5. RAISE EXCEPTION if no match found
 
 To be authorized for database changes:
+- Use postgres superuser (maps to system account), OR
 - Register in developer table with aws_sso_username = your db username, OR
 - Register with email containing your db username';
 
