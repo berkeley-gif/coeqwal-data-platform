@@ -231,14 +231,14 @@ AND (table_name LIKE '%s' AND table_name NOT LIKE '%ss' AND table_name NOT LIKE 
 SELECT 'Network type hierarchy:' as check;
 SELECT nt.short_code as type, COUNT(ns.id) as subtypes
 FROM network_type nt
-LEFT JOIN network_subtype ns ON ns.network_type_id = nt.id
+LEFT JOIN network_subtype ns ON ns.type_id = nt.id
 GROUP BY nt.id, nt.short_code
 ORDER BY nt.short_code;
 
 SELECT 'Network entries by type:' as check;
 SELECT nt.short_code as type, COUNT(n.id) as networks
 FROM network_type nt
-LEFT JOIN network n ON n.network_type_id = nt.id
+LEFT JOIN network n ON n.type_id = nt.id
 GROUP BY nt.id, nt.short_code
 ORDER BY COUNT(n.id) DESC;
 

@@ -24,7 +24,9 @@ database/
 │   └── 10_tier/               # Tier results (layer 10)
 ├── scripts/
 │   ├── sql/                   # SQL scripts
-│   │   ├── 00_versioning/     # Audit triggers and versioning
+│   │   ├── 00_versioning/     # Audit triggers, versioning, verification
+│   │   ├── 01_lookup/         # Lookup table verification
+│   │   ├── 02_network/        # Network layer verification
 │   │   ├── 11_reservoir_statistics/
 │   │   ├── 12_mi_statistics/
 │   │   ├── 13_ag_statistics/
@@ -50,7 +52,8 @@ Arrows indicate **dependency** - each layer depends on layers above it.
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        01_LOOKUP                                    │
 │  hydrologic_region, source, model_source, unit, spatial_scale,      │
-│  temporal_scale, statistic_type, geometry_type, variable_type       │
+│  temporal_scale, statistic_type, geometry_type,                     │
+│  calsim_variable_type, variable_type                                │
 │  Purpose: Reference/lookup tables shared across all layers          │
 └─────────────────────────────────────────────────────────────────────┘
                                   │
@@ -162,6 +165,110 @@ Arrows indicate **dependency** - each layer depends on layers above it.
 | 11_RESERVOIR_STATISTICS | reservoir_monthly_percentile, reservoir_period_summary | 11_reservoir_statistics/*.sql | Implemented |
 | 12_MI_STATISTICS | mi_contractor, du_delivery_monthly | 12_mi_statistics/*.sql | Implemented |
 | 13_AG_STATISTICS | ag_aggregate_entity, ag_aggregate_period_summary | 13_ag_statistics/*.sql | Implemented |
+
+---
+
+## Layer details
+
+### 02_NETWORK: network categorization
+
+The network layer represents CalSim's water infrastructure as connected arcs and nodes.
+
+**Table hierarchy:**
+```
+network (master registry - 6908 records)
+├── network_arc (arc-specific attributes - 2610 records)
+└── network_node (node-specific attributes - 1544 records)
+
+Classification tables:
+├── network_entity_type (4 types)
+├── network_type (21 types)
+└── network_subtype (26 subtypes)
+```
+
+**Network types and subtypes:**
+
+| Type Code | Description | Networks | Subtypes |
+|-----------|-------------|----------|----------|
+| STR | Stream | 1310 | 8 |
+| CH | Channel | 1139 | 10 |
+| D | Delivery | 539 | 0 |
+| RT | Return flow | 259 | 0 |
+| X | Demand unit | 240 | 4 |
+| IN | Inflow | 225 | 0 |
+| S | Storage | 94 | 1 |
+| WTP | Water treatment plant | 42 | 0 |
+| WWTP | Wastewater treatment plant | 22 | 0 |
+| SP | Spreading/recharge | 8 | 0 |
+| PS | Pump station | 3 | 0 |
+| OM | Operations & maintenance | 0 | 2 |
+| CH_N | Channel node | 0 | 1 |
+| NP, DD, PR, DA, SR, RFS, CT, NULL_A | (unused/deprecated) | 0 | 0 |
+
+**Subtypes by parent type:**
+
+- **CH (Channel):** 10 subtypes for channel classification
+- **STR (Storage):** 8 subtypes (e.g., major reservoirs, CVP, SWP)
+- **X (Other):** 4 subtypes for miscellaneous elements
+- **OM:** 2 subtypes for O&M facilities
+- **S (Source):** 1 subtype
+
+Query to explore subtypes:
+```sql
+-- Get subtypes grouped by parent type
+SELECT 
+    nt.short_code as type_code,
+    nt.label as type_label,
+    ns.short_code as subtype_code,
+    ns.label as subtype_label
+FROM network_type nt
+LEFT JOIN network_subtype ns ON ns.type_id = nt.id
+WHERE ns.id IS NOT NULL
+ORDER BY nt.short_code, ns.short_code;
+```
+
+Example output (26 subtypes):
+```
+ type_code |        type_label        | subtype_code |    subtype_label    
+-----------+--------------------------+--------------+---------------------
+ CH        | Channel                  | BP           | Bypass
+ CH        | Channel                  | CH           | Channel
+ CH        | Channel                  | CL           | Canal
+ CH        | Channel                  | HIS          | Historical
+ CH        | Channel                  | IM           | Imported
+ CH        | Channel                  | LI           | Link
+ CH        | Channel                  | NA           | Not applicable
+ CH        | Channel                  | NS           | Not simulated
+ CH        | Channel                  | PRP          | Proposed
+ CH        | Channel                  | ST           | Stream
+ CH_N      | Channel node             | BYP          | Bypass
+ OM        | Operations & maintenance | OMD          | O&M demand
+ OM        | Operations & maintenance | OMR          | O&M return
+ S         | Storage                  | Reservoir    | Reservoir
+ STR       | Stream                   | CNL          | Canal
+ STR       | Stream                   | GWO          | Groundwater outflow
+ STR       | Stream                   | NA           | Not applicable
+ STR       | Stream                   | NSM          | Non-Sacramento
+ STR       | Stream                   | PRP          | Proposed
+ STR       | Stream                   | SG           | Stream gauge
+ STR       | Stream                   | SIM          | Simulated
+ STR       | Stream                   | STM          | Stream
+ X         | Demand unit              | A            | Agricultural
+ X         | Demand unit              | R            | Refuge
+ X         | Demand unit              | U            | Urban
+ X         | Demand unit              | X            | Other Demand
+```
+
+**Source tracking:**
+- All network_arc records have `source_id` and `model_source_id` (100% coverage)
+- All network_node records have `source_id` and `model_source_id` (100% coverage)
+- All network_gis records have `source_id` (100% coverage)
+- Primary source: `geopackage` (CalSim GeoSchematic)
+
+**River codes (network_arc.river):**
+- 459 distinct CalSim river/waterway codes
+- Examples: SAC (Sacramento), SJR (San Joaquin), FTR (Feather), DMC (Delta-Mendota Canal)
+- Stored as text (high cardinality makes lookup impractical)
 
 ---
 
@@ -302,6 +409,36 @@ All tables have automatic audit field population via database triggers.
 4. **FAIL with exception if no match** - unregistered users cannot make changes
 
 **Important:** Each developer must have their own database user registered in the `developer` table before making changes.
+
+### Database access
+
+The database is **not publicly accessible**. Access requires:
+
+1. **Network access** - The RDS database is in a private AWS VPC
+   - Cloud9 (within AWS) has direct access
+   - Local access requires VPN or SSH tunnel through a bastion host
+
+2. **Database credentials** - Host, port, username, password
+   - Stored in environment variables or AWS Secrets Manager
+   - Never committed to the repository
+
+3. **AWS account access** - Required to use Cloud9 or retrieve credentials
+
+**Access summary:**
+
+| User | Network Access | Query (SELECT) | Modify (INSERT/UPDATE/DELETE) |
+|------|----------------|----------------|-------------------------------|
+| Berkeley GIF team | Cloud9 | ✅ | ✅ (as registered developer) |
+| Registered developer | Cloud9 or VPN | ✅ | ✅ (as themselves) |
+| postgres superuser | Cloud9 or VPN | ✅ | ✅ (as system account) |
+| Unregistered db user | Cloud9 or VPN | ✅ | ❌ (blocked by trigger) |
+| General public | ❌ None | ❌ | ❌ |
+
+**Security layers:**
+- AWS VPC (network isolation)
+- Security groups (firewall rules)  
+- Database authentication (username/password)
+- Application-level checks (`coeqwal_current_operator()` for writes)
 
 ### Setting up a new developer
 
@@ -468,6 +605,53 @@ SELECT 'Invalid water_month values' as check_type,
 
 - **S3**: `s3://coeqwal-model-run/database_audits/`
 - **Local**: `./audits/` (gitignored)
+
+### Layer verification scripts
+
+Each database layer has a verification script that checks:
+
+| # | Check | Description |
+|---|-------|-------------|
+| 1 | Audit columns | created_at, created_by, updated_at, updated_by exist |
+| 2 | Audit triggers | `audit_fields_*` trigger applied |
+| 3 | Version family mapping | Table registered in domain_family_map |
+| 4 | FK relationships | FKs to developer and lookup tables |
+| 5 | Row counts | Tables are populated |
+| 6 | Schema accuracy | Key columns exist |
+| 7 | Data integrity | No orphan FKs, no unexpected duplicates |
+| 8 | Naming conventions | No plural table names |
+| 9 | Layer-specific | Depends on layer (e.g., network connectivity) |
+
+**Verification script locations:**
+
+```
+database/scripts/sql/
+├── 00_versioning/09_verify_level00.sql   # Versioning layer
+├── 01_lookup/09_verify_level01.sql       # Lookup/reference tables
+├── 02_network/09_verify_level02.sql      # Network layer
+└── ... (additional layers as audited)
+```
+
+**Running verification in Cloud9:**
+
+```sql
+-- Connect to database
+psql -h $DB_HOST -U $DB_USER -d coeqwal_scenario
+
+-- Run layer verification
+\i database/scripts/sql/00_versioning/09_verify_level00.sql
+\i database/scripts/sql/01_lookup/09_verify_level01.sql
+\i database/scripts/sql/02_network/09_verify_level02.sql
+```
+
+**Layer audit modus operandi:**
+
+1. **Discovery** - List tables in layer, check version family mapping
+2. **Run verification script** - Identifies issues
+3. **Create migration scripts** - Only for issues found (one-time use)
+4. **Execute and verify** - Run migrations, re-run verification
+5. **Delete migration scripts** - Keep repo clean after execution
+6. **Document** - Update ERD/checklist if patterns change
 
 ---
 
