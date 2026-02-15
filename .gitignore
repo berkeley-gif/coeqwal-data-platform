@@ -56,6 +56,12 @@ pip-wheel-metadata/
 !/data/raw/csv_from_CalSim_report_pdf/
 /dss_processing
 
+# ETL staging and output directories
+etl/staging/
+etl/*/staging/
+etl/statistics/charts/
+etl/coeqwal-etl/dss_processing/output/
+
 # IDE and editor junk
 .vscode/
 .idea/
@@ -70,9 +76,11 @@ Thumbs.db
 # FastAPI / docs builds
 /site/
 docs/_build/
-# Archived working documents
+# Archived working documents (local development notes only)
 .archive/
 _archive/
+*/.archive/
+**/.archive/
 api/coeqwal-api/routes/_archive/
 
 # Large data/processing folders
@@ -84,9 +92,20 @@ etl/COEQWAL-pydsstools-archive/
 
 # Database utility scripts (local dev)
 database/scripts/*.sh
+database/setup_db_connection.sh
+database/setup_developer_session.sql
+
+# Local/environment-specific SQL scripts
+database/scripts/sql/*_local.sql
+database/scripts/sql/*_cloud9.sql
+database/scripts/sql/**/*_local.sql
+database/scripts/sql/**/*_cloud9.sql
 
 # Seed tables (stored in S3 bucket coeqwal-seeds-dev)
 database/seed_tables/
+
+# Local audit outputs
+audits/
 
 # Claude Code config (local)
 .claude/

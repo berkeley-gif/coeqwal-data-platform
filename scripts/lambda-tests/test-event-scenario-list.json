@@ -1,0 +1,31 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /scenario",
+  "rawPath": "/default/scenario",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "host": "x66ckhp067.execute-api.us-west-2.amazonaws.com",
+    "user-agent": "test-client"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "x66ckhp067",
+    "domainName": "x66ckhp067.execute-api.us-west-2.amazonaws.com",
+    "domainPrefix": "x66ckhp067",
+    "http": {
+      "method": "GET",
+      "path": "/default/scenario",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "test-client"
+    },
+    "requestId": "test-request-id",
+    "routeKey": "GET /scenario",
+    "stage": "default",
+    "time": "12/Feb/2026:00:00:00 +0000",
+    "timeEpoch": 1770796800000
+  },
+  "isBase64Encoded": false
+}

@@ -1,0 +1,198 @@
+// index.mjs  — Node.js 20.x/22.x  (Handler = index.handler)
+import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
+const REGION = process.env.AWS_REGION || 'us-west-2';
+const BUCKET = process.env.COEQWAL_S3_BUCKET || 'coeqwal-model-run';
+const s3 = new S3Client({ region: REGION });
+
+// ---- Helpers ----------------------------------------------------
+
+const corsHeaders = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+  'Access-Control-Max-Age': '86400'
+};
+
+const json = (status, body) => ({
+  statusCode: status,
+  headers: corsHeaders,
+  body: JSON.stringify(body),
+});
+
+const redirect = (url) => ({
+  statusCode: 302,
+  headers: { 
+    Location: url, 
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+    'Access-Control-Expose-Headers': 'Location'
+  },
+  body: '',
+});
+
+const validScenario = (s) => /^[a-zA-Z]\d{4}$/.test(s || '');
+
+// List scenarios by walking S3 prefixes: scenario/<id>/
+async function listScenarioIds() {
+  const ids = [];
+  let token;
+  do {
+    const res = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: 'scenario/',
+        Delimiter: '/',
+        ContinuationToken: token,
+      })
+    );
+    for (const cp of res.CommonPrefixes ?? []) {
+      // cp.Prefix like "scenario/s0020/"
+      const m = cp.Prefix.match(/^scenario\/([A-Za-z]\d{4})\/$/);
+      if (m) ids.push(m[1]);
+    }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (token);
+  return ids.sort();
+}
+
+// Find the ZIP key under scenario/<id>/run/*.zip (pick most recent if multiple)
+async function findZipKey(id) {
+  const res = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: BUCKET,
+      Prefix: `scenario/${id}/run/`,
+      MaxKeys: 100,
+    })
+  );
+  const zips = (res.Contents || []).filter((o) => o.Key?.toLowerCase().endsWith('.zip'));
+  if (!zips.length) return null;
+  zips.sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified));
+  return zips[0].Key;
+}
+
+// Exact-key existence probe (cheap)
+async function keyExists(key) {
+  const res = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: BUCKET,
+      Prefix: key,
+      MaxKeys: 1,
+    })
+  );
+  return (res.Contents || []).some((o) => o.Key === key);
+}
+
+// Expected CSV keys
+const csvKeysFor = (id) => ({
+  output: `scenario/${id}/csv/${id}_coeqwal_calsim_output.csv`,
+  sv:     `scenario/${id}/csv/${id}_coeqwal_sv_input.csv`,
+});
+
+// Presign a GET for download with Content-Disposition to force download
+async function presign(key) {
+  const filename = key.split('/').pop();
+  const cmd = new GetObjectCommand({ 
+    Bucket: BUCKET, 
+    Key: key,
+    ResponseContentDisposition: `attachment; filename="${filename}"`
+  });
+  return getSignedUrl(s3, cmd, { expiresIn: 15 * 60 });
+}
+
+// ---- Router -----------------------------------------------------
+
+export async function handler(event) {
+  try {
+    // Add debug logging to see what API Gateway is actually sending
+    console.log('Full event:', JSON.stringify(event, null, 2));
+    
+    // More robust path detection for different API Gateway formats
+    const path = event.requestContext?.http?.path || 
+                 event.requestContext?.path || 
+                 event.path || 
+                 event.rawPath || '';
+    const method = (event.requestContext?.http?.method || 
+                   event.requestContext?.httpMethod || 
+                   event.httpMethod || 'GET').toUpperCase();
+                   
+    console.log('Parsed path:', path, 'method:', method);
+
+    // Handle preflight OPTIONS requests
+    if (method === 'OPTIONS') {
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: ''
+      };
+    }
+
+    // GET /scenario
+    if (method === 'GET' && path.endsWith('/scenario')) {
+      const ids = await listScenarioIds();
+
+      const scenarios = [];
+      for (const id of ids) {
+        const zipKey = await findZipKey(id);
+        const { output: outKey, sv: svKey } = csvKeysFor(id);
+
+        const [hasOut, hasSv] = await Promise.all([keyExists(outKey), keyExists(svKey)]);
+
+        scenarios.push({
+          scenario_id: id,
+          files: {
+            zip: zipKey
+              ? { key: zipKey, filename: zipKey.split('/').pop() }
+              : null,
+            output_csv: hasOut
+              ? { key: outKey, filename: outKey.split('/').pop() }
+              : null,
+            sv_csv: hasSv
+              ? { key: svKey, filename: svKey.split('/').pop() }
+              : null,
+          },
+        });
+      }
+
+      return json(200, { scenarios });
+    }
+
+    // GET /download?scenario=s0020&type=zip|output|sv
+    if (method === 'GET' && path.endsWith('/download')) {
+      const qs = event.queryStringParameters || {};
+      const scenario = String(qs.scenario || '');
+      const type = String(qs.type || '').toLowerCase();
+
+      if (!validScenario(scenario)) {
+        return json(400, { error: 'Invalid scenario (expected like s0020)' });
+      }
+      if (!['zip', 'output', 'sv'].includes(type)) {
+        return json(400, { error: 'Invalid type (must be zip|output|sv)' });
+      }
+
+      let key;
+
+      if (type === 'zip') {
+        key = await findZipKey(scenario);
+        if (!key) return json(404, { error: 'ZIP not found' });
+      } else {
+        const { output: outKey, sv: svKey } = csvKeysFor(scenario);
+        key = type === 'output' ? outKey : svKey;
+        const exists = await keyExists(key);
+        if (!exists) return json(404, { error: 'CSV not found' });
+      }
+
+      const url = await presign(key);
+      return redirect(url);
+    }
+
+    // Fallback
+    return json(404, { error: 'Not Found' });
+  } catch (err) {
+    console.error(err);
+    return json(500, { error: 'Internal error' });
+  }
+}

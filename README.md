@@ -1,6 +1,6 @@
-# COEQWAL Backend
+# COEQWAL Data Platform
 
-A comprehensive backend system for the Collaboratory for Equity in Water Allocation (COEQWAL) project, providing data APIs and infrastructure for California water management scenario presentation and analysis.
+A comprehensive data platform for the Collaboratory for Equity in Water Allocation (COEQWAL) project, providing multi-level data schema, PostgreSQL database with PostGIS extension, data APIs, and upload and verification infrastructure for California water management scenario presentation, analysis, and review.
 
 ## Tech stack
 
@@ -32,11 +32,10 @@ Request → Uvicorn → FastAPI → Pydantic (validates) → asyncpg (queries DB
 ### Development tools
 - **Docker** Containerization
 - **Ruff** Python linting
-- **Git** Version control
 
 ## API
 
-**Production:** https://api.coeqwal.org
+**Production:** https://api.coeqwal.org/api
 
 **Interactive docs:** https://api.coeqwal.org/docs
 
