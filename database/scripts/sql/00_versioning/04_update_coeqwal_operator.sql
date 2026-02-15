@@ -25,6 +25,7 @@ ALTER TABLE developer
 ALTER TABLE developer 
     ADD COLUMN IF NOT EXISTS name TEXT;
 
+
 -- Update the function to use proper SSO detection
 CREATE OR REPLACE FUNCTION coeqwal_current_operator()
 RETURNS INTEGER AS $$
@@ -71,19 +72,10 @@ BEGIN
         LIMIT 1;
     END IF;
     
-    -- Strategy 5: If connected as 'postgres', find jfantauzza
-    IF dev_id IS NULL AND current_db_user = 'postgres' THEN
-        SELECT id INTO dev_id
-        FROM developer 
-        WHERE email LIKE '%jfantauzza%' OR email LIKE '%berkeley%'
-        AND is_active = true
-        LIMIT 1;
-    END IF;
-    
-    -- Fallback: Use system user if nothing else works
+    -- STRICT MODE: Fail if we can't identify the operator
+    -- This prevents unverified users from making database changes
     IF dev_id IS NULL THEN
-        dev_id := 1; -- system@coeqwal.local
-        RAISE WARNING 'Could not determine current operator (user: %), using system user (ID=1)', current_db_user;
+        RAISE EXCEPTION 'UNAUTHORIZED: Cannot identify current operator (db_user: %). You must be registered in the developer table with a matching aws_sso_username or email before making database changes.', current_db_user;
     END IF;
     
     RETURN dev_id;
@@ -91,14 +83,18 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 COMMENT ON FUNCTION coeqwal_current_operator() IS 
-'Returns developer.id for current session user with SSO integration.
+'Returns developer.id for current session user. STRICT MODE: Fails if user cannot be identified.
+
 Detection strategies (in order):
 1. Match aws_sso_username column
 2. Match email containing database username
 3. Match name containing database username
 4. Match display_name containing database username
-5. If postgres user, find jfantauzza
-6. Fallback to system user (ID=1)';
+5. RAISE EXCEPTION if no match found
+
+To be authorized for database changes:
+- Register in developer table with aws_sso_username = your db username, OR
+- Register with email containing your db username';
 
 -- =============================================================================
 -- Verify the update

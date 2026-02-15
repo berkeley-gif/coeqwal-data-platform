@@ -293,15 +293,44 @@ All tables have automatic audit field population via database triggers.
 | INSERT | `NOW()` | `coeqwal_current_operator()` | `NOW()` | `coeqwal_current_operator()` |
 | UPDATE | preserved | preserved | `NOW()` | `coeqwal_current_operator()` |
 
-### Developer detection
+### Developer detection (it's strict)
 
 `coeqwal_current_operator()` identifies the current user through multiple strategies:
 1. Match `aws_sso_username` column
 2. Match email containing database username
 3. Match name/display_name containing database username
-4. If postgres user, find jfantauzza
-5. Fallback to system user (id=1)
+4. **FAIL with exception if no match** - unregistered users cannot make changes
 
+**Important:** Each developer must have their own database user registered in the `developer` table before making changes.
+
+### Setting up a new developer
+
+Use the `register_developer()` function (run as postgres):
+
+```sql
+-- Register a new developer
+SELECT register_developer(
+    'jdoe',                    -- database username
+    'jdoe@berkeley.edu',       -- email
+    'Jane Doe',                -- display name
+    'secure_password_here',    -- password (change immediately!)
+    'developer'                -- role: 'admin' or 'developer'
+);
+
+-- List all registered developers
+SELECT * FROM list_developers();
+
+-- Change password after first login
+ALTER USER jdoe WITH PASSWORD 'new_secure_password';
+```
+
+**After registration, connect as your user** (not postgres):
+
+```bash
+psql -h <rds-endpoint> -U jdoe -d coeqwal_scenario
+```
+
+**Important:** Unregistered users cannot make database changes. The `coeqwal_current_operator()` function will raise an exception.
 ### audit_log table
 
 All changes are recorded in the `audit_log` table:
