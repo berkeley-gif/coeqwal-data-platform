@@ -12,3 +12,4 @@ interpretive,Interpretive,Analysis and interpretive frameworks,true
 metadata,Metadata,Data metadata and documentation,true
 network,Network,CalSim network topology and connectivity,true
 entity,Entity,Entity version family for tracking entity data versions,true
+infrastructure,Infrastructure,Database infrastructure and audit system,true
