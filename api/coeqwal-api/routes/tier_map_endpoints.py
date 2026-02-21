@@ -410,153 +410,130 @@ async def get_tier_map_data(
     **Note:** For CWS_DEL and AG_REV, use `/locations` endpoint instead.
     """
     try:
-        # Main query to get tier location data with geometries
-        query = """
-        WITH tier_locations AS (
-            SELECT 
-                tlr.scenario_short_code,
-                tlr.tier_short_code,
+        # Step 1: Fetch tier locations without geometry so we know which tables to query.
+        # This avoids referencing geometry tables (reservoirs, wba, compliance_stations)
+        # that may not yet be populated — PostgreSQL would fail at query planning time
+        # even for CASE branches that are never executed.
+        base_query = """
+            SELECT
                 tlr.location_type,
                 tlr.location_id,
                 tlr.location_name,
                 tlr.tier_level,
                 tlr.tier_value,
                 tlr.display_order,
-                td.name as tier_name,
+                td.name  AS tier_name,
                 td.tier_type
             FROM tier_location_result tlr
             JOIN tier_definition td ON tlr.tier_short_code = td.short_code
             WHERE tlr.scenario_short_code = $1
-            AND tlr.tier_short_code = $2
-        )
-        SELECT 
-            tl.location_type,
-            tl.location_id,
-            tl.location_name,
-            tl.tier_level,
-            tl.tier_value,
-            tl.display_order,
-            tl.tier_name,
-            tl.tier_type,
-            CASE 
-                -- Handle San Luis special case: both SLUIS_CVP and SLUIS_SWP point to SLUIS polygon
-                WHEN tl.location_type = 'reservoir' AND tl.location_id IN ('SLUIS_CVP', 'SLUIS_SWP') THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM reservoirs 
-                     WHERE calsim_short_code = 'SLUIS')
-                -- Regular reservoir lookup
-                WHEN tl.location_type = 'reservoir' THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM reservoirs 
-                     WHERE calsim_short_code = tl.location_id)
-                -- Region lookup (DELTA, SAC) - uses WBA table
-                WHEN tl.location_type = 'region' THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM wba 
-                     WHERE wba_id = tl.location_id)
-                -- WBA (aquifer) lookup
-                -- tier_location_result uses WBA2, WBA7N, WBA10, WBA60N, DETAW etc
-                -- wba table uses 02, 07N, 10, 60N, DETAW (leading zeros for single digits)
-                WHEN tl.location_type = 'wba' THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM wba 
-                     WHERE wba_id = CASE 
-                         WHEN tl.location_id = 'DETAW' THEN 'DETAW'
-                         WHEN tl.location_id LIKE 'WBA%' THEN 
-                             CASE 
-                                 -- Single digit: WBA2 -> 02, WBA7N -> 07N, WBA9 -> 09
-                                 WHEN SUBSTRING(tl.location_id FROM 4 FOR 1) ~ '[0-9]'
-                                      AND (LENGTH(tl.location_id) = 4 
-                                           OR SUBSTRING(tl.location_id FROM 5 FOR 1) ~ '[NS]')
-                                 THEN '0' || SUBSTRING(tl.location_id FROM 4)
-                                 -- Multi digit: WBA10 -> 10, WBA60N -> 60N
-                                 ELSE SUBSTRING(tl.location_id FROM 4)
-                             END
-                         ELSE tl.location_id
-                     END)
-                -- Compliance station lookup
-                WHEN tl.location_type = 'compliance_station' THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM compliance_stations 
-                     WHERE station_code = tl.location_id)
-                -- Network node lookup
-                WHEN tl.location_type = 'network_node' THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM network_gis 
-                     WHERE short_code = tl.location_id)
-                -- Demand unit lookup (urban/agriculture/refuge demand units)
-                WHEN tl.location_type = 'demand_unit' THEN
-                    (SELECT ST_AsGeoJSON(geom)::jsonb 
-                     FROM network_gis 
-                     WHERE short_code = tl.location_id)
-                ELSE NULL
-            END as geometry,
-            CASE 
-                WHEN tl.location_type = 'reservoir' THEN 'Reservoir'
-                WHEN tl.location_type = 'wba' THEN 'Aquifer'
-                WHEN tl.location_type = 'region' THEN 'Region'
-                WHEN tl.location_type = 'compliance_station' THEN 'Compliance Station'
-                WHEN tl.location_type = 'network_node' THEN 'Environmental Flow'
-                WHEN tl.location_type = 'demand_unit' THEN 'Demand Unit'
-                ELSE tl.location_type
-            END as location_type_display
-        FROM tier_locations tl
-        ORDER BY tl.display_order, tl.location_name
+              AND tlr.tier_short_code = $2
+            ORDER BY tlr.display_order, tlr.location_name
         """
+        base_rows = await connection.fetch(base_query, scenario_short_code, tier_short_code)
 
-        rows = await connection.fetch(query, scenario_short_code, tier_short_code)
-
-        if not rows:
+        if not base_rows:
             raise HTTPException(
                 status_code=404,
                 detail=f"No tier data found for scenario '{scenario_short_code}' and tier '{tier_short_code}'",
             )
 
-        # Build GeoJSON featureCollection
+        location_types = {row["location_type"] for row in base_rows}
+
+        # Step 2: Fetch geometries per location type, only for tables that exist.
+        # geometry_map: location_id -> GeoJSON geometry dict
+        geometry_map: Dict[str, Any] = {}
+
+        if location_types & {"network_node", "demand_unit"}:
+            # network_gis exists and has a short_code column matching location_id.
+            # DISTINCT ON deduplicates multiple rows per short_code (e.g. different
+            # precision levels), preferring 'precise' entries.
+            node_ids = [
+                row["location_id"]
+                for row in base_rows
+                if row["location_type"] in ("network_node", "demand_unit")
+            ]
+            geo_rows = await connection.fetch(
+                """
+                SELECT DISTINCT ON (short_code)
+                    short_code,
+                    ST_AsGeoJSON(geom)::jsonb AS geometry
+                FROM network_gis
+                WHERE short_code = ANY($1::text[])
+                  AND geom IS NOT NULL
+                ORDER BY short_code,
+                         (precision_level = 'precise') DESC
+                """,
+                node_ids,
+            )
+            for geo_row in geo_rows:
+                geometry_map[geo_row["short_code"]] = geo_row["geometry"]
+
+        # Geometry tables not yet populated in the database:
+        #   reservoir  → calsim_short_code  (RES_STOR)
+        #   wba        → wba_id             (GW_STOR, DELTA_ECO)
+        #   compliance_station → station_code (FW_DELTA_USES)
+        # When those tables are created, add lookup blocks here following the
+        # same DISTINCT ON pattern used for network_gis above.
+
+        # Step 3: Assemble GeoJSON features
+        _type_display = {
+            "reservoir": "Reservoir",
+            "wba": "Aquifer",
+            "region": "Region",
+            "compliance_station": "Compliance Station",
+            "network_node": "Environmental Flow",
+            "demand_unit": "Demand Unit",
+        }
+
         features = []
         tier_name = None
         tier_type = None
 
-        for row in rows:
-            if not row["geometry"]:
-                # Skip if no geometry found (shouldn't happen with proper data)
+        for row in base_rows:
+            geom = geometry_map.get(row["location_id"])
+            if not geom:
                 continue
 
-            # Store tier metadata for response
             if not tier_name:
                 tier_name = row["tier_name"]
                 tier_type = row["tier_type"]
 
-            # Parse geometry (comes from PostGIS as JSON)
-            geometry = row["geometry"]
-            if isinstance(geometry, str):
-                geometry = json.loads(geometry)
+            if isinstance(geom, str):
+                geom = json.loads(geom)
 
-            # Build feature properties
+            loc_type = row["location_type"]
             properties = {
                 "location_id": row["location_id"],
                 "location_name": row["location_name"],
-                "location_type": row["location_type"],
-                "location_type_display": row["location_type_display"],
+                "location_type": loc_type,
+                "location_type_display": _type_display.get(loc_type, loc_type),
                 "tier_level": row["tier_level"],
                 "tier_value": row["tier_value"],
                 "display_order": row["display_order"],
-                # Add color hints for frontend (optional, frontend can also compute)
                 "tier_color_class": f"tier-{row['tier_level']}",
             }
-
             features.append(
-                TierMapFeature(type="Feature", geometry=geometry, properties=properties)
+                TierMapFeature(type="Feature", geometry=geom, properties=properties)
             )
 
-        # Build metadata
+        if not features:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No geometry available for tier '{tier_short_code}'. "
+                    f"Location types present: {sorted(location_types)}. "
+                    "Required GIS tables may not be populated yet."
+                ),
+            )
+
         metadata = {
             "scenario": scenario_short_code,
             "tier_code": tier_short_code,
             "tier_name": tier_name,
             "tier_type": tier_type,
             "feature_count": len(features),
-            "location_types": list(set(row["location_type"] for row in rows)),
+            "location_types": sorted(location_types),
         }
 
         return TierMapResponse(
