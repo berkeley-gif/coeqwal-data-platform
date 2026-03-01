@@ -42,8 +42,7 @@ SELECT id, short_code, label, is_active FROM temporal_scale ORDER BY id;
 \echo ''
 \echo '7. statistic_type'
 \echo '-----------------'
-SELECT id, short_code, label, is_percentile, is_active FROM statistic_type
-    WHERE is_active IS DISTINCT FROM false ORDER BY is_percentile, id;
+SELECT id, short_code, label, is_percentile FROM statistic_type ORDER BY is_percentile, id;
 
 \echo ''
 \echo '8. geometry_type'
@@ -51,46 +50,41 @@ SELECT id, short_code, label, is_percentile, is_active FROM statistic_type
 SELECT id, short_code, label, is_active FROM geometry_type ORDER BY id;
 
 \echo ''
-\echo '9. calsim_variable_type'
-\echo '-----------------------'
-SELECT id, short_code, label, is_active FROM calsim_variable_type ORDER BY id;
-
-\echo ''
-\echo '10. variable_type'
+\echo '9. variable_type'
 \echo '-----------------'
 SELECT id, short_code, label, is_active FROM variable_type ORDER BY id;
 
 \echo ''
-\echo '11. calsim_model_variable_type'
+\echo '10. calsim_model_variable_type'
 \echo '------------------------------'
 SELECT id, short_code, label, is_active FROM calsim_model_variable_type ORDER BY id;
 
 \echo ''
-\echo '12. derived_variable_type'
+\echo '11. derived_variable_type'
 \echo '-------------------------'
 SELECT id, short_code, label, is_active FROM derived_variable_type ORDER BY id;
 
 \echo ''
-\echo '13. network_type'
+\echo '12. network_type'
 \echo '----------------'
-SELECT id, short_code, label, entity_key, is_active FROM network_type ORDER BY id;
+SELECT id, short_code, label, description, network_entity_type_id, is_active FROM network_type ORDER BY id;
 
 \echo ''
-\echo '14. network_subtype'
+\echo '13. network_subtype'
 \echo '-------------------'
 SELECT id, short_code, label, type_id, is_active FROM network_subtype ORDER BY type_id, id;
 
 \echo ''
-\echo '15. wba (Water Budget Areas)'
+\echo '14. wba (Water Budget Areas)'
 \echo '----------------------------'
-SELECT id, wba_id, wba_name, hydrologic_region, is_active
+SELECT id, wba_id, wba_name, hydrologic_region, hydrologic_region_id
     FROM wba ORDER BY id
     LIMIT 10;
 SELECT COUNT(*) AS total_wba_rows FROM wba;
 
 \echo ''
-\echo '16. watershed  [PLANNED — table exists, not yet fully linked to network]'
-\echo '-------------------------------------------------------------------------'
+\echo '15. watershed'
+\echo '-------------'
 SELECT id, short_code, name, hydrologic_region_short_code, is_active FROM watershed ORDER BY id;
 
 \echo ''
@@ -106,7 +100,6 @@ SELECT table_name, row_count FROM (
     UNION ALL SELECT 'temporal_scale',                 COUNT(*) FROM temporal_scale
     UNION ALL SELECT 'statistic_type',                 COUNT(*) FROM statistic_type
     UNION ALL SELECT 'geometry_type',                  COUNT(*) FROM geometry_type
-    UNION ALL SELECT 'calsim_variable_type',           COUNT(*) FROM calsim_variable_type
     UNION ALL SELECT 'variable_type',                  COUNT(*) FROM variable_type
     UNION ALL SELECT 'calsim_model_variable_type',     COUNT(*) FROM calsim_model_variable_type
     UNION ALL SELECT 'derived_variable_type',          COUNT(*) FROM derived_variable_type

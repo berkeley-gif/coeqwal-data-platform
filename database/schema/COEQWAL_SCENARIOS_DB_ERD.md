@@ -213,7 +213,7 @@ Indexes:
 ```
 Table: hydrologic_region
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "SAC", "SJR", "DELTA", "TULARE", "SOCAL", "EXTERNAL"
+├── short_code           TEXT UNIQUE NOT NULL       -- "SAC", "SJR", "DELTA", "TULARE", "SOCAL", "EXPORT"
 ├── label                TEXT                       -- "Sacramento River Basin", etc.
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
@@ -223,11 +223,11 @@ Table: hydrologic_region
 
 Values (6 total):
 ├── SAC: Sacramento River Basin
-├── SJR: San Joaquin River Basin  
+├── SJR: San Joaquin River Basin
 ├── DELTA: Sacramento–San Joaquin Delta
 ├── TULARE: Tulare Basin
 ├── SOCAL: Southern California
-└── EXTERNAL: External areas
+└── EXPORT: Export region
 
 Indexes:
 └── hydrologic_region_short_code_key (short_code) -- For region lookups
@@ -344,10 +344,12 @@ Table: statistic_type
 ├── label                TEXT NOT NULL              -- "Mean", "Median", etc.
 ├── description          TEXT                       -- Statistic description
 ├── is_percentile        BOOLEAN DEFAULT FALSE      -- Whether this is a percentile measure
-├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Note: no is_active column — all statistic types are always active.
 
 Values (13 total):
 
@@ -369,26 +371,7 @@ Percentile bands (is_percentile = true):
 └── Q100: 100th percentile (Maximum in band context)
 ```
 
-### **8. calsim_variable_type**
-```
-Table: calsim_variable_type
-├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "output", "state", "decision"
-├── label                TEXT NOT NULL              -- "output", "state", "decision"
-├── description          TEXT                       -- Variable type description
-├── is_active            BOOLEAN DEFAULT TRUE
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Values (3 total):
-├── output: output (model output variable)
-├── state: state (state variable)
-└── decision: decision (decision variable)
-```
-
-### **9. variable_type**
+### **8. variable_type**
 ```
 Table: variable_type
 ├── id                   SERIAL PRIMARY KEY
@@ -416,7 +399,7 @@ CalSim model variable behavior classification.
 Seed: no standalone seed CSV (table pre-populated; values managed in DB).
 ```
 
-### **10. calsim_model_variable_type**
+### **9. calsim_model_variable_type**
 ```
 Table: calsim_model_variable_type
 ├── id                   SERIAL PRIMARY KEY
@@ -443,7 +426,7 @@ Note: More granular than calsim_variable_type (output/state/decision only).
 Created by migration 03. Seed: seed_tables/01_lookup/calsim_model_variable_type.csv
 ```
 
-### **11. derived_variable_type**
+### **10. derived_variable_type**
 ```
 Table: derived_variable_type
 ├── id                   SERIAL PRIMARY KEY
@@ -466,7 +449,7 @@ Note: INCOMPLETE — additional types expected as derived variable pipeline expa
 Created by migration 03. Seed: seed_tables/01_lookup/derived_variable_type.csv
 ```
 
-### **12. unit**
+### **11. unit**
 ```
 Table: unit
 ├── id                   SERIAL PRIMARY KEY
@@ -486,7 +469,7 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
-### **13. watershed**
+### **12. watershed**
 
 ```
 Table: watershed
@@ -523,7 +506,7 @@ Values (9 total):
 └── YUBA_RIVER: Yuba River Watershed
 ```
 
-### **14. wba (Water Budget Areas)**
+### **13. wba (Water Budget Areas)**
 ```
 Table: wba
 ├── id                   SERIAL PRIMARY KEY
@@ -547,7 +530,7 @@ Records: 42 Water Budget Areas
 Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) for GW_STOR tier mapping
 ```
 
-### **15. reservoir (reservoir geographic base table)**
+### **14. reservoir (reservoir geographic base table)**
 ```
 Table: reservoir
 ├── id                   SERIAL PRIMARY KEY
@@ -574,7 +557,7 @@ Note: This is the geographic base table with geospatial data. The related `reser
 Used by: tier_location_result (location_type = 'reservoir', location_id = reservoir.calsim_short_code)
 ```
 
-### **16. compliance_station (compliance monitoring stations)**
+### **15. compliance_station (compliance monitoring stations)**
 ```
 Table: compliance_station
 ├── id                   SERIAL PRIMARY KEY
