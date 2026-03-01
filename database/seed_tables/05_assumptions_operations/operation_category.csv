@@ -3,8 +3,8 @@ id,short_code,name,description,is_active,created_at,created_by,updated_at,update
 2,delta_outflow,Delta Outflow,Operations related to Delta outflow requirements,1,2024-01-01 00:00:00,2,2024-01-01 00:00:00,2
 3,carryover,Reservoir Carryover,Operations related to reservoir carryover storage requirements,1,2024-01-01 00:00:00,2,2024-01-01 00:00:00,2
 4,regulatory_salinity,Regulatory Salinity,Operations related to Delta salinity standards (X2),1,2024-01-01 00:00:00,2,2024-01-01 00:00:00,2
-5,tucp,TUCP / TUCO,Temporary Urgency Change Petitions and Temporary Urgency Change Orders,1,2025-01-01 00:00:00,2,2025-01-01 00:00:00,2
-6,gw_restrictions,Groundwater Restrictions,SGMA-type groundwater pumping restrictions,1,2025-01-01 00:00:00,2,2025-01-01 00:00:00,2
-7,infrastructure,Infrastructure,Water infrastructure configuration (tunnels and reservoirs),1,2025-01-01 00:00:00,2,2025-01-01 00:00:00,2
-8,flow,Flow Requirements,Instream flow and minimum flow objectives,1,2025-01-01 00:00:00,2,2025-01-01 00:00:00,2
-9,biops,Biological Opinions,NMFS and USFWS biological opinions for USBR long-term operations,1,2025-01-01 00:00:00,2,2025-01-01 00:00:00,2
+27,tucp,TUCP / TUCO,Temporary Urgency Change Petitions and Temporary Urgency Change Orders,1,2026-03-01 00:00:00,2,2026-03-01 00:00:00,2
+28,gw_restrictions,Groundwater Restrictions,SGMA-type groundwater pumping restrictions,1,2026-03-01 00:00:00,2,2026-03-01 00:00:00,2
+29,infrastructure,Infrastructure,Water infrastructure configuration (tunnels, reservoirs),1,2026-03-01 00:00:00,2,2026-03-01 00:00:00,2
+30,flow,Flow Requirements,Instream flow and minimum flow objectives,1,2026-03-01 00:00:00,2,2026-03-01 00:00:00,2
+31,biops,Biological Opinions,NMFS and USFWS biological opinions for USBR long-term operations,1,2026-03-01 00:00:00,2,2026-03-01 00:00:00,2

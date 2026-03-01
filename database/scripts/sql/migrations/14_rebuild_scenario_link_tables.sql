@@ -63,6 +63,8 @@ DELETE FROM scenario_key_assumption_link;
 --   cvp_settlement_to_zero (28) = Alt3 (CVP Settlement reduced to 0%)
 --   increase_Shasta_co (8) = s0044 (allocations reduced for Shasta carryover)
 
+ALTER TABLE scenario_key_operation_link DISABLE TRIGGER USER;
+
 INSERT INTO scenario_key_operation_link (scenario_id, operation_id)
 VALUES
     -- ── s0011 (id=1): DWR DCR2023 adj hist baseline with TUCPs ──────────────
@@ -308,6 +310,8 @@ VALUES
     (22, 26), -- delta_regs_standard
     (22, 27); -- alloc_standard
 
+ALTER TABLE scenario_key_operation_link ENABLE TRIGGER USER;
+
 -- ─── 3. Insert assumption links ───────────────────────────────────────────────
 -- Columns: (scenario_id, assumption_id)
 -- One land use assumption per scenario.
@@ -316,6 +320,8 @@ VALUES
 -- lu_2004_2013 (id=2) for s0011.
 -- Deprecated: lu_updated (id=3) and lu_proj_reductions (id=4) are no longer
 -- linked; they remain in assumption_definition for historical reference.
+
+ALTER TABLE scenario_key_assumption_link DISABLE TRIGGER USER;
 
 INSERT INTO scenario_key_assumption_link (scenario_id, assumption_id)
 VALUES
@@ -341,6 +347,8 @@ VALUES
    (20, 17),  -- s0045 → lu_2020_landiq
    (21, 17),  -- s0046 → lu_2020_landiq
    (22, 17);  -- s0065 → lu_2020_landiq
+
+ALTER TABLE scenario_key_assumption_link ENABLE TRIGGER USER;
 
 -- ─── Verify ──────────────────────────────────────────────────────────────────
 

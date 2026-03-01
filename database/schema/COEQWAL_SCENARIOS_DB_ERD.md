@@ -736,25 +736,30 @@ Records: 3 authors
 
 ### **1. assumption_category (assumption categories)**
 
-Status: PLANNED — not yet created in the database.
-Currently `assumption_definition.category` is a plain TEXT column. If/when this table is built,
-`assumption_definition.category` should be migrated to a FK `category_id INTEGER`.
+Note: `assumption_definition.category` remains a plain TEXT column mapped to `assumption_category.short_code`.
+No FK is enforced between the two tables; category is resolved by short_code at the application layer.
 
 ```
-Table: assumption_category   [PLANNED]
+Table: assumption_category
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           TEXT UNIQUE NOT NULL       -- "land_use", "gw_model"
-├── label                TEXT NOT NULL
+├── label                TEXT
 ├── description          TEXT
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK developer.id
+├── is_active            INTEGER DEFAULT 1
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER
 
-Values (2 — post-reclassification):
-├── land_use:  Land use scenario (LandIQ vintages)
-└── gw_model:  Groundwater model used (C2VSimFG, etc.)
+Values (2):
+├── land_use (id=2):  Land use scenario (LandIQ vintages)
+└── gw_model (id=5):  Groundwater model used (C2VSimFG, etc.)
+
+Indexes:
+├── assumption_category_pkey (id) UNIQUE PRIMARY
+└── assumption_category_short_code_key (short_code) UNIQUE
+
+Seed: seed_tables/05_assumptions_operations/assumption_category.csv
 ```
 
 ### **2. assumption_definition (assumption definitions)**
