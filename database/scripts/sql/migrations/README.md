@@ -14,7 +14,8 @@ These migrations have been run against the production database. They are kept he
 | `08_register_new_tables_domain_family_map.sql` | Registers `slr`, `assumption_category`, and `operation_category` in `domain_family_map`; fixes `created_by`/`updated_by` on category seed rows | Applied | 2026-03-01 |
 | `09_add_source_to_operation_definition_and_slr.sql` | Adds `source TEXT` column to `operation_definition` and `slr`; sets `source = 'james_gilbert'` for all current rows | Applied | 2026-03-01 |
 | `10_add_source_fk_constraints.sql` | Adds FK constraints on `source` → `source` lookup table for `assumption_definition`, `operation_definition`, and `slr` | Applied | 2026-03-01 |
-| `11_add_source_to_theme.sql` | Adds `wietske_medema` to `source` lookup; adds `source TEXT` column to `theme` with FK; sets `source = 'wietske_medema'` for all 6 theme rows | **Pending** | — |
+| `11_add_source_to_theme.sql` | Adds `wietske_medema` to `source` lookup; adds `source`, `created_at`, `updated_at` columns to `theme` with FK; populates all rows | Applied | 2026-03-01 |
+| `12_replace_themes_and_links.sql` | Replaces old 7-theme architecture with new 6 themes (cws, ag_gw, eco, delta, climate, governance); reseeds `theme_scenario_link` from THEME_SCENARIOS | **Pending** | — |
 
 ## Important notes
 
