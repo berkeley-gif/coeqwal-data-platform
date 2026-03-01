@@ -21,7 +21,8 @@ These migrations have been run against the production database. They are kept he
 - Migration 07 requires `$SUPERUSER_URL` for `DISABLE TRIGGER USER` DDL on RDS. The `CREATE TABLE` / `GRANT` / seed steps run outside the transaction block; the reclassification logic runs inside `BEGIN`/`COMMIT`.
 
 | `08_register_new_tables_domain_family_map.sql` | Registers `slr`, `assumption_category`, and `operation_category` in `domain_family_map`; fixes `created_by`/`updated_by` on category seed rows | Applied | 2026-02-27 |
-| `09_add_source_to_operation_definition_and_slr.sql` | Adds `source TEXT` column to `operation_definition` and `slr`; sets `source = 'james_gilbert'` for all current rows | **Pending** | — |
+| `09_add_source_to_operation_definition_and_slr.sql` | Adds `source TEXT` column to `operation_definition` and `slr`; sets `source = 'james_gilbert'` for all current rows | Applied | 2026-02-27 |
+| `10_add_source_fk_constraints.sql` | Adds FK constraints on `source` column → `source` lookup table for `assumption_definition`, `operation_definition`, and `slr` | **Pending** | — |
 
 ## Naming convention for future migrations
 
