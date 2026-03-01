@@ -21,6 +21,70 @@
 -- Run as: psql $SUPERUSER_URL -f database/scripts/sql/migrations/07_reclassify_assumptions_operations.sql
 -- =============================================================================
 
+-- ─── 0. Create category tables (never existed in live DB) ────────────────────
+-- These tables are Layer 05 lookups that were defined in seed CSVs but never
+-- had a CREATE TABLE statement applied to the live database.
+
+CREATE TABLE IF NOT EXISTS assumption_category (
+    id          SERIAL PRIMARY KEY,
+    short_code  TEXT NOT NULL UNIQUE,
+    label       TEXT,
+    description TEXT,
+    is_active   INTEGER DEFAULT 1,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by  INTEGER DEFAULT 1,
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_by  INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS operation_category (
+    id          SERIAL PRIMARY KEY,
+    short_code  TEXT NOT NULL UNIQUE,
+    name        TEXT,
+    description TEXT,
+    is_active   INTEGER DEFAULT 1,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by  INTEGER DEFAULT 1,
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_by  INTEGER
+);
+
+SELECT apply_audit_trigger_to_table('assumption_category');
+SELECT apply_audit_trigger_to_table('operation_category');
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON assumption_category TO jfantauzza;
+GRANT USAGE, SELECT ON SEQUENCE assumption_category_id_seq TO jfantauzza;
+GRANT SELECT, INSERT, UPDATE, DELETE ON operation_category  TO jfantauzza;
+GRANT USAGE, SELECT ON SEQUENCE operation_category_id_seq  TO jfantauzza;
+
+-- ─── Seed assumption_category (pre-migration state) ──────────────────────────
+-- Rows that will be removed by step 6: TUCP_TUCO, gw_restrictions,
+-- infrastructure, flow, biops, slr.  Rows that remain: land_use, gw_model.
+
+INSERT INTO assumption_category (short_code, label, description, is_active, created_at, created_by, updated_at, updated_by)
+VALUES
+    ('TUCP_TUCO',       'TUCP / TUCO',               'Temporary Urgency Change Petitions and Temporary Urgency Change Orders', 1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('land_use',        'Land Use',                  'Agricultural and urban land use assumptions',                            1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('gw_restrictions', 'Groundwater Restrictions',  'SGMA-type groundwater pumping restrictions',                            1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('infrastructure',  'Infrastructure',            'Water infrastructure configuration (tunnels, reservoirs)',              1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('gw_model',        'Groundwater Model',         'Groundwater model coupling assumptions (e.g. C2VSimFG)',               1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('flow',            'Flow Requirements',         'Instream flow and minimum flow objectives',                             1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('biops',           'Biological Opinions',       'NMFS and USFWS biological opinions for USBR long-term operations',    1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('slr',             'Sea Level Rise',            'Sea-level rise scenarios',                                             1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2)
+ON CONFLICT (short_code) DO NOTHING;
+
+-- ─── Seed operation_category (pre-migration state — 4 original rows) ─────────
+-- Rows 5–9 (tucp, gw_restrictions, infrastructure, flow, biops) are added by
+-- step 1 of this migration.
+
+INSERT INTO operation_category (short_code, name, description, is_active, created_at, created_by, updated_at, updated_by)
+VALUES
+    ('comm_delivery',       'Community Water Delivery', 'Operations related to community water delivery prioritization',              1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('delta_outflow',       'Delta Outflow',            'Operations related to Delta outflow requirements',                          1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('carryover',           'Reservoir Carryover',      'Operations related to reservoir carryover storage requirements',            1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
+    ('regulatory_salinity', 'Regulatory Salinity',      'Operations related to Delta salinity standards (X2)',                       1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2)
+ON CONFLICT (short_code) DO NOTHING;
+
 BEGIN;
 
 -- ─── 1. New operation_category rows ──────────────────────────────────────
