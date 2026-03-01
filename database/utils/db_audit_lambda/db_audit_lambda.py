@@ -398,7 +398,8 @@ def check_versioning_system(cursor) -> Dict[str, Any]:
         # Validate dynamically against actual DB tables:
         # - "missing": tables that exist in the DB but have no domain_family_map entry
         # - "phantom": entries in domain_family_map for tables that don't exist in the DB
-        mapped_tables = {row['table_name'] for row in result['domain_mappings']}
+        # Infrastructure tables are excluded from both sides of the comparison.
+        mapped_tables = {row['table_name'] for row in result['domain_mappings']} - _NON_DOMAIN_TABLES
         cursor.execute("""
             SELECT tablename FROM pg_tables
             WHERE schemaname = 'public'
