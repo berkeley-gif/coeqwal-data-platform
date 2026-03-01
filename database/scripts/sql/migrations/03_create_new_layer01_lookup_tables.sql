@@ -49,12 +49,12 @@ CREATE TABLE IF NOT EXISTS watershed (
 );
 
 ALTER TABLE watershed
-    ADD CONSTRAINT IF NOT EXISTS watershed_created_by_fkey
+    ADD CONSTRAINT watershed_created_by_fkey
     FOREIGN KEY (created_by) REFERENCES developer(id)
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE watershed
-    ADD CONSTRAINT IF NOT EXISTS watershed_updated_by_fkey
+    ADD CONSTRAINT watershed_updated_by_fkey
     FOREIGN KEY (updated_by) REFERENCES developer(id)
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -101,12 +101,12 @@ CREATE TABLE IF NOT EXISTS calsim_model_variable_type (
 );
 
 ALTER TABLE calsim_model_variable_type
-    ADD CONSTRAINT IF NOT EXISTS calsim_model_variable_type_created_by_fkey
+    ADD CONSTRAINT calsim_model_variable_type_created_by_fkey
     FOREIGN KEY (created_by) REFERENCES developer(id)
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE calsim_model_variable_type
-    ADD CONSTRAINT IF NOT EXISTS calsim_model_variable_type_updated_by_fkey
+    ADD CONSTRAINT calsim_model_variable_type_updated_by_fkey
     FOREIGN KEY (updated_by) REFERENCES developer(id)
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -151,12 +151,12 @@ CREATE TABLE IF NOT EXISTS derived_variable_type (
 );
 
 ALTER TABLE derived_variable_type
-    ADD CONSTRAINT IF NOT EXISTS derived_variable_type_created_by_fkey
+    ADD CONSTRAINT derived_variable_type_created_by_fkey
     FOREIGN KEY (created_by) REFERENCES developer(id)
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE derived_variable_type
-    ADD CONSTRAINT IF NOT EXISTS derived_variable_type_updated_by_fkey
+    ADD CONSTRAINT derived_variable_type_updated_by_fkey
     FOREIGN KEY (updated_by) REFERENCES developer(id)
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
