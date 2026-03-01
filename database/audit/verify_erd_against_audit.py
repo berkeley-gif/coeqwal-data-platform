@@ -229,16 +229,19 @@ def load_audit_data(audit_path: Path) -> dict:
 def _normalize_check(clause: str) -> str:
     """
     Normalize a CHECK clause for loose comparison.
-    - Lowercases and strips outer parentheses/spaces.
-    - Converts BETWEEN x AND y → >= x AND <= y, because PostgreSQL stores
-      CHECK constraints in the expanded form rather than preserving BETWEEN.
+
+    PostgreSQL internally rewrites CHECK clauses — e.g. it:
+      - Adds nested parentheses: ((col >= 1) AND (col <= 12))
+      - Expands BETWEEN: col BETWEEN 1 AND 12 → col >= 1 AND col <= 12
+
+    Strategy: strip ALL parentheses, collapse whitespace, lowercase, then
+    convert any remaining BETWEEN syntax so ERD and DB forms can be compared.
     """
     import re as _re
     c = clause.strip().lower()
-    # Strip outer parens
-    while c.startswith('(') and c.endswith(')'):
-        c = c[1:-1].strip()
-    # Expand: col BETWEEN x AND y  →  col >= x AND col <= y
+    c = c.replace('(', '').replace(')', '')        # remove all parens
+    c = ' '.join(c.split())                        # normalize whitespace
+    # Convert: col BETWEEN x AND y → col >= x and col <= y
     m = _re.match(r'^(\w+)\s+between\s+(\S+)\s+and\s+(\S+)$', c)
     if m:
         col, lo, hi = m.group(1), m.group(2), m.group(3)
