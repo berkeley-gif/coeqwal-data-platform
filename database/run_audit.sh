@@ -1,67 +1,60 @@
 #!/bin/bash
-
-# ============================================================================
+# =============================================================================
 # DATABASE AUDIT RUNNER
-# ============================================================================
-# This script runs the comprehensive database audit
-# ============================================================================
+# =============================================================================
+# Runs the local database audit via run_local_audit.py.
+# Output is written to ../audits/ (repo root) as:
+#   audit_YYYYMMDD_HHMMSS.json
+#   tables_summary_YYYYMMDD_HHMMSS.csv
+#   latest.json  (symlink to the most recent JSON)
+#
+# Prerequisites:
+#   pip install psycopg2-binary pandas
+#
+# Usage:
+#   export DATABASE_URL="postgresql://user:pass@host:5432/coeqwal_scenario"
+#   bash database/run_audit.sh
+#
+# Or from the database/ directory:
+#   bash run_audit.sh
+# =============================================================================
 
-echo "🔍 COEQWAL Database Audit Runner"
-echo "================================="
+set -euo pipefail
 
-# Check if DATABASE_URL is set
-if [ -z "$DATABASE_URL" ]; then
+echo "COEQWAL Database Audit Runner"
+echo "=============================="
+
+# Resolve to the database/ directory regardless of where the script is called from
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Check DATABASE_URL ---
+if [ -z "${DATABASE_URL:-}" ]; then
     echo ""
-    echo "❌ DATABASE_URL environment variable is not set!"
+    echo "ERROR: DATABASE_URL is not set."
     echo ""
-    echo "Please set it with your RDS connection string:"
+    echo "Set it with your RDS connection string, then re-run:"
     echo ""
-    echo "For bash/zsh:"
-    echo 'export DATABASE_URL="postgresql://username:password@your-rds-endpoint:5432/coeqwal_scenario"'
+    echo "  export DATABASE_URL=\"postgresql://user:password@your-rds-endpoint:5432/coeqwal_scenario\""
     echo ""
-    echo "For example:"
-    echo 'export DATABASE_URL="postgresql://postgres:mypassword@coeqwal-scenario-database-1.abc123.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"'
-    echo ""
-    echo "Then run this script again."
     exit 1
 fi
 
-echo "✅ DATABASE_URL is set"
-echo "🔗 Connection: $(echo $DATABASE_URL | sed 's/:[^:]*@/:***@/')"
+echo "DATABASE_URL: $(echo "$DATABASE_URL" | sed 's/:[^:@]*@/:***@/')"
 echo ""
 
-# Check if required Python packages are available
-echo "📦 Checking Python dependencies..."
-
-# Check for required packages
-python3 -c "import psycopg2, pandas, json" 2>/dev/null
-if [ $? -ne 0 ]; then
-    echo "❌ Missing required Python packages!"
+# --- Check Python dependencies ---
+echo "Checking Python dependencies..."
+if ! python3 -c "import psycopg2, pandas" 2>/dev/null; then
     echo ""
-    echo "Please install them:"
-    echo "pip install psycopg2-binary pandas"
+    echo "ERROR: Missing required Python packages."
+    echo "Install them with:"
+    echo "  pip install psycopg2-binary pandas"
     echo ""
-    echo "Or if using conda:"
-    echo "conda install psycopg2 pandas"
     exit 1
 fi
-
-echo "✅ Python dependencies available"
+echo "Dependencies OK"
 echo ""
 
-# Run the audit
-echo "🚀 Starting database audit..."
-echo ""
-
-cd "$(dirname "$0")"
-
-python3 utils/audit_database_comprehensive.py
-
-echo ""
-echo "✅ Audit complete!"
-echo ""
-echo "📁 Files created in: $(pwd)"
-echo "   - database_audit_YYYYMMDD_HHMMSS.json (detailed report)"
-echo "   - database_tables_summary_YYYYMMDD_HHMMSS.csv (tables overview)"
-echo ""
-echo "🔍 Review the summary above and the detailed files for complete analysis."
+# --- Run the audit ---
+echo "Starting audit..."
+python3 "$SCRIPT_DIR/run_local_audit.py"

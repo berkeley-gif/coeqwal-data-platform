@@ -19,12 +19,19 @@ DECLARE
     dev_id INTEGER;
     current_db_user TEXT;
 BEGIN
-    -- Get current database user
-    current_db_user := current_user;
-    
-    -- Try multiple strategies to find the developer
-    
-    -- Strategy 1: Match by AWS SSO username
+    -- IMPORTANT: Use session_user, not current_user.
+    -- This function is SECURITY DEFINER (runs as owner = postgres), so
+    -- current_user always returns 'postgres' regardless of who called it.
+    -- session_user always reflects the actual connected user.
+    current_db_user := session_user;
+
+    -- Special case: postgres superuser maps to system account.
+    -- This allows administrative operations while maintaining audit trail.
+    IF current_db_user = 'postgres' THEN
+        RETURN 1;  -- system@coeqwal.local (id=1)
+    END IF;
+
+    -- Strategy 1: Match by AWS SSO username (exact match)
     SELECT id INTO dev_id
     FROM developer 
     WHERE aws_sso_username = current_db_user
@@ -48,27 +55,32 @@ BEGIN
         AND is_active = true
         LIMIT 1;
     END IF;
-    
-    -- Strategy 4: If connected as 'postgres', find jfantauzza
-    IF dev_id IS NULL AND current_db_user = 'postgres' THEN
+
+    -- Strategy 4: Match by display_name containing database username
+    IF dev_id IS NULL THEN
         SELECT id INTO dev_id
         FROM developer 
-        WHERE email LIKE '%jfantauzza%' OR email LIKE '%berkeley%'
+        WHERE LOWER(display_name) LIKE '%' || LOWER(current_db_user) || '%'
         AND is_active = true
         LIMIT 1;
     END IF;
-    
-    -- Fallback: Use system user if nothing else works
+
+    -- STRICT MODE: Fail if we can't identify the operator.
+    -- This prevents unverified users from making database changes.
     IF dev_id IS NULL THEN
-        dev_id := 1; -- system@coeqwal.local
-        RAISE WARNING 'Could not determine current operator, using system user (ID=1)';
+        RAISE EXCEPTION 'UNAUTHORIZED: Cannot identify current operator (db_user: %). '
+            'Register in developer table with a matching aws_sso_username or email first.',
+            current_db_user;
     END IF;
     
     RETURN dev_id;
 END;
-$$ LANGUAGE plpgsql
-SECURITY DEFINER
-COMMENT ON FUNCTION coeqwal_current_operator() IS 'Returns developer.id for current session user with SSO integration';
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION coeqwal_current_operator() IS
+'Returns developer.id for the current session user. STRICT MODE: raises exception if
+user cannot be identified. Special case: postgres -> id=1 (system@coeqwal.local).
+Detection order: aws_sso_username (exact), email (substr), name (substr), display_name (substr).';
 
 -- ============================================================================
 -- FUNCTION: get_active_version(version_family_short_code)

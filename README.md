@@ -60,6 +60,61 @@ uvicorn main:app --reload --port 8000
 open http://localhost:8000/docs
 ```
 
+## AWS Management
+
+### Reclaiming disk space on the EC2 instance
+
+If the AWS instance is running low on disk space (common after OS updates, package installs, or prolonged operation), use the following steps.
+
+**Check current disk usage:**
+```bash
+df -h
+```
+Shows disk usage for all mounted filesystems in human-readable units (GB/MB). The `/` (root) filesystem is the one most likely to fill up. Look for `Use%` approaching 100%.
+
+**Clean the DNF package cache:**
+```bash
+sudo dnf clean all
+```
+DNF (the package manager on Amazon Linux 2023 / RHEL-based systems) caches downloaded packages and metadata on disk after installation. Over time this cache can grow significantly. `dnf clean all` removes all cached package data, repo metadata, and headers. This is safe to run at any time — packages are re-downloaded from the repo on the next `dnf` operation.
+
+Run `df -h` again after to confirm space was reclaimed.
+
+**If `dnf clean all` doesn't reclaim much:**
+
+Manually remove the DNF cache directory and check root disk usage:
+```bash
+sudo rm -rf /var/cache/dnf/*
+df -h /
+```
+
+**Trim the system journal:**
+
+`systemd` accumulates log journal files under `/var/log/journal/`. Check how much space the journal is using, then vacuum it down to 50 MB:
+```bash
+sudo journalctl --disk-usage
+sudo journalctl --vacuum-size=50M
+df -h /
+```
+`--disk-usage` reports total journal size. `--vacuum-size=50M` deletes the oldest journal files until the total size is at or below 50 MB. This is safe — it only removes old log history, not active logs.
+
+**If space is still low — check Docker (~1.2 GB):**
+
+Docker can accumulate significant disk usage from stopped containers, dangling images, unused volumes, and build cache. First, see a breakdown of what Docker is holding:
+```bash
+docker system df
+```
+This shows how much space is used by images, containers, volumes, and build cache, and how much is "reclaimable" (unused).
+
+Safely remove everything unused:
+```bash
+docker container prune -f   # removes all stopped containers
+docker image prune -a -f    # removes all images not used by a running container
+docker volume prune -f      # removes all volumes not attached to a container
+df -h /
+```
+These commands only delete objects that are not currently in use. Running containers, their images, and attached volumes are untouched. The `-f` flag skips the confirmation prompt.
+
 ## License
 
 See [LICENSE](./LICENSE) for details.

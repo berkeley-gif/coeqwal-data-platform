@@ -395,20 +395,65 @@ All tables have automatic audit field population via database triggers.
 
 ### How it works
 
-| Event | created_at | created_by | updated_at | updated_by |
-|-------|------------|------------|------------|------------|
+The full chain from a SQL write to recorded attribution:
+
+```
+INSERT/UPDATE on any table
+  BEFORE trigger fires: set_audit_fields()
+    calls: coeqwal_current_operator()
+      reads: session_user  (PostgreSQL session variable — set at connection time)
+                           (NOT current_user: this function is SECURITY DEFINER,
+                            so current_user always returns the function owner)
+      looks up: developer.id  (4 strategies, in order — see below)
+      returns: INTEGER (the developer.id)
+    writes:
+      NEW.created_by / NEW.updated_by = developer.id
+      NEW.created_at / NEW.updated_at = NOW()
+```
+
+Field behavior by event:
+
+| Event | `created_at` | `created_by` | `updated_at` | `updated_by` |
+|-------|-------------|-------------|-------------|-------------|
 | INSERT | `NOW()` | `coeqwal_current_operator()` | `NOW()` | `coeqwal_current_operator()` |
-| UPDATE | preserved | preserved | `NOW()` | `coeqwal_current_operator()` |
+| UPDATE | preserved (from original INSERT) | preserved | `NOW()` | `coeqwal_current_operator()` |
 
 ### Developer detection (it's strict)
 
-`coeqwal_current_operator()` identifies the current user through multiple strategies:
-1. Match `aws_sso_username` column
-2. Match email containing database username
-3. Match name/display_name containing database username
-4. **FAIL with exception if no match** - unregistered users cannot make changes
+`coeqwal_current_operator()` resolves `current_user` to a `developer.id` using these strategies in order:
+
+| Priority | Field checked | Match condition |
+|----------|--------------|-----------------|
+| 0 (special) | — | If `current_user = 'postgres'`, return id=1 (`system@coeqwal.local`) |
+| 1 | `aws_sso_username` | Exact match: `aws_sso_username = current_user` |
+| 2 | `email` | Substring match: `email LIKE '%current_user%'` |
+| 3 | `name` | Case-insensitive substring: `LOWER(name) LIKE '%current_user%'` |
+| 4 | `display_name` | Case-insensitive substring: `LOWER(display_name) LIKE '%current_user%'` |
+| fail | — | `RAISE EXCEPTION` — unregistered users cannot write to the database |
 
 **Important:** Each developer must have their own database user registered in the `developer` table before making changes.
+
+### Connecting as yourself (getting correct attribution)
+
+The trigger reads `session_user` — the PostgreSQL role you authenticated as at connection time. **You cannot change `session_user` with a session variable.** If your `DATABASE_URL` uses `postgres` as the username, every write is attributed to developer id=1 (system account), regardless of who you are.
+
+To verify who you are before writing:
+
+```sql
+SELECT current_user;                -- your PostgreSQL session role
+SELECT coeqwal_current_operator();  -- your developer.id (or an exception)
+SELECT id, email, display_name, aws_sso_username FROM developer;
+```
+
+**To get correct attribution, connect as your own registered database user:**
+
+```bash
+# Update the username in your connection string
+export DATABASE_URL="postgresql://username:password@rds-endpoint:5432/coeqwal_scenario"
+psql $DATABASE_URL
+```
+
+Strategy 2 (`email LIKE '%username%'`) will match `username@domain.ext`, so no `aws_sso_username` is needed as long as your email is registered.
 
 ### Database access
 
@@ -423,6 +468,15 @@ The database is **not publicly accessible**. Access requires:
    - Never committed to the repository
 
 3. **AWS account access** - Required to use Cloud9 or retrieve credentials
+
+#### Database quick start
+
+Get connection details and store the connection string in shell profile:
+
+```
+export DATABASE_URL="postgresql://username:password@your-rds-endpoint:5432/coeqwal_scenario"
+psql $DATABASE_URL
+```
 
 **Access summary:**
 
@@ -468,6 +522,26 @@ psql -h <rds-endpoint> -U jdoe -d coeqwal_scenario
 ```
 
 **Important:** Unregistered users cannot make database changes. The `coeqwal_current_operator()` function will raise an exception.
+
+### Cloud9 cheatsheet
+
+```bash
+# Show all environment variables currently set in the session
+printenv | sort
+
+# Show only database and AWS connection variables
+printenv | grep -E "DATABASE|PG|AWS|DB_"
+
+# Show what is persisted across sessions (saved in shell profile files)
+grep -n "export" ~/.bashrc ~/.bash_profile ~/.profile 2>/dev/null
+```
+
+`printenv | sort` is the quick sanity check — use it to confirm `DATABASE_URL` is set and see what username it contains.
+
+`printenv | grep -E "DATABASE|PG|AWS|DB_"` narrows to connection-relevant variables only: `DATABASE_URL`, any `PG*` overrides (`PGUSER`, `PGPASSWORD`, `PGHOST`), and AWS credentials.
+
+`grep -n "export" ~/.bashrc ...` shows what is **saved** and will reload on the next login. This is the file to edit when you want to change `DATABASE_URL` permanently. `printenv` only shows what is active right now — edits to profile files require `source ~/.bashrc` to take effect in the current session.
+
 ### audit_log table
 
 All changes are recorded in the `audit_log` table:
@@ -488,10 +562,61 @@ SELECT * FROM audit_log WHERE changed_by = 2;
 
 ### Scripts
 
-Audit trigger scripts are in `scripts/sql/00_versioning/`:
-- `00_create_audit_trigger_function.sql` - Creates `set_audit_fields()` trigger function
-- `01_create_audit_log_table.sql` - Creates `audit_log` table for change tracking
-- `03_apply_audit_triggers.sql` - Applies triggers to all tables
+Scrips in `scripts/sql/00_versioning/` run in numbered order:
+
+**`00_create_versioning_tables.sql`**
+Creates the four foundational versioning tables: `developer`, `version_family`, `version`,
+and `domain_family_map`. This must run before any other script in this folder — the audit
+trigger functions and all domain tables have FK references to `developer`.
+Handles the chicken-and-egg bootstrap: inserts the system user (id=1) before adding the
+self-referencing FK constraints on `developer.created_by` and `updated_by`.
+
+**`01_create_audit_trigger_function.sql`**
+Defines `set_audit_fields()` — the BEFORE INSERT/UPDATE trigger function that auto-populates
+`created_at/by` and `updated_at/by` on every write. This is the core of the audit system.
+Also contains the note on why `session_user` must be used instead of `current_user` (SECURITY DEFINER).
+
+**`02_create_audit_log_table.sql`**
+Creates the `audit_log` table and its indexes. This table stores a full row-level change history
+(old values, new values, changed fields, who, when, from where) as JSONB. The table exists in the
+database but is **not active by default** — see `03_` below for how to enable it.
+
+**`03_apply_audit_triggers.sql`**
+Does two things:
+1. Applies the `set_audit_fields()` trigger to every table that has audit columns — **this runs
+   automatically and is always active.**
+2. Defines `log_audit_changes()` and the helper `apply_audit_log_trigger_to_table(p_table_name)`,
+   which write full change records into `audit_log`. This is **opt-in per table** — it is not
+   applied by default because the write volume on bulk data tables would be large. Enable it on
+   sensitive tables with:
+   ```sql
+   SELECT apply_audit_log_trigger_to_table('scenario');
+   SELECT apply_audit_log_trigger_to_table('version');
+   ```
+
+**`04_create_developer_users.sql`**
+Defines `register_developer()` and `list_developers()` — utility functions for creating a new
+PostgreSQL role, granting it the right permissions, and registering it in the `developer` table
+in one step. See the "Setting up a new developer" section above.
+
+**`05_populate_domain_family_map.sql`**
+Seeds the `domain_family_map` table, which maps every database table to a `version_family`. This
+is what the versioning system uses to know which version governs each table's data. Contains the
+full current set of 70 mappings. The seed CSV (`seed_tables/00_versioning/domain_family_map.csv`)
+is out of date (34 rows) and should not be used for loading — see the seed README for how to
+regenerate it from the live database.
+
+**`06_load_seed_data.sql`**
+Loads bootstrap data into `developer`, `version_family`, and `version`. Uses `ON CONFLICT DO
+NOTHING` throughout, so it is safe to re-run on an existing database. `domain_family_map` is
+intentionally skipped here — it is populated by `05_populate_domain_family_map.sql`.
+Note: `developer` data is inline (not `\copy`) because the seed CSV is missing the `name` and
+`aws_sso_username` columns.
+
+**`09_verify_level00.sql`**
+Verification queries for the versioning layer — checks that triggers are applied, audit fields
+are populated, and domain_family_map entries are present. Run this after any schema changes to
+the versioning layer to confirm everything is wired up correctly.
 
 ### Verification queries
 
@@ -720,8 +845,15 @@ psql -h coeqwal-scenario-database-1.xxxxx.us-west-2.rds.amazonaws.com \
      -U postgres -d coeqwal_scenario
 
 # Run scripts
-\i database/scripts/sql/00_versioning/00_create_audit_trigger_function.sql
-\i database/scripts/sql/00_versioning/01_create_audit_log_table.sql
+\i database/scripts/sql/00_create_helper_functions.sql
+\i database/scripts/sql/00_versioning/00_create_versioning_tables.sql
+\i database/scripts/sql/00_versioning/01_create_audit_trigger_function.sql
+\i database/scripts/sql/00_versioning/02_create_audit_log_table.sql
+\i database/scripts/sql/00_versioning/03_apply_audit_triggers.sql
+\i database/scripts/sql/00_versioning/04_create_developer_users.sql
+\i database/scripts/sql/00_versioning/06_load_seed_data.sql
+\i database/scripts/sql/00_versioning/05_populate_domain_family_map.sql
+\i database/scripts/sql/00_versioning/09_verify_level00.sql
 -- etc.
 ```
 

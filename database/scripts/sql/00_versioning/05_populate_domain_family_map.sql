@@ -1,8 +1,8 @@
 -- =============================================================================
--- 08_populate_domain_family_map.sql
+-- 05_populate_domain_family_map.sql
 -- Populates domain_family_map with all database tables mapped to version families
 -- =============================================================================
--- Run in Cloud9: \i database/scripts/sql/00_versioning/08_populate_domain_family_map.sql
+-- Run in Cloud9: \i database/scripts/sql/00_versioning/05_populate_domain_family_map.sql
 -- =============================================================================
 
 \echo '============================================================================'

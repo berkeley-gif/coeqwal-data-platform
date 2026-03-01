@@ -1,8 +1,8 @@
 -- =============================================================================
--- 00_create_audit_trigger_function.sql
+-- 01_create_audit_trigger_function.sql
 -- Creates the trigger function for automatic audit field population
 -- =============================================================================
--- Run in Cloud9: psql -f 00_create_audit_trigger_function.sql
+-- Run in Cloud9: psql -f 01_create_audit_trigger_function.sql
 -- =============================================================================
 
 -- Drop existing function if it exists (to allow updates)
@@ -10,6 +10,9 @@ DROP FUNCTION IF EXISTS set_audit_fields() CASCADE;
 
 -- Create the audit trigger function
 -- This function automatically populates audit fields on INSERT and UPDATE
+-- Note: coeqwal_current_operator() is SECURITY DEFINER and uses session_user
+-- (not current_user) so it correctly resolves the calling user even when
+-- invoked from within this trigger (which runs as the table owner).
 CREATE OR REPLACE FUNCTION set_audit_fields()
 RETURNS TRIGGER AS $$
 BEGIN

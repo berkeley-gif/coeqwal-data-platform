@@ -1,8 +1,8 @@
 -- =============================================================================
--- 01_create_audit_log_table.sql
+-- 02_create_audit_log_table.sql
 -- Creates the audit_log table for tracking all database changes
 -- =============================================================================
--- Run in Cloud9: psql -f 01_create_audit_log_table.sql
+-- Run in Cloud9: psql -f 02_create_audit_log_table.sql
 -- =============================================================================
 
 -- Create audit_log table for comprehensive change tracking

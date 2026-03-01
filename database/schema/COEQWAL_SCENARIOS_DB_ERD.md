@@ -131,16 +131,68 @@ Table: developer
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── last_login           TIMESTAMP WITH TIME ZONE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-└── updated_at           TIMESTAMP DEFAULT NOW()
+├── updated_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER                    -- FK developer.id (self-referencing)
+└── updated_by           INTEGER                    -- FK developer.id (self-referencing)
+
+Records: 2 (bootstrap system user + admin)
 ```
 
-### **4. domain_family_map (table-to-version mapping)**
+### **4. data_load_log (ETL batch tracking)**
+
+Status: PLANNED — not yet created in the database.
+Intended to replace per-row `created_by`/`updated_by` on bulk statistics tables,
+providing batch-level ETL provenance (who loaded, when, from what source file).
+
+```
+Table: data_load_log   [PLANNED]
+├── id                   SERIAL PRIMARY KEY
+├── table_name           TEXT NOT NULL              -- Target statistics table
+├── scenario_short_code  TEXT                       -- Scenario loaded (if applicable)
+├── source_file          TEXT                       -- S3 path or local file loaded
+├── record_count         INTEGER                    -- Rows inserted/updated
+├── loaded_by            INTEGER NOT NULL           -- FK developer.id
+├── loaded_at            TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── notes                TEXT
+└── status               TEXT DEFAULT 'success'     -- "success", "error", "partial"
+```
+
+### **6. audit_log (change tracking)**
+```
+Table: audit_log
+├── id                   SERIAL PRIMARY KEY
+├── table_name           TEXT NOT NULL              -- Name of the table where change occurred
+├── record_id            INTEGER                    -- Primary key of the changed record
+├── record_key           TEXT                       -- Natural key of the record (e.g. scenario_id)
+├── operation            TEXT NOT NULL              -- "INSERT", "UPDATE", "DELETE"
+├── old_values           JSONB                      -- Row state before change
+├── new_values           JSONB                      -- Row state after change
+├── changed_fields       TEXT[]                     -- Array of column names that changed
+├── changed_by           INTEGER                    -- FK developer.id (who made the change)
+├── changed_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── session_user_name    TEXT                       -- Database session user
+├── application_name     TEXT                       -- Application/tool that made the change
+└── client_addr          TEXT                       -- Client IP address
+
+Records: 0 (table created, triggers not yet deployed to production tables)
+Purpose: Row-level change tracking for key domain tables (theme, scenario, etc.)
+```
+
+### **7. domain_family_map (table-to-version mapping)**
 ```
 Table: domain_family_map
 ├── schema_name          TEXT NOT NULL              -- "public"
 ├── table_name           TEXT NOT NULL              -- Table name
-├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id
-└── note                 TEXT                       -- Purpose note
+├── version_family_id    INTEGER NOT NULL           -- FK version_family.id
+├── note                 TEXT                       -- Purpose note
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
+
+Records: 70 entries (one per domain table tracked)
+Primary key: (schema_name, table_name)
 ```
 
 ## **01_LOOKUP TABLES**
@@ -219,7 +271,11 @@ Table: geometry_type
 ├── short_code           TEXT UNIQUE NOT NULL       -- "point", "linestring", "polygon", "multipolygon"
 ├── label                TEXT                       -- "Point", "LineString", etc.
 ├── description          TEXT                       -- Geometry description
-└── is_active            BOOLEAN DEFAULT TRUE
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
 
 Values (4 total):
 ├── point: Point geometry
@@ -399,6 +455,82 @@ Values (9 total):
 └── YUBA_RIVER: Yuba River Watershed
 ```
 
+### **12. wba (Water Budget Areas)**
+```
+Table: wba
+├── id                   SERIAL PRIMARY KEY
+├── wba_id               VARCHAR(10)                -- WBA identifier (e.g., "02N", "06S")
+├── wba_name             TEXT                       -- Full WBA name
+├── geom_wkt             TEXT                       -- WKT geometry
+├── srid                 INTEGER DEFAULT 4326
+├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
+├── area_acres           NUMERIC                    -- Area in acres
+├── hydrologic_region    VARCHAR(10)                -- Legacy text region code
+├── hydrologic_region_id INTEGER                    -- FK hydrologic_region.id
+├── source_id            INTEGER                    -- FK source.id
+├── comments             TEXT
+├── data_source          TEXT                       -- Original data source description
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
+
+Records: 42 Water Budget Areas
+Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) for GW_STOR tier mapping
+```
+
+### **13. reservoir (reservoir geographic base table)**
+```
+Table: reservoir
+├── id                   SERIAL PRIMARY KEY
+├── calsim_short_code    VARCHAR(20)                -- CalSim identifier (e.g., "SHSTA", "OROVL")
+├── reservoir_name       TEXT                       -- Full reservoir name
+├── geom_wkt             TEXT                       -- WKT geometry
+├── srid                 INTEGER DEFAULT 4326
+├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
+├── area_sqkm            NUMERIC                    -- Surface area in square km
+├── elevation_m          NUMERIC                    -- Elevation in meters
+├── gnis_id              TEXT                       -- GNIS identifier
+├── nhd_permanent_id     TEXT                       -- NHD Permanent Identifier
+├── data_source          TEXT                       -- Original data source description
+├── source_id            INTEGER                    -- FK source.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
+
+Records: 7 major reservoirs
+Note: This is the geographic base table with geospatial data. The related `reservoir_entity` table
+(ENTITY LAYER) holds operational attributes (capacity_taf, dead_pool_taf). Both tables use
+`calsim_short_code` / `short_code` as the joining key.
+Used by: tier_location_result (location_type = 'reservoir', location_id = reservoir.calsim_short_code)
+```
+
+### **14. compliance_station (compliance monitoring stations)**
+```
+Table: compliance_station
+├── id                   SERIAL PRIMARY KEY
+├── station_code         VARCHAR(20)                -- Station identifier (e.g., "JP", "EX2")
+├── station_name         TEXT                       -- Full station name
+├── latitude             NUMERIC
+├── longitude            NUMERIC
+├── srid                 INTEGER DEFAULT 4326
+├── geom_wkt             TEXT                       -- WKT geometry
+├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
+├── tier_use             TEXT                       -- Which tier indicator uses this station
+├── data_source          TEXT                       -- Original data source description
+├── notes                TEXT
+├── source_id            INTEGER                    -- FK source.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
+
+Records: 2 compliance stations
+Used by: tier_location_result (location_type = 'compliance_station', location_id = station_code)
+         for FW_DELTA_USES tier monitoring
+```
+
 ---
 
 ## **05_THEMES_SCENARIOS LAYER**
@@ -419,9 +551,11 @@ Table: theme
 ├── narrative            JSONB                      -- Structured narrative data
 ├── outcome_description  TEXT
 ├── outcome_narrative    TEXT
-├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK → version.id (theme family)
-├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
-└── updated_by           INTEGER                    -- FK → developer.id
+├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK version.id (theme family)
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK developer.id
 
 Records: 7 themes
 
@@ -502,7 +636,11 @@ Baseline Derivations:
 ```
 Table: theme_scenario_link
 ├── theme_id             INTEGER NOT NULL           -- FK → theme.id
-└── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Primary key: (theme_id, scenario_id)
 
@@ -550,27 +688,23 @@ Records: 3 authors
 
 ### **1. assumption_category (assumption categories)**
 
+Status: PLANNED — not yet created in the database.
+Currently `assumption_definition.category` is a plain TEXT column. If/when this table is built,
+`assumption_definition.category` should be migrated to a FK `category_id INTEGER`.
+
 ```
-Table: assumption_category
+Table: assumption_category   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           TEXT UNIQUE NOT NULL       -- "hydrology", "land_use", "regulations", etc.
 ├── label                TEXT NOT NULL              -- "Hydrology", "Land Use", "Regulations"
 ├── description          TEXT
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
 
-Foreign keys:
-├── Ref: assumption_category.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: assumption_category.updated_by > developer.id [delete: restrict, update: cascade]
-
-Indexes:
-├── assumption_category_short_code_key (short_code)
-└── idx_assumption_category_active (is_active, short_code)
-
-Values (8 total):
+Planned values (8 total):
 ├── hydrology: Hydrology
 ├── hydroclimate: Hydroclimate
 ├── land_use: Land Use
@@ -579,8 +713,6 @@ Values (8 total):
 ├── regulations: Regulations
 ├── demand: Demand
 └── infrastructure: Infrastructure
-
-Records: 8 categories
 ```
 
 ### **2. assumption_definition (assumption definitions)**
@@ -595,7 +727,7 @@ Table: assumption_definition
 ├── simple_description   TEXT
 ├── description          TEXT
 ├── narrative            JSONB
-├── category_id          INTEGER                    -- FK → assumption_category.id (nullable for flexibility)
+├── category             TEXT                       -- Inline category label (e.g. "hydrology", "land_use")
 ├── source               TEXT                       -- Source citation
 ├── source_access_date   DATE                       -- When source was accessed
 ├── file                 TEXT                       -- Associated file path/name
@@ -608,7 +740,6 @@ Table: assumption_definition
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Foreign keys:
-├── Ref: assumption_definition.category_id > assumption_category.id [delete: restrict, update: cascade]
 ├── Ref: assumption_definition.assumptions_version_id > version.id [delete: restrict, update: cascade]
 ├── Ref: assumption_definition.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: assumption_definition.updated_by > developer.id [delete: restrict, update: cascade]
@@ -626,7 +757,11 @@ Records: 17 assumption definitions
 ```
 Table: scenario_key_assumption_link
 ├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
-└── assumption_id        INTEGER NOT NULL           -- FK → assumption_definition.id
+├── assumption_id        INTEGER NOT NULL           -- FK → assumption_definition.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Primary key: (scenario_id, assumption_id)
 
@@ -641,33 +776,26 @@ Indexes:
 
 ### **4. operation_category (operation categories)**
 
+Status: PLANNED — not yet created in the database.
+Currently `operation_definition.category` is a plain TEXT column.
+
 ```
-Table: operation_category
+Table: operation_category   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           TEXT UNIQUE NOT NULL       -- "allocation", "regulatory", "infrastructure"
 ├── name                 TEXT                       -- "Allocation", "Regulatory", "Infrastructure"
 ├── description          TEXT
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
 
-Foreign keys:
-├── Ref: operation_category.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: operation_category.updated_by > developer.id [delete: restrict, update: cascade]
-
-Indexes:
-├── operation_category_short_code_key (short_code)
-└── idx_operation_category_active (is_active, short_code)
-
-Values (4 total):
+Planned values (4 total):
 ├── allocation: Allocation
 ├── carryover: Carryover Storage
 ├── infrastructure: Infrastructure
 └── regulatory: Regulatory
-
-Records: 4 categories
 ```
 
 ### **5. operation_definition (operation definitions)**
@@ -682,7 +810,7 @@ Table: operation_definition
 ├── simple_description   TEXT
 ├── description          TEXT
 ├── narrative            JSONB
-├── category_id          INTEGER                    -- FK → operation_category.id (nullable for flexibility)
+├── category             TEXT                       -- Inline category label (e.g. "allocation", "regulatory")
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── notes                TEXT
 ├── operation_version_id INTEGER NOT NULL           -- FK → version.id (operations family)
@@ -692,7 +820,6 @@ Table: operation_definition
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Foreign keys:
-├── Ref: operation_definition.category_id > operation_category.id [delete: restrict, update: cascade]
 ├── Ref: operation_definition.operation_version_id > version.id [delete: restrict, update: cascade]
 ├── Ref: operation_definition.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: operation_definition.updated_by > developer.id [delete: restrict, update: cascade]
@@ -710,7 +837,11 @@ Records: 10 operation definitions
 ```
 Table: scenario_key_operation_link
 ├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
-└── operation_id         INTEGER NOT NULL           -- FK → operation_definition.id
+├── operation_id         INTEGER NOT NULL           -- FK → operation_definition.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Primary key: (scenario_id, operation_id)
 
@@ -743,7 +874,7 @@ Table: hydroclimate
 ├── projection_year      INTEGER                    -- 2040, 2070, etc.
 ├── slr_value            NUMERIC                    -- Sea level rise value
 ├── slr_unit_id          INTEGER                    -- FK → unit.id
-├── source_id            INTEGER                    -- FK → hydroclimate_source.id
+├── source_id            INTEGER                    -- FK source.id (hydroclimate_source table is PLANNED)
 ├── notes                TEXT
 ├── hydroclimate_version_id INTEGER                 -- FK → version.id (hydroclimate family)
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -753,7 +884,7 @@ Table: hydroclimate
 
 Foreign keys:
 ├── Ref: hydroclimate.hydroclimate_version_id > version.id [delete: restrict, update: cascade]
-├── Ref: hydroclimate.source_id > hydroclimate_source.id [delete: restrict, update: cascade]
+├── Ref: hydroclimate.source_id > source.id [delete: restrict, update: cascade]
 ├── Ref: hydroclimate.slr_unit_id > unit.id [delete: restrict, update: cascade]
 ├── Ref: hydroclimate.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: hydroclimate.updated_by > developer.id [delete: restrict, update: cascade]
@@ -777,8 +908,12 @@ Records: 7 hydroclimate conditions
 
 ### **2. hydroclimate_source (hydroclimate data sources)**
 
+Status: PLANNED — not yet created in the database.
+`hydroclimate.source_id` currently points to the generic `source` table (FK source.id).
+When this dedicated table is created, `hydroclimate.source_id` should be migrated to reference it.
+
 ```
-Table: hydroclimate_source
+Table: hydroclimate_source   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           TEXT UNIQUE NOT NULL       -- "dwr_cctag", "usgs", etc.
 ├── name                 TEXT                       -- "DWR Climate Change Technical Advisory Group"
@@ -787,16 +922,9 @@ Table: hydroclimate_source
 ├── url                  TEXT
 ├── notes                TEXT
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Foreign keys:
-├── Ref: hydroclimate_source.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: hydroclimate_source.updated_by > developer.id [delete: restrict, update: cascade]
-
-Indexes:
-└── hydroclimate_source_short_code_key (short_code)
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
 ```
 
 ---
@@ -807,8 +935,10 @@ Pre-calculated statistics and outcome metrics derived from scenario model runs. 
 
 ### **1. outcome_category (outcome types)**
 
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: outcome_category
+Table: outcome_category   [PLANNED]
 ├── id                    SERIAL PRIMARY KEY
 ├── short_code            TEXT UNIQUE NOT NULL       -- "reservoir_storage", "groundwater_storage", etc.
 ├── label                 TEXT                       -- "Reservoir Storage", etc.
@@ -843,8 +973,10 @@ Values (10 total):
 
 ### **2. variable_prefix (CalSim variable naming convention)**
 
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: variable_prefix
+Table: variable_prefix   [PLANNED]
 ├── id                    SERIAL PRIMARY KEY
 ├── prefix                VARCHAR(10) UNIQUE NOT NULL -- "S", "C", "I", "E", "D", "A", "X", etc.
 ├── label                 VARCHAR NOT NULL           -- "Storage", "Channel Flow", "Inflow", etc.
@@ -882,8 +1014,10 @@ Example: S_SHSTA = variable_prefix.prefix "S" + "_" + reservoir_entity.short_cod
 
 ### **3. outcome_statistic (statistics type per category)**
 
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: outcome_statistic
+Table: outcome_statistic   [PLANNED]
 ├── id                    SERIAL PRIMARY KEY
 ├── outcome_category_id   INTEGER NOT NULL           -- FK → outcome_category.id
 ├── short_code            VARCHAR(50) NOT NULL       -- "monthly_percentile", "annual_exceedance", etc.
@@ -931,44 +1065,51 @@ Values (initial):
 ```
 Table: reservoir_monthly_percentile
 ├── id                    SERIAL PRIMARY KEY
-├── outcome_statistic_id  INTEGER NOT NULL           -- FK → outcome_statistic.id
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier (s0011, s0020, etc.)
-├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id (SHSTA, OROVL, etc.)
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK reservoir_entity.id (SHSTA, OROVL, etc.)
 ├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Nov=2, ..., Sep=12)
 │
 ├── -- Percentiles (% of reservoir capacity, using water management scheme)
-├── p0                    NUMERIC(6,2)               -- min (0th percentile)
-├── p10                   NUMERIC(6,2)               -- dry
-├── p30                   NUMERIC(6,2)               -- below normal
-├── p50                   NUMERIC(6,2)               -- median
-├── p70                   NUMERIC(6,2)               -- above normal
-├── p90                   NUMERIC(6,2)               -- wet
-├── p100                  NUMERIC(6,2)               -- max (100th percentile)
-├── mean_value            NUMERIC(6,2)               -- mean for reference
+├── q0                    NUMERIC(6,2)               -- min (0th percentile)
+├── q10                   NUMERIC(6,2)               -- dry
+├── q30                   NUMERIC(6,2)               -- below normal
+├── q50                   NUMERIC(6,2)               -- median
+├── q70                   NUMERIC(6,2)               -- above normal
+├── q90                   NUMERIC(6,2)               -- wet
+├── q100                  NUMERIC(6,2)               -- max (100th percentile)
+├── mean_value            NUMERIC(6,2)               -- mean (% of capacity)
+├── mean_taf              NUMERIC(10,2)              -- mean storage in TAF
+├── capacity_taf          NUMERIC(10,2)              -- Denormalized capacity for convenience
+│
+├── -- Percentiles in absolute TAF values
+├── q0_taf                NUMERIC(10,2)
+├── q10_taf               NUMERIC(10,2)
+├── q30_taf               NUMERIC(10,2)
+├── q50_taf               NUMERIC(10,2)
+├── q70_taf               NUMERIC(10,2)
+├── q90_taf               NUMERIC(10,2)
+├── q100_taf              NUMERIC(10,2)
 │
 ├── -- Audit fields (ETL uses developer.id = 1 "system")
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK developer.id (system)
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
 Note: scenario_short_code is a logical reference to scenario.scenario_id, not a strict FK.
 This allows percentile data to be loaded independently for ETL flexibility.
-
-Note: Capacity lookup via reservoir_entity.capacity_taf (no duplication).
-Variable reconstruction: variable_prefix.prefix "S" + "_" + reservoir_entity.short_code = "S_SHSTA"
+Note: outcome_statistic_id was part of the original design (referencing the PLANNED
+outcome_statistic table) but was not implemented in the current schema.
 
 Foreign keys:
-├── Ref: reservoir_monthly_percentile.outcome_statistic_id > outcome_statistic.id [delete: restrict, update: cascade]
 ├── Ref: reservoir_monthly_percentile.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
 ├── Ref: reservoir_monthly_percentile.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: reservoir_monthly_percentile.updated_by > developer.id [delete: restrict, update: cascade]
 
 Indexes:
 ├── reservoir_monthly_percentile_pkey (id)
-├── uq_reservoir_percentile (outcome_statistic_id, scenario_short_code, reservoir_entity_id, water_month)
-├── idx_reservoir_percentile_statistic (outcome_statistic_id)
+├── uq_reservoir_percentile (scenario_short_code, reservoir_entity_id, water_month)
 ├── idx_reservoir_percentile_scenario (scenario_short_code)
 ├── idx_reservoir_percentile_reservoir (reservoir_entity_id)
 ├── idx_reservoir_percentile_combined (scenario_short_code, reservoir_entity_id)
@@ -976,27 +1117,9 @@ Indexes:
 
 Constraints:
 ├── water_month CHECK (water_month BETWEEN 1 AND 12)
-└── Unique: (outcome_statistic_id, scenario_short_code, reservoir_entity_id, water_month)
+└── Unique: (scenario_short_code, reservoir_entity_id, water_month)
 
-Target Reservoirs (8 major):
-├── SHSTA: Shasta (4,552 TAF capacity)
-├── TRNTY: Trinity (2,448 TAF)
-├── OROVL: Oroville (3,537 TAF)
-├── FOLSM: Folsom (975 TAF)
-├── MELON: New Melones (2,400 TAF)
-├── MLRTN: Millerton (520 TAF)
-├── SLUIS_CVP: San Luis CVP (1,062 TAF)
-└── SLUIS_SWP: San Luis SWP (979 TAF)
-
-Expected Records: 96 rows per scenario (8 reservoirs × 12 months)
-Total: 768 rows for 8 scenarios
-
-Frontend Use:
-├── Band charts showing storage distribution across water year months
-├── Outer band: p10-p90 (lightest color)
-├── Inner bands: p30-p70 (darker)
-├── Center line: p50 (median)
-└── Min/max bounds: p0-p100
+Records: 20,520 rows (92 reservoirs × 12 months × 8+ scenarios)
 
 Source: CalSim scenario CSV from S3 (s3://coeqwal-model-run/scenario/{id}/csv/)
 ETL: etl/statistics/calculate_reservoir_percentiles.py
@@ -1004,8 +1127,10 @@ ETL: etl/statistics/calculate_reservoir_percentiles.py
 
 ### **5. reservoir_variable (CalSim variables linked to reservoirs)**
 
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: reservoir_variable
+Table: reservoir_variable   [PLANNED]
 ├── id                    SERIAL PRIMARY KEY
 ├── calsim_id             TEXT NOT NULL              -- "S_SHSTA", "C_SHSTA", "C_SHSTA_FLOOD", etc.
 ├── name                  TEXT NOT NULL              -- "Shasta Storage", "Shasta Total Release", etc.
@@ -1091,6 +1216,24 @@ Table: reservoir_storage_monthly
 ├── q70_taf               NUMERIC(10,2)              -- 70th percentile in TAF
 ├── q90_taf               NUMERIC(10,2)              -- 90th percentile in TAF
 ├── q100_taf              NUMERIC(10,2)              -- Maximum storage in TAF
+│
+├── -- Storage exceedance percentiles (% of capacity)
+├── exc_p5                NUMERIC(6,2)               -- Exceeded 95% of time
+├── exc_p10               NUMERIC(6,2)               -- Exceeded 90% of time
+├── exc_p25               NUMERIC(6,2)               -- Exceeded 75% of time
+├── exc_p50               NUMERIC(6,2)               -- Exceeded 50% of time (median)
+├── exc_p75               NUMERIC(6,2)               -- Exceeded 25% of time
+├── exc_p90               NUMERIC(6,2)               -- Exceeded 10% of time
+├── exc_p95               NUMERIC(6,2)               -- Exceeded 5% of time
+│
+├── -- Storage exceedance percentiles (TAF volume)
+├── exc_p5_taf            NUMERIC(10,2)
+├── exc_p10_taf           NUMERIC(10,2)
+├── exc_p25_taf           NUMERIC(10,2)
+├── exc_p50_taf           NUMERIC(10,2)
+├── exc_p75_taf           NUMERIC(10,2)
+├── exc_p90_taf           NUMERIC(10,2)
+├── exc_p95_taf           NUMERIC(10,2)
 │
 ├── -- Metadata
 ├── capacity_taf          NUMERIC(10,2)              -- Denormalized for convenience
@@ -1523,10 +1666,12 @@ DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables
 ```
 Table: du_urban_variable
 ├── id                    SERIAL PRIMARY KEY
-├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── du_id                 VARCHAR(20) NOT NULL         -- FK du_urban_entity.du_id
 ├── delivery_variable     VARCHAR(100) NOT NULL        -- CalSim variable (DL_*, D_*, GP_*)
+├── demand_variable       VARCHAR(100)                 -- CalSim variable for demand
 ├── shortage_variable     VARCHAR(100)                 -- CalSim variable (SHRTG_*, GW_SHORT_*)
 ├── variable_type         VARCHAR(20) DEFAULT 'delivery' -- Type of water supply measurement
+├── variable_type_id      INTEGER                      -- FK variable_type.id
 ├── requires_sum          BOOLEAN DEFAULT FALSE        -- TRUE if multiple arcs need summing
 ├── notes                 TEXT                         -- Mapping context
 ├── is_active             BOOLEAN DEFAULT TRUE
@@ -1629,7 +1774,20 @@ Table: du_shortage_monthly
 ├── shortage_avg_taf      NUMERIC(10,2)
 ├── shortage_cv           NUMERIC(6,4)
 ├── shortage_frequency_pct NUMERIC(5,2)                -- % months with shortage > 0
-├── q0 - q100             NUMERIC(10,2)                -- Percentiles
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
 ├── sample_count          INTEGER
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -1655,10 +1813,23 @@ Table: du_period_summary
 ├── total_years           INTEGER NOT NULL
 ├── annual_delivery_avg_taf NUMERIC(10,2)
 ├── annual_delivery_cv    NUMERIC(6,4)
-├── delivery_exc_p5-p95   NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p10      NUMERIC(10,2)
+├── delivery_exc_p25      NUMERIC(10,2)
+├── delivery_exc_p50      NUMERIC(10,2)
+├── delivery_exc_p75      NUMERIC(10,2)
+├── delivery_exc_p90      NUMERIC(10,2)
+├── delivery_exc_p95      NUMERIC(10,2)
 ├── annual_shortage_avg_taf NUMERIC(10,2)
 ├── shortage_years_count  INTEGER
 ├── shortage_frequency_pct NUMERIC(5,2)
+├── shortage_exc_p5       NUMERIC(10,2)                -- Shortage exceedance percentiles
+├── shortage_exc_p10      NUMERIC(10,2)
+├── shortage_exc_p25      NUMERIC(10,2)
+├── shortage_exc_p50      NUMERIC(10,2)
+├── shortage_exc_p75      NUMERIC(10,2)
+├── shortage_exc_p90      NUMERIC(10,2)
+├── shortage_exc_p95      NUMERIC(10,2)
 ├── reliability_pct       NUMERIC(5,2)                 -- % months meeting full demand
 ├── avg_pct_demand_met    NUMERIC(5,2)
 ├── annual_demand_avg_taf NUMERIC(10,2)
@@ -1667,6 +1838,8 @@ Table: du_period_summary
 ├── created_by            INTEGER DEFAULT 1
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
+
+Records: 874 rows
 
 Constraints:
 └── Unique: (scenario_short_code, du_id)
@@ -1679,12 +1852,24 @@ DDL: database/scripts/sql/12_mi_statistics/02_create_du_statistics_tables.sql
 Table: mi_delivery_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
-├── mi_contractor_id      INTEGER NOT NULL             -- FK → mi_contractor.id
+├── mi_contractor_code    VARCHAR(50) NOT NULL         -- FK mi_contractor.short_code
 ├── water_month           INTEGER NOT NULL
 ├── delivery_avg_taf      NUMERIC(10,2)
 ├── delivery_cv           NUMERIC(6,4)
-├── q0 - q100             NUMERIC(10,2)                -- Percentiles
-├── exc_p5 - exc_p95      NUMERIC(10,2)                -- Exceedance percentiles
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
 ├── demand_avg_taf        NUMERIC(10,2)                -- Average monthly demand
 ├── percent_of_demand_avg NUMERIC(5,2)                 -- Avg percent of demand met
 ├── sample_count          INTEGER
@@ -1694,9 +1879,11 @@ Table: mi_delivery_monthly
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
+Records: 3,588 rows (30 contractors × 12 months × ~10 scenarios)
+
 Constraints:
-├── FK: mi_contractor_id → mi_contractor.id
-├── Unique: (scenario_short_code, mi_contractor_id, water_month)
+├── FK: mi_contractor_code → mi_contractor.short_code
+├── Unique: (scenario_short_code, mi_contractor_code, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
 DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
@@ -1707,12 +1894,25 @@ DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
 Table: mi_shortage_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
-├── mi_contractor_id      INTEGER NOT NULL
+├── mi_contractor_code    VARCHAR(50) NOT NULL         -- FK mi_contractor.short_code
 ├── water_month           INTEGER NOT NULL
 ├── shortage_avg_taf      NUMERIC(10,2)
 ├── shortage_cv           NUMERIC(6,4)
 ├── shortage_frequency_pct NUMERIC(5,2)
-├── q0 - q100             NUMERIC(10,2)
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
 ├── sample_count          INTEGER
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -1720,9 +1920,11 @@ Table: mi_shortage_monthly
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
+Records: 3,588 rows
+
 Constraints:
-├── FK: mi_contractor_id → mi_contractor.id
-├── Unique: (scenario_short_code, mi_contractor_id, water_month)
+├── FK: mi_contractor_code → mi_contractor.short_code
+├── Unique: (scenario_short_code, mi_contractor_code, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
 DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
@@ -1733,17 +1935,29 @@ DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
 Table: mi_contractor_period_summary
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
-├── mi_contractor_id      INTEGER NOT NULL
+├── mi_contractor_code    VARCHAR(50) NOT NULL         -- FK mi_contractor.short_code
 ├── simulation_start_year INTEGER NOT NULL
 ├── simulation_end_year   INTEGER NOT NULL
 ├── total_years           INTEGER NOT NULL
 ├── annual_delivery_avg_taf NUMERIC(10,2)
 ├── annual_delivery_cv    NUMERIC(6,4)
-├── delivery_exc_p5-p95   NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p10      NUMERIC(10,2)
+├── delivery_exc_p25      NUMERIC(10,2)
+├── delivery_exc_p50      NUMERIC(10,2)
+├── delivery_exc_p75      NUMERIC(10,2)
+├── delivery_exc_p90      NUMERIC(10,2)
+├── delivery_exc_p95      NUMERIC(10,2)
 ├── annual_shortage_avg_taf NUMERIC(10,2)
 ├── shortage_years_count  INTEGER
 ├── shortage_frequency_pct NUMERIC(5,2)
-├── shortage_exc_p5-p95   NUMERIC(10,2)
+├── shortage_exc_p5       NUMERIC(10,2)
+├── shortage_exc_p10      NUMERIC(10,2)
+├── shortage_exc_p25      NUMERIC(10,2)
+├── shortage_exc_p50      NUMERIC(10,2)
+├── shortage_exc_p75      NUMERIC(10,2)
+├── shortage_exc_p90      NUMERIC(10,2)
+├── shortage_exc_p95      NUMERIC(10,2)
 ├── reliability_pct       NUMERIC(5,2)
 ├── avg_pct_demand_met    NUMERIC(5,2)
 ├── contract_amount_taf   NUMERIC(10,2)                -- Table A amount
@@ -1754,12 +1968,13 @@ Table: mi_contractor_period_summary
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
+Records: 299 rows
+
 Constraints:
-├── FK: mi_contractor_id → mi_contractor.id
-└── Unique: (scenario_short_code, mi_contractor_id)
+├── FK: mi_contractor_code → mi_contractor.short_code
+└── Unique: (scenario_short_code, mi_contractor_code)
 
 DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql
-ETL: etl/statistics/mi/ (pending)
 ```
 
 ### **CWS (Community Water Systems) Aggregate Statistics**
@@ -1820,6 +2035,20 @@ Table: cws_aggregate_monthly
 ├── shortage_q70          NUMERIC(10,2)
 ├── shortage_q90          NUMERIC(10,2)
 ├── shortage_q100         NUMERIC(10,2)
+├── shortage_exc_p5       NUMERIC(10,2)                -- Shortage exceedance percentiles
+├── shortage_exc_p10      NUMERIC(10,2)
+├── shortage_exc_p25      NUMERIC(10,2)
+├── shortage_exc_p50      NUMERIC(10,2)
+├── shortage_exc_p75      NUMERIC(10,2)
+├── shortage_exc_p90      NUMERIC(10,2)
+├── shortage_exc_p95      NUMERIC(10,2)
+├── delivery_exc_p5       NUMERIC(10,2)                -- Delivery exceedance percentiles
+├── delivery_exc_p10      NUMERIC(10,2)
+├── delivery_exc_p25      NUMERIC(10,2)
+├── delivery_exc_p50      NUMERIC(10,2)
+├── delivery_exc_p75      NUMERIC(10,2)
+├── delivery_exc_p90      NUMERIC(10,2)
+├── delivery_exc_p95      NUMERIC(10,2)
 ├── demand_avg_taf        NUMERIC(12,2)                -- Average monthly demand
 ├── percent_of_demand_avg NUMERIC(5,2)                 -- Average percent of demand met
 ├── sample_count          INTEGER
@@ -1856,6 +2085,8 @@ Table: cws_aggregate_period_summary
 ├── total_years           INTEGER NOT NULL
 ├── annual_delivery_avg_taf NUMERIC(10,2)
 ├── annual_delivery_cv    NUMERIC(6,4)
+├── annual_delivery_min_taf NUMERIC(10,2)              -- Minimum annual delivery
+├── annual_delivery_max_taf NUMERIC(10,2)              -- Maximum annual delivery
 ├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
 ├── delivery_exc_p10      NUMERIC(10,2)
 ├── delivery_exc_p25      NUMERIC(10,2)
@@ -1895,6 +2126,227 @@ Expected Records: 6 rows per scenario (6 aggregates)
 
 DDL: database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql
 ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
+```
+
+---
+
+### **Agriculture (AG) Statistics**
+
+Pre-calculated delivery and shortage statistics for agricultural demand units and aggregate water balance areas.
+Mirrors the M&I/Urban DU layer in structure.
+
+#### **ag_aggregate_entity (agriculture aggregate definitions)**
+```
+Table: ag_aggregate_entity
+├── id                    SERIAL PRIMARY KEY
+├── short_code            VARCHAR(50) UNIQUE NOT NULL  -- Aggregate identifier
+├── label                 VARCHAR(100) NOT NULL
+├── project               VARCHAR(10)                  -- "CVP", "SWP", etc.
+├── region                VARCHAR(10)                  -- "NOD", "SOD", etc.
+├── delivery_variable     VARCHAR(100) NOT NULL         -- CalSim variable for delivery
+├── description           TEXT
+├── display_order         INTEGER DEFAULT 0
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1   -- FK developer.id
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: 5 aggregates
+```
+
+#### **ag_aggregate_monthly (agriculture aggregate monthly statistics)**
+```
+Table: ag_aggregate_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL         -- Scenario identifier
+├── aggregate_code        VARCHAR(50) NOT NULL         -- FK ag_aggregate_entity.short_code
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── delivery_avg_taf      NUMERIC(10,2)
+├── delivery_cv           NUMERIC(6,4)
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── shortage_avg_taf      NUMERIC(10,2)
+├── shortage_cv           NUMERIC(6,4)
+├── shortage_frequency_pct NUMERIC(5,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: 480 rows (5 aggregates × 12 months × 8 scenarios)
+
+Constraints:
+├── Unique: (scenario_short_code, aggregate_code, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+```
+
+#### **ag_aggregate_period_summary (agriculture aggregate period summary)**
+```
+Table: ag_aggregate_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── aggregate_code        VARCHAR(50) NOT NULL         -- FK ag_aggregate_entity.short_code
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_delivery_avg_taf NUMERIC(10,2)
+├── annual_delivery_cv    NUMERIC(6,4)
+├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p10      NUMERIC(10,2)
+├── delivery_exc_p25      NUMERIC(10,2)
+├── delivery_exc_p50      NUMERIC(10,2)
+├── delivery_exc_p75      NUMERIC(10,2)
+├── delivery_exc_p90      NUMERIC(10,2)
+├── delivery_exc_p95      NUMERIC(10,2)
+├── annual_shortage_avg_taf NUMERIC(10,2)
+├── shortage_years_count  INTEGER
+├── shortage_frequency_pct NUMERIC(5,2)
+├── shortage_exc_p5       NUMERIC(10,2)
+├── shortage_exc_p10      NUMERIC(10,2)
+├── shortage_exc_p25      NUMERIC(10,2)
+├── shortage_exc_p50      NUMERIC(10,2)
+├── shortage_exc_p75      NUMERIC(10,2)
+├── shortage_exc_p90      NUMERIC(10,2)
+├── shortage_exc_p95      NUMERIC(10,2)
+├── reliability_pct       NUMERIC(5,2)                -- % months meeting full demand
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: 40 rows (5 aggregates × 8 scenarios)
+
+Constraints:
+└── Unique: (scenario_short_code, aggregate_code)
+```
+
+#### **ag_du_delivery_monthly (agriculture demand unit delivery statistics)**
+```
+Table: ag_du_delivery_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- FK du_agriculture_entity.du_id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── delivery_avg_taf      NUMERIC(10,2)
+├── delivery_cv           NUMERIC(6,4)
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: 14,400 rows
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+```
+
+#### **ag_du_shortage_monthly (agriculture demand unit shortage statistics)**
+```
+Table: ag_du_shortage_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- FK du_agriculture_entity.du_id
+├── water_month           INTEGER NOT NULL
+├── shortage_avg_taf      NUMERIC(10,2)
+├── shortage_cv           NUMERIC(6,4)
+├── shortage_frequency_pct NUMERIC(5,2)
+├── shortage_pct_of_demand_avg NUMERIC(5,2)
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: 4,728 rows
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+```
+
+#### **ag_du_period_summary (agriculture demand unit period summary)**
+```
+Table: ag_du_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- FK du_agriculture_entity.du_id
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_delivery_avg_taf NUMERIC(10,2)
+├── annual_delivery_cv    NUMERIC(6,4)
+├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
+├── delivery_exc_p10      NUMERIC(10,2)
+├── delivery_exc_p25      NUMERIC(10,2)
+├── delivery_exc_p50      NUMERIC(10,2)
+├── delivery_exc_p75      NUMERIC(10,2)
+├── delivery_exc_p90      NUMERIC(10,2)
+├── delivery_exc_p95      NUMERIC(10,2)
+├── annual_shortage_avg_taf NUMERIC(10,2)
+├── shortage_years_count  INTEGER
+├── shortage_frequency_pct NUMERIC(5,2)
+├── annual_shortage_pct_of_demand NUMERIC(5,2)
+├── reliability_pct       NUMERIC(5,2)
+├── avg_pct_demand_met    NUMERIC(5,2)
+├── annual_demand_avg_taf NUMERIC(10,2)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: 1,200 rows
+
+Constraints:
+└── Unique: (scenario_short_code, du_id)
 ```
 
 ---
@@ -2245,8 +2697,11 @@ Note: shape_length_m units are meters
 
 ### **3. river_watershed (river-to-watershed mapping)**
 
+Status: PLANNED — not yet created in the database. The `watershed` lookup table exists.
+`network_node.strm_code` currently stores string codes without a FK.
+
 ```
-Table: river_watershed
+Table: river_watershed   [PLANNED]
 ├── id                    SERIAL PRIMARY KEY
 ├── river_prefix          VARCHAR UNIQUE NOT NULL    -- River identifier (AMR, CCH, ELD, etc.)
 ├── river_name            VARCHAR NOT NULL           -- Full river name (American River, Cache Creek)
@@ -2377,8 +2832,6 @@ Table: network_gis
 ├── geom_wkt             TEXT NOT NULL              -- Primary geometry storage
 ├── srid                 INTEGER DEFAULT 4326
 ├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
-├── center_latitude      NUMERIC (computed)         -- Arc midpoint ON line (STORED)
-├── center_longitude     NUMERIC (computed)         -- Arc midpoint ON line (STORED)
 ├── estimated_accuracy_meters NUMERIC               -- Actual accuracy estimate
 ├── source_id            INTEGER NOT NULL           -- FK → source.id
 ├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
@@ -2389,8 +2842,11 @@ Table: network_gis
 ```
 
 ### **3. network_arc_attribute (Arc network attribute)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_arc_attribute
+Table: network_arc_attribute   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── network_id           INTEGER NOT NULL           -- FK → network.id
 ├── name                 VARCHAR                    -- Arc name
@@ -2409,8 +2865,11 @@ Table: network_arc_attribute
 ```
 
 ### **4. network_node_attribute (Node network attribute)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_node_attribute
+Table: network_node_attribute   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── network_id           INTEGER NOT NULL           -- FK → network.id
 ├── calsim_id            VARCHAR                    -- CalSim node identifier
@@ -2434,8 +2893,11 @@ Table: network_node_attribute
 ```
 
 ### **5. network_physical_connectivity (Geopackage Connectivity)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_physical_connectivity
+Table: network_physical_connectivity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── arc_network_id       INTEGER NOT NULL           -- FK → network.id (arc)
 ├── from_node_network_id INTEGER NOT NULL           -- FK → network.id (from node)
@@ -2448,8 +2910,11 @@ Table: network_physical_connectivity
 ```
 
 ### **6. network_operational_connectivity (XML Connectivity)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_operational_connectivity
+Table: network_operational_connectivity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── from_network_id      INTEGER NOT NULL           -- FK → network.id
 ├── to_network_id        INTEGER NOT NULL           -- FK → network.id
@@ -2462,8 +2927,11 @@ Table: network_operational_connectivity
 ```
 
 ### **7. network_computational_connectivity (CalSim Connectivity)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_computational_connectivity
+Table: network_computational_connectivity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── from_network_id      INTEGER NOT NULL           -- FK → network.id
 ├── to_network_id        INTEGER NOT NULL           -- FK → network.id
@@ -2477,8 +2945,11 @@ Table: network_computational_connectivity
 ```
 
 ### **8. network_variable (future variable relationships)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_variable
+Table: network_variable   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── network_id           INTEGER NOT NULL           -- FK → network.id
 ├── variable_id          INTEGER NOT NULL           -- FK → variable.id
@@ -2492,8 +2963,11 @@ Table: network_variable
 ```
 
 ### **9. network_source_attribution**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: network_source_attribution
+Table: network_source_attribution   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── network_id           INTEGER NOT NULL           -- FK → network.id
 ├── source_id            INTEGER NOT NULL           -- FK → source.id
@@ -2504,52 +2978,20 @@ Table: network_source_attribution
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 ```
 
-### **10. tier_definition**
-```
-Table: tier_definition
-├── id                   SERIAL PRIMARY KEY
-├── short_code           VARCHAR UNIQUE NOT NULL    -- "community_water", "agricultural_revenue", etc.
-├── label                VARCHAR NOT NULL           -- "Community Water Systems", "Agricultural Revenue"
-├── description          TEXT
-├── tier_category        TEXT[]                     -- ["water_supply", "environmental"] (can belong to multiple categories)
-├── measurement_unit     VARCHAR                    -- "acre_feet", "people_served", "temperature_f"
-├── is_active            BOOLEAN DEFAULT TRUE
-├── tier_version_id      INTEGER NOT NULL           -- FK → version.id (tier family)
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id
+### **10. variable_tier (Many-to-many variable-tier relationship)**
 
-```
-
-### **11. variable_tier (Many-to-many variable-tier relationship)**
-```
-Table: variable_tier
-├── id                   SERIAL PRIMARY KEY
-├── variable_id          INTEGER NOT NULL           -- FK → variable.id
-├── tier_definition_id   INTEGER NOT NULL           -- FK → tier_definition.id
-├── tier_value           NUMERIC                    -- Value in base unit
-├── base_unit            VARCHAR NOT NULL           -- "TAF", "CFS", "people", "temperature_f" (authoritative unit)
-├── supported_unit_list  TEXT[]                     -- ["TAF", "CFS", "acre_feet"] (units this can be converted to)
-├── note                 TEXT
-├── tier_version_id      INTEGER NOT NULL           -- FK → version.id (tier family)
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Index:
-├── idx_variable_tier_variable
-└──  idx_variable_tier_definition
-```
+Status: PLANNED — not yet created in the database.
 
 ## **ENTITY LAYER TABLES**
 
 ### **Entity tables reference network layer:**
 
 #### **channel_entity (channel management)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: channel_entity
+Table: channel_entity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── network_arc_id       INTEGER NOT NULL           -- FK → network.id
 ├── short_code           VARCHAR UNIQUE NOT NULL
@@ -2585,6 +3027,8 @@ Table: reservoir_entity
 ├── dead_pool_taf        NUMERIC(10,2)              -- Dead pool storage in TAF
 ├── surface_area_acres   NUMERIC(12,2)              -- Surface area in acres
 ├── operational_purpose  VARCHAR(50)                -- Primary operational purpose
+├── has_tiers            BOOLEAN DEFAULT FALSE      -- Whether tier analysis covers this reservoir
+├── is_main              BOOLEAN DEFAULT FALSE      -- Whether this is a primary (major) reservoir
 ├── has_gis_data         INTEGER DEFAULT 1          -- Whether GIS data exists (1=yes, 0=no)
 ├── entity_version_id    INTEGER NOT NULL DEFAULT 1 -- FK → version.id (entity family)
 ├── source_ids           TEXT                       -- Comma-separated source IDs
@@ -2607,8 +3051,11 @@ Comments:
 ```
 
 #### **inflow_entity (inflow management)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: inflow_entity
+Table: inflow_entity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── network_arc_id       INTEGER NOT NULL           -- FK → network.id (inflow arc)
 ├── short_code           VARCHAR UNIQUE NOT NULL
@@ -2627,11 +3074,13 @@ Table: inflow_entity
 #### **du_urban_entity (community demand unit management)**
 ```
 Table: du_urban_entity
-├── du_id                VARCHAR(20) PRIMARY KEY    -- Demand unit identifier (e.g., "16_PU", "AMCYN")
+├── id                   SERIAL PRIMARY KEY
+├── du_id                VARCHAR(20) UNIQUE NOT NULL -- Demand unit identifier (e.g., "16_PU", "AMCYN")
 ├── wba_id               VARCHAR(10)                -- Water Budget Area ID
 ├── hydrologic_region    VARCHAR(10)                -- SAC, SJR, TULARE
+├── hydrologic_region_id INTEGER                    -- FK hydrologic_region.id
 ├── dups                 VARCHAR(10)                -- Duplicate indicator
-├── class                VARCHAR(20) DEFAULT 'Urban'
+├── du_class             VARCHAR DEFAULT 'Urban'
 ├── cs3_type             VARCHAR(10)                -- NU, PU, SU (Non-project, Project, Settlement Urban)
 ├── total_acres          NUMERIC(15,10)
 ├── polygon_count        INTEGER DEFAULT 0
@@ -2641,15 +3090,16 @@ Table: du_urban_entity
 ├── point_of_diversion   TEXT                       -- Water source description
 ├── source               VARCHAR(50)                -- Data source (geopackage, calsim_report, tier_matrix)
 ├── model_source         VARCHAR(20) DEFAULT 'calsim3'
+├── model_source_id      INTEGER                    -- FK model_source.id
 ├── has_gis_data         BOOLEAN DEFAULT FALSE
-├── primary_contractor_short_code VARCHAR(20)       -- FK → mi_contractor.short_code (for SWP-served units)
+├── primary_contractor_short_code VARCHAR(20)       -- FK mi_contractor.short_code (for SWP-served units)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── created_by           INTEGER DEFAULT 1          -- FK developer.id
 ├── updated_at           TIMESTAMPTZ DEFAULT NOW()
 └── updated_by           INTEGER DEFAULT 1
 
-Records: 126 urban demand units (107 original + 19 tier matrix additions)
+Records: 145 urban demand units (107 original + 19 tier matrix additions + extras)
 
 Relationships:
 ├── du_urban_group_member.du_id → du_urban_entity.du_id (group memberships)
@@ -2659,34 +3109,55 @@ DDL: database/scripts/sql/12_mi_statistics/01_create_du_urban_entity.sql
 Seed: s3://coeqwal-seeds-dev/04_calsim_data/du_urban_entity.csv
 ```
 
-#### **du_agriculture_entity (dgriculture demand unit management)**
+#### **du_agriculture_entity (agriculture demand unit management)**
 ```
 Table: du_agriculture_entity
 ├── id                   SERIAL PRIMARY KEY
-├── du_id                VARCHAR UNIQUE NOT NULL
-├── network_node_id      INTEGER NOT NULL           -- FK → network.id
-├── wba_id               VARCHAR
+├── du_id                VARCHAR UNIQUE NOT NULL    -- Demand unit identifier
+├── wba_id               VARCHAR(10)                -- Water Budget Area ID
+├── hydrologic_region    VARCHAR(10)                -- SAC, SJR, TULARE
+├── hydrologic_region_id INTEGER                    -- FK hydrologic_region.id
+├── dups                 VARCHAR(10)                -- Duplicate indicator
 ├── du_class             VARCHAR DEFAULT 'Agriculture'
-├── total_acre           NUMERIC
+├── cs3_type             VARCHAR(10)                -- CalSim3 demand unit type
+├── total_acres          NUMERIC(15,10)
 ├── polygon_count        INTEGER DEFAULT 1
-├── crop_type            VARCHAR                    -- Agriculture specific
-├── irrigation_method    VARCHAR                    -- Agriculture specific
-├── water_right_type     VARCHAR                    -- Agriculture specific
-├── entity_type_id       INTEGER NOT NULL           -- FK → calsim_entity_type.id
-├── entity_version_id    INTEGER NOT NULL           -- FK → version.id (entity family)
-├── attribute_source     JSONB NOT NULL
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── source               VARCHAR(50)                -- Data source
+├── model_source         VARCHAR(20) DEFAULT 'calsim3'
+├── model_source_id      INTEGER                    -- FK model_source.id
+├── agency               TEXT                       -- Water agency
+├── provider             TEXT                       -- Water provider
+├── gw                   VARCHAR(10)                -- Groundwater indicator
+├── sw                   VARCHAR(10)                -- Surface water indicator
+├── point_of_diversion   TEXT                       -- Water source description
+├── diversion_arc        TEXT                       -- CalSim diversion arc variable
+├── river_reach          TEXT                       -- River reach identifier
+├── river_mile_start     NUMERIC                    -- Start river mile
+├── river_mile_end       NUMERIC                    -- End river mile
+├── bank                 TEXT                       -- River bank (left/right)
+├── area_acres           NUMERIC                    -- Geographic area in acres
+├── annual_diversion_taf NUMERIC                    -- Annual diversion volume
+├── demand_unit          TEXT                       -- Demand unit description
+├── table_id             TEXT                       -- Source table identifier
+├── has_gis_data         BOOLEAN DEFAULT FALSE
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL DEFAULT 1
+
+Records: 144 agricultural demand units
 ```
 
 #### **du_refuge_entity (refuge demand unit management)**
+
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: du_refuge_entity
+Table: du_refuge_entity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
 ├── du_id                VARCHAR UNIQUE NOT NULL
-├── network_node_id      INTEGER NOT NULL           -- FK → network.id
+├── network_node_id      INTEGER NOT NULL           -- FK network.id
 ├── wba_id               VARCHAR
 ├── du_class             VARCHAR DEFAULT 'Refuge'
 ├── total_acre           NUMERIC
@@ -2695,13 +3166,13 @@ Table: du_refuge_entity
 ├── managed_by           VARCHAR                    -- Refuge specific
 ├── provider             VARCHAR                    -- Refuge specific
 ├── habitat_type         VARCHAR                    -- Refuge specific
-├── entity_type_id       INTEGER NOT NULL           -- FK → calsim_entity_type.id
-├── entity_version_id    INTEGER NOT NULL           -- FK → version.id (entity family)
+├── entity_type_id       INTEGER NOT NULL           -- FK calsim_entity_type.id
+├── entity_version_id    INTEGER NOT NULL           -- FK version.id (entity family)
 ├── attribute_source     JSONB NOT NULL
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
 ```
 
 ### **Entity Grouping Tables**

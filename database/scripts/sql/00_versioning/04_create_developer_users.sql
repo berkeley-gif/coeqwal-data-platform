@@ -1,5 +1,5 @@
 -- =============================================================================
--- 07_create_developer_users.sql
+-- 04_create_developer_users.sql
 -- Utility function for creating and registering database users
 -- =============================================================================
 
