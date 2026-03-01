@@ -20,7 +20,8 @@ These migrations have been run against the production database. They are kept he
 - Migration 06 requires `$SUPERUSER_URL` (CREATE TABLE, ALTER TABLE, CREATE TRIGGER). Seed INSERTs inside the migration use explicit `created_by = 2`.
 - Migration 07 requires `$SUPERUSER_URL` for `DISABLE TRIGGER USER` DDL on RDS. The `CREATE TABLE` / `GRANT` / seed steps run outside the transaction block; the reclassification logic runs inside `BEGIN`/`COMMIT`.
 
-| `08_register_new_tables_domain_family_map.sql` | Registers `slr`, `assumption_category`, and `operation_category` in `domain_family_map` (missed by migrations 06–07) | **Pending** | — |
+| `08_register_new_tables_domain_family_map.sql` | Registers `slr`, `assumption_category`, and `operation_category` in `domain_family_map`; fixes `created_by`/`updated_by` on category seed rows | Applied | 2026-02-27 |
+| `09_add_source_to_operation_definition_and_slr.sql` | Adds `source TEXT` column to `operation_definition` and `slr`; sets `source = 'james_gilbert'` for all current rows | **Pending** | — |
 
 ## Naming convention for future migrations
 
