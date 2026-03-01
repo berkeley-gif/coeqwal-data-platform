@@ -61,6 +61,8 @@ GRANT USAGE, SELECT ON SEQUENCE operation_category_id_seq  TO jfantauzza;
 -- Rows that will be removed by step 6: TUCP_TUCO, gw_restrictions,
 -- infrastructure, flow, biops, slr.  Rows that remain: land_use, gw_model.
 
+ALTER TABLE assumption_category DISABLE TRIGGER USER;
+
 INSERT INTO assumption_category (short_code, label, description, is_active, created_at, created_by, updated_at, updated_by)
 VALUES
     ('TUCP_TUCO',       'TUCP / TUCO',               'Temporary Urgency Change Petitions and Temporary Urgency Change Orders', 1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
@@ -73,9 +75,13 @@ VALUES
     ('slr',             'Sea Level Rise',            'Sea-level rise scenarios',                                             1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2)
 ON CONFLICT (short_code) DO NOTHING;
 
+ALTER TABLE assumption_category ENABLE TRIGGER USER;
+
 -- ─── Seed operation_category (pre-migration state — 4 original rows) ─────────
 -- Rows 5–9 (tucp, gw_restrictions, infrastructure, flow, biops) are added by
 -- step 1 of this migration.
+
+ALTER TABLE operation_category DISABLE TRIGGER USER;
 
 INSERT INTO operation_category (short_code, name, description, is_active, created_at, created_by, updated_at, updated_by)
 VALUES
@@ -84,6 +90,8 @@ VALUES
     ('carryover',           'Reservoir Carryover',      'Operations related to reservoir carryover storage requirements',            1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2),
     ('regulatory_salinity', 'Regulatory Salinity',      'Operations related to Delta salinity standards (X2)',                       1, '2024-01-01 00:00:00+00', 2, '2024-01-01 00:00:00+00', 2)
 ON CONFLICT (short_code) DO NOTHING;
+
+ALTER TABLE operation_category ENABLE TRIGGER USER;
 
 BEGIN;
 
