@@ -107,8 +107,8 @@ BEGIN
     
     RETURN version_id;
 END;
-$$ LANGUAGE plpgsql
-SECURITY DEFINER
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 COMMENT ON FUNCTION get_active_version(TEXT) IS 'Returns active version.id for specified version family';
 
 -- ============================================================================
@@ -133,8 +133,8 @@ BEGIN
     
     RETURN src_id;
 END;
-$$ LANGUAGE plpgsql
-SECURITY DEFINER
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 COMMENT ON FUNCTION get_source_id(TEXT) IS 'Returns source.id for specified source short_code';
 
 -- ============================================================================
