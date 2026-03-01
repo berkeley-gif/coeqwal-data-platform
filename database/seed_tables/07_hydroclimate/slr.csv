@@ -1,0 +1,5 @@
+short_code,label,slr_value_mm,description,is_active
+none,No sea level rise,0,Baseline — no sea level rise applied,true
+slr_15,15mm sea level rise,15,15mm sea level rise scenario,true
+slr_30,30mm sea level rise,30,30mm sea level rise scenario,true
+slr_60,60mm sea level rise,60,60mm sea level rise scenario,true

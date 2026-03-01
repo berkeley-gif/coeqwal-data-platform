@@ -35,9 +35,9 @@ bash database/setup_db_connection.sh
 
 | Task | Variable |
 |---|---|
-| Queries, seed loads, verify scripts, ETL, API | `$DATABASE_URL` |
+| Queries, seed loads, inspect scripts, ETL, API | `$DATABASE_URL` |
 | DDL migrations (`database/scripts/sql/migrations/`) | `$SUPERUSER_URL` |
-| Running the audit (`run_audit.sh`) | `$DATABASE_URL` (reads as any user) |
+| Running the audit (`bash database/run_audit.sh`) | `$DATABASE_URL` — must be your named user, not `postgres` |
 
 **Finding the postgres password:** it is stored in AWS Secrets Manager. To find it:
 ```bash
@@ -64,10 +64,31 @@ Your username should appear, with `developer_id` matching your row in the `devel
 database/schema/COEQWAL_SCENARIOS_DB_ERD.md
 ```
 
-**5. Run the verification scripts** to confirm the database is healthy:
+**5. Run the audit and verify against the ERD:**
+
+```bash
+# Step 1 — collect live schema snapshot (runs as your named user)
+bash database/run_audit.sh
+
+# Step 2 — compare snapshot to ERD documentation
+python database/audit/verify_erd_against_audit.py \
+    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
+    audits/latest.json
+```
+
+Before running, confirm you are connected as yourself:
+
+```bash
+psql $DATABASE_URL -c "SELECT session_user, coeqwal_current_operator() AS developer_id;"
+```
+
+`developer_id` should be your id (e.g. `2`), not `1`. If it returns `1` you are connected as the system user — check your `DATABASE_URL`.
+
+To inspect a specific layer's full table contents:
 
 ```bash
 psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
+psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
 ```
 
 ### Key resources
@@ -75,10 +96,13 @@ psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
 | Resource | Location |
 |----------|----------|
 | Schema documentation (ERD) | `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` |
-| Audit trigger system | `database/scripts/sql/00_versioning/` |
-| Seed data | `database/seed_tables/00_versioning/` |
-| Verification scripts | `*/09_verify_level*.sql` |
-| Database audit tool | `database/run_local_audit.py` |
+| Audit runner | `database/run_audit.sh` |
+| ERD vs DB comparison | `database/audit/verify_erd_against_audit.py` |
+| Audit tool docs | `database/audit/README.md` |
+| Layer 00 inspect | `database/scripts/sql/00_versioning/09_verify_level00.sql` |
+| Layer 01 inspect | `database/scripts/sql/01_lookup/inspect_layer01.sql` |
+| Seed data | `database/seed_tables/<layer>/` |
+| Applied migrations | `database/scripts/sql/migrations/` |
 
 ---
 
@@ -97,10 +121,11 @@ database/
 │   ├── 01_lookup/             # Reference data
 │   ├── 02_network/            # Network infrastructure
 │   ├── 03_entity/             # Entity definitions
-│   ├── 04_calsim_data/        # CalSim variables & entities
-│   ├── 05_themes_scenarios/   # Theme & scenario definitions
-│   ├── 06_assumptions_operations/
-│   ├── 07_hydroclimate/
+│   ├── 04_variable/           # CalSim variable definitions + type classifications
+│   ├── 05_assumptions_operations/  # Assumption + operation definitions
+│   ├── 06_scenario/           # Scenario definitions + link tables
+│   ├── 07_hydroclimate/       # Hydroclimate conditions + SLR
+│   ├── 08_theme/              # Research themes + theme-scenario links
 │   └── 10_tier/               # Tier results (layer 10)
 ├── scripts/
 │   ├── sql/                   # SQL scripts
@@ -118,133 +143,47 @@ database/
 ## Schema layers
 
 The database follows a layered architecture separating **foundational data** (00-08) from **derived results** (10+).
-
-Arrows indicate **dependency** - each layer depends on layers above it.
+Each layer depends on all layers with a lower number.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        00_VERSIONING                                │
-│  version_family, version, developer, domain_family_map              │
-│  Purpose: Version control, audit trails, developer tracking         │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        01_LOOKUP                                    │
-│  hydrologic_region, source, model_source, unit, spatial_scale,      │
-│  temporal_scale, statistic_type, geometry_type,                     │
-│  calsim_variable_type, variable_type                                │
-│  Purpose: Reference/lookup tables shared across all layers          │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     02_NETWORK (Infrastructure)                     │
-│  network, network_gis, network_arc_attribute, network_node_attribute│
-│  network_physical_connectivity, network_operational_connectivity    │
-│  network_entity_type, network_arc_type, network_node_type           │
-│  Purpose: Physical water infrastructure (arcs, nodes, connectivity) │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     03_ENTITY                          │
-│  reservoir_entity, channel_entity, inflow_entity                    │
-│  du_urban_entity, du_agriculture_entity, du_refuge_entity           │
-│  calsim_entity_type                                                 │
-│  Purpose: Operational/management entities built on network          │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     04_CALSIM_DATA                      │
-│  reservoir_variable, channel_variable, inflow_variable              │
-│  reservoir_group, reservoir_group_member                            │
-│  Purpose: CalSim model variables linked to entities                 │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     05_THEMES_SCENARIOS                             │
-│  theme, scenario, scenario_author, theme_scenario_link              │
-│  Purpose: Scenario definitions and research themes                  │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  06_ASSUMPTIONS_OPERATIONS                          │
-│  assumption_category, assumption_definition, operation_category,    │
-│  operation_definition, scenario_assumption, scenario_operation      │
-│  Purpose: Scenario inputs and operational rules                     │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     07_HYDROCLIMATE                                 │
-│  hydroclimate, hydroclimate_source, climate_projection              │
-│  Purpose: Environmental boundary conditions (historical, projected) │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  08_TIER_DEFINITIONS (Classification)               │
-│  tier_definition, variable_tier                                     │
-│  Purpose: Define tier categories and how variables map to tiers     │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-══════════════════════════════════════════════════════════════════════
-               FOUNDATIONAL (00-08) ▲  │  ▼ DERIVED (10+)
-══════════════════════════════════════════════════════════════════════
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  10_TIER_RESULTS (Outcomes)                         │
-│  tier_result, tier_location_result                                  │
-│  Purpose: Aggregated scenario outcomes (tier levels 1-4)            │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  11_RESERVOIR_STATISTICS                            │
-│  reservoir_monthly_percentile, reservoir_storage_monthly,           │
-│  reservoir_spill_monthly, reservoir_period_summary                  │
-│  Purpose: Reservoir storage and spill statistics from CalSim runs   │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  12_MI_STATISTICS                                   │
-│  mi_contractor, mi_contractor_period_summary, du_delivery_monthly,  │
-│  cws_aggregate_entity, cws_aggregate_period_summary                 │
-│  Purpose: Municipal & Industrial water delivery statistics          │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  13_AG_STATISTICS                                   │
-│  ag_aggregate_entity, ag_aggregate_period_summary,                  │
-│  ag_delivery_monthly, ag_shortage_monthly                           │
-│  Purpose: Agricultural water delivery statistics                    │
-└─────────────────────────────────────────────────────────────────────┘
+00  VERSIONING       version_family, version, developer, domain_family_map
+01  LOOKUP           hydrologic_region, source, model_source, unit, spatial_scale,
+                     temporal_scale, statistic_type, geometry_type,
+                     network_type, network_subtype, watershed, wba
+02  NETWORK          network, network_gis, network_arc, network_node
+03  ENTITY           reservoir, compliance_station,
+                     du_agriculture_entity, du_urban_entity, du_refuge_entity
+04  VARIABLE         calsim_model_variable_type, derived_variable_type, variable_type
+                     channel_variable, reservoir_variable, inflow_variable, derived_variable
+05  ASSUMPTIONS      assumption_category, assumption_definition        ← land_use, gw_model only
+    + OPERATIONS     operation_category, operation_definition          ← TUCP, SGMA, BiOps, flows,
+                     scenario_key_assumption_link                         infrastructure, delta regs,
+                     scenario_key_operation_link                          allocation priorities
+06  SCENARIO         scenario, scenario_author, scenario_source_link
+07  HYDROCLIMATE     hydroclimate, slr
+08  THEME            theme, theme_scenario_link, theme_source_link
+09  (reserved)
+─────────────────────────────────────────────────────────────────────────
+10+ RESULTS          tier_definition, tier_result, tier_location_result
+                     reservoir_storage_monthly, reservoir_spill_monthly
+                     du_delivery_monthly, du_shortage_monthly
+                     ag/cws aggregate statistics
 ```
 
 ## Schema implementation status
 
-| Layer | Key Tables | SQL Scripts | Status |
-|-------|------------|-------------|--------|
-| 00_VERSIONING | version_family, version, developer | 00_create_helper_functions.sql | Implemented |
-| 01_LOOKUP | hydrologic_region, source, model_source | 03_create_and_load_network_lookups.sql | Implemented |
-| 02_NETWORK | network, network_gis | seed_tables/02_network/ | Implemented |
-| 03_ENTITY | reservoir_entity, channel_entity | seed_tables/03_entity/ | Implemented |
-| 04_CALSIM_DATA | calsim_entity_type, *_variable | seed_tables/04_calsim_data/ | Implemented |
-| 05_THEMES_SCENARIOS | theme, scenario, hydroclimate | create_scenario_tables.sql | Implemented |
-| 06_ASSUMPTIONS_OPERATIONS | assumption_definition, operation_definition | seed_tables/06_assumptions_operations/ | Partial |
-| 07_HYDROCLIMATE | hydroclimate | seed_tables/07_hydroclimate/ | Implemented |
-| 08_TIER_DEFINITIONS | tier_definition, variable_tier | create_tier_location_result_table.sql | Implemented |
-| 10_TIER_RESULTS | tier_result, tier_location_result | upsert_tier_data_from_s3.sql | Implemented |
-| 11_RESERVOIR_STATISTICS | reservoir_monthly_percentile, reservoir_period_summary | 11_reservoir_statistics/*.sql | Implemented |
-| 12_MI_STATISTICS | mi_contractor, du_delivery_monthly | 12_mi_statistics/*.sql | Implemented |
-| 13_AG_STATISTICS | ag_aggregate_entity, ag_aggregate_period_summary | 13_ag_statistics/*.sql | Implemented |
+| Layer | Key Tables | Seed directory | Status |
+|-------|------------|----------------|--------|
+| 00 VERSIONING | version_family, version, developer | seed_tables/00_versioning/ | Implemented |
+| 01 LOOKUP | hydrologic_region, source, unit, network_type, watershed, wba | seed_tables/01_lookup/ | Implemented |
+| 02 NETWORK | network, network_gis, network_arc, network_node | seed_tables/02_network/ | Implemented |
+| 03 ENTITY | reservoir, compliance_station, du_* | seed_tables/03_entity/ | Implemented |
+| 04 VARIABLE | calsim_model_variable_type, derived_variable_type, variable_type, *_variable | seed_tables/04_variable/ | Implemented |
+| 05 ASSUMPTIONS + OPS | assumption_definition, operation_definition | seed_tables/05_assumptions_operations/ | Partial |
+| 06 SCENARIO | scenario, scenario_author | seed_tables/06_scenario/ | Partial |
+| 07 HYDROCLIMATE | hydroclimate, slr | seed_tables/07_hydroclimate/ | Partial |
+| 08 THEME | theme, theme_scenario_link | seed_tables/08_theme/ | Implemented |
+| 10+ RESULTS | tier_result, reservoir_storage_monthly, du_delivery_monthly | scripts/sql/1*_statistics/ | Implemented |
 
 ---
 

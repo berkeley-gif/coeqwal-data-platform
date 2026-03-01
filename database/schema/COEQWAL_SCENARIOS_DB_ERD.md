@@ -4,70 +4,51 @@
 
 ### **Database Layer Structure:**
 ```
-00_VERSIONING SYSTEM
-├── Version families and instances
-├── Developer management and SSO
-├── Domain-to-version mappings
-└── Purpose: auditing, track data versions and changes
+00  VERSIONING
+    version families, versions, developer accounts, audit triggers, domain_family_map
 
-01_LOOKUP TABLES (reference data)
-├── Geographic regions, scales, and watershed boundaries
-├── Data sources, model sources, and network topology types
-├── Units, statistics, geometry types, and variable classifications
-└── Purpose: provide consistent reference values across all layers
+01  LOOKUP (shared reference data)
+    hydrologic_region, source, model_source, unit, spatial_scale, temporal_scale,
+    statistic_type, geometry_type, network_type, network_subtype, watershed, wba
 
-04_ENTITY LAYER (GIS + operational entities)
-├── Reservoir geographic base table (geospatial + NHD attributes)
-├── Compliance monitoring stations (geospatial)
-└── Purpose: physical entities with geographic and operational attributes
+02  NETWORK (physical infrastructure)
+    network, network_arc, network_node, network_gis
 
-05_THEMES_SCENARIOS LAYER
-├── Research themes (storylines for exploring scenarios)
-├── Scenarios (water management configurations)
-├── Theme-scenario relationships
-├── Scenario authors and sources
-└── Purpose: organize and describe what-if scenarios
+03  ENTITY (operational entities)
+    reservoir, compliance_station, du_agriculture_entity, du_urban_entity,
+    du_refuge_entity, reservoir_entity, mi_contractor
 
-06_ASSUMPTIONS_OPERATIONS LAYER
-├── Assumption definitions and categories
-├── Operation definitions and categories
-├── Scenario-assumption and scenario-operation links
-└── Purpose: define inputs and rules for each scenario
+04  VARIABLE (CalSim variable definitions + type classifications)
+    calsim_model_variable_type, derived_variable_type, variable_type
+    channel_variable, reservoir_variable, inflow_variable, derived_variable
 
-07_HYDROCLIMATE LAYER
-├── Hydroclimate conditions (historical, projected)
-├── Climate projections and sea level rise
-└── Purpose: define environmental boundary conditions
+05  ASSUMPTIONS + OPERATIONS (scenario configuration dimensions)
+    assumption_category, assumption_definition       ← land use, groundwater model
+    operation_category, operation_definition         ← TUCP, SGMA, BiOps, flows,
+                                                        infrastructure, delta regs,
+                                                        allocation priorities
 
-09_STATISTICS LAYER
-├── Outcome categories (types of outcomes being measured)
-├── Outcome statistics (types of statistics per category)
-├── Variable prefixes (S_, C_, I_, E_, D_, etc.)
-├── Reservoir variables (CalSim storage/release variables linked to entities)
-├── Reservoir monthly percentiles (storage distribution by water month)
-├── Reservoir storage monthly (storage statistics for all 92 reservoirs)
-├── Reservoir spill monthly (spill/flood release statistics)
-├── Reservoir period summary (period-of-record spill metrics)
-└── Purpose: pre-calculated statistics for frontend visualization
+06  SCENARIO (scenario definitions)
+    scenario, scenario_author, scenario_source, scenario_source_link
+    scenario_key_assumption_link, scenario_key_operation_link
 
-10_TIER LAYER
-├── Tier definitions (outcome indicators)
-├── Tier results (aggregated scenario outcomes)
-├── Tier location results (spatially-detailed outcomes)
-└── Purpose: evaluate and compare scenario performance
+07  HYDROCLIMATE (hydrology + SLR)
+    hydroclimate                                     ← historical + projected records
+    slr                                              ← sea level rise scenarios
 
-NETWORK LAYER (infrastructure/physical)
-├── Master registry of all physical network elements
-├── Spatial data and engineering attributes
-├── Multi-source connectivity (geopackage, XML, CalSim)
-└── Purpose: what exists physically and how is it connected?
+08  THEME (research themes)
+    theme, theme_scenario_link, theme_source_link
 
-ENTITY LAYER (management/operational)  
-├── Management and operational perspectives on network elements
-└── Purpose: how are network elements used and managed?
+09  (reserved)
+
+10+ RESULTS / TIERS
+    tier_definition, tier_result, tier_location_result
+    reservoir_storage_monthly, reservoir_spill_monthly, reservoir_period_summary
+    du_delivery_monthly, du_period_summary, du_shortage_monthly
+    ag/cws/mi aggregate statistics
 ```
 
-## **00_VERSIONING SYSTEM TABLES**
+## **Layer 00 — VERSIONING SYSTEM**
 
 ### **1. version_family (version categories)**
 ```
@@ -212,12 +193,15 @@ Indexes:
 └── idx_domain_family_map_version_family (version_family_id) -- FK lookup: all tables in a family
 ```
 
-## **01_LOOKUP TABLES**
+## **Layer 01 — LOOKUP TABLES**
 
 > **Provenance convention:** All lookup tables carry `created_by`, `updated_by`, `created_at`, `updated_at`
 > audit fields (FK → `developer.id`). Tables whose data originates from a specific external source
 > (e.g., geopackage, NHD, CalSim report) additionally carry a `source_id` FK → `source.id`.
 > Current tables using `source_id`: `network_type`, `network_subtype`, `wba`, `reservoir`, `compliance_station`.
+>
+> Note: variable type classification tables (`calsim_model_variable_type`, `derived_variable_type`,
+> `variable_type`) have been moved to **Layer 04 — VARIABLE**.
 
 ### **1. hydrologic_region**
 ```
@@ -383,85 +367,7 @@ Percentile bands (is_percentile = true):
 └── Q100: 100th percentile (Maximum in band context)
 ```
 
-### **8. variable_type**
-```
-Table: variable_type
-├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "delivery", "gw_pumping", "PA", etc.
-├── label                TEXT NOT NULL              -- "delivery", "groundwater pumping", etc.
-├── description          TEXT                       -- Variable type description
-├── is_active            BOOLEAN DEFAULT TRUE
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Values (6 total — water use classification):
-├── delivery: water delivery
-├── gw_pumping: groundwater pumping
-├── PA: project agricultural
-├── PR: project wildlife refuge
-├── PU: project community water system (M&I)
-└── unknown: unknown or unclassified
-
-Note: scope is INCOMPLETE — additional water use types may be needed as more
-demand unit categories are modeled. See also calsim_model_variable_type for
-CalSim model variable behavior classification.
-
-Seed: no standalone seed CSV (table pre-populated; values managed in DB).
-```
-
-### **9. calsim_model_variable_type**
-```
-Table: calsim_model_variable_type
-├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "output", "control", "decision", etc.
-├── label                TEXT NOT NULL              -- "Output", "Control", etc.
-├── description          TEXT                       -- Classification description
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMPTZ DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Values (8 total — CalSim model variable behavior):
-├── output:       Standard CalSim model output variables (flows, diversions, storage)
-├── control:      Operational control indicators and binary flags
-├── decision:     Model decision variables and optimization targets
-├── state:        State variables including storage zones and bookkeeping accounts
-├── input:        External inputs and boundary conditions
-├── intermediate: Calculated intermediate values used in model logic
-├── aggregate:    Variables that sum or combine multiple reservoir/system components
-└── index:        Index variables
-
-Note: More granular than calsim_variable_type (output/state/decision only).
-Created by migration 03. Seed: seed_tables/01_lookup/calsim_model_variable_type.csv
-```
-
-### **10. derived_variable_type**
-```
-Table: derived_variable_type
-├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "sector_aggregate", "delta_variable", etc.
-├── label                TEXT NOT NULL              -- "Sector Aggregate", etc.
-├── description          TEXT                       -- Classification description
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMPTZ DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Values (4 total — derived/computed variable categories):
-├── sector_aggregate:        Variables that aggregate across a sector
-├── delta_variable:          Variables specific to Delta conditions and operations
-├── environmental_indicator: Environmental metrics and indicators
-└── regional_summary:        Variables that aggregate across a region
-
-Note: INCOMPLETE — additional types expected as derived variable pipeline expands.
-Created by migration 03. Seed: seed_tables/01_lookup/derived_variable_type.csv
-```
-
-### **11. unit**
+### **8. unit**
 ```
 Table: unit
 ├── id                   SERIAL PRIMARY KEY
@@ -481,7 +387,7 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
-### **12. network_type**
+### **9. network_type**
 ```
 Table: network_type
 ├── id                      SERIAL PRIMARY KEY
@@ -501,7 +407,7 @@ Records: 21 types (10 arc types, 11 node types)
 Seed: seed_tables/01_lookup/network_type.csv
 ```
 
-### **13. network_subtype**
+### **10. network_subtype**
 ```
 Table: network_subtype
 ├── id                      SERIAL PRIMARY KEY
@@ -522,7 +428,7 @@ Records: 26 subtypes
 Seed: seed_tables/01_lookup/network_subtype.csv
 ```
 
-### **14. watershed**
+### **11. watershed**
 
 ```
 Table: watershed
@@ -560,7 +466,7 @@ Values (9 total):
 └── YUBA_RIVER: Yuba River Watershed (SAC)
 ```
 
-### **15. wba (Water Budget Areas)**
+### **12. wba (Water Budget Areas)**
 ```
 Table: wba
 ├── id                   SERIAL PRIMARY KEY
@@ -586,7 +492,7 @@ Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) 
 
 ---
 
-## **04_ENTITY LAYER** *(planned — GIS and operational entity tables)*
+## **Layer 03 — ENTITY LAYER** *(GIS and operational entity tables)*
 
 ### **1. reservoir (reservoir geographic base table)**
 ```
@@ -641,53 +547,105 @@ Used by: tier_location_result (location_type = 'compliance_station', location_id
 
 ---
 
-## **05_THEMES_SCENARIOS LAYER**
+## **Layer 04 — VARIABLE LAYER**
 
-### **1. theme (research themes)**
+> CalSim variable definitions and type classifications. Tables physically reside in the `public` schema.
+> Seed data is in `seed_tables/04_variable/`.
 
+### **1. calsim_model_variable_type**
 ```
-Table: theme
+Table: calsim_model_variable_type
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "baseline", "community_water", "flow", etc.
+├── short_code           TEXT UNIQUE NOT NULL       -- "output", "control", "decision", etc.
+├── label                TEXT NOT NULL              -- "Output", "Control", etc.
+├── description          TEXT                       -- Classification description
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── name                 TEXT NOT NULL              -- "Current operations for California water"
-├── subtitle             TEXT
-├── short_title          TEXT                       -- "Current operations"
-├── simple_description   TEXT
-├── description          TEXT
-├── description_next     TEXT
-├── narrative            JSONB                      -- Structured narrative data
-├── outcome_description  TEXT
-├── outcome_narrative    TEXT
-├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK version.id (theme family)
-├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK developer.id
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Records: 7 themes
+Values (8 total — CalSim model variable behavior):
+├── output:       Standard CalSim model output variables (flows, diversions, storage)
+├── control:      Operational control indicators and binary flags
+├── decision:     Model decision variables and optimization targets
+├── state:        State variables including storage zones and bookkeeping accounts
+├── input:        External inputs and boundary conditions
+├── intermediate: Calculated intermediate values used in model logic
+├── aggregate:    Variables that sum or combine multiple reservoir/system components
+└── index:        Index variables
 
-Foreign keys:
-├── Ref: theme.theme_version_id > version.id [delete: restrict, update: cascade]
-├── Ref: theme.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: theme.updated_by > developer.id [delete: restrict, update: cascade]
-
-Indexes:
-├── theme_short_code_key (short_code) -- Unique constraint
-├── idx_theme_short_code_active (short_code, is_active)
-└── idx_theme_active (is_active)
-
-Values (7 total):
-├── baseline: Current operations for California water
-├── community_water: Prioritizing community water systems
-├── flow: Enhancing river flows for the environment
-├── gw_ag: Managing groundwater in a changing agricultural landscape
-├── delta_flow: Improving flows for the health of the Bay Delta estuary
-├── delta_uses: Sustaining uses in the Delta for communities and farms
-└── delta_export_reliability: Improving reliability of Delta exports for farms and cities
+Seed: seed_tables/04_variable/calsim_model_variable_type.csv
 ```
 
-### **2. scenario (water management scenarios)**
+### **2. derived_variable_type**
+```
+Table: derived_variable_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "sector_aggregate", "delta_variable", etc.
+├── label                TEXT NOT NULL              -- "Sector Aggregate", etc.
+├── description          TEXT                       -- Classification description
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (4 total — derived/computed variable categories):
+├── sector_aggregate:        Variables that aggregate across a sector
+├── delta_variable:          Variables specific to Delta conditions and operations
+├── environmental_indicator: Environmental metrics and indicators
+└── regional_summary:        Variables that aggregate across a region
+
+Note: INCOMPLETE — additional types expected as derived variable pipeline expands.
+Seed: seed_tables/04_variable/derived_variable_type.csv
+```
+
+### **3. variable_type**
+```
+Table: variable_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "delivery", "gw_pumping", "PA", etc.
+├── label                TEXT NOT NULL              -- "delivery", "groundwater pumping", etc.
+├── description          TEXT                       -- Variable type description
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (6 total — water use classification):
+├── delivery: water delivery
+├── gw_pumping: groundwater pumping
+├── PA: project agricultural
+├── PR: project wildlife refuge
+├── PU: project community water system (M&I)
+└── unknown: unknown or unclassified
+
+Used by: du_urban_variable (variable_type_id)
+Seed: seed_tables/04_variable/variable_type.csv
+```
+
+### **4. channel_variable, reservoir_variable, inflow_variable, derived_variable**
+```
+These tables hold the ~500+ CalSim variable definitions (model output names).
+Each maps a CalSim variable name to its type classification and entity association.
+
+channel_variable      -- flow/diversion arc variables   (FK → calsim_model_variable_type)
+reservoir_variable    -- storage/release variables       (FK → calsim_model_variable_type)
+inflow_variable       -- inflow boundary conditions      (FK → calsim_model_variable_type)
+derived_variable      -- computed / post-processed vars  (FK → derived_variable_type)
+
+Seed: seed_tables/04_variable/*.csv
+```
+
+---
+
+## **Layer 06 — SCENARIO LAYER**
+
+> Theme definitions and theme-scenario links are in **Layer 08 — THEME LAYER**.
+
+### **1. scenario (water management scenarios)**
 
 ```
 Table: scenario
@@ -701,7 +659,9 @@ Table: scenario
 ├── simple_description   TEXT
 ├── description          TEXT
 ├── narrative            JSONB                      -- Structured narrative data
-├── baseline_scenario_id INTEGER                    -- FK → scenario.id (self-referencing, NULL for baseline scenarios)
+├── baseline_scenario_id INTEGER                    -- FK → scenario.id (what this is compared against)
+├── source_scenario_id   INTEGER                    -- FK → scenario.id (what this was derived from)
+├── slr_id               INTEGER                    -- FK → slr.id (sea level rise condition)
 ├── hydroclimate_id      INTEGER                    -- FK → hydroclimate.id
 ├── scenario_author_id   INTEGER                    -- FK → scenario_author.id
 ├── scenario_version_id  INTEGER NOT NULL           -- FK → version.id (scenario family)
@@ -710,10 +670,15 @@ Table: scenario
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Records: 8 scenarios (s0011, s0020, s0021, s0023, s0024, s0025, s0027, s0029)
+Records: 24 scenarios active (s0002–s0037) + deactivated s0029; s0035/36/37 as placeholders
+
+Note: baseline_scenario_id = what scenario this is compared against for delta analysis
+      source_scenario_id   = what scenario this was derived from (sometimes same value)
 
 Foreign keys:
 ├── Ref: scenario.baseline_scenario_id > scenario.id [delete: set null, update: cascade]
+├── Ref: scenario.source_scenario_id > scenario.id [delete: set null, update: cascade]
+├── Ref: scenario.slr_id > slr.id [delete: restrict, update: cascade]
 ├── Ref: scenario.hydroclimate_id > hydroclimate.id [delete: restrict, update: cascade]
 ├── Ref: scenario.scenario_author_id > scenario_author.id [delete: restrict, update: cascade]
 ├── Ref: scenario.scenario_version_id > version.id [delete: restrict, update: cascade]
@@ -725,45 +690,13 @@ Indexes:
 ├── idx_scenario_short_code_active (short_code, is_active)
 ├── idx_scenario_active (is_active)
 ├── idx_scenario_baseline (baseline_scenario_id)
+├── idx_scenario_source (source_scenario_id)
+├── idx_scenario_slr (slr_id)
 ├── idx_scenario_hydroclimate (hydroclimate_id)
 └── idx_scenario_active_version (is_active, scenario_version_id)
-
-Baseline Derivations:
-├── s0011 (id=1): baseline_scenario_id = 1 (self, is the baseline)
-├── s0020 (id=2): baseline_scenario_id = 2 (self, is a baseline)
-├── s0021 (id=3): baseline_scenario_id = 2 (derived from s0020)
-├── s0023 (id=4): baseline_scenario_id = NULL (no baseline yet)
-├── s0024 (id=5): baseline_scenario_id = NULL (no baseline yet)
-├── s0025 (id=6): baseline_scenario_id = 2 (derived from s0020)
-├── s0027 (id=7): baseline_scenario_id = 2 (derived from s0020)
-└── s0029 (id=8): baseline_scenario_id = 2 (derived from s0020)
 ```
 
-### **3. theme_scenario_link (many-to-many relationship)**
-
-```
-Table: theme_scenario_link
-├── theme_id             INTEGER NOT NULL           -- FK → theme.id
-├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
-├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
-
-Primary key: (theme_id, scenario_id)
-
-Foreign keys:
-├── Ref: theme_scenario_link.theme_id > theme.id [delete: restrict, update: cascade]
-└── Ref: theme_scenario_link.scenario_id > scenario.id [delete: restrict, update: cascade]
-
-Indexes:
-├── theme_scenario_link_pkey (theme_id, scenario_id) -- Primary key
-└── idx_theme_scenario_reverse (scenario_id, theme_id) -- Reverse lookup
-
-Records: 8 links
-```
-
-### **4. scenario_author (scenario authors/groups)**
+### **2. scenario_author (scenario authors/groups)**
 
 ```
 Table: scenario_author
@@ -792,7 +725,14 @@ Records: 3 authors
 
 ---
 
-## **06_ASSUMPTIONS_OPERATIONS LAYER**
+## **Layer 05 — ASSUMPTIONS + OPERATIONS LAYER**
+
+> **Classification:**
+> - **Assumptions** = model inputs that represent broad context (land use, groundwater model).
+>   SLR (sea level rise) is now its own table in Layer 07.
+> - **Operations** = active policy/regulatory actions applied to a scenario:
+>   TUCP actions, SGMA / GW restrictions, Delta regulations, BiOps, Infrastructure,
+>   Flows, Allocation / Priorities.
 
 ### **1. assumption_category (assumption categories)**
 
@@ -803,8 +743,8 @@ Currently `assumption_definition.category` is a plain TEXT column. If/when this 
 ```
 Table: assumption_category   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "hydrology", "land_use", "regulations", etc.
-├── label                TEXT NOT NULL              -- "Hydrology", "Land Use", "Regulations"
+├── short_code           TEXT UNIQUE NOT NULL       -- "land_use", "gw_model"
+├── label                TEXT NOT NULL
 ├── description          TEXT
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -812,15 +752,9 @@ Table: assumption_category   [PLANNED]
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK developer.id
 
-Planned values (8 total):
-├── hydrology: Hydrology
-├── hydroclimate: Hydroclimate
-├── land_use: Land Use
-├── future_land_use: Future Land Use
-├── gw_model: Groundwater Model
-├── regulations: Regulations
-├── demand: Demand
-└── infrastructure: Infrastructure
+Values (2 — post-reclassification):
+├── land_use:  Land use scenario (LandIQ vintages)
+└── gw_model:  Groundwater model used (C2VSimFG, etc.)
 ```
 
 ### **2. assumption_definition (assumption definitions)**
@@ -828,14 +762,14 @@ Planned values (8 total):
 ```
 Table: assumption_definition
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "tucp_tuco", "land_use_2030", etc.
-├── name                 TEXT NOT NULL              -- "Temporary Urgency Change Petition / Order"
+├── short_code           TEXT UNIQUE NOT NULL       -- "lu_2020_landiq", "gw_c2vsimfg", etc.
+├── name                 TEXT NOT NULL              -- "2020 LandIQ Land Use"
 ├── short_title          TEXT
 ├── subtitle             TEXT
 ├── simple_description   TEXT
 ├── description          TEXT
 ├── narrative            JSONB
-├── category             TEXT                       -- Inline category label (e.g. "hydrology", "land_use")
+├── category             TEXT                       -- "land_use" or "gw_model"
 ├── source               TEXT                       -- Source citation
 ├── source_access_date   DATE                       -- When source was accessed
 ├── file                 TEXT                       -- Associated file path/name
@@ -847,6 +781,9 @@ Table: assumption_definition
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
+Note: TUCP, SGMA, BiOps, infrastructure, flow, delta regulation, allocation/priority rows
+      have been moved to operation_definition (migration 07). Only land_use + gw_model remain.
+
 Foreign keys:
 ├── Ref: assumption_definition.assumptions_version_id > version.id [delete: restrict, update: cascade]
 ├── Ref: assumption_definition.created_by > developer.id [delete: restrict, update: cascade]
@@ -854,10 +791,10 @@ Foreign keys:
 
 Indexes:
 ├── assumption_definition_short_code_key (short_code)
-├── idx_assumption_definition_category (category_id, short_code)
+├── idx_assumption_definition_category (category, short_code)
 └── idx_assumption_definition_active (is_active)
 
-Records: 17 assumption definitions
+Seed: seed_tables/05_assumptions_operations/assumption_definition.csv
 ```
 
 ### **3. scenario_key_assumption_link (scenario-assumption relationships)**
@@ -890,8 +827,8 @@ Currently `operation_definition.category` is a plain TEXT column.
 ```
 Table: operation_category   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "allocation", "regulatory", "infrastructure"
-├── name                 TEXT                       -- "Allocation", "Regulatory", "Infrastructure"
+├── short_code           TEXT UNIQUE NOT NULL
+├── label                TEXT NOT NULL
 ├── description          TEXT
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -899,11 +836,14 @@ Table: operation_category   [PLANNED]
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK developer.id
 
-Planned values (4 total):
-├── allocation: Allocation
-├── carryover: Carryover Storage
-├── infrastructure: Infrastructure
-└── regulatory: Regulatory
+Values (7 total — post-reclassification):
+├── tucp:                   Temporary Urgency Change Petitions / Temporary Urgency Change Orders
+├── gw_restrictions:        Groundwater use restrictions (SGMA implementation)
+├── delta_regulations:      Delta regulations and salinity standards
+├── biops:                  Biological Opinions (NMFS / USFWS)
+├── infrastructure:         Infrastructure configuration (Shasta cold water, etc.)
+├── flow:                   Flow objectives and minimum flow requirements
+└── allocation_priorities:  Water allocation and priority rules
 ```
 
 ### **5. operation_definition (operation definitions)**
@@ -911,14 +851,14 @@ Planned values (4 total):
 ```
 Table: operation_definition
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "priority_allocation", "min_flow_req", etc.
-├── name                 TEXT NOT NULL              -- "Priority Allocation Rules"
+├── short_code           TEXT UNIQUE NOT NULL       -- "tucp_tuco", "biops_2024", etc.
+├── name                 TEXT NOT NULL
 ├── short_title          TEXT
 ├── subtitle             TEXT
 ├── simple_description   TEXT
 ├── description          TEXT
 ├── narrative            JSONB
-├── category             TEXT                       -- Inline category label (e.g. "allocation", "regulatory")
+├── category             TEXT                       -- maps to operation_category.short_code
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── notes                TEXT
 ├── operation_version_id INTEGER NOT NULL           -- FK → version.id (operations family)
@@ -927,6 +867,10 @@ Table: operation_definition
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
+Note: Rows reclassified from assumption_definition in migration 07:
+      TUCP_TUCO → tucp; SGMA (SJV/SAC/CV) → gw_restrictions; DCP_6000/Bethany → delta_regulations;
+      no_min_flow/functional_flows/salmon_flows → flow; biops_2024 → biops
+
 Foreign keys:
 ├── Ref: operation_definition.operation_version_id > version.id [delete: restrict, update: cascade]
 ├── Ref: operation_definition.created_by > developer.id [delete: restrict, update: cascade]
@@ -934,10 +878,10 @@ Foreign keys:
 
 Indexes:
 ├── operation_definition_short_code_key (short_code)
-├── idx_operation_definition_category (category_id, short_code)
+├── idx_operation_definition_category (category, short_code)
 └── idx_operation_definition_active (is_active)
 
-Records: 10 operation definitions
+Seed: seed_tables/05_assumptions_operations/operation_definition.csv
 ```
 
 ### **6. scenario_key_operation_link (scenario-operation relationships)**
@@ -964,7 +908,7 @@ Indexes:
 
 ---
 
-## **07_HYDROCLIMATE LAYER**
+## **Layer 07 — HYDROCLIMATE LAYER**
 
 ### **1. hydroclimate (hydroclimate conditions)**
 
@@ -980,9 +924,7 @@ Table: hydroclimate
 ├── narrative            JSONB
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── projection_year      INTEGER                    -- 2040, 2070, etc.
-├── slr_value            NUMERIC                    -- Sea level rise value
-├── slr_unit_id          INTEGER                    -- FK → unit.id
-├── source_id            INTEGER                    -- FK source.id (hydroclimate_source table is PLANNED)
+├── source_id            INTEGER                    -- FK source.id
 ├── notes                TEXT
 ├── hydroclimate_version_id INTEGER                 -- FK → version.id (hydroclimate family)
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -990,10 +932,12 @@ Table: hydroclimate
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
+Note: slr_value and slr_unit_id removed — sea level rise is now in the slr table (see below).
+      Use scenario.slr_id → slr.id to link a scenario to its SLR condition.
+
 Foreign keys:
 ├── Ref: hydroclimate.hydroclimate_version_id > version.id [delete: restrict, update: cascade]
 ├── Ref: hydroclimate.source_id > source.id [delete: restrict, update: cascade]
-├── Ref: hydroclimate.slr_unit_id > unit.id [delete: restrict, update: cascade]
 ├── Ref: hydroclimate.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: hydroclimate.updated_by > developer.id [delete: restrict, update: cascade]
 
@@ -1014,7 +958,37 @@ Values (7 total):
 Records: 7 hydroclimate conditions
 ```
 
-### **2. hydroclimate_source (hydroclimate data sources)**
+### **2. slr (sea level rise scenarios)**
+
+```
+Table: slr
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "none", "slr_15", "slr_30", "slr_60"
+├── label                TEXT NOT NULL              -- "No sea level rise", "15mm SLR", etc.
+├── slr_value_mm         NUMERIC                    -- SLR amount in millimetres (0, 15, 30, 60)
+├── description          TEXT
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (4 total):
+├── none:   No sea level rise (0mm)
+├── slr_15: 15mm sea level rise
+├── slr_30: 30mm sea level rise
+└── slr_60: 60mm sea level rise
+
+Foreign keys:
+├── Ref: slr.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: slr.updated_by > developer.id [delete: restrict, update: cascade]
+
+Referenced by: scenario.slr_id
+
+Seed: seed_tables/07_hydroclimate/slr.csv
+```
+
+### **3. hydroclimate_source (hydroclimate data sources)**
 
 Status: PLANNED — not yet created in the database.
 `hydroclimate.source_id` currently points to the generic `source` table (FK source.id).
@@ -1037,7 +1011,98 @@ Table: hydroclimate_source   [PLANNED]
 
 ---
 
-## **09_STATISTICS LAYER**
+## **Layer 08 — THEME LAYER**
+
+> Research themes organize the frontend storylines. Each theme links to one or more scenarios.
+> Seed data is in `seed_tables/08_theme/`.
+
+### **1. theme (research themes)**
+
+```
+Table: theme
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "baseline", "community_water", "flow", etc.
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── name                 TEXT NOT NULL              -- "Current operations for California water"
+├── subtitle             TEXT
+├── short_title          TEXT                       -- "Current operations"
+├── simple_description   TEXT
+├── description          TEXT
+├── description_next     TEXT
+├── narrative            JSONB                      -- Structured narrative data
+├── outcome_description  TEXT
+├── outcome_narrative    TEXT
+├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK → version.id (theme family)
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id
+
+Foreign keys:
+├── Ref: theme.theme_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: theme.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: theme.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── theme_short_code_key (short_code) -- Unique constraint
+├── idx_theme_short_code_active (short_code, is_active)
+└── idx_theme_active (is_active)
+
+Values (7 total):
+├── baseline: Current operations for California water
+├── community_water: Prioritizing community water systems
+├── flow: Enhancing river flows for the environment
+├── gw_ag: Managing groundwater in a changing agricultural landscape
+├── delta_flow: Improving flows for the health of the Bay Delta estuary
+├── delta_uses: Sustaining uses in the Delta for communities and farms
+└── delta_export_reliability: Improving reliability of Delta exports for farms and cities
+
+Seed: seed_tables/08_theme/theme.csv
+```
+
+### **2. theme_scenario_link (many-to-many relationship)**
+
+```
+Table: theme_scenario_link
+├── theme_id             INTEGER NOT NULL           -- FK → theme.id
+├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Primary key: (theme_id, scenario_id)
+
+Foreign keys:
+├── Ref: theme_scenario_link.theme_id > theme.id [delete: restrict, update: cascade]
+└── Ref: theme_scenario_link.scenario_id > scenario.id [delete: restrict, update: cascade]
+
+Indexes:
+├── theme_scenario_link_pkey (theme_id, scenario_id) -- Primary key
+└── idx_theme_scenario_reverse (scenario_id, theme_id) -- Reverse lookup
+
+Seed: seed_tables/08_theme/theme_scenario_link.csv
+```
+
+### **3. theme_source_link (theme provenance)**
+
+```
+Table: theme_source_link
+├── theme_id             INTEGER NOT NULL           -- FK → theme.id
+├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Primary key: (theme_id, source_id)
+
+Seed: seed_tables/08_theme/theme_source_link.csv
+```
+
+---
+
+## **Layer 09+ — STATISTICS / RESULTS**
 
 Pre-calculated statistics and outcome metrics derived from scenario model runs. Provides aggregated data for frontend visualization (percentile bands, time series summaries).
 
