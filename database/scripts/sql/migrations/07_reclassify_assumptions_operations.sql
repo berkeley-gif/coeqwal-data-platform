@@ -106,6 +106,11 @@ ALTER TABLE operation_category ENABLE TRIGGER USER;
 -- Use a CTE with RETURNING to capture the mapping from old assumption IDs
 -- to new operation IDs, then use it to migrate the link table.
 
+-- Sync sequences to current max IDs (seed data was loaded with explicit IDs
+-- without advancing the SERIAL sequences).
+SELECT setval('operation_definition_id_seq',  (SELECT MAX(id) FROM operation_definition));
+SELECT setval('assumption_definition_id_seq', (SELECT MAX(id) FROM assumption_definition));
+
 ALTER TABLE operation_definition DISABLE TRIGGER USER;
 ALTER TABLE scenario_key_operation_link DISABLE TRIGGER USER;
 
