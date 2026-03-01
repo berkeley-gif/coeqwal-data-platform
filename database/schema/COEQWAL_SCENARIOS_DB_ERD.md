@@ -111,8 +111,9 @@ Table: version
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Indexes:
-├── version_version_family_id_version_number_key (version_family_id, version_number)
-└── idx_version_family (version_family_id) -- FK performance
+└── version_version_family_id_version_number_key (version_family_id, version_number)
+    -- Also handles version_family_id prefix queries (left-prefix usable);
+    -- idx_version_family was dropped as redundant.
 ```
 
 ### **3. developer (audits)**
@@ -176,6 +177,14 @@ Table: audit_log
 
 Records: 0 (table created, triggers not yet deployed to production tables)
 Purpose: Row-level change tracking for key domain tables (theme, scenario, etc.)
+
+Indexes:
+├── idx_audit_log_changed_at  (changed_at)              -- time-range queries
+├── idx_audit_log_changed_by  (changed_by)              -- "what did user X change?"
+└── idx_audit_log_record      (table_name, record_id)   -- "what happened to record X?"
+    -- idx_audit_log_table_name and idx_audit_log_operation were dropped:
+    --   table_name  is covered by idx_audit_log_record left-prefix
+    --   operation   has only 3 distinct values; too low-cardinality to be useful
 ```
 
 ### **7. domain_family_map (table-to-version mapping)**
@@ -193,6 +202,9 @@ Table: domain_family_map
 
 Records: 70 entries (one per domain table tracked)
 Primary key: (schema_name, table_name)
+
+Indexes:
+└── idx_domain_family_map_version_family (version_family_id) -- FK lookup: all tables in a family
 ```
 
 ## **01_LOOKUP TABLES**

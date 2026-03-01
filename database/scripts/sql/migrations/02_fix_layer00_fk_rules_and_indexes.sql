@@ -37,15 +37,21 @@ CREATE INDEX IF NOT EXISTS idx_domain_family_map_version_family
 \echo ''
 
 -- ============================================================================
--- PART 2: Drop redundant audit_log index
+-- PART 2: Drop redundant indexes
 -- ============================================================================
--- idx_audit_log_record(table_name, record_id) is a superset of
--- idx_audit_log_table_name(table_name). PostgreSQL uses the composite index
--- for prefix queries, so the single-column index is pure write overhead.
+-- idx_audit_log_table_name(table_name): redundant with idx_audit_log_record
+--   (table_name, record_id). PostgreSQL uses the composite index for prefix
+--   queries. Pure write overhead on the highest-write table in the schema.
+--
+-- idx_version_family(version_family_id): redundant with the composite unique
+--   index version_version_family_id_version_number_key(version_family_id,
+--   version_number). B-tree indexes support left-prefix scanning, so the
+--   composite index already handles any WHERE version_family_id = ? query.
 -- ============================================================================
-\echo 'Part 2: Dropping redundant idx_audit_log_table_name...'
+\echo 'Part 2: Dropping redundant indexes...'
 
 DROP INDEX IF EXISTS idx_audit_log_table_name;
+DROP INDEX IF EXISTS idx_version_family;
 
 \echo 'Part 2: Done.'
 \echo ''
@@ -197,19 +203,25 @@ END $$;
 
 SELECT 'FK rules (all should be RESTRICT / CASCADE):' AS check;
 SELECT
-    tc.table_name,
-    kcu.column_name,
-    ccu.table_name  AS ref_table,
-    rc.delete_rule,
-    rc.update_rule
-FROM information_schema.table_constraints        tc
-JOIN information_schema.key_column_usage         kcu USING (constraint_name, constraint_schema)
-JOIN information_schema.referential_constraints  rc  USING (constraint_name, constraint_schema)
-JOIN information_schema.constraint_column_usage  ccu USING (constraint_name, constraint_schema)
-WHERE tc.constraint_type = 'FOREIGN KEY'
-  AND tc.table_schema    = 'public'
-  AND tc.table_name IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
-ORDER BY tc.table_name, kcu.column_name;
+    c.conrelid::regclass::text                    AS table_name,
+    a.attname                                     AS column_name,
+    c.confrelid::regclass::text                   AS ref_table,
+    f.attname                                     AS ref_column,
+    CASE c.confdeltype
+        WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT' END            AS delete_rule,
+    CASE c.confupdtype
+        WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT' END            AS update_rule
+FROM pg_constraint     c
+JOIN pg_attribute      a ON a.attrelid = c.conrelid  AND a.attnum = ANY(c.conkey)
+JOIN pg_attribute      f ON f.attrelid = c.confrelid AND f.attnum = ANY(c.confkey)
+WHERE c.contype = 'f'
+  AND c.conrelid::regclass::text IN
+      ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+ORDER BY table_name, column_name;
 
 SELECT 'domain_family_map indexes (should include idx_domain_family_map_version_family):' AS check;
 SELECT indexname, indexdef

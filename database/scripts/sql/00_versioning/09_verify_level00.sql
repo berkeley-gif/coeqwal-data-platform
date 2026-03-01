@@ -113,12 +113,10 @@ ORDER BY tablename, indexname;
 SELECT 'Missing expected indexes (should be 0 rows):' AS check;
 WITH expected(table_name, index_name) AS (
     VALUES
-        ('version',            'idx_version_family'),
         ('version',            'version_version_family_id_version_number_key'),
         ('domain_family_map',  'idx_domain_family_map_version_family'),
         ('audit_log',          'idx_audit_log_changed_at'),
         ('audit_log',          'idx_audit_log_changed_by'),
-        ('audit_log',          'idx_audit_log_operation'),
         ('audit_log',          'idx_audit_log_record')
 )
 SELECT e.table_name, e.index_name
@@ -144,11 +142,9 @@ WHERE schemaname = 'public'
       'domain_family_map_pkey',
       'audit_log_pkey',
       -- Expected named indexes
-      'idx_version_family',
       'idx_domain_family_map_version_family',
       'idx_audit_log_changed_at',
       'idx_audit_log_changed_by',
-      'idx_audit_log_operation',
       'idx_audit_log_record'
   )
 ORDER BY tablename, indexname;
@@ -162,30 +158,45 @@ ORDER BY tablename, indexname;
 
 SELECT 'FK constraints (all should be RESTRICT / CASCADE):' AS check;
 SELECT
-    tc.table_name,
-    kcu.column_name,
-    ccu.table_name  AS ref_table,
-    rc.delete_rule,
-    rc.update_rule
-FROM information_schema.table_constraints        tc
-JOIN information_schema.key_column_usage         kcu USING (constraint_name, constraint_schema)
-JOIN information_schema.referential_constraints  rc  USING (constraint_name, constraint_schema)
-JOIN information_schema.constraint_column_usage  ccu USING (constraint_name, constraint_schema)
-WHERE tc.constraint_type = 'FOREIGN KEY'
-  AND tc.table_schema    = 'public'
-  AND tc.table_name IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
-ORDER BY tc.table_name, kcu.column_name;
+    c.conrelid::regclass::text                    AS table_name,
+    a.attname                                     AS column_name,
+    c.confrelid::regclass::text                   AS ref_table,
+    f.attname                                     AS ref_column,
+    CASE c.confdeltype
+        WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT' END            AS delete_rule,
+    CASE c.confupdtype
+        WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT' END            AS update_rule
+FROM pg_constraint     c
+JOIN pg_attribute      a ON a.attrelid = c.conrelid  AND a.attnum = ANY(c.conkey)
+JOIN pg_attribute      f ON f.attrelid = c.confrelid AND f.attnum = ANY(c.confkey)
+WHERE c.contype = 'f'
+  AND c.conrelid::regclass::text IN
+      ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+ORDER BY table_name, column_name;
 
 SELECT 'FKs with wrong rules (should be 0 rows):' AS check;
-SELECT tc.table_name, kcu.column_name, rc.delete_rule, rc.update_rule
-FROM information_schema.table_constraints        tc
-JOIN information_schema.key_column_usage         kcu USING (constraint_name, constraint_schema)
-JOIN information_schema.referential_constraints  rc  USING (constraint_name, constraint_schema)
-WHERE tc.constraint_type = 'FOREIGN KEY'
-  AND tc.table_schema    = 'public'
-  AND tc.table_name IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
-  AND (rc.delete_rule <> 'RESTRICT' OR rc.update_rule <> 'CASCADE')
-ORDER BY tc.table_name, kcu.column_name;
+SELECT
+    c.conrelid::regclass::text AS table_name,
+    a.attname                  AS column_name,
+    CASE c.confdeltype
+        WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT' END AS delete_rule,
+    CASE c.confupdtype
+        WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+        WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+        WHEN 'd' THEN 'SET DEFAULT' END AS update_rule
+FROM pg_constraint c
+JOIN pg_attribute  a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+WHERE c.contype = 'f'
+  AND c.conrelid::regclass::text IN
+      ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+  AND (c.confdeltype <> 'r' OR c.confupdtype <> 'c')
+ORDER BY table_name, column_name;
 
 -- =============================================================================
 -- 7. AUDIT COLUMNS COVERAGE
@@ -232,7 +243,7 @@ SELECT
 \echo 'Expected values:'
 \echo '  - version_families: 14'
 \echo '  - versions: 14'
-\echo '  - domain_mappings: 69'
+\echo '  - domain_mappings: 70'
 \echo '  - active_developers: 2+'
 \echo '  - tables_with_triggers: 67'
 \echo '============================================================================'

@@ -180,23 +180,35 @@ def get_indexes(cursor) -> List[Dict[str, Any]]:
 def get_foreign_keys(cursor) -> List[Dict[str, Any]]:
     """
     Return all foreign key constraints with source column and referenced table/column.
+
+    Uses pg_constraint instead of information_schema.constraint_column_usage.
+    The information_schema view filters results by table ownership, so non-superuser
+    connections return 0 rows for tables they don't own. pg_constraint is readable
+    by any user with CONNECT privilege.
     """
     cursor.execute("""
         SELECT
-            tc.table_name,
-            tc.constraint_name,
-            kcu.column_name,
-            ccu.table_name  AS ref_table,
-            ccu.column_name AS ref_column,
-            rc.delete_rule,
-            rc.update_rule
-        FROM information_schema.table_constraints        tc
-        JOIN information_schema.key_column_usage         kcu USING (constraint_name, constraint_schema)
-        JOIN information_schema.referential_constraints  rc  USING (constraint_name, constraint_schema)
-        JOIN information_schema.constraint_column_usage  ccu USING (constraint_name, constraint_schema)
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema    = 'public'
-        ORDER BY tc.table_name, tc.constraint_name;
+            c.conname                    AS constraint_name,
+            c.conrelid::regclass::text   AS table_name,
+            a.attname                    AS column_name,
+            c.confrelid::regclass::text  AS ref_table,
+            f.attname                    AS ref_column,
+            CASE c.confdeltype
+                WHEN 'a' THEN 'NO ACTION'   WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'     WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT' END AS delete_rule,
+            CASE c.confupdtype
+                WHEN 'a' THEN 'NO ACTION'   WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'     WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT' END AS update_rule
+        FROM pg_constraint c
+        JOIN pg_class      t ON t.oid = c.conrelid
+        JOIN pg_namespace  n ON n.oid = t.relnamespace
+        JOIN pg_attribute  a ON a.attrelid = c.conrelid  AND a.attnum = ANY(c.conkey)
+        JOIN pg_attribute  f ON f.attrelid = c.confrelid AND f.attnum = ANY(c.confkey)
+        WHERE c.contype = 'f'
+          AND n.nspname  = 'public'
+        ORDER BY table_name, constraint_name, column_name;
     """)
     columns = [desc[0] for desc in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
