@@ -123,7 +123,7 @@ DECLARE
 BEGIN
     SELECT id INTO src_id
     FROM source 
-    WHERE short_code = source_short_code
+    WHERE source = source_short_code
     AND is_active = true
     LIMIT 1;
     
@@ -183,13 +183,14 @@ SELECT
 FROM version v 
 WHERE v.id = get_active_version('tier');
 
--- Test source function
+-- Test source function (looks up the first 3 actual values in the source table)
 \echo ''
-\echo 'Source lookup:'
-SELECT 
-    get_source_id('geopackage') as geopackage_id,
-    get_source_id('xml_schematic') as xml_id,
-    get_source_id('calsim_model_run') as calsim_id;
+\echo 'Source lookup (first 3 sources):'
+SELECT source, get_source_id(source) AS id
+FROM source
+WHERE is_active = true
+ORDER BY id
+LIMIT 3;
 
 \echo ''
 \echo 'HELPER FUNCTIONS CREATED SUCCESSFULLY'
