@@ -1,0 +1,5 @@
+station_code,station_name,latitude,longitude,srid,tier_use,geom_wkt,data_source,notes
+JP,Jersey Point,38.056,-121.745,4326,FW_DELTA_USES,POINT(-121.745 38.056),DWR_CDEC,Western Delta salinity compliance station
+EM,Emmaton,38.053,-121.694,4326,FW_DELTA_USES,POINT(-121.694 38.053),DWR_CDEC,Western Delta salinity compliance station
+
+

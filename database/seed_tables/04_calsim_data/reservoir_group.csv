@@ -1,0 +1,5 @@
+id,short_code,label,description,display_order,is_active,created_at,created_by,updated_at,updated_by
+1,major,Major Reservoirs,Primary CVP/SWP storage reservoirs for statistics dashboards and percentile band charts,1,True,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+2,cvp,CVP Storage,Central Valley Project reservoirs,2,True,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+3,swp,SWP Storage,State Water Project reservoirs,3,True,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1
+4,tier,Tier Reservoirs,Reservoirs included in tier result analysis,4,True,2024-01-01 00:00:00,1,2024-01-01 00:00:00,1

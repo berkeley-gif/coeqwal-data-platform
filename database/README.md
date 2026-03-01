@@ -2,6 +2,61 @@
 
 PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics topology.
 
+## Getting started
+
+For new developers. Full details on each step are in the sections below.
+
+### Prerequisites
+
+- AWS account access (to reach the RDS instance via Cloud9 or VPN)
+- Database credentials (ask a team member, or retrieve from AWS Secrets Manager)
+
+### First-time setup (5 steps)
+
+**1. Set your connection string** in `~/.bashrc` on Cloud9:
+
+```bash
+export DATABASE_URL="postgresql://your_username:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+source ~/.bashrc
+```
+
+**2. Get registered** — ask an admin to run `register_developer()` for you (see "Setting up a new developer" below). You need a named PostgreSQL role and a row in the `developer` table before you can write anything.
+
+**3. Verify you're connected as yourself:**
+
+```bash
+psql $DATABASE_URL -c "
+SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id,
+       d.email, d.display_name
+FROM developer d WHERE d.id = coeqwal_current_operator();"
+```
+
+Your username should appear, with `developer_id` matching your row in the `developer` table. If `developer_id = 1` you are connected as `postgres` — all your writes will be attributed to the system account. Please contact an admin if there are issues or we need to run corrections (not a big deal). We are working to set up SSO auth but it's still on the TODO list.
+
+**4. Read the ERD** before writing anything:
+
+```
+database/schema/COEQWAL_SCENARIOS_DB_ERD.md
+```
+
+**5. Run the verification scripts** to confirm the database is healthy:
+
+```bash
+psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
+```
+
+### Key resources
+
+| Resource | Location |
+|----------|----------|
+| Schema documentation (ERD) | `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` |
+| Audit trigger system | `database/scripts/sql/00_versioning/` |
+| Seed data | `database/seed_tables/00_versioning/` |
+| Verification scripts | `*/09_verify_level*.sql` |
+| Database audit tool | `database/run_local_audit.py` |
+
+---
+
 ## Directory structure
 
 ```
@@ -437,13 +492,27 @@ Field behavior by event:
 
 The trigger reads `session_user` — the PostgreSQL role you authenticated as at connection time. **You cannot change `session_user` with a session variable.** If your `DATABASE_URL` uses `postgres` as the username, every write is attributed to developer id=1 (system account), regardless of who you are.
 
-To verify who you are before writing:
+**Check who you are** — two ways to do this:
+
+From the bash shell (`$` prompt):
+
+```bash
+$ psql $DATABASE_URL -c "SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id;"
+```
+
+From inside a psql session (`coeqwal_scenario=>` prompt):
 
 ```sql
-SELECT current_user;                -- your PostgreSQL session role
-SELECT coeqwal_current_operator();  -- your developer.id (or an exception)
-SELECT id, email, display_name, aws_sso_username FROM developer;
+coeqwal_scenario=> SELECT
+    session_user                    AS db_role,
+    coeqwal_current_operator()      AS developer_id,
+    d.email,
+    d.display_name
+FROM developer d
+WHERE d.id = coeqwal_current_operator();
 ```
+
+If `developer_id` is `1` you are connected as `postgres` and writes will be attributed to the system account. If the function raises an exception your username is not registered in the `developer` table.
 
 **To get correct attribution, connect as your own registered database user:**
 
@@ -454,6 +523,55 @@ psql $DATABASE_URL
 ```
 
 Strategy 2 (`email LIKE '%username%'`) will match `username@domain.ext`, so no `aws_sso_username` is needed as long as your email is registered.
+
+**Correcting mis-attributed rows (trigger-disable required):**
+
+The trigger preserves `created_by` on every UPDATE (`NEW.created_by := OLD.created_by`), so a normal `UPDATE ... SET created_by = 2` will be silently overwritten back to the old value. To correct attribution you must disable user-defined triggers as postgres.
+
+Step 1 — open a new psql session connected as postgres (bash shell `$` prompt):
+
+```bash
+$ psql "postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+```
+
+Step 2 — once inside psql (`coeqwal_scenario=#` prompt), paste this whole block:
+
+```sql
+BEGIN;
+ALTER TABLE some_table DISABLE TRIGGER USER;
+UPDATE some_table SET created_by = 2, updated_by = 2 WHERE created_by = 1;
+ALTER TABLE some_table ENABLE TRIGGER USER;
+COMMIT;
+```
+
+> **Note:** Use `DISABLE TRIGGER USER`, not `DISABLE TRIGGER ALL`. On AWS RDS the postgres user cannot disable system FK triggers (`RI_ConstraintTrigger_*`), only user-defined ones. `USER` disables only the audit trigger, which is all you need.
+
+**Verifying attribution after corrections:**
+
+Run this to confirm all versioning tables are correctly attributed. The result shows each developer's share of rows per table with a percentage breakdown:
+
+```sql
+SELECT
+    t.tbl,
+    d.display_name      AS attributed_to,
+    d.id                AS developer_id,
+    COUNT(*)            AS rows,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY t.tbl), 1) AS pct
+FROM (
+    SELECT 'version_family'    AS tbl, created_by FROM version_family
+    UNION ALL
+    SELECT 'version',                  created_by FROM version
+    UNION ALL
+    SELECT 'domain_family_map',        created_by FROM domain_family_map
+    UNION ALL
+    SELECT 'developer',                created_by FROM developer
+) t
+LEFT JOIN developer d ON d.id = t.created_by
+GROUP BY t.tbl, d.id, d.display_name
+ORDER BY t.tbl, developer_id;
+```
+
+Expected result after corrections: all rows show your own name/id, except the `developer` table which correctly has one row for the system account (id=1) and one for you.
 
 ### Database access
 
@@ -524,6 +642,10 @@ psql -h <rds-endpoint> -U jdoe -d coeqwal_scenario
 **Important:** Unregistered users cannot make database changes. The `coeqwal_current_operator()` function will raise an exception.
 
 ### Cloud9 cheatsheet
+
+**Prompt key:**
+- `$` at the end of your prompt → you are in the **bash shell** — use `psql`, `export`, `git`, etc.
+- `coeqwal_scenario=>` → you are **inside psql** — only SQL and `\` meta-commands work here. Type `\q` to exit back to bash.
 
 ```bash
 # Show all environment variables currently set in the session
@@ -759,14 +881,18 @@ database/scripts/sql/
 
 **Running verification in Cloud9:**
 
-```sql
--- Connect to database
-psql -h $DB_HOST -U $DB_USER -d coeqwal_scenario
+From the bash shell (`$` prompt):
 
--- Run layer verification
-\i database/scripts/sql/00_versioning/09_verify_level00.sql
-\i database/scripts/sql/01_lookup/09_verify_level01.sql
-\i database/scripts/sql/02_network/09_verify_level02.sql
+```bash
+$ psql $DATABASE_URL
+```
+
+Once inside psql (`coeqwal_scenario=>` prompt):
+
+```sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/09_verify_level00.sql
+coeqwal_scenario=> \i database/scripts/sql/01_lookup/09_verify_level01.sql
+coeqwal_scenario=> \i database/scripts/sql/02_network/09_verify_level02.sql
 ```
 
 **Layer audit modus operandi:**
@@ -777,6 +903,59 @@ psql -h $DB_HOST -U $DB_USER -d coeqwal_scenario
 4. **Execute and verify** - Run migrations, re-run verification
 5. **Delete migration scripts** - Keep repo clean after execution
 6. **Document** - Update ERD/checklist if patterns change
+
+---
+
+## Running the database audit
+
+The audit captures the full live schema — tables, columns, indexes, FKs, constraints, triggers, functions — and saves it as a timestamped JSON + CSV summary to the `audits/` folder at the repo root.
+
+> **Note on audit history:** The audit previously ran as an AWS Lambda function that deposited results into an S3 bucket. That Lambda is now superseded by the local shell script below. The Lambda and its S3 outputs can be cleaned up — see `database/utils/db_audit_lambda/` for the Lambda source. The shell script runs the same underlying Python (`db_audit_lambda.py`) but locally on Cloud9, which is simpler for on-demand use.
+
+### Python environment (venv)
+
+Activate the venv before running the audit (from the repo root):
+
+```bash
+$ source venv/bin/activate
+```
+
+### Running the audit
+
+From the repo root on Cloud9 (`$` prompt), with venv active:
+
+```bash
+$ cd ~/environment/coeqwal-backend
+$ bash database/run_audit.sh
+```
+
+The script checks for `$DATABASE_URL` and required Python packages before running. Output:
+
+```
+audits/audit_YYYYMMDD_HHMMSS.json         ← full schema snapshot
+audits/tables_summary_YYYYMMDD_HHMMSS.csv ← per-table row counts and audit field status
+audits/latest.json                         ← symlink to the most recent JSON
+```
+
+### Verifying the audit output
+
+The JSON report top-level keys to check:
+
+```
+generated_at       — timestamp
+database_info      — db name, current_user, session_user
+total_tables       — should match ERD table count
+validation         — any warnings (missing triggers, unregistered users, etc.)
+tables             — per-table detail: columns, indexes, FKs, constraints, triggers
+```
+
+### Comparing the audit against the ERD
+
+```bash
+$ python database/audit/verify_erd_against_audit.py \
+    --audit audits/latest.json \
+    --erd database/schema/COEQWAL_SCENARIOS_DB_ERD.md
+```
 
 ---
 
@@ -835,26 +1014,32 @@ The recommended workflow for database changes:
 
 ### Running SQL scripts in Cloud9
 
+Step 1 — in the bash shell (`$` prompt), pull latest and connect:
+
 ```bash
-# Pull latest from GitHub
-cd ~/environment/coeqwal-backend
-git pull origin main
+$ cd ~/environment/coeqwal-backend
+$ git pull origin main
+$ psql $DATABASE_URL
+```
 
-# Connect to database
-psql -h coeqwal-scenario-database-1.xxxxx.us-west-2.rds.amazonaws.com \
-     -U postgres -d coeqwal_scenario
+Step 2 — once inside psql (`coeqwal_scenario=>` prompt), run scripts with `\i`:
 
-# Run scripts
-\i database/scripts/sql/00_create_helper_functions.sql
-\i database/scripts/sql/00_versioning/00_create_versioning_tables.sql
-\i database/scripts/sql/00_versioning/01_create_audit_trigger_function.sql
-\i database/scripts/sql/00_versioning/02_create_audit_log_table.sql
-\i database/scripts/sql/00_versioning/03_apply_audit_triggers.sql
-\i database/scripts/sql/00_versioning/04_create_developer_users.sql
-\i database/scripts/sql/00_versioning/06_load_seed_data.sql
-\i database/scripts/sql/00_versioning/05_populate_domain_family_map.sql
-\i database/scripts/sql/00_versioning/09_verify_level00.sql
--- etc.
+```sql
+coeqwal_scenario=> \i database/scripts/sql/00_create_helper_functions.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/00_create_versioning_tables.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/01_create_audit_trigger_function.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/02_create_audit_log_table.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/03_apply_audit_triggers.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/04_create_developer_users.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/06_load_seed_data.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/05_populate_domain_family_map.sql
+coeqwal_scenario=> \i database/scripts/sql/00_versioning/09_verify_level00.sql
+```
+
+Or from the bash shell, pass the script directly without entering psql:
+
+```bash
+$ psql $DATABASE_URL -f database/scripts/sql/00_create_helper_functions.sql
 ```
 
 ### Connect to production (read-only)

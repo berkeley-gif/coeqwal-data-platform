@@ -218,6 +218,80 @@ def get_unique_constraints(cursor) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Trigger and function inventory
+# ---------------------------------------------------------------------------
+
+def get_trigger_details(cursor) -> List[Dict[str, Any]]:
+    """
+    Return per-trigger detail for all user tables.
+    Replaces the per-table has_triggers boolean with actionable information:
+    trigger name, timing (BEFORE/AFTER), events (INSERT/UPDATE/DELETE), and
+    the function it calls.
+
+    tgtype is a bitmask: bit 1=ROW, bit 2=BEFORE, bit 3=INSERT, bit 4=DELETE,
+    bit 5=UPDATE, bit 6=TRUNCATE.
+    """
+    cursor.execute("""
+        SELECT
+            c.relname                           AS table_name,
+            t.tgname                            AS trigger_name,
+            CASE WHEN (t.tgtype & 2) > 0
+                 THEN 'BEFORE' ELSE 'AFTER' END AS timing,
+            ARRAY_REMOVE(ARRAY[
+                CASE WHEN (t.tgtype & 4)  > 0 THEN 'INSERT'   END,
+                CASE WHEN (t.tgtype & 8)  > 0 THEN 'DELETE'   END,
+                CASE WHEN (t.tgtype & 16) > 0 THEN 'UPDATE'   END,
+                CASE WHEN (t.tgtype & 32) > 0 THEN 'TRUNCATE' END
+            ], NULL)                             AS events,
+            p.proname                           AS function_name,
+            t.tgenabled != 'D'                  AS is_enabled
+        FROM pg_trigger    t
+        JOIN pg_class      c ON c.oid = t.tgrelid
+        JOIN pg_proc       p ON p.oid = t.tgfoid
+        JOIN pg_namespace  n ON n.oid = c.relnamespace
+        WHERE n.nspname    = 'public'
+          AND NOT t.tgisinternal
+        ORDER BY c.relname, t.tgname;
+    """)
+    columns = [desc[0] for desc in cursor.description]
+    rows = []
+    for row in cursor.fetchall():
+        d = dict(zip(columns, row))
+        # Convert PostgreSQL array to Python list if needed
+        if hasattr(d['events'], '__iter__') and not isinstance(d['events'], (str, list)):
+            d['events'] = list(d['events'])
+        rows.append(d)
+    return rows
+
+
+def get_functions(cursor) -> List[Dict[str, Any]]:
+    """
+    Inventory all user-defined functions (excludes built-ins and aggregates).
+    Captures security_definer flag — a SECURITY DEFINER function runs as its
+    owner, not the caller, which affects session_user vs current_user behaviour
+    (see coeqwal_current_operator).
+    """
+    cursor.execute("""
+        SELECT
+            p.proname                               AS function_name,
+            pg_get_function_arguments(p.oid)        AS argument_types,
+            pg_get_function_result(p.oid)           AS return_type,
+            l.lanname                               AS language,
+            p.prosecdef                             AS security_definer,
+            r.rolname                               AS owner
+        FROM pg_proc       p
+        JOIN pg_namespace  n ON n.oid  = p.pronamespace
+        JOIN pg_language   l ON l.oid  = p.prolang
+        JOIN pg_roles      r ON r.oid  = p.proowner
+        WHERE n.nspname    = 'public'
+          AND p.prokind    = 'f'          -- functions only (not aggregates/procedures)
+        ORDER BY p.proname;
+    """)
+    columns = [desc[0] for desc in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+# ---------------------------------------------------------------------------
 # Versioning system check
 # ---------------------------------------------------------------------------
 
@@ -351,14 +425,18 @@ def generate_audit_report(conn) -> Dict[str, Any]:
     cursor = conn.cursor()
     logger.info("Starting comprehensive database audit...")
 
-    cursor.execute("SELECT current_database(), current_user, version();")
-    db_name, db_user, db_version = cursor.fetchone()
+    # Capture both current_user and session_user.
+    # current_user changes inside SECURITY DEFINER functions (returns function owner),
+    # so session_user is the reliable record of who actually ran the audit.
+    cursor.execute("SELECT current_database(), current_user, session_user, version();")
+    db_name, db_user, db_session_user, db_version = cursor.fetchone()
 
     audit_report = {
         'audit_timestamp': datetime.now().isoformat(),
         'database_info': {
             'database_name': db_name,
             'current_user': db_user,
+            'session_user': db_session_user,
             'postgresql_version': db_version,
         },
         'versioning_system': check_versioning_system(cursor),
@@ -366,7 +444,13 @@ def generate_audit_report(conn) -> Dict[str, Any]:
         'foreign_keys': [],
         'check_constraints': [],
         'unique_constraints': [],
+        'triggers': [],
+        'functions': [],
         'tables': [],
+        'validation': {
+            'tables_missing_audit_trigger': [],
+            'tables_attributed_to_system_only': [],
+        },
     }
 
     # Database-wide structural data
@@ -382,6 +466,15 @@ def generate_audit_report(conn) -> Dict[str, Any]:
     logger.info("Collecting UNIQUE constraints...")
     audit_report['unique_constraints'] = get_unique_constraints(cursor)
 
+    logger.info("Collecting trigger details...")
+    audit_report['triggers'] = get_trigger_details(cursor)
+
+    logger.info("Collecting function inventory...")
+    audit_report['functions'] = get_functions(cursor)
+
+    # Build a set of table names that have at least one trigger for fast lookup
+    tables_with_triggers = {t['table_name'] for t in audit_report['triggers']}
+
     # Per-table detail
     tables = get_all_tables(cursor)
     logger.info(f"Auditing {len(tables)} tables...")
@@ -395,6 +488,13 @@ def generate_audit_report(conn) -> Dict[str, Any]:
         record_count = get_record_count(cursor, schema, table)
         audit_fields = get_audit_field_info(cursor, schema, table, structure)
 
+        # Derive has_audit_trigger from the detailed trigger list rather than
+        # the coarse pg_tables boolean, which is true for ANY trigger.
+        has_audit_trigger = any(
+            t['function_name'] == 'set_audit_fields' and t['table_name'] == table
+            for t in audit_report['triggers']
+        )
+
         audit_report['tables'].append({
             'schema': schema,
             'table': table,
@@ -402,11 +502,35 @@ def generate_audit_report(conn) -> Dict[str, Any]:
             'has_indexes': table_info['hasindexes'],
             'has_rules': table_info['hasrules'],
             'has_triggers': table_info['hastriggers'],
+            'has_audit_trigger': has_audit_trigger,
             'record_count': record_count,
             'column_count': len(structure),
             'columns': structure,
             'audit_fields': audit_fields,
         })
+
+    # ---------------------------------------------------------------------------
+    # Cross-table validation
+    # ---------------------------------------------------------------------------
+
+    # 1. Tables that have audit columns but no set_audit_fields() trigger applied.
+    #    These rows will not get automatic created_by/updated_by population.
+    audit_report['validation']['tables_missing_audit_trigger'] = sorted([
+        t['table'] for t in audit_report['tables']
+        if t['audit_fields']['has_created_by']
+        and not t['has_audit_trigger']
+    ])
+
+    # 2. Tables where every row is attributed to developer id=1 (system account)
+    #    and the table is non-empty. These are likely mis-attributed.
+    #    Excludes the developer table itself (system user legitimately has id=1 there).
+    audit_report['validation']['tables_attributed_to_system_only'] = sorted([
+        t['table'] for t in audit_report['tables']
+        if t['audit_fields']['has_created_by']
+        and t['record_count'] > 0
+        and t['audit_fields']['created_by_values'] == [1]
+        and t['table'] != 'developer'
+    ])
 
     cursor.close()
     return audit_report
@@ -466,6 +590,7 @@ def lambda_handler(event, context):
                     'has_created_at': t['audit_fields']['has_created_at'],
                     'has_updated_by': t['audit_fields']['has_updated_by'],
                     'has_updated_at': t['audit_fields']['has_updated_at'],
+                    'has_audit_trigger': t['has_audit_trigger'],
                     'created_by_values': ','.join(map(str, t['audit_fields']['created_by_values'])),
                     'owner': t['owner'],
                 }
@@ -476,12 +601,14 @@ def lambda_handler(event, context):
             csv_s3_path = upload_to_s3(csv_content, csv_key, bucket, 'text/csv')
 
             vs = audit_report['versioning_system']
+            val = audit_report['validation']
             return {
                 'statusCode': 200,
                 'body': {
                     'message': 'Database audit completed successfully',
                     'timestamp': audit_report['audit_timestamp'],
                     'database': audit_report['database_info']['database_name'],
+                    'session_user': audit_report['database_info']['session_user'],
                     'summary': {
                         'total_tables': len(audit_report['tables']),
                         'total_records': sum(
@@ -490,14 +617,27 @@ def lambda_handler(event, context):
                         'total_indexes': len(audit_report['indexes']),
                         'total_foreign_keys': len(audit_report['foreign_keys']),
                         'total_check_constraints': len(audit_report['check_constraints']),
+                        'total_triggers': len(audit_report['triggers']),
+                        'total_functions': len(audit_report['functions']),
                         'tables_with_audit_fields': sum(
                             1 for t in audit_report['tables'] if t['audit_fields']['has_created_by']
+                        ),
+                        'tables_with_audit_trigger': sum(
+                            1 for t in audit_report['tables'] if t['has_audit_trigger']
                         ),
                         'version_families': len(vs.get('version_families', [])),
                         'developers': len(vs.get('developers', [])),
                         'domain_map_missing': len(
                             vs.get('validation', {}).get('domain_map_missing_tables', [])
                         ),
+                    },
+                    'validation': {
+                        'tables_missing_audit_trigger': val['tables_missing_audit_trigger'],
+                        'tables_attributed_to_system_only': val['tables_attributed_to_system_only'],
+                        'domain_map_missing_tables': vs.get('validation', {}).get('domain_map_missing_tables', []),
+                        'domain_map_unexpected_tables': vs.get('validation', {}).get('domain_map_unexpected_tables', []),
+                        'families_without_active_version': vs.get('validation', {}).get('families_without_active_version', []),
+                        'families_with_multiple_active_versions': vs.get('validation', {}).get('families_with_multiple_active_versions', []),
                     },
                     'reports': {
                         'detailed_json': json_s3_path,

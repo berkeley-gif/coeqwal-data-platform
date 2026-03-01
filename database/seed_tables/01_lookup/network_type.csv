@@ -1,0 +1,22 @@
+short_code,label,description,network_entity_type_id,model_source_id,source_id,is_active
+CH,Channel,Stream or canal channel arc,1,1,4,True
+CT,Cross transfer,Cross-basin transfer arc,1,1,4,True
+D,Diversion,Water diversion arc,1,1,4,True
+DA,Diversion aggregated,Aggregated diversion arc,1,1,4,True
+DD,Diversion disaggregated,Disaggregated diversion arc,1,1,4,True
+IN,Inflow,Inflow to system arc,1,1,4,True
+RT,Return,Return flow arc,1,1,4,True
+SP,Spill,Spill or excess flow arc,1,1,4,True
+SR,Stream return,Stream return flow arc,1,1,4,True
+NULL_A,Null arc,Null or placeholder arc,1,1,4,True
+CH_N,Channel node,Channel junction node,2,1,4,True
+NP,Network point,Network connection point node,2,1,4,True
+OM,Operations & maintenance,O&M facility node,2,1,4,True
+PR,Project,Project infrastructure node,2,1,4,True
+PS,Pump station,Pumping facility node,2,1,4,True
+RFS,Return flow split,Return flow distribution node,2,1,4,True
+S,Storage,Storage reservoir node,2,1,4,True
+STR,Stream,Stream gauge or junction node,2,1,4,True
+WTP,Water treatment plant,Water treatment facility node,2,1,4,True
+WWTP,Wastewater treatment plant,Wastewater treatment facility node,2,1,4,True
+X,Demand unit,"Water demand and delivery node (urban, agricultural, refuge)",2,1,4,True

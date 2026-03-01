@@ -1,0 +1,7 @@
+id,short_code,label,description,display_order,is_active,created_at,created_by,updated_at,updated_by
+1,tier,Tier Matrix DUs,Demand units included in the scenario tier matrix for M&I statistics,1,true,2026-02-02 00:00:00,1,2026-02-02 00:00:00,1
+2,nod,North of Delta,Demand units located north of the Sacramento-San Joaquin Delta,2,true,2026-02-02 00:00:00,1,2026-02-02 00:00:00,1
+3,sod,South of Delta,Demand units located south of the Sacramento-San Joaquin Delta,3,true,2026-02-02 00:00:00,1,2026-02-02 00:00:00,1
+4,swp_served,SWP Served,Demand units that receive State Water Project water,4,true,2026-02-02 00:00:00,1,2026-02-02 00:00:00,1
+5,cvp_served,CVP Served,Demand units that receive Central Valley Project water,5,true,2026-02-02 00:00:00,1,2026-02-02 00:00:00,1
+6,swp_delivery_point,SWP Delivery Points,CalSim3 SWP delivery nodes (ESB* CSB* SBA*),6,true,2026-02-02 00:00:00,1,2026-02-02 00:00:00,1

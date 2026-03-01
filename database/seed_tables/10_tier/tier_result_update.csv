@@ -1,0 +1,6 @@
+scenario_short_code,tier_short_code,tier_1_value,tier_2_value,tier_3_value,tier_4_value,norm_tier_1,norm_tier_2,norm_tier_3,norm_tier_4,total_value,single_tier_level
+s0020,CWS_DEL,87,1,0,3,0.956,0.011,0.0,0.033,91,
+s0021,CWS_DEL,83,1,0,7,0.912,0.011,0.0,0.077,91,
+s0011,AG_REV,64,41,13,14,0.485,0.311,0.098,0.106,132,
+s0020,AG_REV,70,35,13,14,0.530,0.265,0.098,0.106,132,
+s0021,AG_REV,70,35,13,14,0.530,0.265,0.098,0.106,132,

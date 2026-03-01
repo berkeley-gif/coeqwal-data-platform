@@ -1,0 +1,27 @@
+short_code,label,description,network_entity_type_id,type_id,model_source_id,source_id,is_active
+BP,Bypass,Flood bypass arc,1,1,1,4,True
+CH,Channel,General channel arc,1,1,1,4,True
+CL,Canal,Constructed canal arc,1,1,1,4,True
+HIS,Historical,Historical or discontinued arc,1,1,1,4,True
+IM,Imported,Imported water arc,1,1,1,4,True
+LI,Link,Connection link arc,1,1,1,4,True
+NA,Not applicable,Not applicable arc subtype,1,1,1,4,True
+NS,Not simulated,Not simulated arc,1,1,1,4,True
+PRP,Proposed,Proposed future arc,1,1,1,4,True
+ST,Stream,Natural stream arc,1,1,1,4,True
+A,Agricultural,Agricultural demand node,2,21,1,4,True
+BYP,Bypass,Bypass node,2,11,1,4,True
+CNL,Canal,Canal node,2,18,1,4,True
+GWO,Groundwater outflow,Groundwater connection node,2,18,1,4,True
+NA,Not applicable,Not applicable node subtype,2,18,1,4,True
+NSM,Non-Sacramento,Non-Sacramento node,2,18,1,4,True
+OMD,O&M demand,Operations & maintenance demand node,2,13,1,4,True
+OMR,O&M return,Operations & maintenance return node,2,13,1,4,True
+PRP,Proposed,Proposed future node,2,18,1,4,True
+R,Refuge,Wildlife refuge demand node,2,21,1,4,True
+Reservoir,Reservoir,Storage reservoir node,2,17,1,4,True
+SG,Stream gauge,Stream gauging station node,2,18,1,4,True
+SIM,Simulated,Simulated node,2,18,1,4,True
+STM,Stream,Stream channel node,2,18,1,4,True
+U,Urban,Urban demand node,2,21,1,4,True
+X,Other Demand,Other or unspecified demand node type,2,21,1,4,True
