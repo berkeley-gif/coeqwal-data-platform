@@ -15,7 +15,9 @@ These migrations have been run against the production database. They are kept he
 | `09_add_source_to_operation_definition_and_slr.sql` | Adds `source TEXT` column to `operation_definition` and `slr`; sets `source = 'james_gilbert'` for all current rows | Applied | 2026-03-01 |
 | `10_add_source_fk_constraints.sql` | Adds FK constraints on `source` → `source` lookup table for `assumption_definition`, `operation_definition`, and `slr` | Applied | 2026-03-01 |
 | `11_add_source_to_theme.sql` | Adds `wietske_medema` to `source` lookup; adds `source`, `created_at`, `updated_at` columns to `theme` with FK; populates all rows | Applied | 2026-03-01 |
-| `12_replace_themes_and_links.sql` | Replaces old 7-theme architecture with new 6 themes (cws, ag_gw, eco, delta, climate, governance); reseeds `theme_scenario_link` from THEME_SCENARIOS | **Pending** | — |
+| `12_replace_themes_and_links.sql` | Replaces old 7-theme architecture with new 6 themes (cws, ag_gw, eco, delta, climate, governance); reseeds `theme_scenario_link` from THEME_SCENARIOS | Applied | 2026-03-01 |
+| `13_add_standard_operations.sql` | Adds 9 new standard/named `operation_definition` rows — one "standard" or "not active" variant per operation category so every scenario can have an explicit link for each category | **Pending** | — |
+| `14_rebuild_scenario_link_tables.sql` | Completely rebuilds `scenario_key_operation_link` and `scenario_key_assumption_link` from the data document; fixes `delta_outflow_45` misuse as a proxy for standard delta regs; adds s0011 land use link; migrates 2020 LandIQ links from `lu_updated` (id=3) to `lu_2020_landiq` (id=17) | **Pending** | — |
 
 ## Important notes
 

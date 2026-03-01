@@ -856,7 +856,7 @@ Seed: seed_tables/05_assumptions_operations/operation_category.csv
 ```
 Table: operation_definition
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "tucp_tuco", "biops_2024", etc.
+├── short_code           TEXT UNIQUE NOT NULL       -- see Values section below
 ├── name                 TEXT NOT NULL
 ├── short_title          TEXT
 ├── subtitle             TEXT
@@ -876,6 +876,47 @@ Table: operation_definition
 Note: Rows reclassified from assumption_definition in migration 07:
       TUCP_TUCO → tucp; SGMA (SJV/SAC/CV) → gw_restrictions; DCP_6000/Bethany → infrastructure;
       no_min_flow/functional_flows/salmon_flows → flow; biops_2024 → biops
+Note: Standard/named variants added in migration 13 so every scenario has an explicit
+      link for each category (e.g. biops_standard, delta_regs_standard, gw_none, etc.)
+
+Values (id | short_code | category):
+  -- comm_delivery (CVP/SWP allocation priorities and community delivery)
+   1  comm_delivery_HHS           comm_delivery   Prioritize human health & safety deliveries
+   2  comm_delivery_functional    comm_delivery   Prioritize functional community water needs
+   3  comm_delivery_full          comm_delivery   Prioritize full community water demands
+  27  alloc_standard              comm_delivery   Standard CVP/SWP allocation (no modification)
+  28  cvp_settlement_to_zero      comm_delivery   CVP Settlement allocations reduced to 0% (Alt3)
+  -- delta_outflow (Delta outflow requirements)
+   4  delta_outflow_35            delta_outflow   35% of unimpaired flow (Alt3)
+   5  delta_outflow_45            delta_outflow   45% of unimpaired flow (Alt3)
+   6  delta_outflow_55            delta_outflow   55% of unimpaired flow (Alt3)
+   7  delta_outflow_65            delta_outflow   65% of unimpaired flow (Alt3)
+  26  delta_regs_standard         delta_outflow   Standard D1641 delta regulations
+  -- carryover (reservoir carryover storage)
+   8  increase_Shasta_co          carryover       Increase Shasta carryover target by 20%
+  -- regulatory_salinity (Delta salinity standards)
+   9  delta_salinity_standards    regulatory_salinity  Relax Fall X2 salinity standard
+  -- tucp (Temporary Urgency Change Petitions/Orders)
+  10  TUCP_TUCO                   tucp            TUCPs/TUCOs active
+  22  tucp_not_active             tucp            TUCPs/TUCOs not active
+  -- gw_restrictions (SGMA-type groundwater restrictions)
+  11  SGMA_SJV                    gw_restrictions SGMA pumping limits — San Joaquin Valley
+  12  SGMA_SAC                    gw_restrictions SGMA pumping limits — Sacramento Valley
+  13  SGMA_CV                     gw_restrictions SGMA pumping limits — entire Central Valley
+  23  gw_none                     gw_restrictions No GW restrictions
+  -- infrastructure (water conveyance infrastructure)
+  14  DCP_6000                    infrastructure  Delta Conveyance Project at 6000 CFS
+  15  DCP_Bethany                 infrastructure  Delta Conveyance Project — Bethany alignment
+  24  infra_standard              infrastructure  Standard infrastructure (no DCP)
+  -- flow (instream flow requirements)
+  16  no_min_flow                 flow            Remove CV tributary min flow requirements
+  17  functional_flows            flow            Functional flow requirements at 17 locations
+  18  salmon_flows                flow            Salmon-friendly flows (Sacramento R.)
+  25  flow_standard               flow            Standard/existing min flow requirements
+  -- biops (Biological Opinions)
+  19  biops_2024                  biops           2024 USBR LTO proposed action BiOps
+  20  biops_standard              biops           2019 BiOps / 2020 ITP for SWP (standard)
+  21  biops_modified_2019         biops           Modified versions of 2019 BiOps (Alt3, s0044/s0045)
 
 Foreign keys:
 ├── Ref: operation_definition.operation_version_id > version.id [delete: restrict, update: cascade]
