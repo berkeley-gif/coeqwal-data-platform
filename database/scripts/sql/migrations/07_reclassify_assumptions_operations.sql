@@ -223,7 +223,7 @@ VALUES
         '2020 LandIQ land use',
         '2020 LandIQ',
         'land_use',
-        TRUE,
+        1,
         1, 2, 2
     ),
     (
@@ -231,7 +231,7 @@ VALUES
         '2020 LandIQ land use with reduced agricultural acreage',
         '2020 LandIQ (reduced ag)',
         'land_use',
-        TRUE,
+        1,
         1, 2, 2
     )
 ON CONFLICT (short_code) DO NOTHING;
