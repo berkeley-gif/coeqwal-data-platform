@@ -1,0 +1,5 @@
+short_code,label,description,is_active
+sector_aggregate,Sector Aggregate,Variables that aggregate across a sector,true
+delta_variable,Delta,Variables specific to Delta conditions and operations,true
+environmental_indicator,Environmental Indicator,Environmental metrics and indicators,true
+regional_summary,Regional Summary,Variables that aggregate across a region,true

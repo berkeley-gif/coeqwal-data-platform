@@ -8,7 +8,7 @@
 ├── Version families and instances
 ├── Developer management and SSO
 ├── Domain-to-version mappings
-└── Purpose: track all data versions and changes
+└── Purpose: auditing, track data versions and changes
 
 01_LOOKUP TABLES (reference data)
 ├── Geographic regions and scales
@@ -401,16 +401,72 @@ Table: variable_type
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (6 total):
-├── delivery: delivery (water delivery)
-├── gw_pumping: groundwater pumping (groundwater pumping)
-├── PA: project agricultural (project agricultural water use)
-├── PR: project wildlife refuge (project wildlife refuge water use)
-├── PU: project community water system (project community water system - M&I)
-└── unknown: unknown (unknown or unclassified)
+Values (6 total — water use classification):
+├── delivery: water delivery
+├── gw_pumping: groundwater pumping
+├── PA: project agricultural
+├── PR: project wildlife refuge
+├── PU: project community water system (M&I)
+└── unknown: unknown or unclassified
+
+Note: scope is INCOMPLETE — additional water use types may be needed as more
+demand unit categories are modeled. See also calsim_model_variable_type for
+CalSim model variable behavior classification.
+
+Seed: no standalone seed CSV (table pre-populated; values managed in DB).
 ```
 
-### **10. unit**
+### **10. calsim_model_variable_type**
+```
+Table: calsim_model_variable_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "output", "control", "decision", etc.
+├── label                TEXT NOT NULL              -- "Output", "Control", etc.
+├── description          TEXT                       -- Classification description
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (8 total — CalSim model variable behavior):
+├── output:       Standard CalSim model output variables (flows, diversions, storage)
+├── control:      Operational control indicators and binary flags
+├── decision:     Model decision variables and optimization targets
+├── state:        State variables including storage zones and bookkeeping accounts
+├── input:        External inputs and boundary conditions
+├── intermediate: Calculated intermediate values used in model logic
+├── aggregate:    Variables that sum or combine multiple reservoir/system components
+└── index:        Index variables
+
+Note: More granular than calsim_variable_type (output/state/decision only).
+Created by migration 03. Seed: seed_tables/01_lookup/calsim_model_variable_type.csv
+```
+
+### **11. derived_variable_type**
+```
+Table: derived_variable_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "sector_aggregate", "delta_variable", etc.
+├── label                TEXT NOT NULL              -- "Sector Aggregate", etc.
+├── description          TEXT                       -- Classification description
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMPTZ DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_at           TIMESTAMPTZ DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+
+Values (4 total — derived/computed variable categories):
+├── sector_aggregate:        Variables that aggregate across a sector
+├── delta_variable:          Variables specific to Delta conditions and operations
+├── environmental_indicator: Environmental metrics and indicators
+└── regional_summary:        Variables that aggregate across a region
+
+Note: INCOMPLETE — additional types expected as derived variable pipeline expands.
+Created by migration 03. Seed: seed_tables/01_lookup/derived_variable_type.csv
+```
+
+### **12. unit**
 ```
 Table: unit
 ├── id                   SERIAL PRIMARY KEY
@@ -430,7 +486,7 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
-### **11. watershed**
+### **13. watershed**
 
 ```
 Table: watershed
@@ -467,7 +523,7 @@ Values (9 total):
 └── YUBA_RIVER: Yuba River Watershed
 ```
 
-### **12. wba (Water Budget Areas)**
+### **14. wba (Water Budget Areas)**
 ```
 Table: wba
 ├── id                   SERIAL PRIMARY KEY
@@ -491,7 +547,7 @@ Records: 42 Water Budget Areas
 Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) for GW_STOR tier mapping
 ```
 
-### **13. reservoir (reservoir geographic base table)**
+### **15. reservoir (reservoir geographic base table)**
 ```
 Table: reservoir
 ├── id                   SERIAL PRIMARY KEY
@@ -518,7 +574,7 @@ Note: This is the geographic base table with geospatial data. The related `reser
 Used by: tier_location_result (location_type = 'reservoir', location_id = reservoir.calsim_short_code)
 ```
 
-### **14. compliance_station (compliance monitoring stations)**
+### **16. compliance_station (compliance monitoring stations)**
 ```
 Table: compliance_station
 ├── id                   SERIAL PRIMARY KEY
