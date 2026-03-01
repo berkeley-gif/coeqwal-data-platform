@@ -72,12 +72,18 @@ def get_table_structure(cursor, schema: str, table: str) -> List[Dict[str, Any]]
 
 
 def get_record_count(cursor, schema: str, table: str) -> int:
-    """Return exact row count; -1 on error."""
+    """Return exact row count; -1 on error. Uses a savepoint so a permission
+    error on one table does not abort the surrounding transaction."""
     try:
+        cursor.execute("SAVEPOINT _count")
         cursor.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}";')
-        return cursor.fetchone()[0]
+        result = cursor.fetchone()[0]
+        cursor.execute("RELEASE SAVEPOINT _count")
+        return result
     except Exception as e:
         logger.warning(f"Could not count {schema}.{table}: {e}")
+        cursor.execute("ROLLBACK TO SAVEPOINT _count")
+        cursor.execute("RELEASE SAVEPOINT _count")
         return -1
 
 
@@ -104,6 +110,7 @@ def get_audit_field_info(cursor, schema: str, table: str, structure: List[Dict])
 
     if has_created_by:
         try:
+            cursor.execute("SAVEPOINT _audit_fields")
             cursor.execute(
                 f'SELECT DISTINCT created_by FROM "{schema}"."{table}" '
                 f'WHERE created_by IS NOT NULL ORDER BY created_by;'
@@ -125,9 +132,12 @@ def get_audit_field_info(cursor, schema: str, table: str, structure: List[Dict])
             cursor.execute(f'SELECT * FROM "{schema}"."{table}" LIMIT 3;')
             cols = [desc[0] for desc in cursor.description]
             result['sample_records'] = [dict(zip(cols, row)) for row in cursor.fetchall()]
+            cursor.execute("RELEASE SAVEPOINT _audit_fields")
 
         except Exception as e:
             result['error'] = str(e)
+            cursor.execute("ROLLBACK TO SAVEPOINT _audit_fields")
+            cursor.execute("RELEASE SAVEPOINT _audit_fields")
 
     return result
 

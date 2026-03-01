@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compare hand-written ERD documentation with actual database audit.
+Compare ERD documentation with database
 
 Checks (in order):
   1. Tables in DB but missing from ERD
@@ -60,7 +60,7 @@ _AUTO_INDEX_PREFIXES = ('pg_',)
 
 def parse_erd_tables(erd_path: Path) -> dict:
     """
-    Extract table definitions from hand-written ERD markdown.
+    Extract table definitions from ERD markdown.
 
     Scans fenced code blocks for `Table: name` headers, then collects:
       - columns      from tree lines (├──/└──) before any section marker
@@ -86,7 +86,8 @@ def parse_erd_tables(erd_path: Path) -> dict:
     _SEC_CONSTRAINTS = re.compile(r'^Constraints?[\s:(]', re.IGNORECASE)
     _SEC_INDEXES     = re.compile(r'^Indexes?[\s:(]',     re.IGNORECASE)
     _SEC_IGNORE      = re.compile(
-        r'^(Values|Records|Columns|Audit|Notes?|Foreign\s+Keys?|Expected|DDL|ETL)[\s:(]',
+        r'^(Values|Records|Columns|Audit|Notes?|Foreign\s+Keys?|Expected|DDL|ETL'
+        r'|Baseline|Top|Comments?|Query|Status|Primary\s+key|Ref:|Example)[\s:(]',
         re.IGNORECASE,
     )
 

@@ -922,12 +922,14 @@ $ source venv/bin/activate
 
 ### Running the audit
 
-From the repo root on Cloud9 (`$` prompt), with venv active:
+The audit is an administrative tool that inspects the whole database. Run it as `postgres` so it has access to all tables regardless of per-developer grants. Use an inline variable override — this does not affect your normal `$DATABASE_URL`:
 
 ```bash
 $ cd ~/environment/coeqwal-backend
-$ bash database/run_audit.sh
+$ DATABASE_URL="postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario" bash database/run_audit.sh
 ```
+
+Running as your own user will work for most tables but will fail on any table where your role lacks SELECT permission (the script will log a warning and skip those tables).
 
 The script checks for `$DATABASE_URL` and required Python packages before running. Output:
 
@@ -939,22 +941,56 @@ audits/latest.json                         ← symlink to the most recent JSON
 
 ### Verifying the audit output
 
-The JSON report top-level keys to check:
+A successful run prints a summary like this:
+
+```
+AUDIT COMPLETE
+==============
+  Database:            coeqwal_scenario
+  Tables audited:      70
+  Total records:       124,184
+  Indexes captured:    280
+  Foreign keys:        117
+  CHECK constraints:   20
+  UNIQUE constraints:  66
+
+  Version families:    14
+  domain_family_map MISSING 26 expected tables:
+    - analysis
+    - channel_entity
+    ...
+```
+
+**What each line means:**
+
+| Field | Meaning |
+|---|---|
+| Tables audited | All tables visible to the connecting user. Running as `postgres` gives the full count. |
+| Total records | Sum of row counts across all tables. |
+| Indexes / FKs / constraints | Structural metadata captured for ERD comparison. |
+| Version families | Count of rows in `version_family` — should match your versioning setup. |
+| `domain_family_map MISSING` | Tables registered in the version/domain mapping as planned but **not yet built** in the database. This is expected for planned tables listed in the ERD. It is not an error — it tracks the gap between the data model roadmap and what's actually been implemented. |
+
+The full detail is in the JSON report. Top-level keys:
 
 ```
 generated_at       — timestamp
 database_info      — db name, current_user, session_user
-total_tables       — should match ERD table count
-validation         — any warnings (missing triggers, unregistered users, etc.)
+total_tables       — count of audited tables
+validation         — warnings: missing triggers, unregistered users, etc.
 tables             — per-table detail: columns, indexes, FKs, constraints, triggers
 ```
 
 ### Comparing the audit against the ERD
 
 ```bash
-$ python database/audit/verify_erd_against_audit.py \
-    --audit audits/latest.json \
-    --erd database/schema/COEQWAL_SCENARIOS_DB_ERD.md
+$ python database/audit/verify_erd_against_audit.py database/schema/COEQWAL_SCENARIOS_DB_ERD.md audits/latest.json
+```
+
+Add `--verbose` to see full column lists for any mismatched tables:
+
+```bash
+$ python database/audit/verify_erd_against_audit.py database/schema/COEQWAL_SCENARIOS_DB_ERD.md audits/latest.json --verbose
 ```
 
 ---
@@ -1072,3 +1108,20 @@ psql "postgresql://user:pass@coeqwal-db.xxxxx.us-west-2.rds.amazonaws.com:5432/c
 - Check VPC configuration
 - Verify security group allows Lambda → RDS
 - See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md)
+
+---
+
+## TODO
+
+Known improvements and cleanup tasks for future work.
+
+### Infrastructure cleanup
+
+- **Decommission the AWS Lambda audit** — the audit now runs locally via `bash database/run_audit.sh`. The old Lambda function and its S3 bucket can be removed. The Lambda source code in `database/utils/db_audit_lambda/` stays (the shell script imports from it directly); only the AWS deployment needs to be torn down.
+
+### Developer access and authentication
+
+- **SSO user attribution** — currently developers connect to the database using a named PostgreSQL role (e.g. `jfantauzza`). The long-term goal is to use AWS SSO identity for authentication so that the `aws_sso_username` field in the `developer` table is used automatically, without requiring a separate PostgreSQL password per developer.
+- **Role-based table permissions** — instead of granting permissions individually to each developer, create a `coeqwal_developer` role with `SELECT, INSERT, UPDATE, DELETE` on all tables (including future ones via `ALTER DEFAULT PRIVILEGES`), and have `register_developer()` grant that role. This prevents permission gaps like the `variable_type` issue encountered during auditing. See the "Connecting as yourself" section for background.
+
+### Review indices and compare to API
