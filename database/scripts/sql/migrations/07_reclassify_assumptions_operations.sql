@@ -93,11 +93,11 @@ ALTER TABLE operation_category DISABLE TRIGGER USER;
 
 INSERT INTO operation_category (short_code, name, description, is_active, created_by, updated_by)
 VALUES
-    ('tucp',                 'TUCP / TUCO',               'Temporary Urgency Change Petitions and Temporary Urgency Change Orders', TRUE, 2, 2),
-    ('gw_restrictions',      'Groundwater Restrictions',  'SGMA-type groundwater pumping restrictions', TRUE, 2, 2),
-    ('infrastructure',       'Infrastructure',            'Water infrastructure configuration (tunnels, reservoirs)', TRUE, 2, 2),
-    ('flow',                 'Flow Requirements',         'Instream flow and minimum flow objectives', TRUE, 2, 2),
-    ('biops',                'Biological Opinions',       'NMFS and USFWS biological opinions (USBR LTO)', TRUE, 2, 2)
+    ('tucp',                 'TUCP / TUCO',               'Temporary Urgency Change Petitions and Temporary Urgency Change Orders', 1, 2, 2),
+    ('gw_restrictions',      'Groundwater Restrictions',  'SGMA-type groundwater pumping restrictions', 1, 2, 2),
+    ('infrastructure',       'Infrastructure',            'Water infrastructure configuration (tunnels, reservoirs)', 1, 2, 2),
+    ('flow',                 'Flow Requirements',         'Instream flow and minimum flow objectives', 1, 2, 2),
+    ('biops',                'Biological Opinions',       'NMFS and USFWS biological opinions (USBR LTO)', 1, 2, 2)
 ON CONFLICT (short_code) DO NOTHING;
 
 ALTER TABLE operation_category ENABLE TRIGGER USER;
