@@ -30,7 +30,7 @@ ORDER BY id;
 SELECT
     id,
     short_code,
-    name,
+    label,
     is_active
 FROM version_family
 ORDER BY id;
@@ -41,10 +41,9 @@ ORDER BY id;
 \echo '============================================================'
 SELECT
     v.id,
-    v.short_code,
+    vf.short_code AS family,
     v.version_number,
-    v.is_active,
-    vf.short_code AS family
+    v.is_active
 FROM version v
 JOIN version_family vf ON vf.id = v.version_family_id
 ORDER BY vf.short_code, v.id;
