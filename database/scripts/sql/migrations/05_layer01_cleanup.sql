@@ -32,9 +32,9 @@
 \echo ''
 \echo 'PART 1: Fixing false updated_at timestamps on migration 03 tables...'
 
-ALTER TABLE watershed              DISABLE TRIGGER audit_fields_watershed;
-ALTER TABLE calsim_model_variable_type DISABLE TRIGGER audit_fields_calsim_model_variable_type;
-ALTER TABLE derived_variable_type  DISABLE TRIGGER audit_fields_derived_variable_type;
+ALTER TABLE watershed              DISABLE TRIGGER USER;
+ALTER TABLE calsim_model_variable_type DISABLE TRIGGER USER;
+ALTER TABLE derived_variable_type  DISABLE TRIGGER USER;
 
 UPDATE watershed
 SET created_by = 2, updated_by = 2, updated_at = created_at;
@@ -45,9 +45,9 @@ SET created_by = 2, updated_by = 2, updated_at = created_at;
 UPDATE derived_variable_type
 SET created_by = 2, updated_by = 2, updated_at = created_at;
 
-ALTER TABLE watershed              ENABLE TRIGGER audit_fields_watershed;
-ALTER TABLE calsim_model_variable_type ENABLE TRIGGER audit_fields_calsim_model_variable_type;
-ALTER TABLE derived_variable_type  ENABLE TRIGGER audit_fields_derived_variable_type;
+ALTER TABLE watershed              ENABLE TRIGGER USER;
+ALTER TABLE calsim_model_variable_type ENABLE TRIGGER USER;
+ALTER TABLE derived_variable_type  ENABLE TRIGGER USER;
 
 \echo '  Verify (created_at should equal updated_at for all rows):'
 SELECT 'watershed' AS tbl, short_code, created_by, updated_by,
@@ -71,7 +71,7 @@ FROM derived_variable_type LIMIT 2;
 \echo ''
 \echo 'PART 2: Renaming EXTERNAL → EXPORT in hydrologic_region...'
 
-ALTER TABLE hydrologic_region DISABLE TRIGGER audit_fields_hydrologic_region;
+ALTER TABLE hydrologic_region DISABLE TRIGGER USER;
 
 UPDATE hydrologic_region
 SET short_code = 'EXPORT',
@@ -80,7 +80,7 @@ SET short_code = 'EXPORT',
     updated_at = NOW()
 WHERE short_code = 'EXTERNAL';
 
-ALTER TABLE hydrologic_region ENABLE TRIGGER audit_fields_hydrologic_region;
+ALTER TABLE hydrologic_region ENABLE TRIGGER USER;
 
 SELECT id, short_code, label, created_by, updated_by FROM hydrologic_region ORDER BY id;
 
@@ -104,7 +104,7 @@ FROM du_urban_variable
 WHERE variable_type_id IS NOT NULL
 GROUP BY variable_type_id ORDER BY variable_type_id;
 
-ALTER TABLE du_urban_variable DISABLE TRIGGER audit_fields_du_urban_variable;
+ALTER TABLE du_urban_variable DISABLE TRIGGER USER;
 
 -- Only state (id=2) needs remapping; output=1 and decision=3 are identical in both tables
 UPDATE du_urban_variable
@@ -113,7 +113,7 @@ SET variable_type_id = 4,
     updated_at = NOW()
 WHERE variable_type_id = 2;
 
-ALTER TABLE du_urban_variable ENABLE TRIGGER audit_fields_du_urban_variable;
+ALTER TABLE du_urban_variable ENABLE TRIGGER USER;
 
 ALTER TABLE du_urban_variable
     DROP CONSTRAINT IF EXISTS du_urban_variable_variable_type_id_fkey;
