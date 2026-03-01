@@ -148,14 +148,30 @@ def get_audit_field_info(cursor, schema: str, table: str, structure: List[Dict])
 
 def get_indexes(cursor) -> List[Dict[str, Any]]:
     """
-    Return full index definitions for all user tables.
-    Replaces the per-table has_indexes boolean with actionable detail.
+    Return structured index data for all user tables.
+    Captures is_unique and column list separately so consumers can do
+    programmatic comparisons without parsing the definition string.
     """
     cursor.execute("""
-        SELECT tablename AS table_name, indexname AS index_name, indexdef AS definition
-        FROM pg_indexes
-        WHERE schemaname = 'public'
-        ORDER BY tablename, indexname;
+        SELECT
+            ix.tablename                                              AS table_name,
+            ix.indexname                                              AS index_name,
+            i.indisunique                                             AS is_unique,
+            i.indisprimary                                            AS is_primary,
+            string_agg(a.attname, ', ' ORDER BY k.ordinality)        AS columns,
+            ix.indexdef                                               AS definition
+        FROM pg_indexes                       ix
+        JOIN pg_class                         c  ON c.relname   = ix.indexname
+        JOIN pg_index                         i  ON i.indexrelid = c.oid
+        JOIN pg_class                         t  ON t.oid        = i.indrelid
+        JOIN LATERAL unnest(i.indkey)
+             WITH ORDINALITY AS k(attnum, ordinality)
+                                              ON TRUE
+        JOIN pg_attribute                     a  ON a.attrelid   = t.oid
+                                                 AND a.attnum    = k.attnum
+        WHERE ix.schemaname = 'public'
+        GROUP BY ix.tablename, ix.indexname, i.indisunique, i.indisprimary, ix.indexdef
+        ORDER BY ix.tablename, ix.indexname;
     """)
     columns = [desc[0] for desc in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]

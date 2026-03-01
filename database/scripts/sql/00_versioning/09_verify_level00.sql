@@ -97,10 +97,101 @@ SELECT 'Current operator test:' as check;
 SELECT coeqwal_current_operator() as operator_id;
 
 -- =============================================================================
--- 5. AUDIT COLUMNS COVERAGE
+-- 5. INDEXES
 -- =============================================================================
 \echo ''
-\echo '5. AUDIT COLUMNS COVERAGE'
+\echo '5. INDEXES'
+\echo '----------'
+
+SELECT 'Expected indexes present (should match list exactly):' AS check;
+SELECT tablename AS table_name, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+ORDER BY tablename, indexname;
+
+SELECT 'Missing expected indexes (should be 0 rows):' AS check;
+WITH expected(table_name, index_name) AS (
+    VALUES
+        ('version',            'idx_version_family'),
+        ('version',            'version_version_family_id_version_number_key'),
+        ('domain_family_map',  'idx_domain_family_map_version_family'),
+        ('audit_log',          'idx_audit_log_changed_at'),
+        ('audit_log',          'idx_audit_log_changed_by'),
+        ('audit_log',          'idx_audit_log_operation'),
+        ('audit_log',          'idx_audit_log_record')
+)
+SELECT e.table_name, e.index_name
+FROM expected e
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename  = e.table_name
+      AND indexname  = e.index_name
+);
+
+SELECT 'Unexpected indexes (manual review):' AS check;
+SELECT tablename AS table_name, indexname
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+  AND indexname NOT IN (
+      -- PKs and unique constraints
+      'developer_pkey', 'developer_email_key',
+      'developer_aws_sso_user_id_key', 'developer_aws_sso_username_key',
+      'version_family_pkey', 'version_family_short_code_key',
+      'version_pkey', 'version_version_family_id_version_number_key',
+      'domain_family_map_pkey',
+      'audit_log_pkey',
+      -- Expected named indexes
+      'idx_version_family',
+      'idx_domain_family_map_version_family',
+      'idx_audit_log_changed_at',
+      'idx_audit_log_changed_by',
+      'idx_audit_log_operation',
+      'idx_audit_log_record'
+  )
+ORDER BY tablename, indexname;
+
+-- =============================================================================
+-- 6. FK RULES
+-- =============================================================================
+\echo ''
+\echo '6. FK RULES'
+\echo '-----------'
+
+SELECT 'FK constraints (all should be RESTRICT / CASCADE):' AS check;
+SELECT
+    tc.table_name,
+    kcu.column_name,
+    ccu.table_name  AS ref_table,
+    rc.delete_rule,
+    rc.update_rule
+FROM information_schema.table_constraints        tc
+JOIN information_schema.key_column_usage         kcu USING (constraint_name, constraint_schema)
+JOIN information_schema.referential_constraints  rc  USING (constraint_name, constraint_schema)
+JOIN information_schema.constraint_column_usage  ccu USING (constraint_name, constraint_schema)
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND tc.table_schema    = 'public'
+  AND tc.table_name IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+ORDER BY tc.table_name, kcu.column_name;
+
+SELECT 'FKs with wrong rules (should be 0 rows):' AS check;
+SELECT tc.table_name, kcu.column_name, rc.delete_rule, rc.update_rule
+FROM information_schema.table_constraints        tc
+JOIN information_schema.key_column_usage         kcu USING (constraint_name, constraint_schema)
+JOIN information_schema.referential_constraints  rc  USING (constraint_name, constraint_schema)
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND tc.table_schema    = 'public'
+  AND tc.table_name IN ('developer', 'version_family', 'version', 'domain_family_map', 'audit_log')
+  AND (rc.delete_rule <> 'RESTRICT' OR rc.update_rule <> 'CASCADE')
+ORDER BY tc.table_name, kcu.column_name;
+
+-- =============================================================================
+-- 7. AUDIT COLUMNS COVERAGE
+-- =============================================================================
+\echo ''
+\echo '7. AUDIT COLUMNS COVERAGE'
 \echo '-------------------------'
 
 SELECT 'Tables missing audit columns (excluding audit_log, spatial_ref_sys):' as check;
@@ -121,7 +212,7 @@ HAVING COUNT(DISTINCT c.column_name) < 4
 ORDER BY t.table_name;
 
 -- =============================================================================
--- 6. SUMMARY
+-- 8. SUMMARY
 -- =============================================================================
 \echo ''
 \echo '============================================================================'
