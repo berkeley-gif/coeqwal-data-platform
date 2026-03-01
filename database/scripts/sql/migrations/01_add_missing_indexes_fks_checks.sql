@@ -122,9 +122,9 @@ CREATE INDEX IF NOT EXISTS idx_reservoir_spill_scenario        ON reservoir_spil
 
 -- Network arc traversal
 -- The recursive CTE in network_traversal.py and nodes_spatial.py joins heavily
--- on from_node_id and to_node_id. These are the highest-read network queries.
-CREATE INDEX IF NOT EXISTS idx_network_arc_from_node           ON network_arc (from_node_id);
-CREATE INDEX IF NOT EXISTS idx_network_arc_to_node             ON network_arc (to_node_id);
+-- on from_node and to_node. These are the highest-read network queries.
+CREATE INDEX IF NOT EXISTS idx_network_arc_from_node           ON network_arc (from_node);
+CREATE INDEX IF NOT EXISTS idx_network_arc_to_node             ON network_arc (to_node);
 
 -- network_gis spatial queries (ST_Intersects bounding box)
 -- PostGIS automatically creates a GIST index on geometry columns;
@@ -135,60 +135,16 @@ CREATE INDEX IF NOT EXISTS idx_network_gis_geom                ON network_gis US
 \echo ''
 
 -- ============================================================================
--- PART 2: Missing FK constraints — mi_contractor.short_code
+-- PART 2: mi_contractor FK — NOT ENFORCEABLE (documented, intentional)
 -- ============================================================================
--- ADD CONSTRAINT IF NOT EXISTS is not valid PostgreSQL syntax.
--- Use DO $$ blocks to check pg_constraint first.
+-- mi_contractor_code contains both individual contractor codes AND aggregate
+-- rollup codes (CVP_PMI_N, CVP_PMI_S, KERN, SWP_PMI_N, SWP_PMI_S,
+-- SWP_PMI_TOTAL). A strict FK to mi_contractor.short_code cannot be enforced
+-- because the aggregate codes have no corresponding rows in mi_contractor.
+-- The ERD has been updated to document this mixed-use column.
 -- ============================================================================
 
-\echo 'Part 2: Adding mi_contractor FK constraints...'
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_mi_delivery_contractor'
-    ) THEN
-        ALTER TABLE mi_delivery_monthly
-            ADD CONSTRAINT fk_mi_delivery_contractor
-            FOREIGN KEY (mi_contractor_code) REFERENCES mi_contractor (short_code)
-            ON DELETE RESTRICT ON UPDATE CASCADE;
-        RAISE NOTICE 'Added fk_mi_delivery_contractor';
-    ELSE
-        RAISE NOTICE 'fk_mi_delivery_contractor already exists, skipping';
-    END IF;
-END $$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_mi_shortage_contractor'
-    ) THEN
-        ALTER TABLE mi_shortage_monthly
-            ADD CONSTRAINT fk_mi_shortage_contractor
-            FOREIGN KEY (mi_contractor_code) REFERENCES mi_contractor (short_code)
-            ON DELETE RESTRICT ON UPDATE CASCADE;
-        RAISE NOTICE 'Added fk_mi_shortage_contractor';
-    ELSE
-        RAISE NOTICE 'fk_mi_shortage_contractor already exists, skipping';
-    END IF;
-END $$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_mi_period_contractor'
-    ) THEN
-        ALTER TABLE mi_contractor_period_summary
-            ADD CONSTRAINT fk_mi_period_contractor
-            FOREIGN KEY (mi_contractor_code) REFERENCES mi_contractor (short_code)
-            ON DELETE RESTRICT ON UPDATE CASCADE;
-        RAISE NOTICE 'Added fk_mi_period_contractor';
-    ELSE
-        RAISE NOTICE 'fk_mi_period_contractor already exists, skipping';
-    END IF;
-END $$;
-
-\echo 'Part 2: Done.'
+\echo 'Part 2: mi_contractor FK skipped (mixed individual+aggregate codes — see ERD note).'
 \echo ''
 
 -- ============================================================================

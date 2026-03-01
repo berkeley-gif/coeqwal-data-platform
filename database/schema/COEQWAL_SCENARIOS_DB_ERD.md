@@ -1881,8 +1881,11 @@ Table: mi_delivery_monthly
 
 Records: 3,588 rows (30 contractors × 12 months × ~10 scenarios)
 
+Note: mi_contractor_code contains BOTH individual contractor codes (referencing mi_contractor.short_code)
+AND aggregate rollup codes (CVP_PMI_N, CVP_PMI_S, KERN, SWP_PMI_N, SWP_PMI_S, SWP_PMI_TOTAL).
+A strict FK constraint cannot be enforced on this column as-is.
+
 Constraints:
-├── FK: mi_contractor_code → mi_contractor.short_code
 ├── Unique: (scenario_short_code, mi_contractor_code, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
@@ -1922,8 +1925,10 @@ Table: mi_shortage_monthly
 
 Records: 3,588 rows
 
+Note: mi_contractor_code contains both individual and aggregate rollup codes — see mi_delivery_monthly note.
+FK constraint not enforced. See mi_delivery_monthly for full explanation.
+
 Constraints:
-├── FK: mi_contractor_code → mi_contractor.short_code
 ├── Unique: (scenario_short_code, mi_contractor_code, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
@@ -1970,8 +1975,10 @@ Table: mi_contractor_period_summary
 
 Records: 299 rows
 
+Note: mi_contractor_code contains both individual and aggregate rollup codes — FK constraint not enforced.
+See mi_delivery_monthly for full explanation.
+
 Constraints:
-├── FK: mi_contractor_code → mi_contractor.short_code
 └── Unique: (scenario_short_code, mi_contractor_code)
 
 DDL: database/scripts/sql/12_mi_statistics/05_create_mi_statistics_tables.sql

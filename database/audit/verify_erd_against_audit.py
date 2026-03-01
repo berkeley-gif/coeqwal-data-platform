@@ -227,10 +227,22 @@ def load_audit_data(audit_path: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 def _normalize_check(clause: str) -> str:
-    """Normalize a CHECK clause for loose comparison (lowercase, strip outer parens/spaces)."""
+    """
+    Normalize a CHECK clause for loose comparison.
+    - Lowercases and strips outer parentheses/spaces.
+    - Converts BETWEEN x AND y → >= x AND <= y, because PostgreSQL stores
+      CHECK constraints in the expanded form rather than preserving BETWEEN.
+    """
+    import re as _re
     c = clause.strip().lower()
-    if c.startswith('(') and c.endswith(')'):
+    # Strip outer parens
+    while c.startswith('(') and c.endswith(')'):
         c = c[1:-1].strip()
+    # Expand: col BETWEEN x AND y  →  col >= x AND col <= y
+    m = _re.match(r'^(\w+)\s+between\s+(\S+)\s+and\s+(\S+)$', c)
+    if m:
+        col, lo, hi = m.group(1), m.group(2), m.group(3)
+        c = f'{col} >= {lo} and {col} <= {hi}'
     return c
 
 
