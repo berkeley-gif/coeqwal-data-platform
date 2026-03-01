@@ -1,0 +1,10 @@
+short_code,name,description,hydrologic_region_short_code,is_active
+BEAR_RIVER,Bear River Watershed,Bear River drainage in the Sacramento River Basin,SAC,true
+SAC_RIVER,Sacramento River Hydrologic Region,Sacramento River mainstem and tributaries,SAC,true
+SAN_JOAQUIN,San Joaquin River Hydrologic Region,San Joaquin River mainstem and tributaries,SJR,true
+UPPER_AMERICAN,Upper American River Watershed,Upper American River drainage above Folsom,SAC,true
+UPPER_FEATHER,Upper Feather River Watershed,Upper Feather River drainage above Oroville,SAC,true
+UPPER_MOKELUMNE,Upper Mokelumne River Watershed,Upper Mokelumne River drainage above Camanche,SJR,true
+UPPER_STANISLAUS,Upper Stanislaus River,Upper Stanislaus River drainage above New Melones,SJR,true
+UPPER_TUOLUMNE,Upper Tuolumne River Watershed,Upper Tuolumne River drainage above Don Pedro,SJR,true
+YUBA_RIVER,Yuba River Watershed,Yuba River drainage in the Sacramento River Basin,SAC,true

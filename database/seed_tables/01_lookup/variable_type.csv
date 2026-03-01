@@ -1,0 +1,7 @@
+short_code,label,description,is_active
+delivery,delivery,Water delivery to a demand unit,true
+gw_pumping,groundwater pumping,Groundwater extraction,true
+PA,project agricultural,Project water for agricultural use,true
+PR,project wildlife refuge,Project water for wildlife refuge,true
+PU,project community water system,Project water for municipal and industrial (M&I) use,true
+unknown,unknown,Unknown or unclassified variable type,true

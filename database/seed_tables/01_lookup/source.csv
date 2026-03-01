@@ -8,3 +8,5 @@ metadata,Scenario metadata,true
 cvm_docs,Central Valley Model documentation,true
 network_schematic,Network schematic,true
 manual,Manual insertion,true
+NHD,National Hydrography Dataset,true
+DWR_CDEC,DWR California Data Exchange Center,true

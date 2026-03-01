@@ -20,7 +20,7 @@ FROM hydrologic_region ORDER BY id;
 \echo ''
 \echo '2. source'
 \echo '---------'
-SELECT id, source, is_active,
+SELECT id, source, description, is_active,
        created_at, created_by, updated_at, updated_by
 FROM source ORDER BY id;
 
@@ -146,7 +146,7 @@ ORDER BY table_name;
 SELECT table_name,
        min_created_by,
        max_updated_by,
-       CASE WHEN min_created_by = 2 AND max_updated_by <= 2 THEN 'OK'
+       CASE WHEN min_created_by = 2 AND max_updated_by = 2 THEN 'OK'
             ELSE 'CHECK' END AS provenance_status
 FROM (
     SELECT 'hydrologic_region'          AS table_name, MIN(created_by) AS min_created_by, MAX(updated_by) AS max_updated_by FROM hydrologic_region

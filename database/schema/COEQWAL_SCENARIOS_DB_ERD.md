@@ -11,10 +11,15 @@
 └── Purpose: auditing, track data versions and changes
 
 01_LOOKUP TABLES (reference data)
-├── Geographic regions and scales
-├── Data sources and model sources  
-├── Units, statistics, and geometry types
-└── Purpose: provide consistent reference values
+├── Geographic regions, scales, and watershed boundaries
+├── Data sources, model sources, and network topology types
+├── Units, statistics, geometry types, and variable classifications
+└── Purpose: provide consistent reference values across all layers
+
+04_ENTITY LAYER (GIS + operational entities)
+├── Reservoir geographic base table (geospatial + NHD attributes)
+├── Compliance monitoring stations (geospatial)
+└── Purpose: physical entities with geographic and operational attributes
 
 05_THEMES_SCENARIOS LAYER
 ├── Research themes (storylines for exploring scenarios)
@@ -209,6 +214,11 @@ Indexes:
 
 ## **01_LOOKUP TABLES**
 
+> **Provenance convention:** All lookup tables carry `created_by`, `updated_by`, `created_at`, `updated_at`
+> audit fields (FK → `developer.id`). Tables whose data originates from a specific external source
+> (e.g., geopackage, NHD, CalSim report) additionally carry a `source_id` FK → `source.id`.
+> Current tables using `source_id`: `network_type`, `network_subtype`, `wba`, `reservoir`, `compliance_station`.
+
 ### **1. hydrologic_region**
 ```
 Table: hydrologic_region
@@ -245,7 +255,7 @@ Table: source
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (9 total):
+Values (11 total):
 ├── calsim_report: CalSim-3 report final.pdf
 ├── james_gilbert: James Gilbert
 ├── calsim_variables: CalSim variables from output and sv data
@@ -254,7 +264,9 @@ Values (9 total):
 ├── metadata: Scenario metadata
 ├── cvm_docs: Central Valley Model documentation
 ├── network_schematic: Network schematic
-└── manual: Manual insertion
+├── manual: Manual insertion
+├── NHD: National Hydrography Dataset
+└── DWR_CDEC: DWR California Data Exchange Center
 ```
 
 ### **3. model_source**
@@ -469,7 +481,48 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
-### **12. watershed**
+### **12. network_type**
+```
+Table: network_type
+├── id                      SERIAL PRIMARY KEY
+├── short_code              TEXT UNIQUE NOT NULL       -- "CH", "CT", "D", "CH_N", "S", etc.
+├── label                   TEXT NOT NULL              -- "Channel", "Cross transfer", etc.
+├── description             TEXT                       -- Network type description
+├── network_entity_type_id  INTEGER NOT NULL           -- FK → network_entity_type.id (1=arc, 2=node)
+├── model_source_id         INTEGER                    -- FK → model_source.id
+├── source_id               INTEGER                    -- FK → source.id
+├── is_active               BOOLEAN DEFAULT TRUE
+├── created_at              TIMESTAMP DEFAULT NOW()
+├── created_by              INTEGER NOT NULL           -- FK → developer.id
+├── updated_at              TIMESTAMP DEFAULT NOW()
+└── updated_by              INTEGER NOT NULL           -- FK → developer.id
+
+Records: 21 types (10 arc types, 11 node types)
+Seed: seed_tables/01_lookup/network_type.csv
+```
+
+### **13. network_subtype**
+```
+Table: network_subtype
+├── id                      SERIAL PRIMARY KEY
+├── short_code              TEXT NOT NULL              -- "BP", "CH", "CL", etc.
+├── label                   TEXT NOT NULL              -- "Bypass", "Channel", etc.
+├── description             TEXT
+├── network_entity_type_id  INTEGER                    -- FK → network_entity_type.id
+├── type_id                 INTEGER NOT NULL           -- FK → network_type.id
+├── model_source_id         INTEGER                    -- FK → model_source.id
+├── source_id               INTEGER                    -- FK → source.id
+├── is_active               BOOLEAN DEFAULT TRUE
+├── created_at              TIMESTAMP DEFAULT NOW()
+├── created_by              INTEGER NOT NULL           -- FK → developer.id
+├── updated_at              TIMESTAMP DEFAULT NOW()
+└── updated_by              INTEGER NOT NULL           -- FK → developer.id
+
+Records: 26 subtypes
+Seed: seed_tables/01_lookup/network_subtype.csv
+```
+
+### **14. watershed**
 
 ```
 Table: watershed
@@ -485,28 +538,29 @@ Table: watershed
 └── updated_by                      INTEGER NOT NULL           -- FK → developer.id
 
 Records: 9 watersheds from CalSim report
+Seed: seed_tables/01_lookup/watershed.csv
 
 Foreign keys:
-├── Ref: watersheds.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: watersheds.updated_by > developer.id [delete: restrict, update: cascade]
+├── Ref: watershed.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: watershed.updated_by > developer.id [delete: restrict, update: cascade]
 
 Indexes:
-├── watersheds_short_code_key (short_code) -- Unique constraint
-└── idx_watersheds_hydrologic_region (hydrologic_region_short_code) -- Region lookups
+├── watershed_short_code_key (short_code) -- Unique constraint
+└── idx_watershed_hydrologic_region (hydrologic_region_short_code) -- Region lookups
 
 Values (9 total):
-├── BEAR_RIVER: Bear River Watershed
-├── SAC_RIVER: Sacramento River Hydrologic Region
-├── SAN_JOAQUIN: San Joaquin River Hydrologic Region
-├── UPPER_AMERICAN: Upper American River Watershed
-├── UPPER_FEATHER: Upper Feather River Watershed
-├── UPPER_MOKELUMNE: Upper Mokelumne River Watershed
-├── UPPER_STANISLAUS: Upper Stanislaus River
-├── UPPER_TUOLUMNE: Upper Tuolumne River Watershed
-└── YUBA_RIVER: Yuba River Watershed
+├── BEAR_RIVER: Bear River Watershed (SAC)
+├── SAC_RIVER: Sacramento River Hydrologic Region (SAC)
+├── SAN_JOAQUIN: San Joaquin River Hydrologic Region (SJR)
+├── UPPER_AMERICAN: Upper American River Watershed (SAC)
+├── UPPER_FEATHER: Upper Feather River Watershed (SAC)
+├── UPPER_MOKELUMNE: Upper Mokelumne River Watershed (SJR)
+├── UPPER_STANISLAUS: Upper Stanislaus River (SJR)
+├── UPPER_TUOLUMNE: Upper Tuolumne River Watershed (SJR)
+└── YUBA_RIVER: Yuba River Watershed (SAC)
 ```
 
-### **13. wba (Water Budget Areas)**
+### **15. wba (Water Budget Areas)**
 ```
 Table: wba
 ├── id                   SERIAL PRIMARY KEY
@@ -530,7 +584,11 @@ Records: 42 Water Budget Areas
 Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) for GW_STOR tier mapping
 ```
 
-### **14. reservoir (reservoir geographic base table)**
+---
+
+## **04_ENTITY LAYER** *(planned — GIS and operational entity tables)*
+
+### **1. reservoir (reservoir geographic base table)**
 ```
 Table: reservoir
 ├── id                   SERIAL PRIMARY KEY
@@ -551,13 +609,12 @@ Table: reservoir
 └── updated_by           INTEGER NOT NULL           -- FK developer.id
 
 Records: 7 major reservoirs
-Note: This is the geographic base table with geospatial data. The related `reservoir_entity` table
-(ENTITY LAYER) holds operational attributes (capacity_taf, dead_pool_taf). Both tables use
-`calsim_short_code` / `short_code` as the joining key.
+Note: Geographic base table. The related `reservoir_entity` table holds operational attributes
+(capacity_taf, dead_pool_taf). Both use `calsim_short_code` / `short_code` as the join key.
 Used by: tier_location_result (location_type = 'reservoir', location_id = reservoir.calsim_short_code)
 ```
 
-### **15. compliance_station (compliance monitoring stations)**
+### **2. compliance_station (compliance monitoring stations)**
 ```
 Table: compliance_station
 ├── id                   SERIAL PRIMARY KEY

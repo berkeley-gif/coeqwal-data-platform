@@ -1,7 +1,14 @@
-code,name,description,is_percentile
+short_code,label,description,is_percentile
 MEAN,Mean,Average value,false
-MEDIAN,Median,50th percentile,false
+MEDIAN,Median,Middle value of the distribution,false
 MIN,Minimum,Minimum value,false
 MAX,Maximum,Maximum value,false
-P10,10th percentile,Lower bound (10%),true
-P90,90th percentile,Upper bound (90%),true
+CV,Coefficient of variation,Relative variability: stdev/mean,false
+STDEV,Standard deviation,Absolute spread around the mean,false
+Q0,0th percentile,Minimum in band context,true
+Q10,10th percentile,Dry conditions,true
+Q30,30th percentile,Below normal,true
+Q50,50th percentile,Median in band context,true
+Q70,70th percentile,Above normal,true
+Q90,90th percentile,Wet conditions,true
+Q100,100th percentile,Maximum in band context,true
