@@ -20,9 +20,12 @@ CREATE TABLE IF NOT EXISTS theme (
     narrative JSONB,
     outcome_description TEXT,
     outcome_narrative TEXT,
+    source TEXT,
     theme_version_id INTEGER NOT NULL DEFAULT 1,
     created_by INTEGER NOT NULL DEFAULT 1,
-    updated_by INTEGER
+    updated_by INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- =============================================================================

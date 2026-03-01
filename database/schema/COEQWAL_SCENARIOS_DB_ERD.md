@@ -690,7 +690,7 @@ Indexes:
 ├── idx_scenario_short_code_active (short_code, is_active)
 ├── idx_scenario_active (is_active)
 ├── idx_scenario_baseline (baseline_scenario_id)
-├── idx_scenario_source (source_scenario_id)
+├── idx_scenario_source_scenario (source_scenario_id)
 ├── idx_scenario_slr (slr_id)
 ├── idx_scenario_hydroclimate (hydroclimate_id)
 └── idx_scenario_active_version (is_active, scenario_version_id)
@@ -821,29 +821,34 @@ Indexes:
 
 ### **4. operation_category (operation categories)**
 
-Status: PLANNED — not yet created in the database.
-Currently `operation_definition.category` is a plain TEXT column.
-
 ```
-Table: operation_category   [PLANNED]
+Table: operation_category
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           TEXT UNIQUE NOT NULL
-├── label                TEXT NOT NULL
+├── name                 TEXT
 ├── description          TEXT
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK developer.id
+├── is_active            INTEGER DEFAULT 1
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER                    -- FK → developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id
 
-Values (7 total — post-reclassification):
-├── tucp:                   Temporary Urgency Change Petitions / Temporary Urgency Change Orders
-├── gw_restrictions:        Groundwater use restrictions (SGMA implementation)
-├── delta_regulations:      Delta regulations and salinity standards
-├── biops:                  Biological Opinions (NMFS / USFWS)
-├── infrastructure:         Infrastructure configuration (Shasta cold water, etc.)
-├── flow:                   Flow objectives and minimum flow requirements
-└── allocation_priorities:  Water allocation and priority rules
+Values (9 total — post-reclassification):
+├── comm_delivery:       Community water delivery prioritization
+├── delta_outflow:       Delta outflow requirements
+├── carryover:           Reservoir carryover storage requirements
+├── regulatory_salinity: Delta salinity standards (X2)
+├── tucp:                Temporary Urgency Change Petitions and Orders
+├── gw_restrictions:     Groundwater pumping restrictions (SGMA-type)
+├── infrastructure:      Water infrastructure configuration (tunnels, reservoirs)
+├── flow:                Instream flow and minimum flow objectives
+└── biops:               Biological Opinions (NMFS / USFWS for USBR LTO)
+
+Foreign keys:
+├── Ref: operation_category.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: operation_category.updated_by > developer.id [delete: restrict, update: cascade]
+
+Seed: seed_tables/05_assumptions_operations/operation_category.csv
 ```
 
 ### **5. operation_definition (operation definitions)**
@@ -859,7 +864,8 @@ Table: operation_definition
 ├── description          TEXT
 ├── narrative            JSONB
 ├── category             TEXT                       -- maps to operation_category.short_code
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── source               TEXT                       -- FK → source.source (james_gilbert, etc.)
+├── is_active            INTEGER DEFAULT 1
 ├── notes                TEXT
 ├── operation_version_id INTEGER NOT NULL           -- FK → version.id (operations family)
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -868,11 +874,12 @@ Table: operation_definition
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Note: Rows reclassified from assumption_definition in migration 07:
-      TUCP_TUCO → tucp; SGMA (SJV/SAC/CV) → gw_restrictions; DCP_6000/Bethany → delta_regulations;
+      TUCP_TUCO → tucp; SGMA (SJV/SAC/CV) → gw_restrictions; DCP_6000/Bethany → infrastructure;
       no_min_flow/functional_flows/salmon_flows → flow; biops_2024 → biops
 
 Foreign keys:
 ├── Ref: operation_definition.operation_version_id > version.id [delete: restrict, update: cascade]
+├── Ref: operation_definition.source > source.source [delete: restrict, update: cascade]
 ├── Ref: operation_definition.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: operation_definition.updated_by > developer.id [delete: restrict, update: cascade]
 
@@ -967,6 +974,7 @@ Table: slr
 ├── label                TEXT NOT NULL              -- "No sea level rise", "15mm SLR", etc.
 ├── slr_value_mm         NUMERIC                    -- SLR amount in millimetres (0, 15, 30, 60)
 ├── description          TEXT
+├── source               TEXT                       -- FK → source.source (james_gilbert, etc.)
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
@@ -980,6 +988,7 @@ Values (4 total):
 └── slr_60: 60mm sea level rise
 
 Foreign keys:
+├── Ref: slr.source > source.source [delete: restrict, update: cascade]
 ├── Ref: slr.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: slr.updated_by > developer.id [delete: restrict, update: cascade]
 
@@ -1021,24 +1030,26 @@ Table: hydroclimate_source   [PLANNED]
 ```
 Table: theme
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "baseline", "community_water", "flow", etc.
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── name                 TEXT NOT NULL              -- "Current operations for California water"
+├── short_code           TEXT UNIQUE NOT NULL       -- "cws", "ag_gw", "eco", "delta", "climate", "governance"
+├── is_active            INTEGER NOT NULL DEFAULT 1
+├── name                 TEXT NOT NULL              -- "Community water systems"
 ├── subtitle             TEXT
-├── short_title          TEXT                       -- "Current operations"
+├── short_title          TEXT
 ├── simple_description   TEXT
 ├── description          TEXT
 ├── description_next     TEXT
-├── narrative            JSONB                      -- Structured narrative data
+├── narrative            JSONB
 ├── outcome_description  TEXT
 ├── outcome_narrative    TEXT
+├── source               TEXT                       -- FK → source.source (wietske_medema, etc.)
 ├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK → version.id (theme family)
-├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id
+├── updated_by           INTEGER                    -- FK → developer.id
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 
 Foreign keys:
+├── Ref: theme.source > source.source [delete: restrict, update: cascade]
 ├── Ref: theme.theme_version_id > version.id [delete: restrict, update: cascade]
 ├── Ref: theme.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: theme.updated_by > developer.id [delete: restrict, update: cascade]
@@ -1048,14 +1059,13 @@ Indexes:
 ├── idx_theme_short_code_active (short_code, is_active)
 └── idx_theme_active (is_active)
 
-Values (7 total):
-├── baseline: Current operations for California water
-├── community_water: Prioritizing community water systems
-├── flow: Enhancing river flows for the environment
-├── gw_ag: Managing groundwater in a changing agricultural landscape
-├── delta_flow: Improving flows for the health of the Bay Delta estuary
-├── delta_uses: Sustaining uses in the Delta for communities and farms
-└── delta_export_reliability: Improving reliability of Delta exports for farms and cities
+Values (6 total):
+├── cws:        Community water systems
+├── ag_gw:      Farms, groundwater & food systems
+├── eco:        Rivers, salmon & ecosystems
+├── delta:      The Delta as a living place
+├── climate:    Drought, climate risk, and resilience
+└── governance: Operations and impacts
 
 Seed: seed_tables/08_theme/theme.csv
 ```
