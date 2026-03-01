@@ -15,8 +15,9 @@
 --      WHERE table_name = ? prefix queries. Dropped to reduce write overhead.
 --
 -- Safe to run multiple times (IF NOT EXISTS / DO $$ guards throughout).
+-- Requires the superuser (postgres) — DDL on tables you don't own will fail otherwise.
 -- Run as:
---   psql $DATABASE_URL -f database/scripts/sql/migrations/02_fix_layer00_fk_rules_and_indexes.sql
+--   psql $SUPERUSER_URL -f database/scripts/sql/migrations/02_fix_layer00_fk_rules_and_indexes.sql
 -- ============================================================================
 
 \echo ''

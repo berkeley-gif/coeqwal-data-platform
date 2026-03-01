@@ -4,8 +4,9 @@
 -- Discovered via: python database/audit/verify_erd_against_audit.py
 -- Index strategy informed by: analysis of api/coeqwal-api/routes/
 -- Safe to run multiple times (CREATE INDEX IF NOT EXISTS; DO $$ guards).
+-- Requires the superuser (postgres) — DDL on tables you don't own will fail otherwise.
 -- Run as:
---   psql "postgresql://postgres:..." -f database/scripts/sql/migrations/01_add_missing_indexes_fks_checks.sql
+--   psql $SUPERUSER_URL -f database/scripts/sql/migrations/01_add_missing_indexes_fks_checks.sql
 -- ============================================================================
 
 \echo ''

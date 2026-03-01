@@ -13,11 +13,36 @@ For new developers. Full details on each step are in the sections below.
 
 ### First-time setup (5 steps)
 
-**1. Set your connection string** in `~/.bashrc` on Cloud9:
+**1. Set your connection strings** in `~/.bashrc` on Cloud9:
 
 ```bash
+# Your personal developer connection — used for everything day-to-day
 export DATABASE_URL="postgresql://your_username:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+
+# RDS master user — only needed for DDL migrations (ALTER TABLE, CREATE/DROP INDEX, GRANT)
+# Retrieve the postgres password from AWS Secrets Manager (ask an admin or see below)
+export SUPERUSER_URL="postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+
 source ~/.bashrc
+```
+
+The `setup_db_connection.sh` script will prompt you for both and test each connection:
+```bash
+bash database/setup_db_connection.sh
+```
+
+**When to use which:**
+
+| Task | Variable |
+|---|---|
+| Queries, seed loads, verify scripts, ETL, API | `$DATABASE_URL` |
+| DDL migrations (`database/scripts/sql/migrations/`) | `$SUPERUSER_URL` |
+| Running the audit (`run_audit.sh`) | `$DATABASE_URL` (reads as any user) |
+
+**Finding the postgres password:** it is stored in AWS Secrets Manager. To find it:
+```bash
+aws secretsmanager list-secrets --query "SecretList[*].Name" --output table
+aws secretsmanager get-secret-value --secret-id <secret-name> --query SecretString --output text
 ```
 
 **2. Get registered** — ask an admin to run `register_developer()` for you (see "Setting up a new developer" below). You need a named PostgreSQL role and a row in the `developer` table before you can write anything.
