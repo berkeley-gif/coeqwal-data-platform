@@ -305,25 +305,15 @@ def get_functions(cursor) -> List[Dict[str, Any]]:
 # Versioning system check
 # ---------------------------------------------------------------------------
 
-# Tables that MUST appear in domain_family_map based on the seed CSV.
-# Update this list whenever a new versioned domain table is added.
-EXPECTED_DOMAIN_MAPPINGS = {
-    'theme', 'scenario',
-    'scenario_variable_statistic', 'scenario_measure_statistic',
-    'scenario_outcome_statistic', 'scenario_category_statistic',
-    'scenario_tier_value', 'scenario_metadata', 'scenario_ancillary_output',
-    'assumption_definition', 'operation_definition',
-    'hydroclimate',
-    'variable_group', 'model_variable', 'derived_variable',
-    'hydroclimate_variable_summary',
-    'network_node', 'network_arc',
-    'reservoir_entity', 'inflow_entity', 'channel_entity',
-    'reservoir_variable', 'inflow_variable', 'channel_variable',
-    'outcome_category', 'outcome_measure',
-    'tier_definition', 'tier_level',
-    'geometry',
-    'analysis', 'key_concept', 'chart_type', 'ancillary_data',
-    'constant', 'model_value',
+# Infrastructure/system tables that are not domain data tables and should not
+# be required in domain_family_map. Excluded from the "missing from map" check.
+_NON_DOMAIN_TABLES = {
+    'spatial_ref_sys',         # PostGIS extension table
+    'audit_log',               # Audit infrastructure
+    'developer',               # Versioning infrastructure
+    'domain_family_map',       # Self-referential
+    'version',                 # Versioning infrastructure
+    'version_family',          # Versioning infrastructure
 }
 
 
@@ -405,13 +395,21 @@ def check_versioning_system(cursor) -> Dict[str, Any]:
         cols = [desc[0] for desc in cursor.description]
         result['domain_mappings'] = [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-        # Validate against expected seed tables
+        # Validate dynamically against actual DB tables:
+        # - "missing": tables that exist in the DB but have no domain_family_map entry
+        # - "phantom": entries in domain_family_map for tables that don't exist in the DB
         mapped_tables = {row['table_name'] for row in result['domain_mappings']}
+        cursor.execute("""
+            SELECT tablename FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY tablename;
+        """)
+        all_db_tables = {row[0] for row in cursor.fetchall()} - _NON_DOMAIN_TABLES
         result['validation']['domain_map_missing_tables'] = sorted(
-            EXPECTED_DOMAIN_MAPPINGS - mapped_tables
+            all_db_tables - mapped_tables
         )
         result['validation']['domain_map_unexpected_tables'] = sorted(
-            mapped_tables - EXPECTED_DOMAIN_MAPPINGS
+            mapped_tables - all_db_tables
         )
     except Exception as e:
         result['domain_mappings_error'] = str(e)

@@ -508,11 +508,11 @@ def compare_schemas(
             out("9. VERSIONING SYSTEM ISSUES:")
             out("-" * 80)
             if missing_map:
-                out(f"  domain_family_map MISSING {len(missing_map)} expected tables:")
+                out(f"  Tables in DB with NO domain_family_map entry ({len(missing_map)}):")
                 for t in missing_map:
                     out(f"    - {t}")
             if unexpected_map:
-                out(f"  domain_family_map has {len(unexpected_map)} unexpected table(s):")
+                out(f"  Phantom entries in domain_family_map (table does not exist in DB) ({len(unexpected_map)}):")
                 for t in unexpected_map:
                     out(f"    - {t}")
             if no_active:
