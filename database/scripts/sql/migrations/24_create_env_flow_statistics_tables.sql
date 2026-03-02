@@ -343,21 +343,21 @@ COMMENT ON TABLE env_flow_channel_period_summary IS
 -- ─── 5. Register in domain_family_map ─────────────────────────────────────────
 -- Register the new tables so they appear in schema governance queries.
 
-INSERT INTO domain_family_map (table_name, version_family_id, is_active)
-SELECT 'env_flow_season',                  vf.id, true FROM version_family vf WHERE vf.short_code = 'statistics'
-ON CONFLICT (table_name) DO NOTHING;
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, is_active, created_by, updated_by)
+SELECT 'public', 'env_flow_season',                 vf.id, true, 1, 1 FROM version_family vf WHERE vf.short_code = 'statistics'
+ON CONFLICT (schema_name, table_name) DO NOTHING;
 
-INSERT INTO domain_family_map (table_name, version_family_id, is_active)
-SELECT 'env_flow_channel_monthly',         vf.id, true FROM version_family vf WHERE vf.short_code = 'statistics'
-ON CONFLICT (table_name) DO NOTHING;
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, is_active, created_by, updated_by)
+SELECT 'public', 'env_flow_channel_monthly',        vf.id, true, 1, 1 FROM version_family vf WHERE vf.short_code = 'statistics'
+ON CONFLICT (schema_name, table_name) DO NOTHING;
 
-INSERT INTO domain_family_map (table_name, version_family_id, is_active)
-SELECT 'env_flow_channel_seasonal',        vf.id, true FROM version_family vf WHERE vf.short_code = 'statistics'
-ON CONFLICT (table_name) DO NOTHING;
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, is_active, created_by, updated_by)
+SELECT 'public', 'env_flow_channel_seasonal',       vf.id, true, 1, 1 FROM version_family vf WHERE vf.short_code = 'statistics'
+ON CONFLICT (schema_name, table_name) DO NOTHING;
 
-INSERT INTO domain_family_map (table_name, version_family_id, is_active)
-SELECT 'env_flow_channel_period_summary',  vf.id, true FROM version_family vf WHERE vf.short_code = 'statistics'
-ON CONFLICT (table_name) DO NOTHING;
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, is_active, created_by, updated_by)
+SELECT 'public', 'env_flow_channel_period_summary', vf.id, true, 1, 1 FROM version_family vf WHERE vf.short_code = 'statistics'
+ON CONFLICT (schema_name, table_name) DO NOTHING;
 
 
 -- ─── 6. Verify ────────────────────────────────────────────────────────────────
