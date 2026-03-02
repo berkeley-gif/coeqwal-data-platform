@@ -46,6 +46,8 @@
     reservoir_storage_monthly, reservoir_spill_monthly, reservoir_period_summary
     du_delivery_monthly, du_period_summary, du_shortage_monthly
     ag/cws/mi aggregate statistics
+    env_flow_season (lookup), env_flow_channel_monthly, env_flow_channel_seasonal,
+    env_flow_channel_period_summary
 
 VIEWS
     scenario_full    ← wide pivot of scenario + operations + assumptions (all in one row)
