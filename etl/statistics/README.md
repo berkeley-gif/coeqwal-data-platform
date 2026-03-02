@@ -17,6 +17,96 @@ This pipeline processes CalSim model output CSVs stored in S3 to calculate reser
         └──────────────────────┘  via psycopg2
 ```
 
+## Scenario backfill strategy and pipeline status
+
+### Current workflow (manual)
+
+The statistics ETL is a **separate, manually-triggered step** from the extraction pipeline.
+The extraction Batch job (`batch_entrypoint.sh`) handles DSS → CSV conversion and uploads to S3,
+then writes `SUCCEEDED` to DynamoDB. The statistics ETL (`run_all.py`) must be run separately
+in Cloud9 after extraction completes:
+
+```
+ZIP dropped in S3
+    → Lambda trigger → AWS Batch (batch_entrypoint.sh)
+        → DSS → CSV extraction
+        → CSV uploaded to S3
+        → DynamoDB: status = SUCCEEDED
+    ← STOPS HERE — statistics ETL is not triggered automatically
+
+Separately in Cloud9:
+    → python etl/statistics/run_all.py --scenario {id}
+        → reads CSVs from S3
+        → writes statistics to PostgreSQL
+```
+
+### ETL module coverage
+
+All six statistics modules must be run for a scenario to have complete data in the website:
+
+| Module | Key tables | Status |
+| ------ | ---------- | ------ |
+| `reservoirs` | `reservoir_monthly_percentile`, `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_period_summary` | Production |
+| `du_urban` | `du_delivery_monthly`, `du_shortage_monthly`, `du_period_summary` | Production |
+| `mi` | `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary` | Production |
+| `cws_aggregate` | `cws_aggregate_monthly`, `cws_aggregate_period_summary` | Production |
+| `ag` | `ag_du_delivery_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary`, aggregates | Production |
+| `refuge` | `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary` | Production (added Feb 2026) |
+| `env_flows` | River flow metrics (% unimpaired, % functional flows, alteration index) | **In development** |
+
+### Backfill plan
+
+The intended approach is to build all ETL modules first, then perform one backfill pass
+across all scenarios rather than running partial passes as each module is completed.
+This avoids an extended intermediate state on the website where some data sections are
+populated and others are not.
+
+**Current state (March 2026):**
+- 19 scenarios have CSVs extracted in S3 (see `SCENARIOS` list in `run_all.py`)
+- `s0045`, `s0046`, `s0065` extraction is pending
+- `s0035`, `s0036`, `s0037` are planned but not yet extracted
+- Refuge statistics (`run_all.py --only refuge`) have been backfilled for all 19 available scenarios
+- `env_flows` ETL is in development — backfill will happen once it is production-ready
+
+**Grand backfill command (run once `env_flows` is complete):**
+
+```bash
+# All modules, all available scenarios
+DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --all-scenarios
+
+# Or selectively, e.g. only the new module for all scenarios:
+DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --all-scenarios --only env_flows
+```
+
+### Website intermediate state
+
+While ETL modules are in development, scenarios without data for a given section return
+empty result sets from the API. The frontend renders an empty/loading state for missing
+sections rather than hiding the scenario entirely. Scenarios are only hidden by setting
+`is_active = 0` in the `scenario` table, which is reserved for scenarios that are
+intentionally excluded (e.g., `s0029`).
+
+### Future: automated post-extraction trigger
+
+The long-term target is to connect extraction completion to automatic statistics ETL
+execution. The recommended architecture:
+
+```
+DynamoDB status → SUCCEEDED
+    → EventBridge rule (on DynamoDB Stream)
+        → Lambda submits AWS Batch job
+            → python etl/statistics/run_all.py --scenario {id}
+```
+
+This has not been implemented yet. Until it is, the manual Cloud9 step is the working path.
+When a new scenario ZIP is dropped in S3 and extraction completes, run:
+
+```bash
+DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --scenario {new_scenario_id}
+```
+
+---
+
 ## Directory Structure
 
 ```
