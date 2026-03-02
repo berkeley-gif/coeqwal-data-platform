@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -68,7 +69,6 @@ SHORTAGE_THRESHOLD_TAF = 0.1
 CFS_TO_TAF_PER_DAY = 0.001983471
 
 # Paths to local data
-from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 LOCAL_PIPELINES_DIR = PROJECT_ROOT / "etl/pipelines"
 LOCAL_DEMANDS_DIR = PROJECT_ROOT / "etl/demands"

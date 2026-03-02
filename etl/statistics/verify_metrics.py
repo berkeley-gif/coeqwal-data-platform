@@ -26,7 +26,6 @@ S3 Reference File:
 
 import argparse
 import io
-import os
 import sys
 from pathlib import Path
 

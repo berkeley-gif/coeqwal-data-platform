@@ -11,7 +11,6 @@ Usage:
 """
 
 import argparse
-import json
 import requests
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -70,8 +69,7 @@ def plot_percentile_band_chart(
     q70 = [monthly_data.get(str(m), monthly_data.get(m, {})).get('q70', 0) for m in range(1, 13)]
     q90 = [monthly_data.get(str(m), monthly_data.get(m, {})).get('q90', 0) for m in range(1, 13)]
     q100 = [monthly_data.get(str(m), monthly_data.get(m, {})).get('q100', 0) for m in range(1, 13)]
-    mean = [monthly_data.get(str(m), monthly_data.get(m, {})).get('mean', 0) for m in range(1, 13)]
-    
+
     # Plot bands from outer to inner
     # Outer band: q10-q90 (lightest blue)
     ax.fill_between(x, q10, q90, alpha=0.3, color='#3182bd', label='10th-90th percentile')
