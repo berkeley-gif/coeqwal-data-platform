@@ -105,14 +105,14 @@ COMMENT ON COLUMN channel_entity.channel_class       IS
 \echo 'Creating channel_variable table...'
 
 CREATE TABLE IF NOT EXISTS channel_variable (
-    id                      INTEGER PRIMARY KEY,        -- explicit id from seed CSV
+    id                      SERIAL PRIMARY KEY,
 
     -- CalSim variable identity
     calsim_id               VARCHAR(40) NOT NULL UNIQUE, -- e.g. C_SAC049, C_SAC049_MIF
     name                    VARCHAR(200),
     description             TEXT,
 
-    -- Entity linkage
+    -- Entity linkage (FK populated post-load via network_arc_id join)
     channel_entity_id       INTEGER REFERENCES channel_entity(id),
 
     -- Classification

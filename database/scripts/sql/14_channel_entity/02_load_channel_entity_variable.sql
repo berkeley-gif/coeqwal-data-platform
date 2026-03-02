@@ -1,6 +1,6 @@
 -- LOAD CHANNEL ENTITY AND VARIABLE SEED DATA
 -- Sources (relative to repo root):
---   database/seed_tables/04_calsim_data/channel_entity.csv    (~670 rows)
+--   database/seed_tables/04_calsim_data/channel_entity.csv    (~669 rows)
 --   database/seed_tables/04_variable/channel_variable.csv     (~1352 rows)
 --
 -- Seed data is loaded via \copy from the local repo — no S3 upload needed.
@@ -9,7 +9,7 @@
 -- Prerequisites:
 --   1. Run 01_create_channel_entity_variable_tables.sql first
 --   2. Run from repo root:
---        psql $SUPERUSER_URL -f database/scripts/sql/14_channel_entity/02_load_channel_entity_variable_from_s3.sql
+--        psql $SUPERUSER_URL -f database/scripts/sql/14_channel_entity/02_load_channel_entity_variable.sql
 
 \echo ''
 \echo '================================================'
@@ -50,24 +50,83 @@ TRUNCATE TABLE channel_entity  CASCADE;
 -- ============================================
 -- 2. LOAD CHANNEL_VARIABLE
 -- ============================================
--- CSV has explicit id column.
--- Columns: id, calsim_id, name, description, channel_entity_id,
+-- The CSV has channel_entity_id values referencing old integer IDs that no
+-- longer match the SERIAL ids assigned above.  Strategy:
+--   a) Drop the FK constraint so the old IDs load without error
+--   b) Load all columns from CSV (id column is ignored — SERIAL assigns new ids)
+--   c) Repopulate channel_entity_id via a natural-key join on network_arc_id
+--   d) Restore the FK constraint
+--
+-- CSV columns: id(ignored), calsim_id, name, description, channel_entity_id(stale),
 --   variable_type, unit_id, temporal_scale_id, variable_version_id,
 --   is_regulatory, regulatory_authority, is_aggregate,
 --   aggregated_variable_ids, variable_id, source_ids, created_by, updated_by
 
 \echo ''
+\echo 'Dropping channel_entity_id FK for clean load...'
+
+ALTER TABLE channel_variable
+    DROP CONSTRAINT IF EXISTS channel_variable_channel_entity_id_fkey;
+
 \echo 'Loading channel_variable from repo CSV...'
 
-\copy channel_variable (id, calsim_id, name, description, channel_entity_id, variable_type, unit_id, temporal_scale_id, variable_version_id, is_regulatory, regulatory_authority, is_aggregate, aggregated_variable_ids, variable_id, source_ids, created_by, updated_by) FROM 'database/seed_tables/04_variable/channel_variable.csv' WITH (FORMAT csv, HEADER true, NULL '')
+-- Skip the stale `id` and `channel_entity_id` columns from the CSV.
+-- Load into a temp staging table that matches the CSV column order exactly,
+-- then insert only the columns we want.
 
--- Advance the id sequence past the highest loaded id so future INSERTs don't collide
-SELECT setval(
-    pg_get_serial_sequence('channel_variable', 'id'),
-    (SELECT MAX(id) FROM channel_variable)
-);
+CREATE TEMP TABLE cv_stage (
+    _id                     INTEGER,
+    calsim_id               VARCHAR(40),
+    name                    VARCHAR(200),
+    description             TEXT,
+    _channel_entity_id      INTEGER,   -- stale; will be resolved via join
+    variable_type           VARCHAR(50),
+    unit_id                 INTEGER,
+    temporal_scale_id       INTEGER,
+    variable_version_id     INTEGER,
+    is_regulatory           BOOLEAN,
+    regulatory_authority    VARCHAR(100),
+    is_aggregate            BOOLEAN,
+    aggregated_variable_ids TEXT,
+    variable_id             UUID,
+    source_ids              TEXT,
+    created_by              INTEGER,
+    updated_by              INTEGER
+) ON COMMIT DROP;
 
-\echo '✅ channel_variable loaded'
+\copy cv_stage FROM 'database/seed_tables/04_variable/channel_variable.csv' WITH (FORMAT csv, HEADER true, NULL '')
+
+INSERT INTO channel_variable
+    (calsim_id, name, description,
+     variable_type, unit_id, temporal_scale_id, variable_version_id,
+     is_regulatory, regulatory_authority,
+     is_aggregate, aggregated_variable_ids, variable_id,
+     source_ids, created_by, updated_by)
+SELECT
+    calsim_id, name, description,
+    variable_type, unit_id, temporal_scale_id, variable_version_id,
+    is_regulatory, regulatory_authority,
+    is_aggregate, aggregated_variable_ids, variable_id,
+    source_ids, created_by, updated_by
+FROM cv_stage;
+
+\echo 'Linking channel_entity_id via network_arc_id...'
+
+-- Standard flow variables: calsim_id == network_arc_id exactly
+UPDATE channel_variable cv
+SET channel_entity_id = ce.id
+FROM channel_entity ce
+WHERE cv.calsim_id = ce.network_arc_id;
+
+\echo '✅ channel_variable loaded and linked'
+
+
+-- Restore FK now that channel_entity_id is populated
+ALTER TABLE channel_variable
+    ADD CONSTRAINT channel_variable_channel_entity_id_fkey
+    FOREIGN KEY (channel_entity_id) REFERENCES channel_entity(id);
+
+\echo '✅ FK constraint restored'
 
 
 -- ============================================
@@ -96,11 +155,12 @@ GROUP BY channel_class
 ORDER BY channel_class NULLS LAST;
 
 \echo ''
-\echo 'channel_variable: type and regulatory breakdown:'
+\echo 'channel_variable: link and regulatory summary:'
 SELECT
     variable_type,
-    COUNT(*)                                        AS total,
-    COUNT(*) FILTER (WHERE is_regulatory = TRUE)    AS regulatory
+    COUNT(*)                                                   AS total,
+    COUNT(*) FILTER (WHERE channel_entity_id IS NOT NULL)      AS linked,
+    COUNT(*) FILTER (WHERE is_regulatory = TRUE)               AS regulatory
 FROM channel_variable
 GROUP BY variable_type
 ORDER BY total DESC;
