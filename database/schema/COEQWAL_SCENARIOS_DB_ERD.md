@@ -3498,12 +3498,14 @@ tier group (id=4):
 
 ### **scenario_full**
 
-Wide, human-readable view of all scenario configurations. Pivots the normalized
-`scenario_key_operation_link` and `scenario_key_assumption_link` junction tables
-into named columns grouped by category. Each row represents one scenario.
+Wide, human-readable view of **active** scenario configurations (`is_active = 1` only).
+Pivots the normalized `scenario_key_operation_link` and `scenario_key_assumption_link`
+junction tables into named columns grouped by category. Each row represents one
+active scenario. To query inactive scenarios, query the `scenario` table directly.
 
 ```
 View: scenario_full
+Filter: WHERE scenario.is_active = 1
 ├── id                   INTEGER                    -- scenario.id (for ordering)
 ├── scenario_id          TEXT                       -- e.g. "s0011"
 ├── short_code           TEXT                       -- e.g. "s0011_adjBL_wTUCP"
@@ -3533,5 +3535,6 @@ NULL in a category column = no link for that category
 (e.g. s0046 has no delta_outflow; most scenarios have no regulatory_salinity)
 
 Source: database/scripts/sql/migrations/17_create_scenario_full_view.sql
+        database/scripts/sql/migrations/18_filter_active_scenarios_in_view.sql
 ```
 ```
