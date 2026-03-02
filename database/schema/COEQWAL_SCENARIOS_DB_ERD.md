@@ -50,8 +50,9 @@
     env_flow_channel_period_summary
 
 VIEWS
-    scenario_full    ← wide pivot of scenario + operations + assumptions (all in one row)
-    refuge_du_full   ← denormalized refuge demand units with decoded cs3_type label
+    scenario_full          ← wide pivot of scenario + operations + assumptions (all in one row)
+    refuge_du_full         ← denormalized refuge demand units with decoded cs3_type label
+    env_flow_channel_full  ← denormalized channel entities with watershed + env-flow attributes
 ```
 
 ## **Layer 00 — VERSIONING SYSTEM**
@@ -3395,27 +3396,50 @@ Status: PLANNED — not yet created in the database.
 
 #### **channel_entity (channel management)**
 
-Status: PLANNED — not yet created in the database.
+Status: **IMPLEMENTED** — created by `14_channel_entity/01_create_channel_entity_variable_tables.sql`,
+loaded from `seed_tables/04_calsim_data/channel_entity.csv` (669 rows).
+Env-flow attribute columns added by migration 23; developer FKs + domain_family_map by migration 25.
 
 ```
-Table: channel_entity   [PLANNED]
+Table: channel_entity   [IMPLEMENTED — migration 25 complete]
 ├── id                   SERIAL PRIMARY KEY
-├── network_arc_id       INTEGER NOT NULL           -- FK → network.id
-├── short_code           VARCHAR UNIQUE NOT NULL
-├── name                 VARCHAR
+├── network_arc_id       VARCHAR(30) NOT NULL UNIQUE -- CalSim arc ID, e.g. C_SAC049
+├── short_code           VARCHAR(100)               -- human label (may be full name)
+├── name                 VARCHAR(200)
 ├── description          TEXT
-├── subtype              VARCHAR
-├── entity_type_id       INTEGER NOT NULL           -- FK → calsim_entity_type.id
-├── boundary_condition   VARCHAR
-├── from_node            VARCHAR
-├── to_node_id           INTEGER                    -- FK → network.id (specific to entity role)
-├── length_m             NUMERIC
-├── entity_version_id    INTEGER NOT NULL           -- FK → version.id (entity family)
-├── attribute_source     JSONB NOT NULL             -- {"name": {"source": "entity_system", "column": "name"}, "boundary_condition": {"source": "management", "column": "boundary_type"}}
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── subtype              VARCHAR(50)
+├── entity_type_id       INTEGER NOT NULL DEFAULT 1  -- FK → calsim_entity_type.id
+├── schematic_type_id    INTEGER
+├── hydrologic_region_id VARCHAR(10)                 -- SAC, SJR, DELTA, etc.
+├── boundary_condition   VARCHAR(50)
+├── from_node            VARCHAR(30)
+├── to_node              VARCHAR(30)
+├── length_m             NUMERIC(14,4)
+├── has_tiers            BOOLEAN DEFAULT FALSE
+├── is_main              BOOLEAN DEFAULT FALSE
+├── has_gis_data         INTEGER DEFAULT 1
+├── entity_version_id    INTEGER NOT NULL DEFAULT 1
+├── source_ids           TEXT
+├── watershed_short_code VARCHAR(30)                 -- FK → watershed.short_code
+├── unimp_sv_variable    VARCHAR(30)                 -- CalSim SV unimpaired variable (override)
+├── has_mif              BOOLEAN NOT NULL DEFAULT FALSE
+├── has_eflows           BOOLEAN NOT NULL DEFAULT FALSE
+├── channel_class        VARCHAR(30) CHECK IN ('stream','canal','reservoir_release')
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by           INTEGER NOT NULL DEFAULT 1   -- FK → developer.id
+├── updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL DEFAULT 1   -- FK → developer.id
+
+Indexes:
+├── idx_channel_entity_network_arc   (network_arc_id)
+├── idx_channel_entity_watershed     (watershed_short_code)
+├── idx_channel_entity_has_mif       (has_mif) WHERE has_mif = TRUE
+├── idx_channel_entity_has_eflows    (has_eflows) WHERE has_eflows = TRUE
+└── idx_channel_entity_channel_class (channel_class)
+
+domain_family_map: version_family = 'entity'
+Developer attribution: created_by = 2 (jfantauzza) — set by migration 25
 ```
 
 #### **reservoir_entity (reservoir management)**
@@ -3757,4 +3781,34 @@ Filter: WHERE du_refuge_entity.is_active = TRUE
 └── has_gis_data                  BOOLEAN
 
 Source: database/scripts/sql/migrations/20_create_refuge_entity_table.sql
+```
+
+---
+
+### **env_flow_channel_full**
+
+Denormalized, human-readable view of **active** channel entities with watershed linkage
+and environmental flow attributes. Use for API responses and frontend channel selectors.
+Analogous to `refuge_du_full` — one row per channel; stats queried separately by
+`network_arc_id × scenario_short_code`.
+
+```
+View: env_flow_channel_full
+Filter: WHERE channel_entity.is_active = TRUE
+├── network_arc_id       TEXT     -- e.g. "C_SAC049"
+├── label                TEXT     -- channel_entity.short_code (human label)
+├── channel_class        TEXT     -- 'stream', 'canal', or 'reservoir_release'
+├── channel_class_label  TEXT     -- 'Natural stream or river reach', etc.
+├── watershed_short_code TEXT     -- FK → watershed.short_code
+├── watershed_name       TEXT     -- watershed.name
+├── hydrologic_region    TEXT     -- watershed.hydrologic_region_short_code
+├── unimp_sv_variable    TEXT     -- CalSim SV unimpaired baseline variable
+├── has_mif              BOOLEAN  -- TRUE if C_*_MIF companion variable exists
+├── has_eflows           BOOLEAN  -- TRUE if EFLOWS_* functional flow target exists
+├── from_node            TEXT     -- upstream node
+├── to_node              TEXT     -- downstream node
+├── hydrologic_region_id TEXT     -- channel_entity.hydrologic_region_id
+└── is_active            BOOLEAN
+
+Source: database/scripts/sql/migrations/25_env_flow_audit_and_views.sql
 ```

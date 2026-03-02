@@ -69,7 +69,15 @@ CREATE TABLE IF NOT EXISTS channel_entity (
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_by           INTEGER NOT NULL DEFAULT 1,
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_by           INTEGER NOT NULL DEFAULT 1
+    updated_by           INTEGER NOT NULL DEFAULT 1,
+
+    -- Developer attribution FKs
+    CONSTRAINT fk_channel_entity_created_by
+        FOREIGN KEY (created_by) REFERENCES developer(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_channel_entity_updated_by
+        FOREIGN KEY (updated_by) REFERENCES developer(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- Indexes
@@ -137,7 +145,15 @@ CREATE TABLE IF NOT EXISTS channel_variable (
 
     -- Audit
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Developer attribution FKs
+    CONSTRAINT fk_channel_variable_created_by
+        FOREIGN KEY (created_by) REFERENCES developer(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_channel_variable_updated_by
+        FOREIGN KEY (updated_by) REFERENCES developer(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- Indexes
