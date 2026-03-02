@@ -37,23 +37,22 @@ ALTER TABLE network_subtype DISABLE TRIGGER USER;
 INSERT INTO network_subtype
     (short_code, label, description, network_entity_type_id, type_id, model_source_id, source_id, is_active,
      created_by, updated_by)
-VALUES
-    ('PR', 'Project Refuge',
+SELECT 'PR', 'Project Refuge',
      'CalSim project refuge demand node — receives CVP (Central Valley Project) contract deliveries',
-     2,                      -- node
+     2,
      (SELECT id FROM network_type WHERE short_code = 'X'),
-     1, 4, TRUE, 2, 2),
+     1, 4, TRUE, 2, 2
+WHERE NOT EXISTS (SELECT 1 FROM network_subtype WHERE short_code = 'PR');
 
-    ('NR', 'Non-project Refuge',
+INSERT INTO network_subtype
+    (short_code, label, description, network_entity_type_id, type_id, model_source_id, source_id, is_active,
+     created_by, updated_by)
+SELECT 'NR', 'Non-project Refuge',
      'CalSim non-project refuge demand node — served by water rights only (no CVP contract deliveries)',
-     2,                      -- node
+     2,
      (SELECT id FROM network_type WHERE short_code = 'X'),
-     1, 4, TRUE, 2, 2)
-ON CONFLICT (short_code) DO UPDATE
-    SET label              = EXCLUDED.label,
-        description        = EXCLUDED.description,
-        updated_at         = NOW(),
-        updated_by         = 2;
+     1, 4, TRUE, 2, 2
+WHERE NOT EXISTS (SELECT 1 FROM network_subtype WHERE short_code = 'NR');
 
 ALTER TABLE network_subtype ENABLE TRIGGER USER;
 
