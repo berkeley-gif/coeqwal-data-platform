@@ -716,7 +716,6 @@ def calculate_period_summary(
 
     flow = pd.to_numeric(df[network_arc_id], errors='coerce')
     water_years = df['WaterYear']
-    water_months = df['WaterMonth']
 
     result: Dict[str, Any] = {
         'network_arc_id':            network_arc_id,
