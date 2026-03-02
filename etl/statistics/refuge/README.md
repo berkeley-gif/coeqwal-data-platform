@@ -124,6 +124,33 @@ but it does **not** affect column selection since the loader uses Part B names, 
 > for all scenarios** and is not used as the primary delivery source. It is useful only as a
 > reference for verifying unit conversion accuracy against pre-computed TAF values.
 
+### DSS date convention — period-beginning vs period-ending
+
+CalSim DSS files use two different month-labelling conventions depending on the file type.
+Both must map to the same calendar month before any merge or calculation can occur.
+
+| File | Convention | Example date | Actual data period |
+| ---- | ---------- | ------------ | ------------------ |
+| SV input (`coeqwal_sv_input.csv`) | **Period-beginning** | `1920-11-01` | October 1920 (WM=1) |
+| DV output (`coeqwal_calsim_output.csv`) | **Period-ending** | `1921-10-31` | October 1921 (WM=1) |
+
+The SV file stamps each row with the **first day of the following month**: `1920-11-01` is labelled
+November 1 but represents water delivered *during* October 1920.
+The DV file stamps each row with the **last day of the current month**: `1921-10-31` is the last day
+of October and correctly represents October 1921.
+
+**Consequence:** a naive date-string join between SV and DV produces 0 matching rows because no
+SV date (`YYYY-MM-01`) ever equals a DV date (`YYYY-MM-{28,29,30,31}`).
+
+**ETL normalisation** (`add_water_year_month`): before deriving `WaterYear`, `WaterMonth`, and
+`DaysInMonth`, the function detects period-beginning rows by checking if `day == 1` and shifts
+those dates back by one day (`1920-11-01 → 1920-10-31`). End-of-month DV dates are used as-is.
+After normalisation, both files yield October → WM=1 for the same model month, and the
+`WaterYear + WaterMonth` merge produces the expected row count (one row per month of record).
+
+> The raw date values in the CSV files are left unchanged — this normalisation is applied only
+> within the ETL at the point of water-year calendar derivation, never during DSS→CSV extraction.
+
 ---
 
 ## Unit conversion

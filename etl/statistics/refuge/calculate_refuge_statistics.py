@@ -175,8 +175,6 @@ def _select_taf_columns(
     Returns a DataFrame with the date column and one TAF column per matching variable.
     """
     date_col = var_names[0]
-    result = pd.DataFrame()
-    result[date_col] = data_df.iloc[:, 0]
 
     # Build a dict: variable_name -> list of (col_index, units_label)
     seen: Dict[str, List[Tuple[int, str]]] = {}
@@ -184,15 +182,19 @@ def _select_taf_columns(
         if vname.startswith(prefix):
             seen.setdefault(vname, []).append((i, unit))
 
+    # Collect all series at once then concat — avoids fragmentation warnings
+    series_list = [data_df.iloc[:, 0].rename(date_col)]
     for vname, occurrences in seen.items():
         # Prefer explicit TAF label; fall back to last occurrence
         taf_col = next(
             (idx for idx, unit in occurrences if unit.upper() == 'TAF'),
             occurrences[-1][0],
         )
-        result[vname] = pd.to_numeric(data_df.iloc[:, taf_col], errors='coerce')
+        series_list.append(
+            pd.to_numeric(data_df.iloc[:, taf_col], errors='coerce').rename(vname)
+        )
 
-    return result
+    return pd.concat(series_list, axis=1)
 
 
 def load_sv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
@@ -331,14 +333,40 @@ def load_dv_csv_from_file(file_path: str) -> pd.DataFrame:
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add WaterYear, WaterMonth (1=Oct ... 12=Sep), and DaysInMonth columns.
+
+    DSS date convention normalisation
+    ----------------------------------
+    CalSim DSS files use two different period conventions depending on the file
+    type, both of which must be mapped to the same calendar month:
+
+    - Period-ending (DV / calsim_output): the date stamp is the LAST day of the
+      month the data represents.  Example: 1921-10-31 → October 1921 (WM=1).
+
+    - Period-beginning (SV input): the date stamp is the FIRST day of the
+      FOLLOWING month.  Example: 1920-11-01 → October 1920 (WM=1), not November.
+
+    Detection: if the date's day-of-month == 1, subtract one day to get the
+    actual data period before deriving CalendarMonth/Year/DaysInMonth.  Dates
+    with day ≠ 1 (end-of-month) are already correct and are used as-is.
+
+    This normalisation ensures that October is always WaterMonth=1 regardless of
+    which source file is being processed, and that the WaterYear+WaterMonth merge
+    between SV and DV DataFrames produces the expected row count.
     """
     df = df.copy()
     first_col = df.columns[0]
     df['DateTime'] = pd.to_datetime(df[first_col], errors='coerce')
 
-    df['CalendarMonth'] = df['DateTime'].dt.month
-    df['CalendarYear'] = df['DateTime'].dt.year
-    df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
+    # Shift period-beginning dates (day == 1) back by one day so that the
+    # calendar month/year reflect the actual data period, not the label period.
+    period_date = df['DateTime'].where(
+        df['DateTime'].dt.day != 1,
+        df['DateTime'] - pd.Timedelta(days=1),
+    )
+
+    df['CalendarMonth'] = period_date.dt.month
+    df['CalendarYear'] = period_date.dt.year
+    df['DaysInMonth'] = period_date.dt.daysinmonth
     df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
     df['WaterYear'] = df['CalendarYear']
     df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
@@ -582,15 +610,15 @@ def calculate_all_refuge_statistics(
         )
         log.info(f"Converted {len(dn_cols)} DN_* columns from CFS to TAF")
 
-    # Merge SV (demand) and DV (delivery) on the date string column
-    date_col_sv = sv_df.columns[0]
-    date_col_dv = dv_df.columns[0]
+    # Merge SV (demand) and DV (delivery) on WaterYear + WaterMonth.
+    # The SV file uses start-of-month dates and the DV file uses end-of-month
+    # dates, so joining on the raw date string produces 0 rows. Joining on the
+    # derived water-year calendar (WaterYear, WaterMonth) is date-format agnostic.
+    aux_cols = ['DateTime', 'CalendarMonth', 'CalendarYear', 'DaysInMonth']
     merged = pd.merge(
-        sv_df.rename(columns={date_col_sv: 'date'}),
-        dv_df.drop(columns=['DateTime', 'CalendarMonth', 'CalendarYear',
-                             'DaysInMonth', 'WaterMonth', 'WaterYear'], errors='ignore')
-             .rename(columns={date_col_dv: 'date'}),
-        on='date',
+        sv_df.drop(columns=aux_cols, errors='ignore'),
+        dv_df.drop(columns=aux_cols + [dv_df.columns[0]], errors='ignore'),
+        on=['WaterYear', 'WaterMonth'],
         how='inner',
     )
     log.info(f"Merged DataFrame: {len(merged)} rows, {len(merged.columns)} columns")

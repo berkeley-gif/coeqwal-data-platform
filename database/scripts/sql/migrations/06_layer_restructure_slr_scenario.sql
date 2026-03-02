@@ -84,7 +84,12 @@ UPDATE scenario
 SET slr_id = (SELECT id FROM slr WHERE short_code = 'none')
 WHERE slr_id IS NULL;
 
--- ─── 6. Drop stale slr columns from hydroclimate ─────────────────────────
+-- ─── 6. Grant application user access to slr ─────────────────────────────
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE slr TO jfantauzza;
+GRANT USAGE, SELECT ON SEQUENCE slr_id_seq TO jfantauzza;
+
+-- ─── 7. Drop stale slr columns from hydroclimate ─────────────────────────
 -- SLR is now modelled in scenario.slr_id → slr.id.
 -- The hydroclimate table described hydro boundary conditions, not SLR policy.
 
