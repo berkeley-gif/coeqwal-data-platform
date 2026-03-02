@@ -46,6 +46,9 @@
     reservoir_storage_monthly, reservoir_spill_monthly, reservoir_period_summary
     du_delivery_monthly, du_period_summary, du_shortage_monthly
     ag/cws/mi aggregate statistics
+
+VIEWS
+    scenario_full    ← wide pivot of scenario + operations + assumptions (all in one row)
 ```
 
 ## **Layer 00 — VERSIONING SYSTEM**
@@ -3488,4 +3491,47 @@ swp group (id=3):
 
 tier group (id=4):
 └── Same as major group
+
+---
+
+## **VIEWS**
+
+### **scenario_full**
+
+Wide, human-readable view of all scenario configurations. Pivots the normalized
+`scenario_key_operation_link` and `scenario_key_assumption_link` junction tables
+into named columns grouped by category. Each row represents one scenario.
+
+```
+View: scenario_full
+├── id                   INTEGER                    -- scenario.id (for ordering)
+├── scenario_id          TEXT                       -- e.g. "s0011"
+├── short_code           TEXT                       -- e.g. "s0011_adjBL_wTUCP"
+├── name                 TEXT
+├── short_title          TEXT
+├── is_active            INTEGER
+├── author               TEXT                       -- scenario_author.short_code
+├── hydroclimate         TEXT                       -- hydroclimate.short_code
+├── slr                  TEXT                       -- slr.short_code
+│
+│   ── operations (one column per operation_category, NULL if not linked) ──
+├── biops                TEXT                       -- e.g. "biops_standard"
+├── tucp                 TEXT                       -- e.g. "TUCP_TUCO"
+├── gw_restrictions      TEXT                       -- e.g. "gw_none", "SGMA_CV"
+├── infrastructure       TEXT                       -- e.g. "infra_standard"
+├── flow                 TEXT                       -- e.g. "flow_standard"
+├── delta_outflow        TEXT                       -- e.g. "delta_regs_standard"
+├── comm_delivery        TEXT                       -- e.g. "alloc_standard"
+├── regulatory_salinity  TEXT                       -- NULL for most scenarios
+├── carryover            TEXT                       -- NULL for most scenarios
+│
+│   ── assumptions (one column per assumption_category, NULL if not linked) ──
+├── land_use             TEXT                       -- e.g. "lu_2020_landiq"
+└── gw_model             TEXT                       -- NULL until gw_model links added
+
+NULL in a category column = no link for that category
+(e.g. s0046 has no delta_outflow; most scenarios have no regulatory_salinity)
+
+Source: database/scripts/sql/migrations/17_create_scenario_full_view.sql
+```
 ```
