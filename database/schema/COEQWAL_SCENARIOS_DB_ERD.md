@@ -49,6 +49,7 @@
 
 VIEWS
     scenario_full    ← wide pivot of scenario + operations + assumptions (all in one row)
+    refuge_du_full   ← denormalized refuge demand units with decoded cs3_type label
 ```
 
 ## **Layer 00 — VERSIONING SYSTEM**
@@ -2588,6 +2589,129 @@ Constraints:
 └── Unique: (scenario_short_code, du_id)
 ```
 
+#### **refuge_du_delivery_monthly (wildlife refuge demand unit delivery statistics)**
+```
+Table: refuge_du_delivery_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- References du_refuge_entity.du_id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── delivery_avg_taf      NUMERIC(10,2)                -- Mean monthly SW delivery (TAF)
+├── delivery_cv           NUMERIC(10,4)                -- CV of monthly delivery
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL DEFAULT 1
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL DEFAULT 1
+
+Records: ~4,752 rows (18 DUs × 12 months × ~22 active scenarios)
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+Source: DN_{DU_ID} from deliveries CSV, TAF block (Units row = 'TAF').
+ETL: etl/statistics/refuge/calculate_refuge_statistics.py
+```
+
+#### **refuge_du_shortage_monthly (wildlife refuge demand unit shortage statistics)**
+```
+Table: refuge_du_shortage_monthly
+├── id                        SERIAL PRIMARY KEY
+├── scenario_short_code       VARCHAR(20) NOT NULL
+├── du_id                     VARCHAR(20) NOT NULL     -- References du_refuge_entity.du_id
+├── water_month               INTEGER NOT NULL         -- 1-12 (Oct=1, Sep=12)
+├── shortage_avg_taf          NUMERIC(10,2)            -- Mean monthly shortage (TAF)
+├── shortage_cv               NUMERIC(10,4)            -- CV of monthly shortage (TAF)
+├── shortage_pct_avg          NUMERIC(10,4)            -- Mean shortage as % of demand
+├── shortage_pct_cv           NUMERIC(10,4)            -- CV of shortage %
+├── shortage_frequency_pct    NUMERIC(10,4)            -- Fraction of months with shortage > 0.1 TAF
+├── q0                        NUMERIC(10,2)            -- Percentile bands of monthly shortage TAF
+├── q10                       NUMERIC(10,2)
+├── q30                       NUMERIC(10,2)
+├── q50                       NUMERIC(10,2)
+├── q70                       NUMERIC(10,2)
+├── q90                       NUMERIC(10,2)
+├── q100                      NUMERIC(10,2)
+├── exc_p5                    NUMERIC(10,2)            -- Exceedance percentiles
+├── exc_p10                   NUMERIC(10,2)
+├── exc_p25                   NUMERIC(10,2)
+├── exc_p50                   NUMERIC(10,2)
+├── exc_p75                   NUMERIC(10,2)
+├── exc_p90                   NUMERIC(10,2)
+├── exc_p95                   NUMERIC(10,2)
+├── sample_count              INTEGER
+├── is_active                 BOOLEAN DEFAULT TRUE
+├── created_at                TIMESTAMPTZ DEFAULT NOW()
+├── created_by                INTEGER NOT NULL DEFAULT 1
+├── updated_at                TIMESTAMPTZ DEFAULT NOW()
+└── updated_by                INTEGER NOT NULL DEFAULT 1
+
+Records: ~4,752 rows (18 DUs × 12 months × ~22 active scenarios)
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+Note: Shortage is DERIVED — no native CalSim shortage variable exists for refuge DUs.
+      shortage_taf = max(AWO_{DU_ID} - DN_{DU_ID}, 0)
+Source: AWO_{DU_ID} from SV input CSV (TAF); DN_{DU_ID} from deliveries CSV (TAF block).
+ETL: etl/statistics/refuge/calculate_refuge_statistics.py
+```
+
+#### **refuge_du_period_summary (wildlife refuge demand unit period summary)**
+```
+Table: refuge_du_period_summary
+├── id                          SERIAL PRIMARY KEY
+├── scenario_short_code         VARCHAR(20) NOT NULL
+├── du_id                       VARCHAR(20) NOT NULL     -- References du_refuge_entity.du_id
+├── simulation_start_year       INTEGER                  -- First water year (e.g., 1922)
+├── simulation_end_year         INTEGER                  -- Last water year (e.g., 2021)
+├── total_years                 INTEGER                  -- Total simulated years
+├── annual_delivery_avg_taf     NUMERIC(10,2)            -- Mean of annual delivery totals
+├── annual_delivery_cv          NUMERIC(10,4)            -- CV of annual delivery
+├── delivery_exc_p5             NUMERIC(10,2)            -- Annual delivery exceedance curve
+├── delivery_exc_p10            NUMERIC(10,2)
+├── delivery_exc_p25            NUMERIC(10,2)
+├── delivery_exc_p50            NUMERIC(10,2)
+├── delivery_exc_p75            NUMERIC(10,2)
+├── delivery_exc_p90            NUMERIC(10,2)
+├── delivery_exc_p95            NUMERIC(10,2)
+├── annual_shortage_avg_taf     NUMERIC(10,2)            -- Mean of annual shortage totals
+├── annual_shortage_cv          NUMERIC(10,4)            -- CV of annual shortage
+├── annual_shortage_pct_avg     NUMERIC(10,4)            -- Mean annual shortage as % of demand
+├── annual_shortage_pct_cv      NUMERIC(10,4)            -- CV of annual shortage %
+├── reliability_pct_95          NUMERIC(10,4)            -- 95th pct of annual shortage %
+│                                                        -- "In 95 of 100 years, shortage ≤ this value"
+├── is_active                   BOOLEAN DEFAULT TRUE
+├── created_at                  TIMESTAMPTZ DEFAULT NOW()
+├── created_by                  INTEGER NOT NULL DEFAULT 1
+├── updated_at                  TIMESTAMPTZ DEFAULT NOW()
+└── updated_by                  INTEGER NOT NULL DEFAULT 1
+
+Records: ~396 rows (18 DUs × ~22 active scenarios)
+
+Constraints:
+└── Unique: (scenario_short_code, du_id)
+
+ETL: etl/statistics/refuge/calculate_refuge_statistics.py
+```
+
 ---
 
 ## **10_TIER LAYER**
@@ -2826,9 +2950,16 @@ Table: network_subtype
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (27 total):
-├── IDs 1-10: Arc subtypes (BP, CH, CL, HIS, IM, LI, NA, NS, PRP, ST)
-└── IDs 11-27: Node subtypes (A, BYP, CNL, GWO, NA, NSM, OMD, OMR, PRP, R, Reservoir, SG, SIM, STM, U, X)
+Values (28 total):
+├── IDs 1-10:  Arc subtypes (BP, CH, CL, HIS, IM, LI, NA, NS, PRP, ST)
+└── IDs 11-28: Node subtypes (A, BYP, CNL, GWO, NA, NSM, OMD, OMR, PRP, R, Reservoir, SG, SIM, STM, U, X, PR, NR)
+              PR (id=27) = Project Refuge — CVP (Central Valley Project) contract deliveries
+              NR (id=28) = Non-project Refuge — water rights only, no CVP deliveries
+              R  (id=20) = Generic refuge (legacy; all 18 DUs now use PR or NR)
+
+Note: 9 refuge nodes (08N_PR1, 08N_PR2, and all SJR refuges except 91_PR) were
+incorrectly tagged with subtype U (Urban, id=25) in the original seed data.
+Migration 22 corrects all 18 refuge nodes to use PR (id=27) or NR (id=28).
 ```
 
 #### **Views**
@@ -3390,28 +3521,51 @@ Records: 144 agricultural demand units
 
 #### **du_refuge_entity (refuge demand unit management)**
 
-Status: PLANNED — not yet created in the database.
+Seed file: `database/seed_tables/04_calsim_data/du_refuge_entity.csv` (18 rows)
+Migration: `database/scripts/sql/migrations/20_create_refuge_entity_table.sql`
+
+Statistics tables: `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary`
+(see Layer 09+ — STATISTICS / RESULTS section above)
+
+Source: CalSim 3 Main Report Tables 3-9 (SAC region) and 3-10 (SJR/Tulare region).
+`gw` and `sw` flags indicate whether the demand unit has access to groundwater and surface water
+respectively, as defined in the report, and should be surfaced in the frontend interface.
 
 ```
-Table: du_refuge_entity   [PLANNED]
-├── id                   SERIAL PRIMARY KEY
-├── du_id                VARCHAR UNIQUE NOT NULL
-├── network_node_id      INTEGER NOT NULL           -- FK network.id
-├── wba_id               VARCHAR
-├── du_class             VARCHAR DEFAULT 'Refuge'
-├── total_acre           NUMERIC
-├── polygon_count        INTEGER DEFAULT 1
-├── refuge_or_wildlife_area VARCHAR                 -- Refuge specific
-├── managed_by           VARCHAR                    -- Refuge specific
-├── provider             VARCHAR                    -- Refuge specific
-├── habitat_type         VARCHAR                    -- Refuge specific
-├── entity_type_id       INTEGER NOT NULL           -- FK calsim_entity_type.id
-├── entity_version_id    INTEGER NOT NULL           -- FK version.id (entity family)
-├── attribute_source     JSONB NOT NULL
-├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK developer.id
-├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK developer.id
+Table: du_refuge_entity
+├── id                            SERIAL PRIMARY KEY
+├── du_id                         VARCHAR(20) UNIQUE NOT NULL    -- e.g. 08N_PR1, 91_PR
+├── wba_id                        VARCHAR(10)                    -- Water Budget Area ID
+├── hydrologic_region             VARCHAR(20) NOT NULL           -- SAC, SJR, TULARE
+├── dups                          INTEGER                        -- -1 = aggregated DU, 0 = single unit
+├── du_class                      VARCHAR(50) DEFAULT 'Refuge'
+├── cs3_type                      VARCHAR(10)                    -- PR = Project Refuge (CVP), NR = Non-project Refuge
+├── total_acres                   NUMERIC(14,4)
+├── polygon_count                 INTEGER DEFAULT 1
+├── refuge_or_wildlife_area       TEXT                           -- Refuge name(s) within this DU
+├── managed_by                    VARCHAR(200)                   -- Managing agency: USFWS, CDFW, Private, …
+├── provider                      VARCHAR(200)                   -- Water provider/contractor (blank = drainage-supplied)
+├── gw                            BOOLEAN NOT NULL DEFAULT FALSE -- Access to groundwater (from CalSim 3 report)
+├── sw                            BOOLEAN NOT NULL DEFAULT TRUE  -- Access to surface water (from CalSim 3 report)
+├── point_of_diversion_conveyance TEXT                          -- Point of diversion description
+├── source                        VARCHAR(100)                   -- e.g. geopackage,calsim_report
+├── model_source                  VARCHAR(50) DEFAULT 'calsim3'
+├── has_gis_data                  BOOLEAN DEFAULT TRUE
+├── is_active                     BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by                    INTEGER NOT NULL DEFAULT 1     -- FK → developer.id
+├── updated_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by                    INTEGER NOT NULL DEFAULT 1     -- FK → developer.id
+
+Foreign keys:
+├── Ref: du_refuge_entity.created_by > developer.id [delete: restrict, update: cascade]
+└── Ref: du_refuge_entity.updated_by > developer.id [delete: restrict, update: cascade]
+
+Indexes:
+├── du_refuge_entity_pkey (id)
+├── du_refuge_entity_du_id_key (du_id)
+├── idx_du_refuge_entity_hydrologic_region (hydrologic_region)
+└── idx_du_refuge_entity_cs3_type (cs3_type)
 ```
 
 ### **Entity Grouping Tables**
@@ -3537,4 +3691,33 @@ NULL in a category column = no link for that category
 Source: database/scripts/sql/migrations/17_create_scenario_full_view.sql
         database/scripts/sql/migrations/18_filter_active_scenarios_in_view.sql
 ```
+
+---
+
+### **refuge_du_full**
+
+Denormalized, human-readable view of **active** wildlife refuge demand units.
+Decodes `cs3_type` into a plain-language label (`PR` → `Project Refuge`, `NR` → `Non-project Refuge`).
+Use this view for API responses and frontend attribute panels. The `gw` and `sw` columns
+should be surfaced in the frontend (tooltip or attribute panel).
+
+```
+View: refuge_du_full
+Filter: WHERE du_refuge_entity.is_active = TRUE
+├── du_id                         TEXT     -- e.g. "08N_PR1"
+├── wba_id                        TEXT     -- Water Budget Area ID
+├── hydrologic_region             TEXT     -- SAC, SJR, TULARE
+├── cs3_type                      TEXT     -- PR, NR (raw)
+├── cs3_type_label                TEXT     -- "Project Refuge" or "Non-project Refuge"
+├── refuge_or_wildlife_area       TEXT     -- Refuge name(s) within this DU
+├── managed_by                    TEXT     -- Managing agency: USFWS, CDFW, Private, …
+├── provider                      TEXT     -- Water provider/contractor (NULL = drainage-supplied)
+├── gw                            BOOLEAN  -- Access to groundwater (surface in frontend)
+├── sw                            BOOLEAN  -- Access to surface water (surface in frontend)
+├── total_acres                   NUMERIC
+├── polygon_count                 INTEGER
+├── point_of_diversion_conveyance TEXT     -- Point of diversion description
+└── has_gis_data                  BOOLEAN
+
+Source: database/scripts/sql/migrations/20_create_refuge_entity_table.sql
 ```

@@ -32,21 +32,21 @@ short_code,name,description,comment,entity_type_id,type_id,subtype_ids,model_lis
 08N_NA, ,Non-District,,2,21,{11},{1},"{4,9}",True,1, , ,12
 08N_NU,Groundwater,"Hamilton City, Small Communities",,2,21,{25},{1},"{4,9}",True,1, , ,12
 08N_PA, ,Colusa Drain MWC,,2,21,{11},{1},"{4,9}",True,1, , ,12
-08N_PR1,Sacramento NWR,Sacramento NWR,,2,21,{25},{1},"{4,9}",True,1, , ,12
-08N_PR2,Delevan NWR,Delevan NWR,,2,21,{25},{1},"{4,9}",True,1, , ,12
+08N_PR1,Sacramento NWR,Sacramento NWR,,2,21,{27},{1},"{4,9}",True,1, , ,12
+08N_PR2,Delevan NWR,Delevan NWR,,2,21,{27},{1},"{4,9}",True,1, , ,12
 08N_SA1, ,"Princeton-Cordora-Glenn ID, Provident ID, Maxwell ID (part), Misc. Settlement Contractors",,2,21,{25},{1},"{4,9}",True,1, , ,12
 08N_SA2, ,Glenn-Colusa ID (part),,2,21,{25},{1},"{4,9}",True,1, , ,12
 08S_NA1, ,Non-District,,2,21,{25},{1},"{4,9}",True,1, , ,12
 08S_NA2, ,Non-District,,2,21,{25},{1},"{4,9}",True,1, , ,12
 08S_NU,"Cities of Colusa, Williams, Knights Landing and Small Communities.","City of Colusa, Williams, Small Communities",,2,21,{25},{1},"{4,9}",True,1, , ,12
 08S_PA, ,Colusa Drain MWC (part),,2,21,{11},{1},"{4,9}",True,1, , ,12
-08S_PR, ,Colusa NWR,,2,21,{20},{1},"{4,9}",True,1, , ,12
+08S_PR, ,Colusa NWR,,2,21,{27},{1},"{4,9}",True,1, , ,12
 08S_SA1, ,"Maxwell ID (portion), Roberts Ditch IC, Sycamore Family Trust, Misc. Settlement Contractors",,2,21,{25},{1},"{4,9}",True,1, , ,12
 08S_SA2, ,Glenn-Colusa ID (part),,2,21,{25},{1},"{4,9}",True,1, , ,12
 08S_SA3, ,"RD 108, River Garden Farms, Misc. Settlement Contractors",,2,21,{25},{1},"{4,9}",True,1, , ,12
 09_NA, ,"Llano Seco Rancho, Dayton MWC, Non-District",,2,21,{11},{1},"{4,9}",True,1, , ,12
 09_NU,Groundwater,Small communities,,2,21,{25},{1},"{4,9}",True,1, , ,12
-09_PR, ,Upper Butte Wildlife Area and Sacramento River NWR - Llano Seco Units,,2,21,{20},{1},"{4,9}",True,1, , ,12
+09_PR, ,Upper Butte Wildlife Area and Sacramento River NWR - Llano Seco Units,,2,21,{27},{1},"{4,9}",True,1, , ,12
 09_SA1,M and T Ranch Inc.,Pacific Realty Associates (M&T Chico Ranch),,2,21,{25},{1},"{4,9}",True,1, , ,12
 09_SA2, ,"RD 1004, Carter MWC, Jack Baber, Misc. Settlement Contractors",,2,21,{25},{1},"{4,9}",True,1, , ,12
 10_NA,Durham ID,Non-District,,2,21,{11},{1},"{4,9}",True,1, , ,12
@@ -55,7 +55,7 @@ short_code,name,description,comment,entity_type_id,type_id,subtype_ids,model_lis
 11_NA, ,"Sutter Butte MWC, Non-District",,2,21,{11},{1},"{4,9}",True,1, , ,12
 11_NU1, ,Thermalito ID (Oroville),,2,21,{25},{1},"{4,9}",True,1, , ,12
 11_NU2,Groundwater,"City of Biggs, Gridley, Live Oak WD, Small Communities",,2,21,{25},{1},"{4,9}",True,1, , ,12
-11_PR,Upper Butte WA - Howard Slough Unit/Little Dry Creek,Upper Butte Basin Wildlife Area Howard Slough Unit and Little Dry Creek,,2,21,{20},{1},"{4,9}",True,1, , ,12
+11_PR,Upper Butte WA - Howard Slough Unit/Little Dry Creek,Upper Butte Basin Wildlife Area Howard Slough Unit and Little Dry Creek,,2,21,{27},{1},"{4,9}",True,1, , ,12
 11_SA1, ,Western Canal WD,,2,21,{25},{1},"{4,9}",True,1, , ,12
 11_SA2, ,Richvale ID,,2,21,{25},{1},"{4,9}",True,1, , ,12
 11_SA3, ,"Biggs-West Gridley WD, Butte WD",,2,21,{25},{1},"{4,9}",True,1, , ,12
@@ -84,12 +84,12 @@ short_code,name,description,comment,entity_type_id,type_id,subtype_ids,model_lis
 16_PU, ,City of Yuba City,,2,21,{25},{1},"{4,9}",True,1, , ,12
 16_SA, ,"Garden Highway MWC, Tudor ID, Oswald MWC, Misc. FRSA Diverters",,2,21,{11},{1},"{4,9}",True,1, , ,12
 17N_NA,Groundwater Only,"Non-Project, Non-District",,2,21,{11},{1},"{4,9}",True,1, , ,12
-17N_NR, ,Sutter and Butte Sink Duck Clubs,,2,21,{20},{1},"{4,9}",True,1, , ,12
+17N_NR, ,Sutter and Butte Sink Duck Clubs,,2,21,{28},{1},"{4,9}",True,1, , ,12
 17N_NU,Small Communities,Small Communities,,2,21,{25},{1},"{4,9}",True,1, , ,12
-17N_PR, ,Gray Lodge WA,,2,21,{20},{1},"{4,9}",True,1, , ,12
+17N_PR, ,Gray Lodge WA,,2,21,{27},{1},"{4,9}",True,1, , ,12
 17S_NA, ,"Sutter Bypass-Butte Slough WUA, Non-district",,2,21,{11},{1},"{4,9}",True,1, , ,12
 17S_NU, ,Sutter CSD Small Communities,,2,21,{25},{1},"{4,9}",True,1, , ,12
-17S_PR,Difficult to locate within 17S.,Sutter NWR,,2,21,{20},{1},"{4,9}",True,1, , ,12
+17S_PR,Difficult to locate within 17S.,Sutter NWR,,2,21,{27},{1},"{4,9}",True,1, , ,12
 17S_SA,Misc. Feather Riparian Diverters,Misc. FRSA Diverters,,2,21,{11},{1},"{4,9}",True,1, , ,12
 18_NA, ,"Butte Slough IC, Sutter Butte MWC, Non-District",,2,21,{11},{1},"{4,9}",True,1, , ,12
 18_NU,Groundwater,Small communities,,2,21,{25},{1},"{4,9}",True,1, , ,12
@@ -188,9 +188,9 @@ short_code,name,description,comment,entity_type_id,type_id,subtype_ids,model_lis
 63_NA4,,"Plainsburg ID, La Grande-Athlone, Turner Island WD, Stevinson WD, Non-District, Merced Riparian",,2,21,{25},{1},"{4,9}",True,2,,,12
 63_NA5,,El Nido ID,,2,21,{25},{1},{9},False,,,,12
 63_NU,"Merced, Atwater, Livingston, Winton, Planada, Le Grand","Cities of Merced, Atwater, Livingston, Winton, Planada and LeGrand small communities",,2,21,{25},{1},"{4,9}",True,2,,,12
-63_PR1,Arena Plains Unit - Merced NWR,Arena Plains Unit of Merced NWR,,2,21,{25},{1},"{4,9}",True,2,,,12
-63_PR2,"Merced Unit, Lone Tree Unit - Merced NWR",Merced and Lone Tree units of Merced NWR,,2,21,{25},{1},"{4,9}",True,2,,,12
-63_PR3,East Bear Creek Unit - San Luis NWR,East Bear Unit of San Luis NWR,,2,21,{25},{1},"{4,9}",True,2,,,12
+63_PR1,Arena Plains Unit - Merced NWR,Arena Plains Unit of Merced NWR,,2,21,{27},{1},"{4,9}",True,2,,,12
+63_PR2,"Merced Unit, Lone Tree Unit - Merced NWR",Merced and Lone Tree units of Merced NWR,,2,21,{27},{1},"{4,9}",True,2,,,12
+63_PR3,East Bear Creek Unit - San Luis NWR,East Bear Unit of San Luis NWR,,2,21,{27},{1},"{4,9}",True,2,,,12
 64_NA1,,Non-District,,2,21,{25},{1},"{4,9}",True,2,,,12
 64_NA2,Non District Ag,Non-District West,,2,21,{25},{1},"{4,9}",True,2,,,12
 64_NU,"Madera, Chowchilla, Madera Acres","Cities of Madera, Chowchilla, Madera Acres, and State Prisons small communities",,2,21,{25},{1},"{4,9}",True,2,,,12
@@ -216,12 +216,12 @@ short_code,name,description,comment,entity_type_id,type_id,subtype_ids,model_lis
 72_NA2,,,,2,21,{25},{1},"{4,9}",True,2,,,12
 72_NU,"Los Banos, Gustine, Firebaugh, Newman","Gustine, Firebaugh Los Banos, Newman small communities",,2,21,{25},{1},"{4,9}",True,2,,,12
 72_PA,,Laguna WD,,2,21,{11},{1},"{4,9}",True,2,,,12
-72_PR1,,Volta WA,,2,21,{25},{1},"{4,9}",True,2,,,12
-72_PR2,,Kesterson NWR Freitas and Blue Goose units of San Luis NWR,,2,21,{25},{1},"{4,9}",True,2,,,12
-72_PR3,,West Bear Creek and San Luis units of San Luis NWR,,2,21,{25},{1},"{4,9}",True,2,,,12
-72_PR4,,"Los Banos WA Salt Slough, China Island and Gadwall units of North Grassland WA",,2,21,{25},{1},"{4,9}",True,2,,,12
-72_PR5,,Grassland WD North,,2,21,{25},{1},"{4,9}",True,2,,,12
-72_PR6,,Grassland WD (South),,2,21,{25},{1},"{4,9}",True,2,,,12
+72_PR1,,Volta WA,,2,21,{27},{1},"{4,9}",True,2,,,12
+72_PR2,,Kesterson NWR Freitas and Blue Goose units of San Luis NWR,,2,21,{27},{1},"{4,9}",True,2,,,12
+72_PR3,,West Bear Creek and San Luis units of San Luis NWR,,2,21,{27},{1},"{4,9}",True,2,,,12
+72_PR4,,"Los Banos WA Salt Slough, China Island and Gadwall units of North Grassland WA",,2,21,{27},{1},"{4,9}",True,2,,,12
+72_PR5,,Grassland WD North,,2,21,{27},{1},"{4,9}",True,2,,,12
+72_PR6,,Grassland WD (South),,2,21,{27},{1},"{4,9}",True,2,,,12
 72_PU,South Dos Palos (Dos Palos Station),City of Los Banos,,2,21,{25},{1},"{4,9}",True,2,,,12
 72_XA1,,,,2,21,{11},{1},{4},True,2,,,12
 72_XA1 San Luis Canal Company,,,,2,,{},{1},{9},False,3,,,12
@@ -238,7 +238,7 @@ short_code,name,description,comment,entity_type_id,type_id,subtype_ids,model_lis
 90_PA2,,Westlands WD Priority II,,2,21,{25},{1},"{4,9}",True,2,,,12
 90_PU,"Coalinga, Huron, Avenal","Avenal, Coalinga, Huron",,2,21,{25},{1},"{4,9}",True,2,,,12
 91_PA,,"Coelho Family Trust, Fresno Slough WD, James ID, RD 1606, Tranquility ID, Tranquility PUD",,2,21,{11},{1},"{4,9}",True,2,,,12
-91_PR,,Mendota WA,,2,21,{20},{1},"{4,9}",True,2,,,12
+91_PR,,Mendota WA,,2,21,{27},{1},"{4,9}",True,2,,,12
 A.D Edmonson,,Pumping Plant,,2,,{},{1},{9},False,,,,12
 ABN000,Connection to Cross Canal and Sacramento River also connects to Natomas East Main Drain by way of Natomas Central MWD,,,2,18,{24},{1},"{4,9}",True,1,Auburn Ravine,ABN,12
 ABN006,"South Sutter Water District Diversions at Aitken Ranch, Tom Glenn and Davis Dams on Auburn Ravine and Coppin Dam on Cross Canal.",,,2,18,{24},{1},"{4,9}",True,1,Auburn Ravine,ABN,12

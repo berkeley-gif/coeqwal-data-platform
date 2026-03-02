@@ -67,6 +67,10 @@ from routes.batch_statistics_endpoints import (
     router as batch_stats_router,
     set_db_pool as set_batch_stats_db_pool,
 )
+from routes.refuge_endpoints import (
+    router as refuge_router,
+    set_db_pool as set_refuge_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -163,6 +167,7 @@ async def lifespan(app: FastAPI):
     set_demand_unit_db_pool(db_pool)
     set_ag_db_pool(db_pool)
     set_batch_stats_db_pool(db_pool)
+    set_refuge_db_pool(db_pool)
 
     yield
 
@@ -214,6 +219,9 @@ app.include_router(ag_router)
 
 # Batch statistics router (for Data Explorer performance)
 app.include_router(batch_stats_router)
+
+# Wildlife refuge statistics router
+app.include_router(refuge_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)

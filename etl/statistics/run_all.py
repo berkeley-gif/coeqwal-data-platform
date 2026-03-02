@@ -8,6 +8,7 @@ Runs all statistics calculations for a scenario in the correct order:
 3. M&I contractor statistics (delivery, shortage)
 4. CWS aggregate statistics (SWP, CVP, MWD totals)
 5. Agricultural (AG) statistics (delivery, shortage, aggregates)
+6. Wildlife Refuge statistics (delivery, shortage, reliability)
 
 Usage:
     # Run all statistics for a scenario
@@ -73,6 +74,12 @@ ETL_MODULES = {
         'name': 'Agricultural Statistics',
         'tables': ['ag_du_delivery_monthly', 'ag_du_shortage_monthly', 'ag_du_period_summary',
                    'ag_aggregate_monthly', 'ag_aggregate_period_summary'],
+    },
+    'refuge': {
+        'path': SCRIPT_DIR / 'refuge' / 'main.py',
+        'name': 'Wildlife Refuge Statistics',
+        'tables': ['refuge_du_delivery_monthly', 'refuge_du_shortage_monthly',
+                   'refuge_du_period_summary'],
     },
 }
 
@@ -343,6 +350,7 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
         'mi': 'M&I',
         'cws_aggregate': 'CWS',
         'ag': 'AG',
+        'refuge': 'REF',
     }
     
     # Legend

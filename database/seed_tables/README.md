@@ -23,6 +23,27 @@ seed_tables/
 └── 10_tier/                 tier definitions and results
 ```
 
+## Loading seed data into the database
+
+Seed data is loaded from these repo files directly — no S3 upload is required.
+Migrations use the psql `\copy` meta-command, which reads from the local filesystem
+of the machine running the command. **Always run migrations from the repo root** so
+relative paths resolve correctly:
+
+```bash
+# Example: run a migration that loads seed data
+psql $SUPERUSER_URL -f database/scripts/sql/migrations/20_create_refuge_entity_table.sql
+
+# Example: re-sync scenario / theme / link tables after editing a CSV
+psql $SUPERUSER_URL -f database/scripts/sql/upsert_scenario_data.sql
+```
+
+`\copy` vs `COPY`:
+- `\copy` (lowercase, client-side) — reads from the **client machine**. Works for Cloud9 and local dev.
+- `COPY` (uppercase, server-side) — reads from the **RDS server filesystem**. Not available on RDS.
+
+Always use `\copy`.
+
 ## Audit and verify
 
 ```bash

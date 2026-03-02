@@ -1,14 +1,15 @@
--- DEPRECATED: This script loaded seed data from S3. Use upsert_scenario_data.sql instead.
--- Seed tables are now loaded via \copy directly from the repo — no S3 upload required.
--- Kept for reference only.
-
--- UPSERT SCENARIO DATA FROM S3 (05_themes_scenarios directory)
+-- UPSERT SCENARIO DATA FROM REPO (05_themes_scenarios directory)
 -- Updates scenario, theme_scenario_link, scenario_key_assumption_link, scenario_key_operation_link
--- Created: December 2025
+--
+-- Run from the repository root:
+--   psql $SUPERUSER_URL -f database/scripts/sql/upsert_scenario_data.sql
+--
+-- Seed data is loaded via \copy from the local repo — no S3 upload needed.
+-- Paths below are relative to wherever psql is invoked (the repo root).
 
 \echo ''
-\echo '🔄 UPSERTING SCENARIO DATA FROM S3 (05_themes_scenarios)'
-\echo '========================================================'
+\echo '🔄 UPSERTING SCENARIO DATA (05_themes_scenarios)'
+\echo '================================================='
 
 -- Check current data status
 \echo ''
@@ -32,12 +33,11 @@ TRUNCATE TABLE scenario_key_operation_link CASCADE;
 \echo '✅ Link tables cleared'
 
 -- =============================================================================
--- STEP 2: Upsert scenario table (use temp table for upsert logic)
+-- STEP 2: Upsert scenario table via staging
 -- =============================================================================
 \echo ''
-\echo '📥 Loading scenarios from S3...'
+\echo '📥 Loading scenarios from repo...'
 
--- Create temp table for staging
 CREATE TEMP TABLE scenario_staging (
     id INTEGER,
     scenario_id VARCHAR,
@@ -57,66 +57,49 @@ CREATE TEMP TABLE scenario_staging (
     updated_by INTEGER
 );
 
--- Load from S3
-SELECT aws_s3.table_import_from_s3(
-    'scenario_staging',
-    'id, scenario_id, short_code, is_active, name, subtitle, short_title, simple_description, description, narrative, baseline_scenario_id, hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by',
-    '(format csv, header true)',
-    'coeqwal-seeds-dev',
-    '05_themes_scenarios/scenario.csv',
-    'us-west-2'
-);
+\copy scenario_staging (id, scenario_id, short_code, is_active, name, subtitle, short_title, simple_description, description, narrative, baseline_scenario_id, hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by) FROM 'database/seed_tables/05_themes_scenarios/scenario.csv' WITH (FORMAT csv, HEADER true, NULL '');
 
--- Upsert from staging to scenario
 INSERT INTO scenario (
-    id, scenario_id, short_code, is_active, name, subtitle, short_title, 
-    simple_description, description, narrative, baseline_scenario_id, 
-    hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by
-)
-SELECT 
     id, scenario_id, short_code, is_active, name, subtitle, short_title,
     simple_description, description, narrative, baseline_scenario_id,
-    hydroclimate_id, scenario_author_id, scenario_version_id, 
+    hydroclimate_id, scenario_author_id, scenario_version_id, created_by, updated_by
+)
+SELECT
+    id, scenario_id, short_code, is_active, name, subtitle, short_title,
+    simple_description, description, narrative, baseline_scenario_id,
+    hydroclimate_id, scenario_author_id, scenario_version_id,
     COALESCE(created_by, 1), COALESCE(updated_by, 1)
 FROM scenario_staging
 ON CONFLICT (id) DO UPDATE SET
-    scenario_id = EXCLUDED.scenario_id,
-    short_code = EXCLUDED.short_code,
-    is_active = EXCLUDED.is_active,
-    name = EXCLUDED.name,
-    subtitle = EXCLUDED.subtitle,
-    short_title = EXCLUDED.short_title,
+    scenario_id        = EXCLUDED.scenario_id,
+    short_code         = EXCLUDED.short_code,
+    is_active          = EXCLUDED.is_active,
+    name               = EXCLUDED.name,
+    subtitle           = EXCLUDED.subtitle,
+    short_title        = EXCLUDED.short_title,
     simple_description = EXCLUDED.simple_description,
-    description = EXCLUDED.description,
-    narrative = EXCLUDED.narrative,
-    baseline_scenario_id = EXCLUDED.baseline_scenario_id,
-    hydroclimate_id = EXCLUDED.hydroclimate_id,
+    description        = EXCLUDED.description,
+    narrative          = EXCLUDED.narrative,
+    baseline_scenario_id  = EXCLUDED.baseline_scenario_id,
+    hydroclimate_id    = EXCLUDED.hydroclimate_id,
     scenario_author_id = EXCLUDED.scenario_author_id,
     scenario_version_id = EXCLUDED.scenario_version_id,
-    updated_by = EXCLUDED.updated_by;
+    updated_by         = EXCLUDED.updated_by;
 
 DROP TABLE scenario_staging;
 
-\echo '✅ Scenarios upserted'
-
 -- Reset sequence to max id + 1
 SELECT setval('scenario_id_seq', COALESCE((SELECT MAX(id) FROM scenario), 0) + 1, false);
-\echo '✅ Sequence reset'
+
+\echo '✅ Scenarios upserted, sequence reset'
 
 -- =============================================================================
 -- STEP 3: Load theme_scenario_link
 -- =============================================================================
 \echo ''
-\echo '📥 Loading theme_scenario_link from S3...'
+\echo '📥 Loading theme_scenario_link from repo...'
 
-SELECT aws_s3.table_import_from_s3(
-    'theme_scenario_link',
-    'theme_id, scenario_id',
-    '(format csv, header true)',
-    'coeqwal-seeds-dev',
-    '05_themes_scenarios/theme_scenario_link.csv',
-    'us-west-2'
-);
+\copy theme_scenario_link (theme_id, scenario_id) FROM 'database/seed_tables/05_themes_scenarios/theme_scenario_link.csv' WITH (FORMAT csv, HEADER true, NULL '');
 
 \echo '✅ theme_scenario_link loaded'
 
@@ -124,16 +107,9 @@ SELECT aws_s3.table_import_from_s3(
 -- STEP 4: Load scenario_key_assumption_link
 -- =============================================================================
 \echo ''
-\echo '📥 Loading scenario_key_assumption_link from S3...'
+\echo '📥 Loading scenario_key_assumption_link from repo...'
 
-SELECT aws_s3.table_import_from_s3(
-    'scenario_key_assumption_link',
-    'scenario_id, assumption_id',
-    '(format csv, header true)',
-    'coeqwal-seeds-dev',
-    '05_themes_scenarios/scenario_key_assumption_link.csv',
-    'us-west-2'
-);
+\copy scenario_key_assumption_link (scenario_id, assumption_id) FROM 'database/seed_tables/05_themes_scenarios/scenario_key_assumption_link.csv' WITH (FORMAT csv, HEADER true, NULL '');
 
 \echo '✅ scenario_key_assumption_link loaded'
 
@@ -141,16 +117,9 @@ SELECT aws_s3.table_import_from_s3(
 -- STEP 5: Load scenario_key_operation_link
 -- =============================================================================
 \echo ''
-\echo '📥 Loading scenario_key_operation_link from S3...'
+\echo '📥 Loading scenario_key_operation_link from repo...'
 
-SELECT aws_s3.table_import_from_s3(
-    'scenario_key_operation_link',
-    'scenario_id, operation_id',
-    '(format csv, header true)',
-    'coeqwal-seeds-dev',
-    '05_themes_scenarios/scenario_key_operation_link.csv',
-    'us-west-2'
-);
+\copy scenario_key_operation_link (scenario_id, operation_id) FROM 'database/seed_tables/05_themes_scenarios/scenario_key_operation_link.csv' WITH (FORMAT csv, HEADER true, NULL '');
 
 \echo '✅ scenario_key_operation_link loaded'
 
@@ -193,7 +162,7 @@ ORDER BY s.id;
 
 \echo ''
 \echo '📊 Final counts:'
-SELECT 
+SELECT
     (SELECT COUNT(*) FROM scenario) as scenarios,
     (SELECT COUNT(*) FROM theme_scenario_link) as theme_links,
     (SELECT COUNT(*) FROM scenario_key_assumption_link) as assumption_links,
@@ -202,4 +171,3 @@ SELECT
 \echo ''
 \echo '🎉 SCENARIO DATA UPSERT COMPLETE!'
 \echo '================================='
-

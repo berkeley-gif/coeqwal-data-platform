@@ -34,3 +34,7 @@ public,chart_type,interpretive,interpretive_version_id,Chart type catalog versio
 public,ancillary_data,interpretive,interpretive_version_id,Ancillary data catalog versioning
 public,constant,metadata,metadata_version_id,Constant/lookup versioning
 public,model_value,metadata,source_version_id,Values tagged by source/version
+public,du_refuge_entity,entity,,Wildlife refuge demand unit entities (Layer 03)
+public,refuge_du_delivery_monthly,statistics,,Wildlife refuge demand unit monthly delivery statistics
+public,refuge_du_shortage_monthly,statistics,,Wildlife refuge demand unit monthly shortage statistics
+public,refuge_du_period_summary,statistics,,Wildlife refuge demand unit period-of-record summary statistics

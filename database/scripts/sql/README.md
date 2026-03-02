@@ -37,7 +37,7 @@ Review results for any non-zero counts in integrity checks.
 ## Naming conventions
 
 - `create_*.sql` - Creates new tables
-- `*_from_s3.sql` - Loads data from S3
+- `*_from_s3.sql` - Deprecated; seed data is now loaded from repo via `\copy`
 - `*_local.sql` - Local development variants (gitignored)
 - `*_cloud9.sql` - Cloud9 variants (gitignored)
 - `upsert_*.sql` - Insert or update operations

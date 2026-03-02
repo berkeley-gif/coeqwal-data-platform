@@ -25,3 +25,5 @@ SIM,Simulated,Simulated node,2,18,1,4,True
 STM,Stream,Stream channel node,2,18,1,4,True
 U,Urban,Urban demand node,2,21,1,4,True
 X,Other Demand,Other or unspecified demand node type,2,21,1,4,True
+PR,Project Refuge,CalSim project refuge demand node (CVP contract deliveries),2,21,1,4,True
+NR,Non-project Refuge,CalSim non-project refuge demand node (water rights only — no CVP deliveries),2,21,1,4,True
