@@ -9,6 +9,7 @@ Runs all statistics calculations for a scenario in the correct order:
 4. CWS aggregate statistics (SWP, CVP, MWD totals)
 5. Agricultural (AG) statistics (delivery, shortage, aggregates)
 6. Wildlife Refuge statistics (delivery, shortage, reliability)
+7. Environmental River Flow statistics (% unimpaired, % functional flow, alteration index)
 
 Usage:
     # Run all statistics for a scenario
@@ -80,6 +81,12 @@ ETL_MODULES = {
         'name': 'Wildlife Refuge Statistics',
         'tables': ['refuge_du_delivery_monthly', 'refuge_du_shortage_monthly',
                    'refuge_du_period_summary'],
+    },
+    'env_flows': {
+        'path': SCRIPT_DIR / 'env_flows' / 'main.py',
+        'name': 'Environmental River Flow Statistics',
+        'tables': ['env_flow_channel_monthly', 'env_flow_channel_seasonal',
+                   'env_flow_channel_period_summary'],
     },
 }
 
@@ -352,6 +359,7 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
         'cws_aggregate': 'CWS',
         'ag': 'AG',
         'refuge': 'REF',
+        'env_flows': 'EF',
     }
     
     # Legend

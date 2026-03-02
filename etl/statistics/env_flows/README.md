@@ -256,14 +256,34 @@ PRIMARY KEY (channel_entity_id, scenario_id, water_year, water_month)
 
 ### `env_flow_channel_seasonal`
 ```
-channel_entity_id  INTEGER FK → channel_entity
-scenario_id        INTEGER FK → scenario
+network_arc_id     VARCHAR(30)      -- References channel_entity.network_arc_id
+scenario_short_code VARCHAR(20)
 season_id          INTEGER FK → env_flow_season
-water_year         SMALLINT
-pct_ff_avg         NUMERIC(8,3)    -- mean C/EFLOWS × 100 within season-year
-deviation          NUMERIC(8,3)    -- pct_ff_avg − 100.0 (negative = below target)
-PRIMARY KEY (channel_entity_id, scenario_id, season_id, water_year)
+
+-- Raw flow volume (CFS) — all 60 channels
+flow_avg_cfs       NUMERIC(12,3)   -- mean of per-year seasonal mean flows
+flow_cv            NUMERIC(8,4)
+flow_q0 … flow_q100               -- percentile distribution across years
+flow_exc_p5 … flow_exc_p95
+
+-- Natural flow reference + % unimpaired (Metric 1, seasonal) — 58 channels
+unimp_avg_cfs      NUMERIC(12,3)   -- mean of UNIMP seasonal averages (natural reference)
+pct_unimpaired_avg NUMERIC(8,3)    -- mean (C/UNIMP × 100) across years
+pct_unimpaired_cv  NUMERIC(8,4)
+unimp_q0 … unimp_q100             -- percentile distribution of pct_unimpaired
+unimp_exc_p5 … unimp_exc_p95
+
+-- % Functional flows (Metric 2) — ~17 EFLOWS channels
+pct_ff_avg         NUMERIC(8,3)    -- mean C/EFLOWS × 100 within season-year, across years
+pct_ff_cv          NUMERIC(8,4)
+deviation_avg      NUMERIC(8,3)    -- pct_ff_avg − 100.0 (negative = below target)
+q0 … q100                         -- percentile distribution of pct_ff
+exc_p5 … exc_p95
+target_met_pct     NUMERIC(6,2)    -- % of years where seasonal pct_ff >= 100%
+
+UNIQUE (network_arc_id, scenario_short_code, season_id)
 ```
+Coverage: all 60 channels (flow_* columns); 58 with UNIMP (pct_unimpaired_*); ~17 with EFLOWS (pct_ff_*). Extended by migration 26.
 
 ### `env_flow_channel_period_summary`
 ```
