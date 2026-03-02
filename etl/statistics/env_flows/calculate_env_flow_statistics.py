@@ -509,15 +509,16 @@ def calculate_monthly_statistics(
 
             row['unimp_avg_cfs'] = _round_or_none(aligned_unimp.dropna().mean())
 
-            # Compute pct_unimpaired per timestep; guard against zero denominator
-            pct = pd.Series(
-                np.where(
+            # Compute pct_unimpaired per timestep; guard against zero denominator.
+            # errstate suppresses the numpy divide-by-zero warning that fires even
+            # though np.where masks the invalid result before it is used.
+            with np.errstate(divide='ignore', invalid='ignore'):
+                pct_vals = np.where(
                     aligned_unimp.values > 0,
                     (aligned_flow.values / aligned_unimp.values) * 100,
                     np.nan,
-                ),
-                index=flow.index,
-            ).dropna()
+                )
+            pct = pd.Series(pct_vals, index=flow.index).dropna()
 
             if not pct.empty:
                 row['pct_unimpaired_avg'] = _round_or_none(pct.mean())
@@ -587,19 +588,21 @@ def calculate_seasonal_statistics(
 
     if has_unimp:
         work['unimp'] = pd.to_numeric(work[unimp_sv_variable], errors='coerce')
-        work['pct_unimpaired'] = np.where(
-            work['unimp'] > 0,
-            (work['flow'] / work['unimp']) * 100,
-            np.nan,
-        )
+        with np.errstate(divide='ignore', invalid='ignore'):
+            work['pct_unimpaired'] = np.where(
+                work['unimp'] > 0,
+                (work['flow'] / work['unimp']) * 100,
+                np.nan,
+            )
 
     if has_ef:
         work['eflows'] = pd.to_numeric(work[eflows_var], errors='coerce')
-        work['pct_ff'] = np.where(
-            work['eflows'] > 0,
-            (work['flow'] / work['eflows']) * 100,
-            np.nan,
-        )
+        with np.errstate(divide='ignore', invalid='ignore'):
+            work['pct_ff'] = np.where(
+                work['eflows'] > 0,
+                (work['flow'] / work['eflows']) * 100,
+                np.nan,
+            )
 
     # Assign season and season_year (dry season October belongs to WY-1)
     work['season'] = work['WaterMonth'].map(WY_MONTH_TO_SEASON)
@@ -749,10 +752,11 @@ def calculate_period_summary(
     # ── % Unimpaired: avg and annual CV ───────────────────────────────────
     if has_unimp:
         unimp = pd.to_numeric(df[unimp_sv_variable], errors='coerce')
-        pct = pd.Series(
-            np.where(unimp > 0, (flow / unimp) * 100, np.nan),
-            index=df.index,
-        )
+        with np.errstate(divide='ignore', invalid='ignore'):
+            pct = pd.Series(
+                np.where(unimp > 0, (flow / unimp) * 100, np.nan),
+                index=df.index,
+            )
         result['avg_pct_unimpaired'] = _round_or_none(pct.dropna().mean())
 
         # Annual mean pct_unimpaired per year
