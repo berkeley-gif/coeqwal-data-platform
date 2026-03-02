@@ -33,59 +33,42 @@
 \echo ''
 \echo '1. Adding FK constraints to developer table...'
 
--- channel_entity
-ALTER TABLE channel_entity
-    ADD CONSTRAINT IF NOT EXISTS fk_channel_entity_created_by
-        FOREIGN KEY (created_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT IF NOT EXISTS fk_channel_entity_updated_by
-        FOREIGN KEY (updated_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- channel_variable
-ALTER TABLE channel_variable
-    ADD CONSTRAINT IF NOT EXISTS fk_channel_variable_created_by
-        FOREIGN KEY (created_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT IF NOT EXISTS fk_channel_variable_updated_by
-        FOREIGN KEY (updated_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- env_flow_season
-ALTER TABLE env_flow_season
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_season_created_by
-        FOREIGN KEY (created_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_season_updated_by
-        FOREIGN KEY (updated_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- env_flow_channel_monthly
-ALTER TABLE env_flow_channel_monthly
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_monthly_created_by
-        FOREIGN KEY (created_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_monthly_updated_by
-        FOREIGN KEY (updated_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- env_flow_channel_seasonal
-ALTER TABLE env_flow_channel_seasonal
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_seasonal_created_by
-        FOREIGN KEY (created_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_seasonal_updated_by
-        FOREIGN KEY (updated_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- env_flow_channel_period_summary
-ALTER TABLE env_flow_channel_period_summary
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_period_created_by
-        FOREIGN KEY (created_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT IF NOT EXISTS fk_env_flow_period_updated_by
-        FOREIGN KEY (updated_by) REFERENCES developer(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$
+DECLARE
+    r RECORD;
+    constraints TEXT[][] := ARRAY[
+        -- table,                             constraint_name,                        col,        ref_table
+        ARRAY['channel_entity',               'fk_channel_entity_created_by',         'created_by', 'developer'],
+        ARRAY['channel_entity',               'fk_channel_entity_updated_by',         'updated_by', 'developer'],
+        ARRAY['channel_variable',             'fk_channel_variable_created_by',       'created_by', 'developer'],
+        ARRAY['channel_variable',             'fk_channel_variable_updated_by',       'updated_by', 'developer'],
+        ARRAY['env_flow_season',              'fk_env_flow_season_created_by',        'created_by', 'developer'],
+        ARRAY['env_flow_season',              'fk_env_flow_season_updated_by',        'updated_by', 'developer'],
+        ARRAY['env_flow_channel_monthly',     'fk_env_flow_monthly_created_by',       'created_by', 'developer'],
+        ARRAY['env_flow_channel_monthly',     'fk_env_flow_monthly_updated_by',       'updated_by', 'developer'],
+        ARRAY['env_flow_channel_seasonal',    'fk_env_flow_seasonal_created_by',      'created_by', 'developer'],
+        ARRAY['env_flow_channel_seasonal',    'fk_env_flow_seasonal_updated_by',      'updated_by', 'developer'],
+        ARRAY['env_flow_channel_period_summary', 'fk_env_flow_period_created_by',     'created_by', 'developer'],
+        ARRAY['env_flow_channel_period_summary', 'fk_env_flow_period_updated_by',     'updated_by', 'developer']
+    ];
+    c TEXT[];
+BEGIN
+    FOREACH c SLICE 1 IN ARRAY constraints LOOP
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = c[2] AND conrelid = c[1]::regclass
+        ) THEN
+            EXECUTE format(
+                'ALTER TABLE %I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES %I(id) ON DELETE RESTRICT ON UPDATE CASCADE',
+                c[1], c[2], c[3], c[4]
+            );
+            RAISE NOTICE 'Added constraint % on %', c[2], c[1];
+        ELSE
+            RAISE NOTICE 'Constraint % already exists on % — skipped', c[2], c[1];
+        END IF;
+    END LOOP;
+END;
+$$;
 
 \echo '  ✅ FK constraints added'
 
