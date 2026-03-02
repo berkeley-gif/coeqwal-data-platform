@@ -74,6 +74,7 @@ ALTER TABLE channel_variable
 -- Load into a temp staging table that matches the CSV column order exactly,
 -- then insert only the columns we want.
 
+DROP TABLE IF EXISTS cv_stage;
 CREATE TEMP TABLE cv_stage (
     _id                     INTEGER,
     calsim_id               VARCHAR(40),
@@ -92,7 +93,7 @@ CREATE TEMP TABLE cv_stage (
     source_ids              TEXT,
     created_by              INTEGER,
     updated_by              INTEGER
-) ON COMMIT DROP;
+);
 
 \copy cv_stage FROM 'database/seed_tables/04_variable/channel_variable.csv' WITH (FORMAT csv, HEADER true, NULL '')
 

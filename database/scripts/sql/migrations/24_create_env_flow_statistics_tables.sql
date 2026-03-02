@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS env_flow_season (
     CONSTRAINT env_flow_season_short_code_key UNIQUE (short_code)
 );
 
+DROP TRIGGER IF EXISTS trg_env_flow_season_audit ON env_flow_season;
 CREATE TRIGGER trg_env_flow_season_audit
     BEFORE INSERT OR UPDATE ON env_flow_season
     FOR EACH ROW EXECUTE FUNCTION set_audit_fields();
@@ -181,6 +182,7 @@ CREATE INDEX IF NOT EXISTS idx_env_flow_monthly_scenario
 CREATE INDEX IF NOT EXISTS idx_env_flow_monthly_arc_scenario
     ON env_flow_channel_monthly (network_arc_id, scenario_short_code);
 
+DROP TRIGGER IF EXISTS trg_env_flow_monthly_audit ON env_flow_channel_monthly;
 CREATE TRIGGER trg_env_flow_monthly_audit
     BEFORE INSERT OR UPDATE ON env_flow_channel_monthly
     FOR EACH ROW EXECUTE FUNCTION set_audit_fields();
@@ -258,6 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_env_flow_seasonal_season
 CREATE INDEX IF NOT EXISTS idx_env_flow_seasonal_arc_scenario
     ON env_flow_channel_seasonal (network_arc_id, scenario_short_code);
 
+DROP TRIGGER IF EXISTS trg_env_flow_seasonal_audit ON env_flow_channel_seasonal;
 CREATE TRIGGER trg_env_flow_seasonal_audit
     BEFORE INSERT OR UPDATE ON env_flow_channel_seasonal
     FOR EACH ROW EXECUTE FUNCTION set_audit_fields();
@@ -327,6 +330,7 @@ CREATE INDEX IF NOT EXISTS idx_env_flow_period_summary_scenario
 CREATE INDEX IF NOT EXISTS idx_env_flow_period_summary_arc_scenario
     ON env_flow_channel_period_summary (network_arc_id, scenario_short_code);
 
+DROP TRIGGER IF EXISTS trg_env_flow_period_summary_audit ON env_flow_channel_period_summary;
 CREATE TRIGGER trg_env_flow_period_summary_audit
     BEFORE INSERT OR UPDATE ON env_flow_channel_period_summary
     FOR EACH ROW EXECUTE FUNCTION set_audit_fields();
