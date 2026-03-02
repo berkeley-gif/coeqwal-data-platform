@@ -49,6 +49,12 @@ with open(INFILE, newline="", encoding="utf-8") as infile, \
     for row in reader:
         total += 1
 
+        # Drop ghost rows that have no network_arc_id — these are artefacts of
+        # the original multi-line source_ids CSV corruption.
+        if not row.get("network_arc_id", "").strip():
+            fixed += 1
+            continue
+
         # Detect and fix the corruption: entity_version_id should always be
         # a small integer (1).  If it contains a newline or non-numeric
         # characters it is the multi-line garbage field.
