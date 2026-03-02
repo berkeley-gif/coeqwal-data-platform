@@ -437,17 +437,20 @@ Seed: seed_tables/01_lookup/network_subtype.csv
 ```
 Table: watershed
 ├── id                              SERIAL PRIMARY KEY
-├── short_code                      VARCHAR UNIQUE NOT NULL    -- Watershed identifier (UPPER_AMERICAN, SAC_RIVER)
-├── name                            VARCHAR NOT NULL           -- Full watershed name (Upper American River Watershed)
+├── short_code                      VARCHAR UNIQUE NOT NULL    -- Watershed identifier
+├── name                            VARCHAR NOT NULL           -- Full watershed name
 ├── description                     TEXT                       -- Watershed description
-├── hydrologic_region_short_code    VARCHAR                    -- Connection to hydrologic regions (SAC, SJR)
+├── hydrologic_region_short_code    VARCHAR                    -- FK (soft) → hydrologic_region (SAC, SJR, NC)
+├── unimp_sv_variable               VARCHAR                    -- CalSim SV UNIMP_* variable for this watershed
+│                                                              -- (NULL if no SV reference exists, e.g. UPPER_MOKELUMNE)
 ├── is_active                       BOOLEAN DEFAULT TRUE
 ├── created_at                      TIMESTAMP DEFAULT NOW()
 ├── created_by                      INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at                      TIMESTAMP DEFAULT NOW()
 └── updated_by                      INTEGER NOT NULL           -- FK → developer.id
 
-Records: 9 watersheds from CalSim report
+Records: 13 watersheds (migration 23 added CLEAR_CREEK, SAC_LOWER, SAC_UPPER, TRINITY_RIVER, UPPER_MERCED;
+         replaced SAC_RIVER with SAC_UPPER + SAC_LOWER split at Bend Bridge rm 257)
 Seed: seed_tables/01_lookup/watershed.csv
 
 Foreign keys:
@@ -458,16 +461,27 @@ Indexes:
 ├── watershed_short_code_key (short_code) -- Unique constraint
 └── idx_watershed_hydrologic_region (hydrologic_region_short_code) -- Region lookups
 
-Values (9 total):
-├── BEAR_RIVER: Bear River Watershed (SAC)
-├── SAC_RIVER: Sacramento River Hydrologic Region (SAC)
-├── SAN_JOAQUIN: San Joaquin River Hydrologic Region (SJR)
-├── UPPER_AMERICAN: Upper American River Watershed (SAC)
-├── UPPER_FEATHER: Upper Feather River Watershed (SAC)
-├── UPPER_MOKELUMNE: Upper Mokelumne River Watershed (SJR)
-├── UPPER_STANISLAUS: Upper Stanislaus River (SJR)
-├── UPPER_TUOLUMNE: Upper Tuolumne River Watershed (SJR)
-└── YUBA_RIVER: Yuba River Watershed (SAC)
+Values (13 total):
+├── BEAR_RIVER:       Bear River Watershed (SAC)                          — no UNIMP variable
+├── CLEAR_CREEK:      Clear Creek / Whiskeytown Watershed (SAC)           — UNIMP_WH
+├── SAC_UPPER:        Sacramento River above Bend Bridge (SAC)            — UNIMP_SHAS
+├── SAC_LOWER:        Sacramento River at/below Bend Bridge (SAC)         — UNIMP_SRBB
+├── SAN_JOAQUIN:      San Joaquin River Hydrologic Region (SJR)           — UNIMP_SJ
+├── TRINITY_RIVER:    Trinity River Watershed (NC)                        — UNIMP_TRIN
+├── UPPER_AMERICAN:   Upper American River Watershed (SAC)                — UNIMP_FOLS
+├── UPPER_FEATHER:    Upper Feather River Watershed (SAC)                 — UNIMP_OROV
+├── UPPER_MERCED:     Upper Merced River Watershed (SJR)                  — UNIMP_ME
+├── UPPER_MOKELUMNE:  Upper Mokelumne River Watershed (SJR)               — no UNIMP variable
+├── UPPER_STANISLAUS: Upper Stanislaus River (SJR)                        — UNIMP_ST
+├── UPPER_TUOLUMNE:   Upper Tuolumne River Watershed (SJR)                — UNIMP_TU
+└── YUBA_RIVER:       Yuba River Watershed (SAC)                          — UNIMP_YUBA
+
+Notes:
+- SAC_RIVER was split at Bend Bridge (rm 257) into SAC_UPPER and SAC_LOWER (migration 23).
+  All Sacramento mainstem channels at or below rm 257 use SAC_LOWER / UNIMP_SRBB.
+  Channels above rm 257 (SAC289, KSWCK, SHSTA) use SAC_UPPER / UNIMP_SHAS.
+- UPPER_MOKELUMNE has no UNIMP_MOK in CalSim SV. % unimpaired metric cannot be computed
+  for MOK reaches without a proper natural flow reference.
 ```
 
 ### **12. wba (Water Budget Areas)**
@@ -635,12 +649,33 @@ Seed: seed_tables/04_variable/variable_type.csv
 These tables hold the ~500+ CalSim variable definitions (model output names).
 Each maps a CalSim variable name to its type classification and entity association.
 
-channel_variable      -- flow/diversion arc variables   (FK → calsim_model_variable_type)
+channel_variable      -- flow/diversion arc variables   (FK → channel_entity; includes MIF regulatory vars)
 reservoir_variable    -- storage/release variables       (FK → calsim_model_variable_type)
 inflow_variable       -- inflow boundary conditions      (FK → calsim_model_variable_type)
 derived_variable      -- computed / post-processed vars  (FK → derived_variable_type)
 
+channel_variable notable fields (migration 23):
+├── is_regulatory       BOOLEAN    -- TRUE for C_*_MIF variables (binding regulatory minimums)
+├── regulatory_authority VARCHAR   -- "CalSim-III" for MIF variables
+└── channel_entity_id   INTEGER FK -- links variable to its physical channel entity
+
+channel_variable records: ~1352 total (migration 23 added 20 MIF + 1 ISF001_OMR027)
+  - 20 C_*_MIF variables (FLOW-MIN-INSTREAM, is_regulatory=true):
+    AMR004, FTR003, FTR029, FTR059, KSWCK, MCD005, MOK028, NTOMA,
+    SAC049, SAC122, SAC148, SAC257, SAC289, SJR070, SJR127,
+    STS011, STS059, TRN111, TUO003, YUB002
+  - NOTE: C_SAC000_MIF is absent from CalSim DV — no MIF for delta confluence reach
+
+channel_entity new columns (migration 23):
+├── watershed_short_code  VARCHAR FK → watershed.short_code  -- geographic watershed grouping
+├── unimp_sv_variable     VARCHAR    -- specific UNIMP_* SV variable for % unimpaired calc
+│                                    -- may differ from watershed.unimp_sv_variable (e.g. SAC mainstem)
+├── has_mif               BOOLEAN    -- companion C_*_MIF exists in DV
+├── has_eflows            BOOLEAN    -- companion EFLOWS_* exists in SV (confirmed for original 17 reaches)
+└── channel_class         VARCHAR    -- 'stream' | 'canal' | 'reservoir_release'
+
 Seed: seed_tables/04_variable/*.csv
+      seed_tables/04_calsim_data/channel_entity.csv (updated migration 23)
 ```
 
 ---

@@ -1,10 +1,14 @@
-short_code,name,description,hydrologic_region_short_code,is_active
-BEAR_RIVER,Bear River Watershed,Bear River drainage in the Sacramento River Basin,SAC,true
-SAC_RIVER,Sacramento River Hydrologic Region,Sacramento River mainstem and tributaries,SAC,true
-SAN_JOAQUIN,San Joaquin River Hydrologic Region,San Joaquin River mainstem and tributaries,SJR,true
-UPPER_AMERICAN,Upper American River Watershed,Upper American River drainage above Folsom,SAC,true
-UPPER_FEATHER,Upper Feather River Watershed,Upper Feather River drainage above Oroville,SAC,true
-UPPER_MOKELUMNE,Upper Mokelumne River Watershed,Upper Mokelumne River drainage above Camanche,SJR,true
-UPPER_STANISLAUS,Upper Stanislaus River,Upper Stanislaus River drainage above New Melones,SJR,true
-UPPER_TUOLUMNE,Upper Tuolumne River Watershed,Upper Tuolumne River drainage above Don Pedro,SJR,true
-YUBA_RIVER,Yuba River Watershed,Yuba River drainage in the Sacramento River Basin,SAC,true
+short_code,name,description,hydrologic_region_short_code,unimp_sv_variable,is_active
+BEAR_RIVER,Bear River Watershed,"Bear River drainage basin in the Sacramento River Basin, tributary to Feather River",SAC,,true
+CLEAR_CREEK,Clear Creek / Whiskeytown Watershed,"Clear Creek drainage above Whiskeytown Reservoir, tributary to Sacramento River below Shasta",SAC,UNIMP_WH,true
+SAC_LOWER,Sacramento River — Lower (at and below Bend Bridge),Sacramento River mainstem at and below Bend Bridge near Red Bluff,SAC,UNIMP_SRBB,true
+SAC_UPPER,Sacramento River — Upper (above Bend Bridge),Sacramento River mainstem above Bend Bridge; Shasta Reservoir inflow is the unimpaired reference,SAC,UNIMP_SHAS,true
+SAN_JOAQUIN,San Joaquin River Hydrologic Region,"San Joaquin River mainstem and tributary drainage (Merced, Tuolumne, Stanislaus, Mokelumne excluded at sub-basin level)",SJR,UNIMP_SJ,true
+TRINITY_RIVER,Trinity River Watershed,"Trinity River drainage above Lewiston Reservoir, diversion source for the Sacramento basin",NC,UNIMP_TRIN,true
+UPPER_AMERICAN,Upper American River Watershed,Upper American River drainage above Folsom Reservoir,SAC,UNIMP_FOLS,true
+UPPER_FEATHER,Upper Feather River Watershed,Upper Feather River drainage above Lake Oroville,SAC,UNIMP_OROV,true
+UPPER_MERCED,Upper Merced River Watershed,Merced River drainage above McClure Reservoir,SJR,UNIMP_ME,true
+UPPER_MOKELUMNE,Upper Mokelumne River Watershed,Upper Mokelumne River drainage above Camanche Reservoir (East Bay MUD),SJR,,true
+UPPER_STANISLAUS,Upper Stanislaus River,Upper Stanislaus River drainage above New Melones Reservoir,SJR,UNIMP_ST,true
+UPPER_TUOLUMNE,Upper Tuolumne River Watershed,Upper Tuolumne River drainage above Don Pedro Reservoir,SJR,UNIMP_TU,true
+YUBA_RIVER,Yuba River Watershed,Yuba River drainage in the Sacramento River Basin,SAC,UNIMP_YUBA,true
