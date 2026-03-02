@@ -16,7 +16,7 @@
 -- NULL in a category column means that scenario has no link for that category
 -- (e.g. s0046 has no delta_outflow; s0011 through s0042 have no gw_model).
 --
--- Run as: psql $DATABASE_URL -f database/scripts/sql/migrations/17_create_scenario_full_view.sql
+-- Run as: psql $SUPERUSER_URL -f database/scripts/sql/migrations/17_create_scenario_full_view.sql
 -- =============================================================================
 
 DROP VIEW IF EXISTS scenario_full;
@@ -57,6 +57,8 @@ GROUP BY
     s.id, s.scenario_id, s.short_code, s.name, s.short_title, s.is_active,
     sa.short_code, hc.short_code, slr.short_code
 ORDER BY s.id;
+
+GRANT SELECT ON scenario_full TO jfantauzza;
 
 COMMENT ON VIEW scenario_full IS
 'Wide view of all scenario configurations. Pivots scenario_key_operation_link
