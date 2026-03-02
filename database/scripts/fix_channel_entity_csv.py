@@ -58,6 +58,14 @@ with open(INFILE, newline="", encoding="utf-8") as infile, \
             row["source_ids"]        = "{1,3,4}"
             fixed += 1
 
+        # has_mif and has_eflows are NOT NULL BOOLEAN columns.
+        # Non-DV rows have empty strings which become NULL on COPY → violation.
+        # Default to 'false'; migration 23 will update the 60 DV channels.
+        if not row.get("has_mif", "").strip():
+            row["has_mif"] = "false"
+        if not row.get("has_eflows", "").strip():
+            row["has_eflows"] = "false"
+
         # Ensure the new env-flow columns are present (may be missing in old rows)
         for col in ("watershed_short_code", "unimp_sv_variable",
                     "has_mif", "has_eflows", "channel_class"):
