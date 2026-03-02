@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS channel_entity (
 
     -- Network linkage
     network_arc_id       VARCHAR(30) NOT NULL UNIQUE,   -- CalSim arc ID, e.g. C_SAC049
-    short_code           VARCHAR(30),
+    short_code           VARCHAR(100),
     name                 VARCHAR(200),
     description          TEXT,
     subtype              VARCHAR(50),                    -- Stream, Canal, Reservoir Release, etc.
