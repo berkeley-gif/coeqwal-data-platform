@@ -8,12 +8,25 @@ Instead of making ~24 individual API calls (N scenarios × M types × P endpoint
 clients can make 1 batched request.
 
 Example:
-    GET /api/statistics/batch?scenarios=s0020,s0021,s0022&types=storage,cws,ag
+    GET /api/statistics/batch?scenarios=s0020,s0021,s0022&types=storage,cws,ag,env_flow
+
+Performance note: each fetch function acquires its own connection from the pool.
+This is essential for true parallelism — if all tasks shared one connection, asyncio.gather
+would not actually overlap the queries.
 """
 
 import asyncio
+import logging
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
+
+from routes.env_flow_endpoints import (
+    _fetch_channels_monthly,
+    _fetch_channels_seasonal,
+    _fetch_channels_period_summary,
+)
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
@@ -46,27 +59,28 @@ def safe_int(val) -> Optional[int]:
 # =============================================================================
 
 
-async def fetch_storage_monthly(conn, scenario_id: str) -> Dict[str, Any]:
+async def fetch_storage_monthly(pool, scenario_id: str) -> Dict[str, Any]:
     """Fetch monthly storage percentile data for major reservoirs."""
-    query = """
-    SELECT
-        re.short_code as reservoir_id,
-        re.name as reservoir_name,
-        rsm.capacity_taf,
-        rsm.water_month,
-        rsm.q0, rsm.q10, rsm.q30, rsm.q50, rsm.q70, rsm.q90, rsm.q100,
-        rsm.storage_pct_capacity,
-        rsm.q0_taf, rsm.q10_taf, rsm.q30_taf, rsm.q50_taf,
-        rsm.q70_taf, rsm.q90_taf, rsm.q100_taf,
-        rsm.storage_avg_taf
-    FROM reservoir_storage_monthly rsm
-    JOIN reservoir_entity re ON rsm.reservoir_entity_id = re.id
-    JOIN reservoir_group_member rgm ON rgm.reservoir_entity_id = re.id
-    JOIN reservoir_group rg ON rg.id = rgm.reservoir_group_id
-    WHERE rsm.scenario_short_code = $1 AND rg.short_code = 'major'
-    ORDER BY re.short_code, rsm.water_month
-    """
-    rows = await conn.fetch(query, scenario_id)
+    async with pool.acquire() as conn:
+        query = """
+        SELECT
+            re.short_code as reservoir_id,
+            re.name as reservoir_name,
+            rsm.capacity_taf,
+            rsm.water_month,
+            rsm.q0, rsm.q10, rsm.q30, rsm.q50, rsm.q70, rsm.q90, rsm.q100,
+            rsm.storage_pct_capacity,
+            rsm.q0_taf, rsm.q10_taf, rsm.q30_taf, rsm.q50_taf,
+            rsm.q70_taf, rsm.q90_taf, rsm.q100_taf,
+            rsm.storage_avg_taf
+        FROM reservoir_storage_monthly rsm
+        JOIN reservoir_entity re ON rsm.reservoir_entity_id = re.id
+        JOIN reservoir_group_member rgm ON rgm.reservoir_entity_id = re.id
+        JOIN reservoir_group rg ON rg.id = rgm.reservoir_group_id
+        WHERE rsm.scenario_short_code = $1 AND rg.short_code = 'major'
+        ORDER BY re.short_code, rsm.water_month
+        """
+        rows = await conn.fetch(query, scenario_id)
 
     reservoirs = {}
     for row in rows:
@@ -104,25 +118,26 @@ async def fetch_storage_monthly(conn, scenario_id: str) -> Dict[str, Any]:
     return {"scenario_id": scenario_id, "reservoirs": reservoirs}
 
 
-async def fetch_cws_aggregates_monthly(conn, scenario_id: str) -> Dict[str, Any]:
+async def fetch_cws_aggregates_monthly(pool, scenario_id: str) -> Dict[str, Any]:
     """Fetch monthly CWS aggregate delivery and shortage data."""
-    query = """
-    SELECT
-        e.short_code, e.label,
-        m.water_month,
-        m.delivery_avg_taf, m.delivery_cv,
-        m.delivery_q0, m.delivery_q10, m.delivery_q30, m.delivery_q50,
-        m.delivery_q70, m.delivery_q90, m.delivery_q100,
-        m.shortage_avg_taf, m.shortage_cv, m.shortage_frequency_pct,
-        m.shortage_q0, m.shortage_q10, m.shortage_q30, m.shortage_q50,
-        m.shortage_q70, m.shortage_q90, m.shortage_q100,
-        m.demand_avg_taf, m.percent_of_demand_avg
-    FROM cws_aggregate_monthly m
-    JOIN cws_aggregate_entity e ON m.cws_aggregate_id = e.id
-    WHERE m.scenario_short_code = $1 AND e.is_active = TRUE
-    ORDER BY e.display_order, m.water_month
-    """
-    rows = await conn.fetch(query, scenario_id)
+    async with pool.acquire() as conn:
+        query = """
+        SELECT
+            e.short_code, e.label,
+            m.water_month,
+            m.delivery_avg_taf, m.delivery_cv,
+            m.delivery_q0, m.delivery_q10, m.delivery_q30, m.delivery_q50,
+            m.delivery_q70, m.delivery_q90, m.delivery_q100,
+            m.shortage_avg_taf, m.shortage_cv, m.shortage_frequency_pct,
+            m.shortage_q0, m.shortage_q10, m.shortage_q30, m.shortage_q50,
+            m.shortage_q70, m.shortage_q90, m.shortage_q100,
+            m.demand_avg_taf, m.percent_of_demand_avg
+        FROM cws_aggregate_monthly m
+        JOIN cws_aggregate_entity e ON m.cws_aggregate_id = e.id
+        WHERE m.scenario_short_code = $1 AND e.is_active = TRUE
+        ORDER BY e.display_order, m.water_month
+        """
+        rows = await conn.fetch(query, scenario_id)
 
     aggregates = {}
     for row in rows:
@@ -164,20 +179,21 @@ async def fetch_cws_aggregates_monthly(conn, scenario_id: str) -> Dict[str, Any]
     return {"scenario_id": scenario_id, "aggregates": aggregates}
 
 
-async def fetch_cws_aggregates_period(conn, scenario_id: str) -> Dict[str, Any]:
+async def fetch_cws_aggregates_period(pool, scenario_id: str) -> Dict[str, Any]:
     """Fetch period summary for CWS aggregates."""
-    query = """
-    SELECT
-        e.short_code, e.label,
-        p.annual_delivery_avg_taf,
-        p.reliability_pct,
-        p.shortage_frequency_pct
-    FROM cws_aggregate_period p
-    JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
-    WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
-    ORDER BY e.display_order
-    """
-    rows = await conn.fetch(query, scenario_id)
+    async with pool.acquire() as conn:
+        query = """
+        SELECT
+            e.short_code, e.label,
+            p.annual_delivery_avg_taf,
+            p.reliability_pct,
+            p.shortage_frequency_pct
+        FROM cws_aggregate_period p
+        JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
+        WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
+        ORDER BY e.display_order
+        """
+        rows = await conn.fetch(query, scenario_id)
 
     aggregates = {}
     for row in rows:
@@ -191,21 +207,22 @@ async def fetch_cws_aggregates_period(conn, scenario_id: str) -> Dict[str, Any]:
     return {"scenario_id": scenario_id, "aggregates": aggregates}
 
 
-async def fetch_ag_aggregates_monthly(conn, scenario_id: str) -> Dict[str, Any]:
+async def fetch_ag_aggregates_monthly(pool, scenario_id: str) -> Dict[str, Any]:
     """Fetch monthly AG aggregate delivery data."""
-    query = """
-    SELECT
-        e.short_code, e.label,
-        m.water_month,
-        m.delivery_avg_taf, m.delivery_cv,
-        m.delivery_q0, m.delivery_q10, m.delivery_q30, m.delivery_q50,
-        m.delivery_q70, m.delivery_q90, m.delivery_q100
-    FROM ag_aggregate_monthly m
-    JOIN ag_aggregate_entity e ON m.ag_aggregate_id = e.id
-    WHERE m.scenario_short_code = $1 AND e.is_active = TRUE
-    ORDER BY e.display_order, m.water_month
-    """
-    rows = await conn.fetch(query, scenario_id)
+    async with pool.acquire() as conn:
+        query = """
+        SELECT
+            e.short_code, e.label,
+            m.water_month,
+            m.delivery_avg_taf, m.delivery_cv,
+            m.delivery_q0, m.delivery_q10, m.delivery_q30, m.delivery_q50,
+            m.delivery_q70, m.delivery_q90, m.delivery_q100
+        FROM ag_aggregate_monthly m
+        JOIN ag_aggregate_entity e ON m.ag_aggregate_id = e.id
+        WHERE m.scenario_short_code = $1 AND e.is_active = TRUE
+        ORDER BY e.display_order, m.water_month
+        """
+        rows = await conn.fetch(query, scenario_id)
 
     aggregates = {}
     for row in rows:
@@ -232,18 +249,19 @@ async def fetch_ag_aggregates_monthly(conn, scenario_id: str) -> Dict[str, Any]:
     return {"scenario_id": scenario_id, "aggregates": aggregates}
 
 
-async def fetch_ag_aggregates_period(conn, scenario_id: str) -> Dict[str, Any]:
+async def fetch_ag_aggregates_period(pool, scenario_id: str) -> Dict[str, Any]:
     """Fetch period summary for AG aggregates."""
-    query = """
-    SELECT
-        e.short_code, e.label,
-        p.annual_delivery_avg_taf
-    FROM ag_aggregate_period p
-    JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
-    WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
-    ORDER BY e.display_order
-    """
-    rows = await conn.fetch(query, scenario_id)
+    async with pool.acquire() as conn:
+        query = """
+        SELECT
+            e.short_code, e.label,
+            p.annual_delivery_avg_taf
+        FROM ag_aggregate_period p
+        JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+        WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
+        ORDER BY e.display_order
+        """
+        rows = await conn.fetch(query, scenario_id)
 
     aggregates = {}
     for row in rows:
@@ -263,7 +281,11 @@ async def fetch_ag_aggregates_period(conn, scenario_id: str) -> Dict[str, Any]:
 @router.get(
     "/batch",
     summary="Batch fetch statistics for multiple scenarios",
-    description="Fetch storage, CWS, and AG statistics for multiple scenarios in a single request.",
+    description=(
+        "Fetch storage, CWS, AG, and env_flow statistics for multiple scenarios "
+        "in a single request. All sub-queries run in parallel via asyncio.gather, "
+        "each acquiring its own DB connection."
+    ),
 )
 async def get_batch_statistics(
     scenarios: str = Query(
@@ -272,34 +294,30 @@ async def get_batch_statistics(
     ),
     types: str = Query(
         "storage,cws,ag",
-        description="Comma-separated data types to fetch: storage, cws, ag",
+        description="Comma-separated data types: storage, cws, ag, env_flow",
     ),
 ) -> Dict[str, Any]:
     """
     Batch fetch statistics for multiple scenarios and data types.
 
-    This endpoint reduces frontend load time by fetching all required data
-    in a single request instead of multiple individual requests.
-
-    **Parameters:**
-    - `scenarios`: Comma-separated scenario IDs (required)
-    - `types`: Comma-separated data types (default: storage,cws,ag)
+    Each sub-query acquires its own connection and runs concurrently via
+    asyncio.gather, so N scenarios × M types all fire at the same time.
+    The env_flow sub-queries also benefit from the per-endpoint TTL cache,
+    so repeated calls for the same (scenario, type) return immediately.
 
     **Response:**
     ```json
     {
       "scenarios": ["s0020", "s0021"],
-      "storage": {
-        "s0020": { "reservoirs": {...} },
-        "s0021": { "reservoirs": {...} }
-      },
-      "cws": {
-        "s0020": { "monthly": {...}, "period": {...} },
-        "s0021": { "monthly": {...}, "period": {...} }
-      },
-      "ag": {
-        "s0020": { "monthly": {...}, "period": {...} },
-        "s0021": { "monthly": {...}, "period": {...} }
+      "storage": { "s0020": { "reservoirs": {...} }, ... },
+      "cws":     { "s0020": { "monthly": {...}, "period": {...} }, ... },
+      "ag":      { "s0020": { "monthly": {...}, "period": {...} }, ... },
+      "env_flow": {
+        "s0020": {
+          "monthly": { "data": [...], "count": 708 },
+          "seasonal": { "data": [...], "count": 295 },
+          "period":   { "data": [...], "count": 59 }
+        }
       }
     }
     ```
@@ -307,73 +325,68 @@ async def get_batch_statistics(
     if _db_pool is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Parse parameters
     scenario_list = [s.strip() for s in scenarios.split(",") if s.strip()]
     type_list = [t.strip().lower() for t in types.split(",") if t.strip()]
 
     if not scenario_list:
         raise HTTPException(status_code=400, detail="No scenarios provided")
 
-    valid_types = {"storage", "cws", "ag"}
+    valid_types = {"storage", "cws", "ag", "env_flow"}
     invalid_types = set(type_list) - valid_types
     if invalid_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid types: {invalid_types}. Valid types: {valid_types}",
+            detail=f"Invalid types: {invalid_types}. Valid: {sorted(valid_types)}",
         )
 
-    # Build list of async tasks
+    # Build parallel task list — each fetch function acquires its own connection.
     tasks = []
-    task_keys = []  # Track (type, scenario, subtype) for each task
+    task_keys: List[tuple] = []
 
-    async with _db_pool.acquire() as conn:
-        for scenario_id in scenario_list:
-            if "storage" in type_list:
-                tasks.append(fetch_storage_monthly(conn, scenario_id))
-                task_keys.append(("storage", scenario_id, "data"))
+    for scenario_id in scenario_list:
+        if "storage" in type_list:
+            tasks.append(fetch_storage_monthly(_db_pool, scenario_id))
+            task_keys.append(("storage", scenario_id, "data"))
 
-            if "cws" in type_list:
-                tasks.append(fetch_cws_aggregates_monthly(conn, scenario_id))
-                task_keys.append(("cws", scenario_id, "monthly"))
-                tasks.append(fetch_cws_aggregates_period(conn, scenario_id))
-                task_keys.append(("cws", scenario_id, "period"))
+        if "cws" in type_list:
+            tasks.append(fetch_cws_aggregates_monthly(_db_pool, scenario_id))
+            task_keys.append(("cws", scenario_id, "monthly"))
+            tasks.append(fetch_cws_aggregates_period(_db_pool, scenario_id))
+            task_keys.append(("cws", scenario_id, "period"))
 
-            if "ag" in type_list:
-                tasks.append(fetch_ag_aggregates_monthly(conn, scenario_id))
-                task_keys.append(("ag", scenario_id, "monthly"))
-                tasks.append(fetch_ag_aggregates_period(conn, scenario_id))
-                task_keys.append(("ag", scenario_id, "period"))
+        if "ag" in type_list:
+            tasks.append(fetch_ag_aggregates_monthly(_db_pool, scenario_id))
+            task_keys.append(("ag", scenario_id, "monthly"))
+            tasks.append(fetch_ag_aggregates_period(_db_pool, scenario_id))
+            task_keys.append(("ag", scenario_id, "period"))
 
-        # Run all tasks in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        if "env_flow" in type_list:
+            tasks.append(_fetch_channels_monthly(_db_pool, scenario_id, None))
+            task_keys.append(("env_flow", scenario_id, "monthly"))
+            tasks.append(_fetch_channels_seasonal(_db_pool, scenario_id, None))
+            task_keys.append(("env_flow", scenario_id, "seasonal"))
+            tasks.append(_fetch_channels_period_summary(_db_pool, scenario_id, None))
+            task_keys.append(("env_flow", scenario_id, "period"))
 
-    # Organize results
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
     response: Dict[str, Any] = {"scenarios": scenario_list}
-
-    if "storage" in type_list:
-        response["storage"] = {}
-    if "cws" in type_list:
-        response["cws"] = {}
-    if "ag" in type_list:
-        response["ag"] = {}
+    for t in type_list:
+        response[t] = {}
 
     for i, result in enumerate(results):
         data_type, scenario_id, subtype = task_keys[i]
 
         if isinstance(result, Exception):
-            # Log error but continue with other results
+            log.error(f"batch sub-query failed ({data_type}/{scenario_id}/{subtype}): {result}")
             continue
 
         if data_type == "storage":
             response["storage"][scenario_id] = result
-        elif data_type == "cws":
-            if scenario_id not in response["cws"]:
-                response["cws"][scenario_id] = {}
-            response["cws"][scenario_id][subtype] = result
-        elif data_type == "ag":
-            if scenario_id not in response["ag"]:
-                response["ag"][scenario_id] = {}
-            response["ag"][scenario_id][subtype] = result
+        elif data_type in ("cws", "ag", "env_flow"):
+            if scenario_id not in response[data_type]:
+                response[data_type][scenario_id] = {}
+            response[data_type][scenario_id][subtype] = result
 
     return response
 

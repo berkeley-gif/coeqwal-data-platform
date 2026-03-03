@@ -71,6 +71,10 @@ from routes.refuge_endpoints import (
     router as refuge_router,
     set_db_pool as set_refuge_db_pool,
 )
+from routes.env_flow_endpoints import (
+    router as env_flow_router,
+    set_db_pool as set_env_flow_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -168,6 +172,7 @@ async def lifespan(app: FastAPI):
     set_ag_db_pool(db_pool)
     set_batch_stats_db_pool(db_pool)
     set_refuge_db_pool(db_pool)
+    set_env_flow_db_pool(db_pool)
 
     yield
 
@@ -222,6 +227,9 @@ app.include_router(batch_stats_router)
 
 # Wildlife refuge statistics router
 app.include_router(refuge_router)
+
+# Environmental river flows statistics router
+app.include_router(env_flow_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)

@@ -1,15 +1,16 @@
 # ETL statistics — Environmental river flows
 
-> **Status: READY FOR IMPLEMENTATION**
+> **Status: IMPLEMENTED**
 >
-> All blocking design decisions resolved. Watershed and channel attribute schema complete
-> (migration 23). Next: migration 24 (statistics tables + season seed data), then ETL script.
+> All migrations (23–27) applied. ETL complete for all 19 scenarios. Data loaded into
+> `env_flow_channel_monthly`, `env_flow_channel_seasonal`, and `env_flow_channel_period_summary`.
+> API endpoints are the next step.
 
 ---
 
 ## Overview
 
-Three metrics are computed for **60 river channel reaches** in the CalSim DV output,
+Three metrics are computed for **59 river channel reaches** in the CalSim DV output,
 covering streams, reservoir releases, and conveyance canals across California:
 
 | # | Metric | Unit | Temporal | Statistics |
@@ -88,9 +89,33 @@ in S3. No additional data pipeline work is required before building this ETL mod
 
 ## Reach inventory
 
-**60 channels** appear in the CalSim DV with `Part C = CHANNEL`. All are included in the ETL.
+**59 channels** are currently attributed in `channel_entity` with `channel_class IS NOT NULL`
+and are included in the ETL. The original planning estimate was "60 channels," and it is
+possible one channel with `Part C = CHANNEL` was missed during the attribution step.
+
+> **Open question:** Run the command below from Cloud9 to get the true count directly from
+> the DV header, independent of `channel_entity.csv`:
+>
+> ```bash
+> python - <<'EOF'
+> import boto3, csv, io
+> s3 = boto3.client('s3')
+> obj = s3.get_object(Bucket='coeqwal-model-run',
+>     Key='scenario/s0020/csv/s0020_coeqwal_calsim_output.csv')
+> first_mb = obj['Body'].read(200_000).decode('latin-1')
+> lines = first_mb.splitlines()
+> # Find Part C row (typically row index 2 or 3)
+> for i, line in enumerate(lines[:10]):
+>     print(i, line[:120])
+> EOF
+> ```
+> Then count the `CHANNEL` occurrences in the Part C row. If the count is 60, one channel
+> is missing from `channel_entity.csv` and must be identified and added.
+
 Channels are attributed in `channel_entity` (migration 23) with `watershed_short_code`,
 `unimp_sv_variable`, `has_mif`, `has_eflows`, and `channel_class`.
+
+Current class breakdown: 47 stream reaches, 7 reservoir releases, 5 conveyance canals (= 59 total).
 
 ### Channels with MIF companion (20)
 
@@ -321,6 +346,68 @@ sort_order  SMALLINT
 
 ---
 
+## ETL run results (all 19 scenarios)
+
+ETL executed via `python etl/statistics/run_all.py --module env_flows` on all 19 scenarios.
+All rows inserted successfully into the three statistics tables.
+
+| Table | Rows inserted |
+|-------|--------------|
+| `env_flow_channel_monthly` | 19 scenarios × 59 channels × 12 months = ~13,452 |
+| `env_flow_channel_seasonal` | 19 scenarios × 59 channels × 5 seasons = ~5,605 |
+| `env_flow_channel_period_summary` | 19 scenarios × 59 channels = ~1,121 |
+
+---
+
+## Data quality notes by scenario
+
+### MIF variable availability (20 expected)
+
+Not all scenarios model the same minimum instream flow (MIF) constraints. The following
+MIF variables are absent from some scenarios' DV output — this is expected and reflects
+different regulatory frameworks being tested, not a data pipeline error.
+
+| Scenario(s) | MIF present / 20 | Missing variables |
+|------------|-----------------|-------------------|
+| s0020, s0021, s0025–s0028, s0029, s0030, s0031–s0033, s0044 | **20 / 20** | — |
+| s0039–s0042 | **7 / 20** | `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_STS011_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
+| s0011 | **8 / 20** | Same 13 as s0039–s0042 except `C_STS011_MIF` is present; missing: `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
+| s0023, s0024 | **6 / 20** | Same 12 as s0011, plus `C_SAC257_MIF` and `C_STS011_MIF` |
+
+All 59 channel flow variables (`C_{reach}`) are present in every scenario — **no channel
+flow data is missing from any scenario.**
+
+The ETL handles absent MIF variables gracefully: `pct_mif_*` columns are NULL for those
+reaches in those scenarios.
+
+### EFLOWS (functional flow targets) variable availability (17 expected)
+
+EFLOWS targets are SV inputs — they are prescribed constraints, not DV outputs.
+
+| Scenario(s) | SV columns | EFLOWS present | Notes |
+|------------|------------|----------------|-------|
+| s0020, s0021, s0023–s0028, s0031–s0033, s0039–s0042, s0044 | 28 | All 17 | Full EFLOWS suite |
+| s0011 | 12 | **None** | Pre-EFLOWS baseline — no functional flow targets prescribed |
+| **s0029, s0030** | **12** | **1 of 17 — only `EFLOWS_STS011`** | Unexpected — see open question below |
+
+**s0029/s0030 detail (confirmed via `diagnose_dv_columns.py`):** Both scenarios have all 79 DV
+channel-flow variables (including all 20 MIF), so their channel flow data is complete. However,
+their SV contains only 12 columns: 11 `UNIMP_*` unimpaired flow variables + `EFLOWS_STS011`.
+The other 16 EFLOWS variables (`EFLOWS_AMR004`, `EFLOWS_FTR003`, `EFLOWS_FTR029`, `EFLOWS_MCD005`,
+`EFLOWS_MOK028`, `EFLOWS_SAC000`, `EFLOWS_SAC049`, `EFLOWS_SAC122`, `EFLOWS_SAC148`,
+`EFLOWS_SAC257`, `EFLOWS_SAC289`, `EFLOWS_SJR070`, `EFLOWS_SJR127`, `EFLOWS_TRN111`,
+`EFLOWS_TUO003`, `EFLOWS_YUB002`) are absent. Functional flow statistics (`pct_ff_*`) are
+NULL for all those 16 reaches in s0029 and s0030 in the database.
+
+### Percentage overflow
+
+Some scenarios produce `pct_unimpaired` values far exceeding 100% for heavily regulated
+reaches (e.g., canal diversions near zero natural flow). Values up to ~100,000% are
+possible and physically valid. Migration 27 widened affected columns from `NUMERIC(8,3)`
+to `NUMERIC(12,3)` to accommodate these.
+
+---
+
 ## Resolved questions
 
 | # | Question | Resolution |
@@ -330,9 +417,13 @@ sort_order  SMALLINT
 | 3 | Season definitions | **CEFF 5-season calendar** confirmed. Seed data in `env_flow_season`. |
 | 4 | TR CSV staging | Not required. All variables are in the standard `_coeqwal_calsim_output.csv` and `_coeqwal_sv_input.csv` files already staged in S3. |
 | 5 | `UNIMP_*_UHH` variants | Excluded. `_UHH` suffix = "upper-half hydrology" alternative baseline. Always use base `UNIMP_*` names. |
+| 6 | Channel count discrepancy | Planning estimate was "60 channels." `channel_entity.csv` has 59 rows with `channel_class` set. Whether the DV truly contains 60 or 59 distinct `CHANNEL` variables has **not been independently verified** — see open question 2. |
+| 7 | `C_SAC000_MIF` absence | SAC000 has no MIF in the DV (`has_mif = false`). Metric 1 computed normally using `UNIMP_SRBB`. Metric 2 uses `EFLOWS_SAC000` from SV. No action required unless modeling team adds this variable in a future SV version. |
+| 8 | MIF variable absence in some scenarios | Confirmed expected: different scenarios model different regulatory frameworks. The absent variables reflect a policy choice in those scenario configs, not a data pipeline error (verified via `diagnose_dv_columns.py`). |
 
-## Remaining open question
+## Open questions
 
-| # | Question |
-|---|----------|
-| 1 | **`C_SAC000_MIF` absence** — SAC000 has no MIF in the DV. For Metric 1 (% unimpaired), SAC000 is computed normally using `UNIMP_SRBB`. For Metric 2, `EFLOWS_SAC000` is in the SV and can serve as the denominator. For MIF-based analysis, SAC000 is excluded (`has_mif = false`). No further action required unless the modeling team adds `C_SAC000_MIF` in a future SV version. |
+| # | Question | Priority |
+|---|----------|----------|
+| 1 | **s0029/s0030 missing 16 of 17 EFLOWS targets.** Both scenarios have complete DV (all 59 channel flows + 20 MIF) but their SV contains only `EFLOWS_STS011` and no other functional flow targets. If these scenarios were intended to include an EFLOWS regulatory framework, the `pct_ff_*` columns in the database are NULL for 16 of 17 EFLOWS reaches in those scenarios. **Verify with the modeling team** whether this is intentional (e.g., s0029/s0030 test Stanislaus-only EFLOWS) or a missing SV file. | High |
+| 2 | **59 vs 60 channels.** The diagnose script confirms all 79 expected DV variables are present (59 channels + 20 MIF), but its target list is built from `channel_entity.csv` — it cannot detect a channel that was never attributed. **Verify the true count** by reading the raw DV header and counting `CHANNEL` occurrences in the Part C row (see script in "Reach inventory" above). If the count is 60, identify the missing channel and add it to `channel_entity.csv`. | Medium |
