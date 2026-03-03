@@ -252,9 +252,12 @@ async def list_seasons():
 
 async def _fetch_channels_monthly(pool, scenario_id: str, channel_id: Optional[str]) -> Dict[str, Any]:
     """
-    Fetch monthly % unimpaired stats from env_flow_channel_monthly.
+    Fetch monthly flow-volume and % unimpaired stats from env_flow_channel_monthly.
     Each element covers one (network_arc_id × water_month) combination.
     Acquires its own connection — safe to call concurrently via asyncio.gather.
+
+    Columns added by migration 28: flow_avg_taf, flow_q*_cfs, flow_q*_taf,
+    flow_exc_p*_cfs, flow_exc_p*_taf.
     """
     cache_key = f"monthly:{scenario_id}:{channel_id or ''}"
     if cache_key in _stats_cache:
@@ -265,13 +268,30 @@ async def _fetch_channels_monthly(pool, scenario_id: str, channel_id: Optional[s
             SELECT
                 network_arc_id,
                 water_month,
+
+                -- Raw flow (CFS mean + CV)
                 flow_avg_cfs,
                 flow_cv,
+                -- Raw flow mean TAF/month (migration 28)
+                flow_avg_taf,
+                -- Raw flow percentile bands — CFS (migration 28)
+                flow_q0_cfs,   flow_q10_cfs,  flow_q30_cfs,  flow_q50_cfs,
+                flow_q70_cfs,  flow_q90_cfs,  flow_q100_cfs,
+                flow_exc_p5_cfs,  flow_exc_p10_cfs, flow_exc_p25_cfs,
+                flow_exc_p50_cfs, flow_exc_p75_cfs, flow_exc_p90_cfs, flow_exc_p95_cfs,
+                -- Raw flow percentile bands — TAF/month (migration 28)
+                flow_q0_taf,   flow_q10_taf,  flow_q30_taf,  flow_q50_taf,
+                flow_q70_taf,  flow_q90_taf,  flow_q100_taf,
+                flow_exc_p5_taf,  flow_exc_p10_taf, flow_exc_p25_taf,
+                flow_exc_p50_taf, flow_exc_p75_taf, flow_exc_p90_taf, flow_exc_p95_taf,
+
+                -- Unimpaired reference + % unimpaired
                 unimp_avg_cfs,
                 pct_unimpaired_avg,
                 pct_unimpaired_cv,
                 q0, q10, q30, q50, q70, q90, q100,
                 exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,
+
                 sample_count
             FROM env_flow_channel_monthly
             WHERE scenario_short_code = $1
@@ -295,19 +315,52 @@ async def _fetch_channels_monthly(pool, scenario_id: str, channel_id: Optional[s
         {
             "network_arc_id": row["network_arc_id"],
             "water_month": row["water_month"],
-            "flow_avg_cfs": safe_float(row["flow_avg_cfs"]),
-            "flow_cv": safe_float(row["flow_cv"]),
-            "unimp_avg_cfs": safe_float(row["unimp_avg_cfs"]),
+            # Flow volume
+            "flow_avg_cfs":      safe_float(row["flow_avg_cfs"]),
+            "flow_cv":           safe_float(row["flow_cv"]),
+            "flow_avg_taf":      safe_float(row["flow_avg_taf"]),
+            # CFS percentile bands
+            "flow_q0_cfs":       safe_float(row["flow_q0_cfs"]),
+            "flow_q10_cfs":      safe_float(row["flow_q10_cfs"]),
+            "flow_q30_cfs":      safe_float(row["flow_q30_cfs"]),
+            "flow_q50_cfs":      safe_float(row["flow_q50_cfs"]),
+            "flow_q70_cfs":      safe_float(row["flow_q70_cfs"]),
+            "flow_q90_cfs":      safe_float(row["flow_q90_cfs"]),
+            "flow_q100_cfs":     safe_float(row["flow_q100_cfs"]),
+            "flow_exc_p5_cfs":   safe_float(row["flow_exc_p5_cfs"]),
+            "flow_exc_p10_cfs":  safe_float(row["flow_exc_p10_cfs"]),
+            "flow_exc_p25_cfs":  safe_float(row["flow_exc_p25_cfs"]),
+            "flow_exc_p50_cfs":  safe_float(row["flow_exc_p50_cfs"]),
+            "flow_exc_p75_cfs":  safe_float(row["flow_exc_p75_cfs"]),
+            "flow_exc_p90_cfs":  safe_float(row["flow_exc_p90_cfs"]),
+            "flow_exc_p95_cfs":  safe_float(row["flow_exc_p95_cfs"]),
+            # TAF percentile bands
+            "flow_q0_taf":       safe_float(row["flow_q0_taf"]),
+            "flow_q10_taf":      safe_float(row["flow_q10_taf"]),
+            "flow_q30_taf":      safe_float(row["flow_q30_taf"]),
+            "flow_q50_taf":      safe_float(row["flow_q50_taf"]),
+            "flow_q70_taf":      safe_float(row["flow_q70_taf"]),
+            "flow_q90_taf":      safe_float(row["flow_q90_taf"]),
+            "flow_q100_taf":     safe_float(row["flow_q100_taf"]),
+            "flow_exc_p5_taf":   safe_float(row["flow_exc_p5_taf"]),
+            "flow_exc_p10_taf":  safe_float(row["flow_exc_p10_taf"]),
+            "flow_exc_p25_taf":  safe_float(row["flow_exc_p25_taf"]),
+            "flow_exc_p50_taf":  safe_float(row["flow_exc_p50_taf"]),
+            "flow_exc_p75_taf":  safe_float(row["flow_exc_p75_taf"]),
+            "flow_exc_p90_taf":  safe_float(row["flow_exc_p90_taf"]),
+            "flow_exc_p95_taf":  safe_float(row["flow_exc_p95_taf"]),
+            # % unimpaired
+            "unimp_avg_cfs":     safe_float(row["unimp_avg_cfs"]),
             "pct_unimpaired_avg": safe_float(row["pct_unimpaired_avg"]),
             "pct_unimpaired_cv": safe_float(row["pct_unimpaired_cv"]),
-            "q0": safe_float(row["q0"]),
-            "q10": safe_float(row["q10"]),
-            "q30": safe_float(row["q30"]),
-            "q50": safe_float(row["q50"]),
-            "q70": safe_float(row["q70"]),
-            "q90": safe_float(row["q90"]),
+            "q0":   safe_float(row["q0"]),
+            "q10":  safe_float(row["q10"]),
+            "q30":  safe_float(row["q30"]),
+            "q50":  safe_float(row["q50"]),
+            "q70":  safe_float(row["q70"]),
+            "q90":  safe_float(row["q90"]),
             "q100": safe_float(row["q100"]),
-            "exc_p5": safe_float(row["exc_p5"]),
+            "exc_p5":  safe_float(row["exc_p5"]),
             "exc_p10": safe_float(row["exc_p10"]),
             "exc_p25": safe_float(row["exc_p25"]),
             "exc_p50": safe_float(row["exc_p50"]),
