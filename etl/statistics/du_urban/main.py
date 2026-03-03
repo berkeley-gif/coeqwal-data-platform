@@ -8,7 +8,7 @@ Usage:
     python main.py --all-scenarios
 """
 
-from calculate_du_statistics import main
+from calculate_du_statistics_v2 import main
 
 if __name__ == "__main__":
     main()

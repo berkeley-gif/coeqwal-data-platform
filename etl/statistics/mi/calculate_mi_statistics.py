@@ -529,6 +529,7 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
             # Successfully parsed as datetime - monthly data
             df['CalendarMonth'] = df['DateTime'].dt.month
             df['CalendarYear'] = df['DateTime'].dt.year
+            df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
 
             # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
             df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
@@ -574,9 +575,10 @@ def calculate_contractor_delivery_monthly(
         log.debug(f"No delivery variables found for {contractor_code}")
         return []
 
-    # Sum all delivery points for this contractor
+    # Sum all delivery points for this contractor (CFS) and convert to TAF
     df_copy = df.copy()
-    df_copy['total_delivery'] = df_copy[available_vars].sum(axis=1)
+    total_delivery_cfs = df_copy[available_vars].sum(axis=1)
+    df_copy['total_delivery'] = total_delivery_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -671,7 +673,8 @@ def calculate_contractor_shortage_monthly(
         return []
 
     df_copy = df.copy()
-    df_copy['total_shortage'] = df_copy[available_vars].sum(axis=1)
+    total_shortage_cfs = df_copy[available_vars].sum(axis=1)
+    df_copy['total_shortage'] = total_shortage_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -759,7 +762,8 @@ def calculate_contractor_period_summary(
         return None
 
     df_copy = df.copy()
-    df_copy['total_delivery'] = df_copy[available_delivery].sum(axis=1)
+    total_delivery_cfs = df_copy[available_delivery].sum(axis=1)
+    df_copy['total_delivery'] = total_delivery_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
 
     water_years = sorted(df_copy['WaterYear'].unique())
 
@@ -784,7 +788,8 @@ def calculate_contractor_period_summary(
 
     # Shortage statistics
     if available_shortage:
-        df_copy['total_shortage'] = df_copy[available_shortage].sum(axis=1)
+        total_shortage_cfs = df_copy[available_shortage].sum(axis=1)
+        df_copy['total_shortage'] = total_shortage_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
         annual_shortage = df_copy.groupby('WaterYear')['total_shortage'].sum()
         # Use threshold to filter out floating-point noise from CalSim solver
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()

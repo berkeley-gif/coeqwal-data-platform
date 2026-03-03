@@ -339,6 +339,7 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
         df['DateTime'] = pd.to_datetime(date_values, errors='coerce')
         df['CalendarMonth'] = df['DateTime'].dt.month
         df['CalendarYear'] = df['DateTime'].dt.year
+        df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
 
         # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
         df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
@@ -393,10 +394,18 @@ def calculate_aggregate_monthly(
 
     is_annual = (df['WaterMonth'] == 0).all() if 'WaterMonth' in df.columns else False
 
+    # Convert delivery and shortage from CFS to TAF
+    df = df.copy()
+    delivery_cfs = pd.to_numeric(df[delivery_var], errors='coerce')
+    df['delivery_taf'] = delivery_cfs * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    if has_shortage:
+        shortage_cfs = pd.to_numeric(df[shortage_var], errors='coerce')
+        df['shortage_taf'] = shortage_cfs * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+
     if is_annual:
         # Annual data - single aggregated row
-        delivery_data = df[delivery_var].dropna()
-        shortage_data = df[shortage_var].dropna() if has_shortage else pd.Series()
+        delivery_data = df['delivery_taf'].dropna()
+        shortage_data = df['shortage_taf'].dropna() if has_shortage else pd.Series()
 
         if delivery_data.empty:
             return []
@@ -453,12 +462,12 @@ def calculate_aggregate_monthly(
         # Monthly data - 12 rows
         for wm in range(1, 13):
             month_df = df[df['WaterMonth'] == wm]
-            delivery_data = month_df[delivery_var].dropna()
+            delivery_data = month_df['delivery_taf'].dropna()
 
             if delivery_data.empty:
                 continue
 
-            shortage_data = month_df[shortage_var].dropna() if has_shortage else pd.Series()
+            shortage_data = month_df['shortage_taf'].dropna() if has_shortage else pd.Series()
 
             row = {
                 'cws_aggregate_id': aggregate_id,
@@ -508,7 +517,6 @@ def calculate_aggregate_monthly(
                     if not demand_data.empty:
                         # Convert CFS to TAF if demand_df has DateTime column
                         if 'DateTime' in demand_df.columns:
-                            # Get days in month for conversion
                             days_in_month = month_demand_df['DateTime'].dt.daysinmonth.mean() if 'DateTime' in month_demand_df.columns else 30
                             demand_taf = float(demand_data.mean()) * days_in_month * CFS_TO_TAF_PER_DAY
                         else:
@@ -552,9 +560,13 @@ def calculate_aggregate_period_summary(
     if delivery_var not in df.columns:
         return None
 
-    delivery_data = df[delivery_var].dropna()
-    if delivery_data.empty:
+    delivery_cfs = pd.to_numeric(df[delivery_var], errors='coerce')
+    if delivery_cfs.dropna().empty:
         return None
+
+    # Convert CFS to TAF before aggregating
+    df = df.copy()
+    df['delivery_taf'] = delivery_cfs * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
 
     water_years = sorted(df['WaterYear'].unique())
 
@@ -565,8 +577,8 @@ def calculate_aggregate_period_summary(
         'total_years': len(water_years),
     }
 
-    # Annual delivery statistics
-    annual_delivery = df.groupby('WaterYear')[delivery_var].sum()
+    # Annual delivery statistics (now in TAF)
+    annual_delivery = df.groupby('WaterYear')['delivery_taf'].sum()
     result['annual_delivery_avg_taf'] = round(float(annual_delivery.mean()), 2)
     result['annual_delivery_cv'] = round(float(annual_delivery.std() / annual_delivery.mean()), 4) if annual_delivery.mean() > 0 else 0
     result['annual_delivery_min_taf'] = round(float(annual_delivery.min()), 2)
@@ -579,7 +591,9 @@ def calculate_aggregate_period_summary(
     # Shortage statistics
     has_shortage = shortage_var in df.columns
     if has_shortage:
-        annual_shortage = df.groupby('WaterYear')[shortage_var].sum()
+        shortage_cfs = pd.to_numeric(df[shortage_var], errors='coerce')
+        df['shortage_taf'] = shortage_cfs * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        annual_shortage = df.groupby('WaterYear')['shortage_taf'].sum()
         # Use threshold to filter out floating-point noise from CalSim solver
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 

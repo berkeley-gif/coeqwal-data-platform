@@ -156,18 +156,18 @@ CREATE TABLE ag_du_period_summary (
     simulation_end_year INTEGER NOT NULL,
     total_years INTEGER NOT NULL,
 
-    -- Annual delivery statistics
-    annual_delivery_avg_taf NUMERIC(10,2),
-    annual_delivery_cv NUMERIC(10,4),
+    -- Annual demand statistics (AW_* = applied water = demand)
+    annual_demand_avg_taf NUMERIC(10,2),
+    annual_demand_cv NUMERIC(10,4),
 
-    -- Annual delivery exceedance percentiles
-    delivery_exc_p5 NUMERIC(10,2),
-    delivery_exc_p10 NUMERIC(10,2),
-    delivery_exc_p25 NUMERIC(10,2),
-    delivery_exc_p50 NUMERIC(10,2),
-    delivery_exc_p75 NUMERIC(10,2),
-    delivery_exc_p90 NUMERIC(10,2),
-    delivery_exc_p95 NUMERIC(10,2),
+    -- Annual demand exceedance percentiles
+    demand_exc_p5 NUMERIC(10,2),
+    demand_exc_p10 NUMERIC(10,2),
+    demand_exc_p25 NUMERIC(10,2),
+    demand_exc_p50 NUMERIC(10,2),
+    demand_exc_p75 NUMERIC(10,2),
+    demand_exc_p90 NUMERIC(10,2),
+    demand_exc_p95 NUMERIC(10,2),
 
     -- Annual shortage statistics (NULL for Sacramento region)
     annual_shortage_avg_taf NUMERIC(10,2),
@@ -178,7 +178,13 @@ CREATE TABLE ag_du_period_summary (
     -- Reliability metrics
     reliability_pct NUMERIC(5,2),             -- % of months meeting full demand
     avg_pct_demand_met NUMERIC(5,2),          -- Average delivery/demand ratio
-    annual_demand_avg_taf NUMERIC(10,2),      -- Back-calculated annual demand
+
+    -- SW delivery and GW pumping summary columns
+    annual_sw_delivery_avg_taf NUMERIC(10,2),
+    annual_sw_delivery_cv NUMERIC(10,4),
+    annual_gw_pumping_avg_taf NUMERIC(10,2),
+    annual_gw_pumping_cv NUMERIC(10,4),
+    gw_pumping_pct_of_demand NUMERIC(5,2),
 
     -- Audit fields
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

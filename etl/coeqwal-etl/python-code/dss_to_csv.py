@@ -165,7 +165,8 @@ class DSSProcessor:
                         a=a, b=b, c=c, d=d, e=e, f=f
                     )
 
-                    if series_key not in time_series_groups:
+                    is_new_series = series_key not in time_series_groups
+                    if is_new_series:
                         time_series_groups[series_key] = {
                             "data": {},
                             "a": a,
@@ -177,6 +178,15 @@ class DSSProcessor:
                             "units": getattr(data, "units", ""),
                             "type": getattr(data, "type", ""),
                         }
+                    else:
+                        existing_f = time_series_groups[series_key]["f"]
+                        if f != existing_f:
+                            log.warning(
+                                "Series key collision: %s has Part F='%s' "
+                                "(existing) vs '%s' (new, skipped)",
+                                series_key, existing_f, f,
+                            )
+                            continue
 
                     values = getattr(data, "values", [])
                     pytimes = getattr(data, "pytimes", [])
