@@ -260,35 +260,49 @@ def _extract_sv_cfs_columns(
     target_ids: Set[str],
 ) -> pd.DataFrame:
     """
-    Extract date + target SV columns at CFS precision.
+    Extract date + target SV columns, converting to CFS if needed.
 
-    The SV file has a two-block layout (CFS block, then TAF block). For
-    env-flow ratio metrics (pct_unimpaired, pct_ff) we want the CFS values
-    so that units cancel with the CFS DV channel flows.
-
-    Falls back to the first occurrence if no column is explicitly labeled CFS.
+    CalSim SV DSS files store unimpaired flow data in TAF. For env-flow
+    ratio metrics (pct_unimpaired, pct_ff) we need CFS so that units cancel
+    with the CFS DV channel flows. If a column is labeled CFS, use it
+    directly; if labeled TAF, convert: CFS = TAF / (DaysInMonth * 0.001983471).
     """
+    CFS_TO_TAF_PER_DAY = 0.001983471
     date_col = var_names[0]
+    dates = pd.to_datetime(data_df.iloc[:, 0], errors='coerce')
+    days_in_month = dates.dt.daysinmonth
+
     seen: Dict[str, List[Tuple[int, str]]] = {}
     for i, (vname, unit) in enumerate(zip(var_names[1:], units[1:]), start=1):
         if vname in target_ids:
             seen.setdefault(vname, []).append((i, unit))
 
     series_list = [data_df.iloc[:, 0].rename(date_col)]
+    taf_converted = 0
     for vname, occurrences in seen.items():
-        # Prefer CFS; fall back to first occurrence
-        cfs_col = next(
-            (idx for idx, unit in occurrences if unit.upper() == 'CFS'),
-            occurrences[0][0],
+        cfs_entry = next(
+            ((idx, unit) for idx, unit in occurrences if unit.upper() == 'CFS'),
+            None,
         )
-        series_list.append(
-            pd.to_numeric(data_df.iloc[:, cfs_col], errors='coerce').rename(vname)
-        )
+        if cfs_entry:
+            col_idx = cfs_entry[0]
+            series_list.append(
+                pd.to_numeric(data_df.iloc[:, col_idx], errors='coerce').rename(vname)
+            )
+        else:
+            col_idx, unit = occurrences[0]
+            raw = pd.to_numeric(data_df.iloc[:, col_idx], errors='coerce')
+            if unit.upper() == 'TAF' and days_in_month.notna().any():
+                raw = raw / (days_in_month * CFS_TO_TAF_PER_DAY)
+                taf_converted += 1
+            series_list.append(raw.rename(vname))
 
     found = len(series_list) - 1
     missing = target_ids - set(seen.keys())
     if missing:
         log.debug(f"SV: {len(missing)} target variables not found: {sorted(missing)[:10]}...")
+    if taf_converted:
+        log.info(f"SV: converted {taf_converted} column(s) from TAF to CFS")
     log.info(f"Extracted {found} SV columns (CFS) from SV input")
     return pd.concat(series_list, axis=1)
 

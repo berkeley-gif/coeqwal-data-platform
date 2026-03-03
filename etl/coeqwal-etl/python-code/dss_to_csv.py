@@ -11,7 +11,7 @@ import json
 import argparse
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set
 
 import numpy as np
 import pandas as pd
@@ -29,6 +29,13 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%SZ",
 )
 log = logging.getLogger("dss_to_csv")
+
+_UNIT_STRIP_RE = re.compile(r"[{}\[\]()]+")
+
+
+def _sanitize_unit(raw: str) -> str:
+    """Strip stray braces/brackets from DSS unit metadata (e.g. 'CFS}' -> 'CFS')."""
+    return _UNIT_STRIP_RE.sub("", raw).strip()
 
 
 class DSSProcessor:
@@ -165,8 +172,7 @@ class DSSProcessor:
                         a=a, b=b, c=c, d=d, e=e, f=f
                     )
 
-                    is_new_series = series_key not in time_series_groups
-                    if is_new_series:
+                    if series_key not in time_series_groups:
                         time_series_groups[series_key] = {
                             "data": {},
                             "a": a,
@@ -175,18 +181,9 @@ class DSSProcessor:
                             "d": d,
                             "e": e,
                             "f": f,
-                            "units": getattr(data, "units", ""),
+                            "units": _sanitize_unit(getattr(data, "units", "")),
                             "type": getattr(data, "type", ""),
                         }
-                    else:
-                        existing_f = time_series_groups[series_key]["f"]
-                        if f != existing_f:
-                            log.warning(
-                                "Series key collision: %s has Part F='%s' "
-                                "(existing) vs '%s' (new, skipped)",
-                                series_key, existing_f, f,
-                            )
-                            continue
 
                     values = getattr(data, "values", [])
                     pytimes = getattr(data, "pytimes", [])
