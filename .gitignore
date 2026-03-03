@@ -59,6 +59,9 @@ pip-wheel-metadata/
 # ETL staging and output directories
 etl/staging/
 etl/*/staging/
+# Tier staging CSVs are tracked so they can be pushed/pulled to Cloud9
+!etl/tier_data/staging/
+!etl/tier_data/staging/*.csv
 etl/statistics/charts/
 etl/coeqwal-etl/dss_processing/output/
 
