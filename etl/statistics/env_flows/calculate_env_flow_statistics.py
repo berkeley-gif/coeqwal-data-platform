@@ -895,11 +895,13 @@ def calculate_all_env_flow_statistics(
     dv_df = add_water_year_month(dv_df)
     sv_df = add_water_year_month(sv_df)
 
-    # Merge on WaterYear + WaterMonth (date-format agnostic)
-    aux_cols = ['DateTime', 'CalendarMonth', 'CalendarYear', 'DaysInMonth']
+    # Merge on WaterYear + WaterMonth (date-format agnostic).
+    # DaysInMonth is kept from the DV side (needed for CFS→TAF conversion)
+    # and dropped only from the SV side to prevent a name collision.
+    drop_from_both = ['DateTime', 'CalendarMonth', 'CalendarYear']
     merged = pd.merge(
-        dv_df.drop(columns=aux_cols, errors='ignore'),
-        sv_df.drop(columns=aux_cols + [sv_df.columns[0]], errors='ignore'),
+        dv_df.drop(columns=drop_from_both, errors='ignore'),
+        sv_df.drop(columns=drop_from_both + ['DaysInMonth', sv_df.columns[0]], errors='ignore'),
         on=['WaterYear', 'WaterMonth'],
         how='inner',
     )
