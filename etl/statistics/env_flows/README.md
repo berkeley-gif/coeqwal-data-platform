@@ -117,6 +117,53 @@ Channels are attributed in `channel_entity` (migration 23) with `watershed_short
 
 Current class breakdown: 47 stream reaches, 7 reservoir releases, 5 conveyance canals (= 59 total).
 
+---
+
+## Channel subsets used in the data explorer
+
+The frontend data explorer exposes four channel filter options, each corresponding to a
+meaningful analytical subset. The `channel_entity` table flags drives these filters.
+
+| Filter | Column flag | Count | Description |
+|--------|------------|-------|-------------|
+| **Stream reaches** | `channel_class = 'stream'` | 47 | All natural river channels; excludes reservoir releases (below-dam flows) and conveyance canals |
+| **EFLOWS streams** | `has_eflows = true` | 17 | Streams with a prescribed functional flow (`EFLOWS_{reach}`) target in the SV input — the reach set used for tier results and CEFF analysis (Metric 2) |
+| **MIF streams** | `has_mif = true` | 20 | Streams with a binding minimum instream flow companion variable (`C_{reach}_MIF`) in the DV output — the primary regulatory monitoring locations |
+| **All channels** | (no filter) | 59 | Complete CalSim reach set including reservoir releases (e.g. below Shasta, Oroville, Folsom) and conveyance canals (e.g. Delta Cross Channel, Clifton Court Forebay) |
+
+### EFLOWS streams (17) — tier analysis reaches
+
+These 17 reaches have `has_eflows = true` in `channel_entity` and represent the CEFF
+functional-flow monitoring network. They are used as the denominator set for tier scoring
+and the basis for Metric 2 (% functional flows) and Metric 3 (flow alteration index).
+
+| Reach | Location | Watershed | `UNIMP_*` | MIF? |
+|-------|----------|-----------|-----------|------|
+| `AMR004` | American River at I-80 Bridge | UPPER_AMERICAN | `UNIMP_FOLS` | ✓ |
+| `FTR003` | Feather River | UPPER_FEATHER | `UNIMP_OROV` | ✓ |
+| `FTR029` | Feather River at Yuba City | UPPER_FEATHER | `UNIMP_OROV` | ✓ |
+| `MCD005` | Merced River at Stevinson | UPPER_MERCED | `UNIMP_ME` | ✓ |
+| `MOK028` | Mokelumne River at Woodbridge | UPPER_MOKELUMNE | — | ✓ |
+| `SAC000` | Sacramento River at Chipps Island | SAC_LOWER | `UNIMP_SRBB` | — |
+| `SAC049` | Sacramento River at Freeport | SAC_LOWER | `UNIMP_SRBB` | ✓ |
+| `SAC122` | Sacramento River at Tisdale Weir | SAC_LOWER | `UNIMP_SRBB` | ✓ |
+| `SAC148` | Sacramento River at Colusa Weir | SAC_LOWER | `UNIMP_SRBB` | ✓ |
+| `SAC257` | Sacramento River at Bend Bridge | SAC_LOWER | `UNIMP_SRBB` | ✓ |
+| `SAC289` | Sacramento River at South Bonnieville | SAC_UPPER | `UNIMP_SHAS` | ✓ |
+| `SJR070` | San Joaquin near Vernalis | SAN_JOAQUIN | `UNIMP_SJ` | ✓ |
+| `SJR127` | San Joaquin at Salt Slough | SAN_JOAQUIN | `UNIMP_SJ` | ✓ |
+| `STS011` | Stanislaus River | UPPER_STANISLAUS | `UNIMP_ST` | ✓ |
+| `TRN111` | Trinity River at Lewiston | TRINITY_RIVER | `UNIMP_TRIN` | ✓ |
+| `TUO003` | Tuolumne River | UPPER_TUOLUMNE | `UNIMP_TU` | ✓ |
+| `YUB002` | Yuba River at Marysville | YUBA_RIVER | `UNIMP_YUBA` | ✓ |
+
+> **Note:** `SAC000` (Chipps Island) has `has_eflows = true` but **no MIF** (`has_mif = false`)
+> because `C_SAC000_MIF` is absent from the DV. It does have `EFLOWS_SAC000` in the SV.
+> The MIF subset (20 reaches) includes all EFLOWS reaches except SAC000 plus 3 additional
+> non-EFLOWS streams: `FTR059`, `KSWCK`, `NTOMA`, `STS059`.
+
+---
+
 ### Channels with MIF companion (20)
 
 These channels have a `C_{reach}_MIF` variable in the DV and are the primary env-flow monitoring
