@@ -87,6 +87,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("env_flow_statistics")
 
+# ─── Unit conversion ─────────────────────────────────────────────────────────
+# 1 CFS for 1 day = 86 400 cubic feet
+# 1 TAF = 43 560 × 1000 cubic feet = 43 560 000 cubic feet
+# => TAF/month = CFS × days_in_month × 86400 / 43_560_000
+CFS_PER_DAY_TO_TAF = 86_400 / 43_560_000  # ≈ 0.0019835 TAF per CFS-day
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 SCENARIOS = [
@@ -460,21 +466,74 @@ def _percentile_stats(data: pd.Series) -> Dict[str, Optional[float]]:
 # CALCULATIONS — METRIC 1: Monthly % unimpaired
 # =============================================================================
 
+def _flow_volume_stats(
+    flow_cfs: pd.Series,
+    days_in_month: pd.Series,
+) -> Dict[str, Optional[float]]:
+    """
+    Compute flow-volume percentile statistics in both CFS and TAF.
+
+    flow_cfs       — per-year monthly mean flow (CFS), already dropna'd, one value per year
+    days_in_month  — days in that calendar month for the matching rows (same index as flow_cfs)
+
+    Returns a flat dict with keys:
+        flow_avg_taf,
+        flow_q{p}_cfs / flow_exc_p{p}_cfs  (p in DELIVERY_PERCENTILES / EXCEEDANCE_PERCENTILES)
+        flow_q{p}_taf / flow_exc_p{p}_taf
+    """
+    out: Dict[str, Optional[float]] = {}
+
+    if flow_cfs.empty:
+        out['flow_avg_taf'] = None
+        for p in DELIVERY_PERCENTILES:
+            out[f'flow_q{p}_cfs'] = None
+            out[f'flow_q{p}_taf'] = None
+        for p in EXCEEDANCE_PERCENTILES:
+            out[f'flow_exc_p{p}_cfs'] = None
+            out[f'flow_exc_p{p}_taf'] = None
+        return out
+
+    arr_cfs = flow_cfs.values.astype(float)
+
+    # TAF per month for each year: CFS × actual_days × CFS_PER_DAY_TO_TAF
+    aligned_days = days_in_month.reindex(flow_cfs.index).fillna(30.4375)
+    arr_taf = arr_cfs * aligned_days.values * CFS_PER_DAY_TO_TAF
+
+    out['flow_avg_taf'] = round(float(np.mean(arr_taf)), 3)
+
+    for p in DELIVERY_PERCENTILES:
+        out[f'flow_q{p}_cfs'] = round(float(np.percentile(arr_cfs, p)), 3)
+        out[f'flow_q{p}_taf'] = round(float(np.percentile(arr_taf, p)), 3)
+    for p in EXCEEDANCE_PERCENTILES:
+        out[f'flow_exc_p{p}_cfs'] = round(float(np.percentile(arr_cfs, 100 - p)), 3)
+        out[f'flow_exc_p{p}_taf'] = round(float(np.percentile(arr_taf, 100 - p)), 3)
+
+    return out
+
+
 def calculate_monthly_statistics(
     df: pd.DataFrame,
     network_arc_id: str,
     unimp_sv_variable: Optional[str],
 ) -> List[Dict[str, Any]]:
     """
-    Monthly % unimpaired statistics for one channel reach.
+    Monthly flow-volume and % unimpaired statistics for one channel reach.
 
-    For each water month 1–12, across all simulated years:
-      pct_unimpaired = C_{reach}[CFS] / UNIMP_{watershed}[CFS] × 100
-      NaN where UNIMP == 0 (divide-by-zero guard).
+    For each water month 1–12, across all simulated years, computes:
+
+      Flow volume (all channels):
+        flow_avg_cfs, flow_cv  — mean CFS and coefficient of variation
+        flow_avg_taf           — mean TAF/month (CFS × actual_days × CFS_PER_DAY_TO_TAF)
+        flow_q{p}_cfs, flow_q{p}_taf, flow_exc_p{p}_cfs, flow_exc_p{p}_taf
+          — percentile bands and exceedance percentiles of per-year monthly flow
+
+      % unimpaired (channels with unimp_sv_variable only):
+        pct_unimpaired = C_{reach}[CFS] / UNIMP_{watershed}[CFS] × 100
+        pct_unimpaired_avg, pct_unimpaired_cv
+        q{p}, exc_p{p}  — percentile bands of pct_unimpaired
+        NaN where UNIMP == 0 (divide-by-zero guard).
 
     Returns one row per water month (up to 12 rows).
-    NULL-safe: if unimp_sv_variable is absent, pct_unimpaired stats are None,
-    but flow_avg_cfs and flow_cv are still computed.
     """
     if network_arc_id not in df.columns:
         log.debug(f"Monthly: {network_arc_id} not in DataFrame — skipped")
@@ -485,10 +544,14 @@ def calculate_monthly_statistics(
 
     for wm in range(1, 13):
         mask = df['WaterMonth'] == wm
-        flow = pd.to_numeric(df.loc[mask, network_arc_id], errors='coerce').dropna()
+        month_df = df.loc[mask]
+        flow = pd.to_numeric(month_df[network_arc_id], errors='coerce').dropna()
 
         if flow.empty:
             continue
+
+        # DaysInMonth for CFS→TAF conversion (same index as flow after dropna)
+        days = month_df['DaysInMonth'].reindex(flow.index)
 
         row: Dict[str, Any] = {
             'network_arc_id':    network_arc_id,
@@ -501,17 +564,17 @@ def calculate_monthly_statistics(
             'sample_count':      int(len(flow)),
         }
 
+        # Flow-volume percentile bands (CFS + TAF)
+        row.update(_flow_volume_stats(flow, days))
+
         if has_unimp:
-            unimp = pd.to_numeric(df.loc[mask, unimp_sv_variable], errors='coerce')
-            # Align indices
+            unimp = pd.to_numeric(month_df[unimp_sv_variable], errors='coerce')
             aligned_flow  = flow.reindex(unimp.index)
             aligned_unimp = unimp.reindex(flow.index)
 
             row['unimp_avg_cfs'] = _round_or_none(aligned_unimp.dropna().mean())
 
-            # Compute pct_unimpaired per timestep; guard against zero denominator.
-            # errstate suppresses the numpy divide-by-zero warning that fires even
-            # though np.where masks the invalid result before it is used.
+            # pct_unimpaired per year; guard against zero denominator
             with np.errstate(divide='ignore', invalid='ignore'):
                 pct_vals = np.where(
                     aligned_unimp.values > 0,
@@ -524,8 +587,12 @@ def calculate_monthly_statistics(
                 row['pct_unimpaired_avg'] = _round_or_none(pct.mean())
                 row['pct_unimpaired_cv']  = _safe_cv(pct)
                 row.update(_percentile_stats(pct))
+            else:
+                for p in DELIVERY_PERCENTILES:
+                    row[f'q{p}'] = None
+                for p in EXCEEDANCE_PERCENTILES:
+                    row[f'exc_p{p}'] = None
         else:
-            # Fill percentile columns with None for schema consistency
             for p in DELIVERY_PERCENTILES:
                 row[f'q{p}'] = None
             for p in EXCEEDANCE_PERCENTILES:
@@ -900,11 +967,31 @@ def calculate_all_env_flow_statistics(
 
 MONTHLY_COLS = [
     'network_arc_id', 'scenario_short_code', 'water_month',
+
+    # Raw flow — mean CFS and CV
     'flow_avg_cfs', 'flow_cv',
+    # Raw flow — mean TAF/month
+    'flow_avg_taf',
+    # Raw flow — percentile bands CFS (added migration 28)
+    'flow_q0_cfs', 'flow_q10_cfs', 'flow_q30_cfs', 'flow_q50_cfs',
+    'flow_q70_cfs', 'flow_q90_cfs', 'flow_q100_cfs',
+    # Raw flow — exceedance percentiles CFS
+    'flow_exc_p5_cfs', 'flow_exc_p10_cfs', 'flow_exc_p25_cfs', 'flow_exc_p50_cfs',
+    'flow_exc_p75_cfs', 'flow_exc_p90_cfs', 'flow_exc_p95_cfs',
+    # Raw flow — percentile bands TAF (added migration 28)
+    'flow_q0_taf', 'flow_q10_taf', 'flow_q30_taf', 'flow_q50_taf',
+    'flow_q70_taf', 'flow_q90_taf', 'flow_q100_taf',
+    # Raw flow — exceedance percentiles TAF
+    'flow_exc_p5_taf', 'flow_exc_p10_taf', 'flow_exc_p25_taf', 'flow_exc_p50_taf',
+    'flow_exc_p75_taf', 'flow_exc_p90_taf', 'flow_exc_p95_taf',
+
+    # Unimpaired reference
     'unimp_avg_cfs',
+    # % unimpaired
     'pct_unimpaired_avg', 'pct_unimpaired_cv',
     'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
     'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+
     'sample_count', 'created_by', 'updated_by',
 ]
 
