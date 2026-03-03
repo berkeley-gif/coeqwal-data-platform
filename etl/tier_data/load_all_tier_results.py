@@ -681,9 +681,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
     lines.append("    location_name = EXCLUDED.location_name,")
     lines.append("    tier_level = EXCLUDED.tier_level,")
     lines.append("    tier_value = EXCLUDED.tier_value,")
-    lines.append("    display_order = EXCLUDED.display_order,")
-    lines.append("    is_active = TRUE,")
-    lines.append("    updated_at = NOW();")
+    lines.append("    display_order = EXCLUDED.display_order;")
     lines.append("")
     return '\n'.join(lines)
 
@@ -743,13 +741,10 @@ def generate_deactivation_sql() -> str:
         return ""
 
     codes = ', '.join(escape_sql(s) for s in sorted(DEACTIVATED_SCENARIOS))
-    return f"""-- Deactivate retired scenarios
--- Data is retained for audit purposes; is_active = FALSE hides it from API responses.
+    return f"""-- Deactivate retired scenarios in tier_result
+-- (tier_location_result has no is_active column; retired rows remain but
+--  are not surfaced since the API filters on tier_result.is_active)
 UPDATE tier_result
-   SET is_active = FALSE, updated_at = NOW()
- WHERE scenario_short_code IN ({codes});
-
-UPDATE tier_location_result
    SET is_active = FALSE, updated_at = NOW()
  WHERE scenario_short_code IN ({codes});
 
@@ -875,8 +870,7 @@ GROUP BY tier_short_code
 ORDER BY tier_short_code;
 
 SELECT tier_short_code,
-       COUNT(*) AS location_rows,
-       SUM(CASE WHEN is_active THEN 1 ELSE 0 END) AS active_rows
+       COUNT(*) AS location_rows
 FROM tier_location_result
 WHERE tier_version_id = {TIER_VERSION_ID}
 GROUP BY tier_short_code
