@@ -6,7 +6,7 @@ on:
       - 'etl/coeqwal-etl/**'
       - '.github/workflows/etl.yml'
     branches:
-      - dev  # change to main when ready
+      - main
   workflow_dispatch:
     inputs:
       reason:
