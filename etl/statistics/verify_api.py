@@ -51,8 +51,9 @@ REL_TOL = 0.001
 
 ALL_SCENARIOS = [
     "s0011", "s0020", "s0021", "s0023", "s0024", "s0025", "s0026",
-    "s0027", "s0028", "s0029", "s0030", "s0031", "s0032", "s0033",
-    "s0039", "s0040", "s0041", "s0042", "s0044",
+    "s0027", "s0028", "s0030", "s0031", "s0032", "s0033", "s0035",
+    "s0036", "s0037", "s0039", "s0040", "s0041", "s0042", "s0044",
+    "s0045", "s0046", "s0065",
 ]
 
 
@@ -281,6 +282,46 @@ def verify_batch_ag(report: APIReport, conn, api_url: str, sid: str):
         report.add("annual_delivery_avg_taf", section, code, db_del, api_del)
 
 
+def verify_delta(report: APIReport, conn, api_url: str, sid: str):
+    """Verify delta data exists in DB. No API endpoint yet — DB-only check."""
+    section = "delta"
+    log.info(f"  Checking {section}...")
+
+    monthly_count = db_query(conn, """
+        SELECT COUNT(*) as cnt FROM delta_monthly
+        WHERE scenario_short_code = %s
+    """, (sid,))
+    cnt = monthly_count[0]["cnt"] if monthly_count else 0
+    report.add("monthly_row_count", section, "all",
+               None, float(cnt))
+
+    period_rows = db_query(conn, """
+        SELECT variable_code, category,
+               summary_data->>'annual_avg_taf' as annual_avg_taf,
+               summary_data->>'avg_km' as avg_km,
+               summary_data->>'avg_ec' as avg_ec
+        FROM delta_period_summary
+        WHERE scenario_short_code = %s
+        ORDER BY variable_code
+    """, (sid,))
+
+    for row in period_rows:
+        code = row["variable_code"]
+        cat = row.get("category", "")
+        if cat == "outflow":
+            val = _sf(row.get("annual_avg_taf"))
+            report.add("annual_avg_taf", section, code, None, val)
+        elif cat == "x2":
+            val = _sf(row.get("avg_km"))
+            report.add("avg_km", section, code, None, val)
+        elif cat and cat.startswith("salinity"):
+            val = _sf(row.get("avg_ec"))
+            report.add("avg_ec", section, code, None, val)
+
+    if not period_rows:
+        report.add("data_present", section, "all", 1.0, 0.0)
+
+
 # ── Verify: Tiers ───────────────────────────────────────────────────────────
 
 TIER_CODES = [
@@ -389,6 +430,7 @@ def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIRepor
         verify_batch_storage(report, conn, api_url, sid)
         verify_batch_cws(report, conn, api_url, sid)
         verify_batch_ag(report, conn, api_url, sid)
+        verify_delta(report, conn, api_url, sid)
         verify_tiers(report, conn, api_url, sid)
         verify_env_flow_period(report, conn, api_url, sid)
     finally:

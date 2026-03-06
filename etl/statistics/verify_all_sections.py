@@ -18,9 +18,10 @@ Requires:
 
 Data sources after ETL refactoring:
     - DV: delivery (DN_*, D_*), shortage (SHRTG_*, SHORT_*), AG demand (AW_*),
-           AG GW pumping (GP_*), reservoir storage (S_*), spill (C_*_FLOOD),
-           env flows (C_*), CWS aggregates (DEL_*, SHORT_*)
-    - SV: urban demand (UD_*), MI demand (DEM_D_*_PIN), refuge demand (AWO_*)
+           AG GW pumping (GP_*), reservoir storage (S_*),
+           env flows (C_*), CWS aggregates (DEL_*, SHORT_*),
+           Delta outflow (NDO), X2 (X2_PRV_KM), salinity (EM/JP/RS/CO_EC_MONTH, *EC_MAX14DAY)
+    - SV: urban demand (UD_*)
 """
 
 import argparse
@@ -61,8 +62,9 @@ SCENARIO_RUN_IDS = {
 
 ALL_SCENARIOS = [
     "s0011", "s0020", "s0021", "s0023", "s0024", "s0025", "s0026",
-    "s0027", "s0028", "s0029", "s0030", "s0031", "s0032", "s0033",
-    "s0039", "s0040", "s0041", "s0042", "s0044",
+    "s0027", "s0028", "s0030", "s0031", "s0032", "s0033", "s0035",
+    "s0036", "s0037", "s0039", "s0040", "s0041", "s0042", "s0044",
+    "s0045", "s0046", "s0065",
 ]
 
 # Variable lists from COEQWAL_V3/notebooks/variable_groupings.csv
@@ -101,6 +103,33 @@ AG_AGGREGATE_VARS = [
     ("DEL_SWP_PAG_S", "SWP AG SOD"),
     ("DEL_CVP_PAG_N", "CVP AG NOD"),
     ("DEL_CVP_PAG_S", "CVP AG SOD"),
+]
+
+AG_AGGREGATE_NEW_VARS = [
+    ("cvp_psc_n", "DEL_CVP_PSC_N", "CVP Settlement NOD"),
+    ("cvp_pex_s", "DEL_CVP_PEX_S", "CVP Exchange SOD"),
+]
+
+AG_COMPUTED_AGGREGATES = {
+    "nod_ag": {
+        "delivery_components": ["DEL_CVP_PAG_N", "DEL_SWP_PAG_N", "DEL_CVP_PSC_N"],
+        "shortage_components": ["SHORT_CVP_PAG_N", "SHORT_SWP_PAG_N", "SHORT_CVP_PSC_N"],
+    },
+    "sod_ag": {
+        "delivery_components": ["DEL_CVP_PAG_S", "DEL_SWP_PAG_S", "DEL_CVP_PEX_S"],
+        "shortage_components": ["SHORT_CVP_PAG_S", "SHORT_SWP_PAG_S", "SHORT_CVP_PEX_S"],
+    },
+}
+
+DELTA_OUTFLOW_VARS = [("ndo", "NDO", "CFS")]
+DELTA_X2_VARS = [("x2", "X2_PRV_KM", "KM")]
+DELTA_SALINITY_VARS = [
+    ("em_ec", "EM_EC_MONTH", "UMHOS/CM"),
+    ("jp_ec", "JP_EC_MONTH", "UMHOS/CM"),
+    ("rs_ec", "RS_EC_MONTH", "UMHOS/CM"),
+    ("co_ec", "CO_EC_MONTH", "UMHOS/CM"),
+    ("banks_ec", "BANKSEC_MAX14DAY", "UMHOS/CM"),
+    ("tracy_ec", "TRACYEC_MAX14DAY", "UMHOS/CM"),
 ]
 
 SAMPLE_CWS_DUS = ["02_PU", "26S_PU1", "71_PU1", "GDPUD_NU", "MWD", "CCWD"]
@@ -559,7 +588,7 @@ def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
         if act_reliability is not None:
             report.add("reliability_pct", section, du, None, act_reliability)
 
-    # AG aggregate delivery — expected from DV
+    # AG aggregate delivery — expected from DV (original aggregates keyed by DV variable)
     for var, label in AG_AGGREGATE_VARS:
         exp_ann = None
         if dv_df is not None:
@@ -571,12 +600,59 @@ def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
             rows = db_query(conn, """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
-                JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
+                JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
             """, (report.scenario_id, var))
             if rows:
                 act_ann = _safe_round(rows[0].get("annual_delivery_avg_taf"))
         report.add("annual_delivery_avg_taf", "ag_aggregate", var, exp_ann, act_ann)
+
+    # New direct AG aggregates (cvp_psc_n, cvp_pex_s)
+    for short_code, dv_var, label in AG_AGGREGATE_NEW_VARS:
+        exp_ann = None
+        if dv_df is not None:
+            taf_series = get_column_taf(dv_df, dv_units, dv_var)
+            exp_ann = annual_avg_taf(taf_series, dv_df["WaterYear"])
+
+        act_ann = None
+        if conn:
+            rows = db_query(conn, """
+                SELECT p.annual_delivery_avg_taf
+                FROM ag_aggregate_period_summary p
+                JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+                WHERE p.scenario_short_code = %s AND e.short_code = %s
+            """, (report.scenario_id, short_code))
+            if rows:
+                act_ann = _safe_round(rows[0].get("annual_delivery_avg_taf"))
+        report.add("annual_delivery_avg_taf", "ag_aggregate", short_code, exp_ann, act_ann)
+
+    # Computed AG aggregates (nod_ag, sod_ag) — sum of components
+    for agg_code, components in AG_COMPUTED_AGGREGATES.items():
+        exp_ann = None
+        if dv_df is not None:
+            total_annual = None
+            for del_var in components["delivery_components"]:
+                comp_series = get_column_taf(dv_df, dv_units, del_var)
+                if comp_series is not None:
+                    comp_annual = comp_series.groupby(dv_df["WaterYear"]).sum()
+                    if total_annual is None:
+                        total_annual = comp_annual
+                    else:
+                        total_annual = total_annual + comp_annual
+            if total_annual is not None:
+                exp_ann = round(float(total_annual.mean()), 4)
+
+        act_ann = None
+        if conn:
+            rows = db_query(conn, """
+                SELECT p.annual_delivery_avg_taf
+                FROM ag_aggregate_period_summary p
+                JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+                WHERE p.scenario_short_code = %s AND e.short_code = %s
+            """, (report.scenario_id, agg_code))
+            if rows:
+                act_ann = _safe_round(rows[0].get("annual_delivery_avg_taf"))
+        report.add("annual_delivery_avg_taf", "ag_aggregate", agg_code, exp_ann, act_ann)
 
 
 # ── Section: Env Flows ──────────────────────────────────────────────────────
@@ -664,6 +740,120 @@ def verify_refuge(report: Report, conn) -> None:
 
     if not rows:
         report.add("data_present", section, "all", 1.0, 0.0)
+
+
+# ── Section: Delta ──────────────────────────────────────────────────────────
+
+def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
+                 dv_units: Optional[pd.Series], conn) -> None:
+    """Verify Delta outflow (NDO), X2 position, and salinity from DV CSV vs DB."""
+    section = "delta"
+    log.info(f"Verifying {section}...")
+
+    # --- NDO outflow: annual avg TAF ---
+    for var_code, calsim_var, native_unit in DELTA_OUTFLOW_VARS:
+        exp_ann_taf = None
+        if dv_df is not None and calsim_var in dv_df.columns:
+            taf_series = get_column_taf(dv_df, dv_units, calsim_var)
+            exp_ann_taf = annual_avg_taf(taf_series, dv_df["WaterYear"])
+
+        act_ann_taf = None
+        act_avg_cfs = None
+        if conn:
+            rows = db_query(conn, """
+                SELECT summary_data
+                FROM delta_period_summary
+                WHERE scenario_short_code = %s AND variable_code = %s
+            """, (report.scenario_id, var_code))
+            if rows:
+                sd = rows[0].get("summary_data", {})
+                act_ann_taf = _safe_round(sd.get("annual_avg_taf"))
+                act_avg_cfs = _safe_round(sd.get("avg_cfs"))
+
+        report.add("annual_avg_taf", section, var_code, exp_ann_taf, act_ann_taf)
+        if act_avg_cfs is not None:
+            exp_avg_cfs = None
+            if dv_df is not None and calsim_var in dv_df.columns:
+                raw = pd.to_numeric(dv_df[calsim_var], errors="coerce")
+                exp_avg_cfs = round(float(raw.mean()), 4) if not raw.dropna().empty else None
+            report.add("avg_cfs", section, var_code, exp_avg_cfs, act_avg_cfs)
+
+    # --- X2: period average in KM ---
+    for var_code, calsim_var, native_unit in DELTA_X2_VARS:
+        exp_avg = None
+        if dv_df is not None and calsim_var in dv_df.columns:
+            raw = pd.to_numeric(dv_df[calsim_var], errors="coerce")
+            exp_avg = round(float(raw.mean()), 4) if not raw.dropna().empty else None
+
+        act_avg = None
+        if conn:
+            rows = db_query(conn, """
+                SELECT summary_data
+                FROM delta_period_summary
+                WHERE scenario_short_code = %s AND variable_code = %s
+            """, (report.scenario_id, var_code))
+            if rows:
+                sd = rows[0].get("summary_data", {})
+                act_avg = _safe_round(sd.get("avg_km"))
+
+        report.add("avg_km", section, var_code, exp_avg, act_avg)
+
+        # April and September X2
+        if dv_df is not None and calsim_var in dv_df.columns:
+            raw = pd.to_numeric(dv_df[calsim_var], errors="coerce")
+            exp_apr = monthly_avg(raw, dv_df["CalendarMonth"], 4)
+            exp_sep = monthly_avg(raw, dv_df["CalendarMonth"], 9)
+        else:
+            exp_apr, exp_sep = None, None
+
+        act_apr, act_sep = None, None
+        if conn:
+            rows = db_query(conn, """
+                SELECT summary_data
+                FROM delta_period_summary
+                WHERE scenario_short_code = %s AND variable_code = %s
+            """, (report.scenario_id, var_code))
+            if rows:
+                sd = rows[0].get("summary_data", {})
+                act_apr = _safe_round(sd.get("april_avg_km"))
+                act_sep = _safe_round(sd.get("sept_avg_km"))
+
+        report.add("april_avg_km", section, var_code, exp_apr, act_apr)
+        report.add("sept_avg_km", section, var_code, exp_sep, act_sep)
+
+    # --- Salinity: period average EC ---
+    for var_code, calsim_var, native_unit in DELTA_SALINITY_VARS:
+        exp_avg = None
+        if dv_df is not None and calsim_var in dv_df.columns:
+            raw = pd.to_numeric(dv_df[calsim_var], errors="coerce")
+            exp_avg = round(float(raw.mean()), 4) if not raw.dropna().empty else None
+
+        act_avg = None
+        if conn:
+            rows = db_query(conn, """
+                SELECT summary_data
+                FROM delta_period_summary
+                WHERE scenario_short_code = %s AND variable_code = %s
+            """, (report.scenario_id, var_code))
+            if rows:
+                sd = rows[0].get("summary_data", {})
+                act_avg = _safe_round(sd.get("avg_ec"))
+
+        report.add("avg_ec", section, var_code, exp_avg, act_avg)
+
+    # --- Delta monthly: spot-check NDO month 1 ---
+    if conn:
+        rows = db_query(conn, """
+            SELECT variable_code, water_month, avg, avg_cfs, sample_count
+            FROM delta_monthly
+            WHERE scenario_short_code = %s
+            ORDER BY variable_code, water_month
+        """, (report.scenario_id,))
+        row_count = len(rows)
+        expected_rows = 8 * 12  # 8 variables x 12 months
+        report.add("monthly_row_count", section, "all",
+                    float(expected_rows), float(row_count),
+                    abs_tol=12, rel_tol=0.15)
 
 
 # ── Section: Tiers ──────────────────────────────────────────────────────────
@@ -878,6 +1068,7 @@ def run_scenario(scenario_id: str, ref_dir: Path, report_dir: Optional[Path],
         verify_mi_contractors(report, conn)
         verify_env_flows(report, dv_df, dv_units, conn)
         verify_refuge(report, conn)
+        verify_delta(report, dv_df, dv_units, conn)
         verify_tiers(report, conn, tier_staging_dir)
     finally:
         if conn:

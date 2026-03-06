@@ -110,24 +110,19 @@ CREATE INDEX IF NOT EXISTS idx_delta_summary_category ON delta_period_summary(ca
 -- Register in domain/family map
 -- ============================================
 
-INSERT INTO domain_family_map (domain, family, table_name, description)
-VALUES
-    ('delta', 'statistics', 'delta_monthly', 'Monthly Delta statistics (outflow, X2, salinity)'),
-    ('delta', 'statistics', 'delta_period_summary', 'Period summary for Delta variables')
-ON CONFLICT DO NOTHING;
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, note, created_by, updated_by)
+SELECT 'public', 'delta_monthly', vf.id,
+       'Monthly Delta statistics (outflow, X2, salinity)',
+       2, 2
+FROM version_family vf WHERE vf.short_code = 'statistics'
+ON CONFLICT (schema_name, table_name) DO NOTHING;
 
-
--- ============================================
--- Grants
--- ============================================
-
-GRANT SELECT ON delta_monthly TO coeqwal_reader;
-GRANT SELECT, INSERT, UPDATE, DELETE ON delta_monthly TO coeqwal_writer;
-GRANT USAGE, SELECT ON SEQUENCE delta_monthly_id_seq TO coeqwal_writer;
-
-GRANT SELECT ON delta_period_summary TO coeqwal_reader;
-GRANT SELECT, INSERT, UPDATE, DELETE ON delta_period_summary TO coeqwal_writer;
-GRANT USAGE, SELECT ON SEQUENCE delta_period_summary_id_seq TO coeqwal_writer;
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, note, created_by, updated_by)
+SELECT 'public', 'delta_period_summary', vf.id,
+       'Period-of-record summary for Delta variables',
+       2, 2
+FROM version_family vf WHERE vf.short_code = 'statistics'
+ON CONFLICT (schema_name, table_name) DO NOTHING;
 
 
 -- ============================================
