@@ -297,9 +297,15 @@ def compute_demand_for_du(
         sv_vals = get_column_value(sv_df, demand_var)
         if sv_vals.index.equals(output_df.index):
             return sv_vals
-        sv_dated = pd.Series(sv_vals.values, index=sv_df['DateTime'].values, dtype=float)
-        out_dated = sv_dated.reindex(output_df['DateTime'].values)
-        return out_dated.set_axis(output_df.index)
+        valid = sv_df['DateTime'].notna()
+        sv_dt = pd.to_datetime(sv_df.loc[valid, 'DateTime'])
+        # SV uses raw DSS timestamps (start of next month), so shift back
+        # 1 day to land in the correct month before converting to period.
+        sv_ym = (sv_dt - pd.Timedelta(days=1)).dt.to_period('M')
+        ym_to_val = dict(zip(sv_ym, sv_vals[valid]))
+        dv_dt = pd.to_datetime(output_df['DateTime'])
+        dv_ym = dv_dt.dt.to_period('M')
+        return dv_ym.map(ym_to_val).astype(float)
 
     if demand_mode == 'table_a':
         return pd.Series(MWD_TABLE_A_ANNUAL_TAF / 12.0, index=output_df.index, dtype=float)
