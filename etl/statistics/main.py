@@ -281,11 +281,11 @@ def write_statistics_to_db(
                     row["spill_months_count"],
                     row["total_months"],
                     row["spill_frequency_pct"],
-                    row["spill_avg_cfs"],
-                    row["spill_max_cfs"],
-                    row["spill_q50"],
-                    row["spill_q90"],
-                    row["spill_q100"],
+                    row.get("spill_avg_cfs"),
+                    row.get("spill_max_cfs"),
+                    row.get("spill_q50"),
+                    row.get("spill_q90"),
+                    row.get("spill_q100"),
                     row.get("storage_at_spill_avg_pct"),
                 )
             )
