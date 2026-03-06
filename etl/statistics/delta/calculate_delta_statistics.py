@@ -462,6 +462,110 @@ def calculate_all_delta_statistics(
 
 
 # =============================================================================
+# DATABASE PERSISTENCE
+# =============================================================================
+
+def _convert_numpy(val):
+    """Convert numpy types to Python natives for psycopg2."""
+    if val is None:
+        return None
+    if isinstance(val, (np.integer,)):
+        return int(val)
+    if isinstance(val, (np.floating,)):
+        return round(float(val), 6) if not np.isnan(val) else None
+    if isinstance(val, np.ndarray):
+        return val.tolist()
+    return val
+
+
+def save_to_database(
+    scenario_id: str,
+    monthly_rows: List[Dict],
+    period_summary_rows: List[Dict],
+    database_url: Optional[str] = None,
+) -> bool:
+    """
+    Write delta statistics to PostgreSQL.
+
+    Deletes existing data for the scenario before inserting.
+    """
+    import json as _json
+
+    if not HAS_PSYCOPG2:
+        raise ImportError("psycopg2 is required to write to database")
+
+    db_url = database_url or os.environ.get('DATABASE_URL')
+    if not db_url:
+        raise ValueError("DATABASE_URL not set")
+
+    conn = psycopg2.connect(db_url)
+    cur = conn.cursor()
+
+    try:
+        cur.execute("DELETE FROM delta_monthly WHERE scenario_short_code = %s", (scenario_id,))
+        cur.execute("DELETE FROM delta_period_summary WHERE scenario_short_code = %s", (scenario_id,))
+        log.info(f"Cleared existing delta data for {scenario_id}")
+
+        if monthly_rows:
+            monthly_cols = [
+                'scenario_short_code', 'variable_code', 'water_month',
+                'avg', 'cv', 'unit', 'sample_count', 'avg_cfs',
+                'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
+                'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
+            ]
+            values = [
+                tuple(_convert_numpy(row.get(c)) for c in monthly_cols)
+                for row in monthly_rows
+            ]
+            sql = f"INSERT INTO delta_monthly ({', '.join(monthly_cols)}) VALUES %s"
+            execute_values(cur, sql, values)
+            log.info(f"Inserted {len(values)} delta_monthly rows")
+
+        if period_summary_rows:
+            meta_keys = {
+                'variable_code', 'label', 'category', 'native_unit',
+                'simulation_start_year', 'simulation_end_year', 'total_years',
+                'scenario_short_code',
+            }
+            for row in period_summary_rows:
+                summary_data = {
+                    k: _convert_numpy(v)
+                    for k, v in row.items()
+                    if k not in meta_keys
+                }
+                cur.execute(
+                    """INSERT INTO delta_period_summary
+                       (scenario_short_code, variable_code, label, category, native_unit,
+                        simulation_start_year, simulation_end_year, total_years, summary_data)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        row['scenario_short_code'],
+                        row['variable_code'],
+                        row.get('label'),
+                        row.get('category'),
+                        row.get('native_unit'),
+                        _convert_numpy(row.get('simulation_start_year')),
+                        _convert_numpy(row.get('simulation_end_year')),
+                        _convert_numpy(row.get('total_years')),
+                        _json.dumps(summary_data),
+                    ),
+                )
+            log.info(f"Inserted {len(period_summary_rows)} delta_period_summary rows")
+
+        conn.commit()
+        log.info("Database save complete")
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        log.error(f"Database error: {e}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+# =============================================================================
 # CLI
 # =============================================================================
 
@@ -470,6 +574,8 @@ def main():
     parser.add_argument('--scenario', required=True, help='Scenario ID (e.g., s0020)')
     parser.add_argument('--csv-path', help='Path to local DV CSV')
     parser.add_argument('--output-json', help='Write results to JSON file')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Calculate statistics without writing to database')
     args = parser.parse_args()
 
     monthly, summaries = calculate_all_delta_statistics(args.scenario, args.csv_path)
@@ -496,15 +602,14 @@ def main():
         with open(args.output_json, 'w') as f:
             json.dump(output, f, indent=2, default=convert)
         log.info(f"Wrote results to {args.output_json}")
+
+    elif args.dry_run:
+        log.info("Dry run complete. Statistics calculated but not saved.")
+
     else:
-        print(f"\nScenario: {args.scenario}")
-        print(f"Monthly rows: {len(monthly)}")
-        print(f"Period summaries: {len(summaries)}")
-        for s in summaries:
-            print(f"\n  {s['variable_code']} ({s['label']}):")
-            for k, v in s.items():
-                if k not in ('variable_code', 'label', 'scenario_short_code', 'category'):
-                    print(f"    {k}: {v}")
+        save_to_database(args.scenario, monthly, summaries)
+
+    log.info(f"Total: {len(monthly)} monthly, {len(summaries)} period summary rows")
 
 
 if __name__ == '__main__':
