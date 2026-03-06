@@ -294,7 +294,12 @@ def compute_demand_for_du(
     du_id = mapping.get('du_id', '?')
 
     if demand_mode == 'sv' and demand_var:
-        return get_column_value(sv_df, demand_var)
+        sv_vals = get_column_value(sv_df, demand_var)
+        if sv_vals.index.equals(output_df.index):
+            return sv_vals
+        sv_dated = pd.Series(sv_vals.values, index=sv_df['DateTime'].values, dtype=float)
+        out_dated = sv_dated.reindex(output_df['DateTime'].values)
+        return out_dated.set_axis(output_df.index)
 
     if demand_mode == 'table_a':
         return pd.Series(MWD_TABLE_A_ANNUAL_TAF / 12.0, index=output_df.index, dtype=float)
