@@ -75,6 +75,10 @@ from routes.env_flow_endpoints import (
     router as env_flow_router,
     set_db_pool as set_env_flow_db_pool,
 )
+from routes.delta_endpoints import (
+    router as delta_router,
+    set_db_pool as set_delta_db_pool,
+)
 from routes.verification_endpoints import router as verification_router
 
 # Configure logging
@@ -178,6 +182,7 @@ async def lifespan(app: FastAPI):
     set_batch_stats_db_pool(db_pool)
     set_refuge_db_pool(db_pool)
     set_env_flow_db_pool(db_pool)
+    set_delta_db_pool(db_pool)
 
     yield
 
@@ -235,6 +240,9 @@ app.include_router(refuge_router)
 
 # Environmental river flows statistics router
 app.include_router(env_flow_router)
+
+# Delta statistics router (X2, salinity, outflow)
+app.include_router(delta_router)
 
 # Verification status (data quality reports)
 app.include_router(verification_router)
