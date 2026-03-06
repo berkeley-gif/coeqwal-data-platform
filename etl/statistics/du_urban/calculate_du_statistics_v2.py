@@ -498,7 +498,7 @@ def calculate_du_statistics(
         
         # Annual demand
         if demand.notna().any():
-            annual_demand = sv_df.groupby('WaterYear').apply(
+            annual_demand = output_df.groupby('WaterYear').apply(
                 lambda g: demand[g.index].sum(), include_groups=False
             )
         else:
