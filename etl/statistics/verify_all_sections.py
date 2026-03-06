@@ -40,6 +40,7 @@ import pandas as pd
 try:
     import psycopg2
     import psycopg2.extras
+
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
@@ -61,10 +62,30 @@ SCENARIO_RUN_IDS = {
 }
 
 ALL_SCENARIOS = [
-    "s0011", "s0020", "s0021", "s0023", "s0024", "s0025", "s0026",
-    "s0027", "s0028", "s0030", "s0031", "s0032", "s0033", "s0035",
-    "s0036", "s0037", "s0039", "s0040", "s0041", "s0042", "s0044",
-    "s0045", "s0046", "s0065",
+    "s0011",
+    "s0020",
+    "s0021",
+    "s0023",
+    "s0024",
+    "s0025",
+    "s0026",
+    "s0027",
+    "s0028",
+    "s0030",
+    "s0031",
+    "s0032",
+    "s0033",
+    "s0035",
+    "s0036",
+    "s0037",
+    "s0039",
+    "s0040",
+    "s0041",
+    "s0042",
+    "s0044",
+    "s0045",
+    "s0046",
+    "s0065",
 ]
 
 # Variable lists from COEQWAL_V3/notebooks/variable_groupings.csv
@@ -80,8 +101,17 @@ RESERVOIR_VARS = {
 }
 
 FLOW_VARS = [
-    "C_SAC041", "C_SAC085", "C_FTR003", "C_SAC257", "C_KSWCK",
-    "C_AMR004", "C_SJR070", "C_STS017", "C_TUO003", "C_SJR115", "C_MCD005",
+    "C_SAC041",
+    "C_SAC085",
+    "C_FTR003",
+    "C_SAC257",
+    "C_KSWCK",
+    "C_AMR004",
+    "C_SJR070",
+    "C_STS017",
+    "C_TUO003",
+    "C_SJR115",
+    "C_MCD005",
 ]
 
 CWS_AGGREGATE_VARS = [
@@ -113,11 +143,19 @@ AG_AGGREGATE_NEW_VARS = [
 AG_COMPUTED_AGGREGATES = {
     "nod_ag": {
         "delivery_components": ["DEL_CVP_PAG_N", "DEL_SWP_PAG_N", "DEL_CVP_PSC_N"],
-        "shortage_components": ["SHORT_CVP_PAG_N", "SHORT_SWP_PAG_N", "SHORT_CVP_PSC_N"],
+        "shortage_components": [
+            "SHORT_CVP_PAG_N",
+            "SHORT_SWP_PAG_N",
+            "SHORT_CVP_PSC_N",
+        ],
     },
     "sod_ag": {
         "delivery_components": ["DEL_CVP_PAG_S", "DEL_SWP_PAG_S", "DEL_CVP_PEX_S"],
-        "shortage_components": ["SHORT_CVP_PAG_S", "SHORT_SWP_PAG_S", "SHORT_CVP_PEX_S"],
+        "shortage_components": [
+            "SHORT_CVP_PAG_S",
+            "SHORT_SWP_PAG_S",
+            "SHORT_CVP_PEX_S",
+        ],
     },
 }
 
@@ -139,6 +177,7 @@ SAMPLE_AG_DUS = ["02_PA", "08N_PA", "61_PA1", "71_PA1", "02_NA", "64_PA1"]
 
 # ── Data Classes ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class Check:
     metric: str
@@ -159,8 +198,7 @@ class Check:
             return "pass"
         if np.isnan(self.expected) or np.isnan(self.actual):
             return "fail"
-        if np.isclose(self.expected, self.actual,
-                      atol=self.abs_tol, rtol=self.rel_tol):
+        if np.isclose(self.expected, self.actual, atol=self.abs_tol, rtol=self.rel_tol):
             return "pass"
         return "fail"
 
@@ -186,14 +224,27 @@ class Report:
             "no_db": statuses.count("no_db"),
         }
 
-    def add(self, metric: str, section: str, entity: str,
-            expected: Optional[float], actual: Optional[float] = None,
-            abs_tol: float = ABS_TOL, rel_tol: float = REL_TOL):
-        self.checks.append(Check(
-            metric=metric, section=section, entity=entity,
-            expected=expected, actual=actual,
-            abs_tol=abs_tol, rel_tol=rel_tol,
-        ))
+    def add(
+        self,
+        metric: str,
+        section: str,
+        entity: str,
+        expected: Optional[float],
+        actual: Optional[float] = None,
+        abs_tol: float = ABS_TOL,
+        rel_tol: float = REL_TOL,
+    ):
+        self.checks.append(
+            Check(
+                metric=metric,
+                section=section,
+                entity=entity,
+                expected=expected,
+                actual=actual,
+                abs_tol=abs_tol,
+                rel_tol=rel_tol,
+            )
+        )
 
     def to_dict(self) -> dict:
         checks = []
@@ -229,14 +280,17 @@ class Report:
             print(f"\nFAILED CHECKS ({len(failures)}):")
             for c in failures[:20]:
                 diff = abs(c.expected - c.actual) if c.actual is not None else None
-                print(f"  [{c.section}] {c.entity} / {c.metric}: "
-                      f"expected={c.expected:.4f}, actual={c.actual:.4f}, "
-                      f"diff={diff:.4f}")
+                print(
+                    f"  [{c.section}] {c.entity} / {c.metric}: "
+                    f"expected={c.expected:.4f}, actual={c.actual:.4f}, "
+                    f"diff={diff:.4f}"
+                )
             if len(failures) > 20:
                 print(f"  ... and {len(failures) - 20} more")
 
 
 # ── CSV Parsing ──────────────────────────────────────────────────────────────
+
 
 def parse_calsim_csv(file_path: str) -> Tuple[pd.DataFrame, pd.Series]:
     """
@@ -266,8 +320,8 @@ def parse_calsim_csv(file_path: str) -> Tuple[pd.DataFrame, pd.Series]:
             [f"_extra_{i}" for i in range(len(data_df.columns) - len(col_names))]
         )
     elif len(data_df.columns) < len(col_names):
-        col_names = col_names[:len(data_df.columns)]
-        col_units = col_units[:len(data_df.columns)]
+        col_names = col_names[: len(data_df.columns)]
+        col_units = col_units[: len(data_df.columns)]
 
     data_df.columns = col_names
     first_col = col_names[0]
@@ -330,6 +384,7 @@ def monthly_avg(series: pd.Series, months: pd.Series, month: int) -> Optional[fl
 
 # ── DB Helpers ───────────────────────────────────────────────────────────────
 
+
 def connect_db() -> Optional[object]:
     url = os.environ.get("DATABASE_URL")
     if not url:
@@ -357,8 +412,10 @@ def db_query(conn, sql: str, params: tuple = ()) -> List[dict]:
 
 # ── Section: Reservoirs ──────────────────────────────────────────────────────
 
-def verify_reservoirs(report: Report, dv_df: Optional[pd.DataFrame],
-                      dv_units: Optional[pd.Series], conn) -> None:
+
+def verify_reservoirs(
+    report: Report, dv_df: Optional[pd.DataFrame], dv_units: Optional[pd.Series], conn
+) -> None:
     section = "reservoirs"
     log.info(f"Verifying {section}...")
 
@@ -388,13 +445,17 @@ def verify_reservoirs(report: Report, dv_df: Optional[pd.DataFrame],
         act_sep_pct = None
 
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT rps.april_avg_taf, rps.september_avg_taf,
                        rps.annual_avg_taf, rps.capacity_taf
                 FROM reservoir_period_summary rps
                 JOIN reservoir_entity re ON rps.reservoir_entity_id = re.id
                 WHERE rps.scenario_short_code = %s AND re.short_code = %s
-            """, (report.scenario_id, short_code))
+            """,
+                (report.scenario_id, short_code),
+            )
             if rows:
                 r = rows[0]
                 act_apr = _safe_round(r.get("april_avg_taf"))
@@ -410,25 +471,35 @@ def verify_reservoirs(report: Report, dv_df: Optional[pd.DataFrame],
         report.add("september_avg_taf", section, short_code, exp_sep, act_sep)
         report.add("annual_avg_taf", section, short_code, exp_ann, act_ann)
         report.add("april_pct_capacity", section, short_code, exp_apr_pct, act_apr_pct)
-        report.add("september_pct_capacity", section, short_code, exp_sep_pct, act_sep_pct)
+        report.add(
+            "september_pct_capacity", section, short_code, exp_sep_pct, act_sep_pct
+        )
 
     # Spill frequency
     if conn:
         for short_code, (calsim_var, _cap) in RESERVOIR_VARS.items():
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT rps.spill_frequency_pct
                 FROM reservoir_period_summary rps
                 JOIN reservoir_entity re ON rps.reservoir_entity_id = re.id
                 WHERE rps.scenario_short_code = %s AND re.short_code = %s
-            """, (report.scenario_id, short_code))
-            act_spill = _safe_round(rows[0].get("spill_frequency_pct")) if rows else None
+            """,
+                (report.scenario_id, short_code),
+            )
+            act_spill = (
+                _safe_round(rows[0].get("spill_frequency_pct")) if rows else None
+            )
             report.add("spill_frequency_pct", section, short_code, None, act_spill)
 
 
 # ── Section: CWS Aggregates ─────────────────────────────────────────────────
 
-def verify_cws_aggregates(report: Report, dv_df: Optional[pd.DataFrame],
-                          dv_units: Optional[pd.Series], conn) -> None:
+
+def verify_cws_aggregates(
+    report: Report, dv_df: Optional[pd.DataFrame], dv_units: Optional[pd.Series], conn
+) -> None:
     section = "cws_aggregate"
     log.info(f"Verifying {section}...")
 
@@ -441,12 +512,16 @@ def verify_cws_aggregates(report: Report, dv_df: Optional[pd.DataFrame],
         act_ann_taf = None
         act_reliability = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT p.annual_delivery_avg_taf, p.reliability_pct
                 FROM cws_aggregate_period_summary p
                 JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
-            """, (report.scenario_id, var))
+            """,
+                (report.scenario_id, var),
+            )
             if rows:
                 act_ann_taf = _safe_round(rows[0].get("annual_delivery_avg_taf"))
                 act_reliability = _safe_round(rows[0].get("reliability_pct"))
@@ -460,11 +535,11 @@ def verify_cws_aggregates(report: Report, dv_df: Optional[pd.DataFrame],
         if dv_df is not None and var in dv_df.columns:
             taf_series = get_column_taf(dv_df, dv_units, var)
             exp_short_taf = annual_avg_taf(taf_series, dv_df["WaterYear"])
-        report.add("annual_shortage_avg_taf", section, var,
-                    exp_short_taf, None)
+        report.add("annual_shortage_avg_taf", section, var, exp_short_taf, None)
 
 
 # ── Section: M&I Contractors ────────────────────────────────────────────────
+
 
 def verify_mi_contractors(report: Report, conn) -> None:
     section = "mi_contractors"
@@ -472,7 +547,9 @@ def verify_mi_contractors(report: Report, conn) -> None:
     if not conn:
         return
 
-    rows = db_query(conn, """
+    rows = db_query(
+        conn,
+        """
         SELECT mc.short_code, p.annual_delivery_avg_taf,
                p.annual_shortage_avg_taf, p.reliability_pct,
                p.avg_pct_demand_met, p.annual_demand_avg_taf
@@ -480,18 +557,40 @@ def verify_mi_contractors(report: Report, conn) -> None:
         JOIN mi_contractor mc ON p.mi_contractor_code = mc.short_code
         WHERE p.scenario_short_code = %s
         ORDER BY mc.short_code
-    """, (report.scenario_id,))
+    """,
+        (report.scenario_id,),
+    )
 
     for r in rows:
         code = r["short_code"]
-        report.add("annual_delivery_avg_taf", section, code,
-                    None, _safe_round(r.get("annual_delivery_avg_taf")))
-        report.add("annual_shortage_avg_taf", section, code,
-                    None, _safe_round(r.get("annual_shortage_avg_taf")))
-        report.add("reliability_pct", section, code,
-                    None, _safe_round(r.get("reliability_pct")))
-        report.add("avg_pct_demand_met", section, code,
-                    None, _safe_round(r.get("avg_pct_demand_met")))
+        report.add(
+            "annual_delivery_avg_taf",
+            section,
+            code,
+            None,
+            _safe_round(r.get("annual_delivery_avg_taf")),
+        )
+        report.add(
+            "annual_shortage_avg_taf",
+            section,
+            code,
+            None,
+            _safe_round(r.get("annual_shortage_avg_taf")),
+        )
+        report.add(
+            "reliability_pct",
+            section,
+            code,
+            None,
+            _safe_round(r.get("reliability_pct")),
+        )
+        report.add(
+            "avg_pct_demand_met",
+            section,
+            code,
+            None,
+            _safe_round(r.get("avg_pct_demand_met")),
+        )
 
     if not rows:
         report.add("data_present", section, "all", 1.0, 0.0)
@@ -499,10 +598,15 @@ def verify_mi_contractors(report: Report, conn) -> None:
 
 # ── Section: CWS Demand Units ───────────────────────────────────────────────
 
-def verify_cws_du(report: Report, dv_df: Optional[pd.DataFrame],
-                  dv_units: Optional[pd.Series],
-                  sv_df: Optional[pd.DataFrame],
-                  sv_units: Optional[pd.Series], conn) -> None:
+
+def verify_cws_du(
+    report: Report,
+    dv_df: Optional[pd.DataFrame],
+    dv_units: Optional[pd.Series],
+    sv_df: Optional[pd.DataFrame],
+    sv_units: Optional[pd.Series],
+    conn,
+) -> None:
     """Verify CWS DU delivery (DN_* from DV) and demand (UD_* from SV)."""
     section = "cws_du"
     log.info(f"Verifying {section}...")
@@ -523,11 +627,15 @@ def verify_cws_du(report: Report, dv_df: Optional[pd.DataFrame],
         act_del_taf = None
         act_dem_taf = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT p.annual_delivery_avg_taf, p.annual_demand_avg_taf
                 FROM du_period_summary p
                 WHERE p.scenario_short_code = %s AND p.du_id = %s
-            """, (report.scenario_id, du))
+            """,
+                (report.scenario_id, du),
+            )
             if rows:
                 act_del_taf = _safe_round(rows[0].get("annual_delivery_avg_taf"))
                 act_dem_taf = _safe_round(rows[0].get("annual_demand_avg_taf"))
@@ -538,8 +646,10 @@ def verify_cws_du(report: Report, dv_df: Optional[pd.DataFrame],
 
 # ── Section: AG Demand Units ────────────────────────────────────────────────
 
-def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
-              dv_units: Optional[pd.Series], conn) -> None:
+
+def verify_ag(
+    report: Report, dv_df: Optional[pd.DataFrame], dv_units: Optional[pd.Series], conn
+) -> None:
     """Verify AG demand (AW_*), delivery (DN_*), GW pumping (GP_*) — all from DV."""
     section = "ag"
     log.info(f"Verifying {section}...")
@@ -567,14 +677,18 @@ def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
         act_reliability = None
 
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT p.annual_sw_delivery_avg_taf,
                        p.annual_gw_pumping_avg_taf,
                        p.annual_demand_avg_taf,
                        p.reliability_pct
                 FROM ag_du_period_summary p
                 WHERE p.scenario_short_code = %s AND p.du_id = %s
-            """, (report.scenario_id, du))
+            """,
+                (report.scenario_id, du),
+            )
             if rows:
                 r = rows[0]
                 act_del_taf = _safe_round(r.get("annual_sw_delivery_avg_taf"))
@@ -597,12 +711,16 @@ def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
 
         act_ann = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
                 JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
-            """, (report.scenario_id, var))
+            """,
+                (report.scenario_id, var),
+            )
             if rows:
                 act_ann = _safe_round(rows[0].get("annual_delivery_avg_taf"))
         report.add("annual_delivery_avg_taf", "ag_aggregate", var, exp_ann, act_ann)
@@ -616,15 +734,21 @@ def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
 
         act_ann = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
                 JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
-            """, (report.scenario_id, short_code))
+            """,
+                (report.scenario_id, short_code),
+            )
             if rows:
                 act_ann = _safe_round(rows[0].get("annual_delivery_avg_taf"))
-        report.add("annual_delivery_avg_taf", "ag_aggregate", short_code, exp_ann, act_ann)
+        report.add(
+            "annual_delivery_avg_taf", "ag_aggregate", short_code, exp_ann, act_ann
+        )
 
     # Computed AG aggregates (nod_ag, sod_ag) — sum of components
     for agg_code, components in AG_COMPUTED_AGGREGATES.items():
@@ -644,21 +768,29 @@ def verify_ag(report: Report, dv_df: Optional[pd.DataFrame],
 
         act_ann = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
                 JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
-            """, (report.scenario_id, agg_code))
+            """,
+                (report.scenario_id, agg_code),
+            )
             if rows:
                 act_ann = _safe_round(rows[0].get("annual_delivery_avg_taf"))
-        report.add("annual_delivery_avg_taf", "ag_aggregate", agg_code, exp_ann, act_ann)
+        report.add(
+            "annual_delivery_avg_taf", "ag_aggregate", agg_code, exp_ann, act_ann
+        )
 
 
 # ── Section: Env Flows ──────────────────────────────────────────────────────
 
-def verify_env_flows(report: Report, dv_df: Optional[pd.DataFrame],
-                     dv_units: Optional[pd.Series], conn) -> None:
+
+def verify_env_flows(
+    report: Report, dv_df: Optional[pd.DataFrame], dv_units: Optional[pd.Series], conn
+) -> None:
     section = "env_flows"
     log.info(f"Verifying {section}...")
 
@@ -668,7 +800,9 @@ def verify_env_flows(report: Report, dv_df: Optional[pd.DataFrame],
 
         if dv_df is not None and var in dv_df.columns:
             raw = pd.to_numeric(dv_df[var], errors="coerce")
-            exp_avg_cfs = round(float(raw.mean()), 4) if not raw.dropna().empty else None
+            exp_avg_cfs = (
+                round(float(raw.mean()), 4) if not raw.dropna().empty else None
+            )
             taf_series = get_column_taf(dv_df, dv_units, var)
             _exp_ann_taf = annual_avg_taf(taf_series, dv_df["WaterYear"])
 
@@ -680,23 +814,31 @@ def verify_env_flows(report: Report, dv_df: Optional[pd.DataFrame],
         arc_code = var.replace("C_", "")
 
         if conn:
-            monthly_rows = db_query(conn, """
+            monthly_rows = db_query(
+                conn,
+                """
                 SELECT AVG(m.flow_avg_cfs) as overall_avg_cfs
                 FROM env_flow_channel_monthly m
                 WHERE m.scenario_short_code = %s AND m.network_arc_id = (
                     SELECT id FROM network_arc WHERE code = %s LIMIT 1
                 )
-            """, (report.scenario_id, arc_code))
+            """,
+                (report.scenario_id, arc_code),
+            )
             if monthly_rows and monthly_rows[0].get("overall_avg_cfs") is not None:
                 act_avg_cfs = _safe_round(monthly_rows[0]["overall_avg_cfs"])
 
-            period_rows = db_query(conn, """
+            period_rows = db_query(
+                conn,
+                """
                 SELECT p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
                 FROM env_flow_channel_period_summary p
                 WHERE p.scenario_short_code = %s AND p.network_arc_id = (
                     SELECT id FROM network_arc WHERE code = %s LIMIT 1
                 )
-            """, (report.scenario_id, arc_code))
+            """,
+                (report.scenario_id, arc_code),
+            )
             if period_rows:
                 r = period_rows[0]
                 act_pearson_r = _safe_round(r.get("pearson_r"))
@@ -714,29 +856,49 @@ def verify_env_flows(report: Report, dv_df: Optional[pd.DataFrame],
 
 # ── Section: Refuge ─────────────────────────────────────────────────────────
 
+
 def verify_refuge(report: Report, conn) -> None:
     section = "refuge"
     log.info(f"Verifying {section}...")
     if not conn:
         return
 
-    rows = db_query(conn, """
+    rows = db_query(
+        conn,
+        """
         SELECT p.du_id, p.annual_delivery_avg_taf,
                p.annual_shortage_avg_taf, p.reliability_pct_95,
                p.annual_shortage_pct_avg
         FROM refuge_du_period_summary p
         WHERE p.scenario_short_code = %s
         ORDER BY p.du_id
-    """, (report.scenario_id,))
+    """,
+        (report.scenario_id,),
+    )
 
     for r in rows:
         du = r["du_id"]
-        report.add("annual_delivery_avg_taf", section, du,
-                    None, _safe_round(r.get("annual_delivery_avg_taf")))
-        report.add("annual_shortage_avg_taf", section, du,
-                    None, _safe_round(r.get("annual_shortage_avg_taf")))
-        report.add("reliability_pct_95", section, du,
-                    None, _safe_round(r.get("reliability_pct_95")))
+        report.add(
+            "annual_delivery_avg_taf",
+            section,
+            du,
+            None,
+            _safe_round(r.get("annual_delivery_avg_taf")),
+        )
+        report.add(
+            "annual_shortage_avg_taf",
+            section,
+            du,
+            None,
+            _safe_round(r.get("annual_shortage_avg_taf")),
+        )
+        report.add(
+            "reliability_pct_95",
+            section,
+            du,
+            None,
+            _safe_round(r.get("reliability_pct_95")),
+        )
 
     if not rows:
         report.add("data_present", section, "all", 1.0, 0.0)
@@ -744,8 +906,10 @@ def verify_refuge(report: Report, conn) -> None:
 
 # ── Section: Delta ──────────────────────────────────────────────────────────
 
-def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
-                 dv_units: Optional[pd.Series], conn) -> None:
+
+def verify_delta(
+    report: Report, dv_df: Optional[pd.DataFrame], dv_units: Optional[pd.Series], conn
+) -> None:
     """Verify Delta outflow (NDO), X2 position, and salinity from DV CSV vs DB."""
     section = "delta"
     log.info(f"Verifying {section}...")
@@ -760,11 +924,15 @@ def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
         act_ann_taf = None
         act_avg_cfs = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT summary_data
                 FROM delta_period_summary
                 WHERE scenario_short_code = %s AND variable_code = %s
-            """, (report.scenario_id, var_code))
+            """,
+                (report.scenario_id, var_code),
+            )
             if rows:
                 sd = rows[0].get("summary_data", {})
                 act_ann_taf = _safe_round(sd.get("annual_avg_taf"))
@@ -775,7 +943,9 @@ def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
             exp_avg_cfs = None
             if dv_df is not None and calsim_var in dv_df.columns:
                 raw = pd.to_numeric(dv_df[calsim_var], errors="coerce")
-                exp_avg_cfs = round(float(raw.mean()), 4) if not raw.dropna().empty else None
+                exp_avg_cfs = (
+                    round(float(raw.mean()), 4) if not raw.dropna().empty else None
+                )
             report.add("avg_cfs", section, var_code, exp_avg_cfs, act_avg_cfs)
 
     # --- X2: period average in KM ---
@@ -787,11 +957,15 @@ def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
 
         act_avg = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT summary_data
                 FROM delta_period_summary
                 WHERE scenario_short_code = %s AND variable_code = %s
-            """, (report.scenario_id, var_code))
+            """,
+                (report.scenario_id, var_code),
+            )
             if rows:
                 sd = rows[0].get("summary_data", {})
                 act_avg = _safe_round(sd.get("avg_km"))
@@ -808,11 +982,15 @@ def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
 
         act_apr, act_sep = None, None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT summary_data
                 FROM delta_period_summary
                 WHERE scenario_short_code = %s AND variable_code = %s
-            """, (report.scenario_id, var_code))
+            """,
+                (report.scenario_id, var_code),
+            )
             if rows:
                 sd = rows[0].get("summary_data", {})
                 act_apr = _safe_round(sd.get("april_avg_km"))
@@ -830,11 +1008,15 @@ def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
 
         act_avg = None
         if conn:
-            rows = db_query(conn, """
+            rows = db_query(
+                conn,
+                """
                 SELECT summary_data
                 FROM delta_period_summary
                 WHERE scenario_short_code = %s AND variable_code = %s
-            """, (report.scenario_id, var_code))
+            """,
+                (report.scenario_id, var_code),
+            )
             if rows:
                 sd = rows[0].get("summary_data", {})
                 act_avg = _safe_round(sd.get("avg_ec"))
@@ -843,24 +1025,41 @@ def verify_delta(report: Report, dv_df: Optional[pd.DataFrame],
 
     # --- Delta monthly: spot-check NDO month 1 ---
     if conn:
-        rows = db_query(conn, """
+        rows = db_query(
+            conn,
+            """
             SELECT variable_code, water_month, avg, avg_cfs, sample_count
             FROM delta_monthly
             WHERE scenario_short_code = %s
             ORDER BY variable_code, water_month
-        """, (report.scenario_id,))
+        """,
+            (report.scenario_id,),
+        )
         row_count = len(rows)
         expected_rows = 8 * 12  # 8 variables x 12 months
-        report.add("monthly_row_count", section, "all",
-                    float(expected_rows), float(row_count),
-                    abs_tol=12, rel_tol=0.15)
+        report.add(
+            "monthly_row_count",
+            section,
+            "all",
+            float(expected_rows),
+            float(row_count),
+            abs_tol=12,
+            rel_tol=0.15,
+        )
 
 
 # ── Section: Tiers ──────────────────────────────────────────────────────────
 
 TIER_CODES = [
-    "CWS_DEL", "AG_REV", "ENV_FLOWS", "RES_STOR", "GW_STOR",
-    "DELTA_ECO", "FW_DELTA_USES", "FW_EXP", "WRC_SALMON_AB",
+    "CWS_DEL",
+    "AG_REV",
+    "ENV_FLOWS",
+    "RES_STOR",
+    "GW_STOR",
+    "DELTA_ECO",
+    "FW_DELTA_USES",
+    "FW_EXP",
+    "WRC_SALMON_AB",
 ]
 
 
@@ -871,7 +1070,9 @@ def verify_tiers(report: Report, conn, tier_staging_dir: Optional[Path]) -> None
         return
 
     for tier_code in TIER_CODES:
-        rows = db_query(conn, """
+        rows = db_query(
+            conn,
+            """
             SELECT tr.single_tier_level,
                    tr.tier_1_value, tr.tier_2_value,
                    tr.tier_3_value, tr.tier_4_value,
@@ -880,18 +1081,20 @@ def verify_tiers(report: Report, conn, tier_staging_dir: Optional[Path]) -> None
             WHERE tr.scenario_short_code = %s
               AND tr.tier_short_code = %s
               AND tr.is_active = TRUE
-        """, (report.scenario_id, tier_code))
+        """,
+            (report.scenario_id, tier_code),
+        )
 
         if rows:
             r = rows[0]
             single = r.get("single_tier_level")
             total = r.get("total_value")
             if single is not None:
-                report.add("single_tier_level", section, tier_code,
-                           None, float(single))
+                report.add("single_tier_level", section, tier_code, None, float(single))
             elif total is not None:
-                report.add("total_location_count", section, tier_code,
-                           None, float(total))
+                report.add(
+                    "total_location_count", section, tier_code, None, float(total)
+                )
             else:
                 report.add("data_present", section, tier_code, 1.0, 0.0)
         else:
@@ -919,13 +1122,17 @@ def _verify_tier_staging(report: Report, conn, staging_dir: Path) -> None:
         if not csv_path.exists():
             continue
 
-        db_rows = db_query(conn, """
+        db_rows = db_query(
+            conn,
+            """
             SELECT COUNT(*) as loc_count
             FROM tier_location_result
             WHERE scenario_short_code = %s
               AND tier_short_code = %s
               AND is_active = TRUE
-        """, (report.scenario_id, tier_code))
+        """,
+            (report.scenario_id, tier_code),
+        )
 
         db_count = db_rows[0]["loc_count"] if db_rows else 0
 
@@ -935,7 +1142,8 @@ def _verify_tier_staging(report: Report, conn, staging_dir: Path) -> None:
             if tier_code in ("CWS_DEL",):
                 csv_count = (
                     csv_df[csv_df.iloc[:, 0] == scenario_id].shape[0]
-                    if scenario_id in csv_df.iloc[:, 0].values else 0
+                    if scenario_id in csv_df.iloc[:, 0].values
+                    else 0
                 )
                 if csv_count == 0:
                     csv_row = csv_df[csv_df.iloc[:, 0] == scenario_id]
@@ -947,17 +1155,25 @@ def _verify_tier_staging(report: Report, conn, staging_dir: Path) -> None:
             csv_count = None
 
         if csv_count is not None and csv_count > 0:
-            report.add("tier_location_count", "tier_staging", tier_code,
-                        float(csv_count), float(db_count))
+            report.add(
+                "tier_location_count",
+                "tier_staging",
+                tier_code,
+                float(csv_count),
+                float(db_count),
+            )
         elif db_count > 0:
-            report.add("tier_location_count", "tier_staging", tier_code,
-                        None, float(db_count))
+            report.add(
+                "tier_location_count", "tier_staging", tier_code, None, float(db_count)
+            )
 
 
 # ── Section: Unit Conversion Validation ─────────────────────────────────────
 
-def verify_unit_conversion(report: Report, dv_df: Optional[pd.DataFrame],
-                           dv_units: Optional[pd.Series]) -> None:
+
+def verify_unit_conversion(
+    report: Report, dv_df: Optional[pd.DataFrame], dv_units: Optional[pd.Series]
+) -> None:
     """Verify CFS-to-TAF conversion factor by checking balance identities.
 
     For AG DUs: AW (demand) = DN (delivery) + GP (GW pumping).
@@ -991,11 +1207,19 @@ def verify_unit_conversion(report: Report, dv_df: Optional[pd.DataFrame],
 
         exp = round(float(annual_aw.mean()), 4)
         act = round(float(annual_sum.mean()), 4)
-        report.add("ag_balance_aw_eq_dn_plus_gp", section, du,
-                    exp, act, abs_tol=5.0, rel_tol=0.05)
+        report.add(
+            "ag_balance_aw_eq_dn_plus_gp",
+            section,
+            du,
+            exp,
+            act,
+            abs_tol=5.0,
+            rel_tol=0.05,
+        )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _safe_round(val, decimals=4) -> Optional[float]:
     if val is None:
@@ -1021,8 +1245,14 @@ def find_file(base_dir: Path, run_id: str, suffix: str) -> Optional[Path]:
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def run_scenario(scenario_id: str, ref_dir: Path, report_dir: Optional[Path],
-                 csv_only: bool, tier_staging_dir: Optional[Path]) -> Report:
+
+def run_scenario(
+    scenario_id: str,
+    ref_dir: Path,
+    report_dir: Optional[Path],
+    csv_only: bool,
+    tier_staging_dir: Optional[Path],
+) -> Report:
     report = Report(scenario_id=scenario_id)
 
     run_id = SCENARIO_RUN_IDS.get(scenario_id, scenario_id)
@@ -1090,32 +1320,39 @@ def main():
     parser = argparse.ArgumentParser(
         description="Verify data explorer values against reference CSVs and database"
     )
-    parser.add_argument("--scenario", default=None,
-                        help="Scenario ID (e.g., s0020)")
-    parser.add_argument("--all-scenarios", action="store_true",
-                        help="Run for all active scenarios")
-    parser.add_argument("--ref-dir", default=None,
-                        help="Path to reference CSV directory")
-    parser.add_argument("--report-dir", default=None,
-                        help="Path for JSON output reports")
-    parser.add_argument("--csv-only", action="store_true",
-                        help="Skip DB comparison (CSV-only mode)")
-    parser.add_argument("--tier-staging-dir", default=None,
-                        help="Path to tier staging CSVs")
+    parser.add_argument("--scenario", default=None, help="Scenario ID (e.g., s0020)")
+    parser.add_argument(
+        "--all-scenarios", action="store_true", help="Run for all active scenarios"
+    )
+    parser.add_argument(
+        "--ref-dir", default=None, help="Path to reference CSV directory"
+    )
+    parser.add_argument(
+        "--report-dir", default=None, help="Path for JSON output reports"
+    )
+    parser.add_argument(
+        "--csv-only", action="store_true", help="Skip DB comparison (CSV-only mode)"
+    )
+    parser.add_argument(
+        "--tier-staging-dir", default=None, help="Path to tier staging CSVs"
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
     repo_root = script_dir.parent.parent
     ref_dir = (
-        Path(args.ref_dir) if args.ref_dir
+        Path(args.ref_dir)
+        if args.ref_dir
         else repo_root / "audits" / "notebooks_reference"
     )
     report_dir = (
-        Path(args.report_dir) if args.report_dir
+        Path(args.report_dir)
+        if args.report_dir
         else repo_root / "audits" / "verification_reports"
     )
     tier_staging_dir = (
-        Path(args.tier_staging_dir) if args.tier_staging_dir
+        Path(args.tier_staging_dir)
+        if args.tier_staging_dir
         else repo_root / "etl" / "tier_data" / "staging"
     )
 
@@ -1142,9 +1379,11 @@ def main():
         for r in all_reports:
             s = r.summary
             status = "PASS" if s["fail"] == 0 else "FAIL"
-            print(f"  {r.scenario_id}: {status} "
-                  f"({s['pass']} pass, {s['fail']} fail, "
-                  f"{s['skip']} skip, {s['no_db']} no_db)")
+            print(
+                f"  {r.scenario_id}: {status} "
+                f"({s['pass']} pass, {s['fail']} fail, "
+                f"{s['skip']} skip, {s['no_db']} no_db)"
+            )
 
     total_fail = sum(r.summary["fail"] for r in all_reports)
     sys.exit(1 if total_fail > 0 else 0)

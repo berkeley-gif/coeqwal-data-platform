@@ -31,12 +31,14 @@ import numpy as np
 try:
     import psycopg2
     import psycopg2.extras
+
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
 
 try:
     import requests
+
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
@@ -50,14 +52,35 @@ ABS_TOL = 0.01
 REL_TOL = 0.001
 
 ALL_SCENARIOS = [
-    "s0011", "s0020", "s0021", "s0023", "s0024", "s0025", "s0026",
-    "s0027", "s0028", "s0030", "s0031", "s0032", "s0033", "s0035",
-    "s0036", "s0037", "s0039", "s0040", "s0041", "s0042", "s0044",
-    "s0045", "s0046", "s0065",
+    "s0011",
+    "s0020",
+    "s0021",
+    "s0023",
+    "s0024",
+    "s0025",
+    "s0026",
+    "s0027",
+    "s0028",
+    "s0030",
+    "s0031",
+    "s0032",
+    "s0033",
+    "s0035",
+    "s0036",
+    "s0037",
+    "s0039",
+    "s0040",
+    "s0041",
+    "s0042",
+    "s0044",
+    "s0045",
+    "s0046",
+    "s0065",
 ]
 
 
 # ── Data Classes ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Check:
@@ -79,8 +102,9 @@ class Check:
             return "pass"
         if np.isnan(self.db_value) or np.isnan(self.api_value):
             return "fail"
-        if np.isclose(self.db_value, self.api_value,
-                      atol=self.abs_tol, rtol=self.rel_tol):
+        if np.isclose(
+            self.db_value, self.api_value, atol=self.abs_tol, rtol=self.rel_tol
+        ):
             return "pass"
         return "fail"
 
@@ -105,12 +129,23 @@ class APIReport:
             "skip": statuses.count("skip"),
         }
 
-    def add(self, metric: str, section: str, entity: str,
-            db_value: Optional[float], api_value: Optional[float]):
-        self.checks.append(Check(
-            metric=metric, section=section, entity=entity,
-            db_value=db_value, api_value=api_value,
-        ))
+    def add(
+        self,
+        metric: str,
+        section: str,
+        entity: str,
+        db_value: Optional[float],
+        api_value: Optional[float],
+    ):
+        self.checks.append(
+            Check(
+                metric=metric,
+                section=section,
+                entity=entity,
+                db_value=db_value,
+                api_value=api_value,
+            )
+        )
 
     def to_dict(self) -> dict:
         checks = []
@@ -141,11 +176,14 @@ class APIReport:
         if failures:
             print(f"\nFAILED ({len(failures)}):")
             for c in failures[:20]:
-                print(f"  [{c.section}] {c.entity}/{c.metric}: "
-                      f"db={c.db_value}, api={c.api_value}")
+                print(
+                    f"  [{c.section}] {c.entity}/{c.metric}: "
+                    f"db={c.db_value}, api={c.api_value}"
+                )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _sf(val) -> Optional[float]:
     if val is None:
@@ -188,11 +226,14 @@ def api_get(base_url: str, path: str, params: dict = None) -> Optional[dict]:
 
 # ── Verify: Batch Statistics ────────────────────────────────────────────────
 
+
 def verify_batch_storage(report: APIReport, conn, api_url: str, sid: str):
     section = "storage"
     log.info(f"  Checking {section}...")
 
-    db_rows = db_query(conn, """
+    db_rows = db_query(
+        conn,
+        """
         SELECT re.short_code, rsm.water_month,
                rsm.storage_avg_taf, rsm.q50_taf
         FROM reservoir_storage_monthly rsm
@@ -201,10 +242,13 @@ def verify_batch_storage(report: APIReport, conn, api_url: str, sid: str):
         JOIN reservoir_group rg ON rg.id = rgm.reservoir_group_id
         WHERE rsm.scenario_short_code = %s AND rg.short_code = 'major'
         ORDER BY re.short_code, rsm.water_month
-    """, (sid,))
+    """,
+        (sid,),
+    )
 
-    api_data = api_get(api_url, "/statistics/batch",
-                       {"scenarios": sid, "types": "storage"})
+    api_data = api_get(
+        api_url, "/statistics/batch", {"scenarios": sid, "types": "storage"}
+    )
 
     if not api_data or "storage" not in api_data:
         report.add("api_reachable", section, "batch", 1.0, 0.0)
@@ -231,15 +275,18 @@ def verify_batch_cws(report: APIReport, conn, api_url: str, sid: str):
     section = "cws"
     log.info(f"  Checking {section}...")
 
-    db_rows = db_query(conn, """
+    db_rows = db_query(
+        conn,
+        """
         SELECT e.short_code, p.annual_delivery_avg_taf, p.reliability_pct
         FROM cws_aggregate_period_summary p
         JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
         WHERE p.scenario_short_code = %s AND e.is_active = TRUE
-    """, (sid,))
+    """,
+        (sid,),
+    )
 
-    api_data = api_get(api_url, "/statistics/batch",
-                       {"scenarios": sid, "types": "cws"})
+    api_data = api_get(api_url, "/statistics/batch", {"scenarios": sid, "types": "cws"})
     api_cws = {}
     if api_data and "cws" in api_data:
         period_data = api_data["cws"].get(sid, {}).get("period", {})
@@ -261,15 +308,18 @@ def verify_batch_ag(report: APIReport, conn, api_url: str, sid: str):
     section = "ag"
     log.info(f"  Checking {section}...")
 
-    db_rows = db_query(conn, """
+    db_rows = db_query(
+        conn,
+        """
         SELECT e.short_code, p.annual_delivery_avg_taf
         FROM ag_aggregate_period_summary p
         JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
         WHERE p.scenario_short_code = %s AND e.is_active = TRUE
-    """, (sid,))
+    """,
+        (sid,),
+    )
 
-    api_data = api_get(api_url, "/statistics/batch",
-                       {"scenarios": sid, "types": "ag"})
+    api_data = api_get(api_url, "/statistics/batch", {"scenarios": sid, "types": "ag"})
     api_ag = {}
     if api_data and "ag" in api_data:
         period_data = api_data["ag"].get(sid, {}).get("period", {})
@@ -287,15 +337,20 @@ def verify_delta(report: APIReport, conn, api_url: str, sid: str):
     section = "delta"
     log.info(f"  Checking {section}...")
 
-    monthly_count = db_query(conn, """
+    monthly_count = db_query(
+        conn,
+        """
         SELECT COUNT(*) as cnt FROM delta_monthly
         WHERE scenario_short_code = %s
-    """, (sid,))
+    """,
+        (sid,),
+    )
     cnt = monthly_count[0]["cnt"] if monthly_count else 0
-    report.add("monthly_row_count", section, "all",
-               None, float(cnt))
+    report.add("monthly_row_count", section, "all", None, float(cnt))
 
-    period_rows = db_query(conn, """
+    period_rows = db_query(
+        conn,
+        """
         SELECT variable_code, category,
                summary_data->>'annual_avg_taf' as annual_avg_taf,
                summary_data->>'avg_km' as avg_km,
@@ -303,7 +358,9 @@ def verify_delta(report: APIReport, conn, api_url: str, sid: str):
         FROM delta_period_summary
         WHERE scenario_short_code = %s
         ORDER BY variable_code
-    """, (sid,))
+    """,
+        (sid,),
+    )
 
     for row in period_rows:
         code = row["variable_code"]
@@ -325,8 +382,15 @@ def verify_delta(report: APIReport, conn, api_url: str, sid: str):
 # ── Verify: Tiers ───────────────────────────────────────────────────────────
 
 TIER_CODES = [
-    "CWS_DEL", "AG_REV", "ENV_FLOWS", "RES_STOR", "GW_STOR",
-    "DELTA_ECO", "FW_DELTA_USES", "FW_EXP", "WRC_SALMON_AB",
+    "CWS_DEL",
+    "AG_REV",
+    "ENV_FLOWS",
+    "RES_STOR",
+    "GW_STOR",
+    "DELTA_ECO",
+    "FW_DELTA_USES",
+    "FW_EXP",
+    "WRC_SALMON_AB",
 ]
 
 
@@ -347,14 +411,18 @@ def verify_tiers(report: APIReport, conn, api_url: str, sid: str):
         api_tiers = api_data
 
     for tier_code in TIER_CODES:
-        db_rows = db_query(conn, """
+        db_rows = db_query(
+            conn,
+            """
             SELECT single_tier_level, total_value,
                    norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4
             FROM tier_result
             WHERE scenario_short_code = %s
               AND tier_short_code = %s
               AND is_active = TRUE
-        """, (sid, tier_code))
+        """,
+            (sid, tier_code),
+        )
 
         db_single = None
         db_total = None
@@ -367,35 +435,34 @@ def verify_tiers(report: APIReport, conn, api_url: str, sid: str):
         api_total = _sf(api_tier.get("total_value"))
 
         if db_single is not None:
-            report.add("single_tier_level", section, tier_code,
-                        db_single, api_single)
+            report.add("single_tier_level", section, tier_code, db_single, api_single)
         if db_total is not None:
-            report.add("total_value", section, tier_code,
-                        db_total, api_total)
+            report.add("total_value", section, tier_code, db_total, api_total)
 
         api_score = _sf(api_tier.get("weighted_score"))
         if api_score is not None:
-            report.add("weighted_score_present", section, tier_code,
-                        None, api_score)
+            report.add("weighted_score_present", section, tier_code, None, api_score)
 
 
 # ── Verify: Env Flow Period ─────────────────────────────────────────────────
+
 
 def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
     section = "env_flow_period"
     log.info(f"  Checking {section}...")
 
-    db_rows = db_query(conn, """
+    db_rows = db_query(
+        conn,
+        """
         SELECT na.code, p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
         FROM env_flow_channel_period_summary p
         JOIN network_arc na ON p.network_arc_id = na.id
         WHERE p.scenario_short_code = %s
-    """, (sid,))
-
-    api_data = api_get(
-        api_url,
-        f"/statistics/scenarios/{sid}/channels/period-summary"
+    """,
+        (sid,),
     )
+
+    api_data = api_get(api_url, f"/statistics/scenarios/{sid}/channels/period-summary")
 
     api_map: Dict[str, dict] = {}
     if api_data and isinstance(api_data, dict):
@@ -418,6 +485,7 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+
 
 def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIReport:
     report = APIReport(scenario_id=sid, api_url=api_url)
@@ -460,7 +528,8 @@ def main():
 
     repo_root = Path(__file__).parent.parent.parent
     report_dir = (
-        Path(args.report_dir) if args.report_dir
+        Path(args.report_dir)
+        if args.report_dir
         else repo_root / "audits" / "verification_reports"
     )
 
@@ -481,11 +550,12 @@ def main():
         for r in all_reports:
             s = r.summary
             status = "PASS" if s["fail"] == 0 and s["mismatch"] == 0 else "FAIL"
-            print(f"  {r.scenario_id}: {status} "
-                  f"({s['pass']}P/{s['fail']}F/{s['mismatch']}M)")
+            print(
+                f"  {r.scenario_id}: {status} "
+                f"({s['pass']}P/{s['fail']}F/{s['mismatch']}M)"
+            )
 
-    total_fail = sum(r.summary["fail"] + r.summary["mismatch"]
-                     for r in all_reports)
+    total_fail = sum(r.summary["fail"] + r.summary["mismatch"] for r in all_reports)
     sys.exit(1 if total_fail > 0 else 0)
 
 
