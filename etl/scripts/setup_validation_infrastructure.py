@@ -8,7 +8,6 @@ import json
 import argparse
 import sys
 import os
-from pathlib import Path
 
 def create_s3_validation_structure(bucket_name, scenarios):
     """Create S3 directory structure for validation testing"""
@@ -49,12 +48,12 @@ def upload_reference_csv(bucket_name, scenario_id, local_csv_path):
     s3_key = f"scenario/{scenario_id}/verify/java_reference.csv"
     
     try:
-        print(f"📤 Uploading reference CSV...")
+        print("📤 Uploading reference CSV...")
         print(f"   📄 Local: {local_csv_path}")
         print(f"   🎯 S3: s3://{bucket_name}/{s3_key}")
         
         s3_client.upload_file(local_csv_path, bucket_name, s3_key)
-        print(f"   ✅ Upload successful!")
+        print("   ✅ Upload successful!")
         return True
         
     except Exception as e:
@@ -66,7 +65,7 @@ def verify_batch_configuration(job_queue, job_definition):
     
     batch_client = boto3.client('batch')
     
-    print(f"🔍 Verifying AWS Batch configuration...")
+    print("🔍 Verifying AWS Batch configuration...")
     
     # Check job queue
     try:

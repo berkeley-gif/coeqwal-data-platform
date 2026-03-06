@@ -450,7 +450,7 @@ def _safe_cv(data: pd.Series) -> Optional[float]:
     mean = float(np.mean(arr))
     if mean == 0:
         return 0.0
-    return round(float(np.std(arr) / mean), 4)
+    return round(float(np.std(arr, ddof=1) / mean), 4)
 
 
 def _round_or_none(value, ndigits: int = 3) -> Optional[float]:

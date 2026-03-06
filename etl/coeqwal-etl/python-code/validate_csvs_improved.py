@@ -234,7 +234,7 @@ def print_console_report(summary: dict, mismatches_df: pd.DataFrame, column_summ
     
     # Summary statistics
     val_summary = summary["validation_summary"]
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  Total cells compared: {val_summary['total_cells_compared']:,}")
     print(f"  Mismatch cells: {val_summary['total_mismatch_cells']:,}")
     print(f"  Mismatch rate: {val_summary['mismatch_rate']:.4%}")
@@ -242,7 +242,7 @@ def print_console_report(summary: dict, mismatches_df: pd.DataFrame, column_summ
     
     # Column-level breakdown
     if column_summaries:
-        print(f"\nColumns with highest mismatch rates:")
+        print("\nColumns with highest mismatch rates:")
         sorted_cols = sorted(column_summaries, key=lambda x: x['mismatch_rate'], reverse=True)
         for col in sorted_cols[:10]:  # Top 10 worst columns
             print(f"  {col['B']}|{col['C']}: {col['mismatches']:,}/{col['total_cells']:,} ({col['mismatch_rate']:.2%})")
@@ -258,7 +258,7 @@ def print_console_report(summary: dict, mismatches_df: pd.DataFrame, column_summ
         for mtype, count in mismatch_types.items():
             print(f"  {mtype}: {count:,} cells")
         
-        print(f"\nDetailed mismatches:")
+        print("\nDetailed mismatches:")
         display_df = mismatches_df.head(max_unmatched)[['date', 'B', 'C', 'ref_value', 'file_value', 'abs_diff', 'mismatch_type']]
         
         # Format for better readability

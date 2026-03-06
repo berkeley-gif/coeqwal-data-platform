@@ -46,6 +46,15 @@ PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent.parent / \
     "database/seed_tables/04_calsim_data/reservoir_entity.csv"
 
+# Capacity overrides (TAF) from V3 DataExtraction.py — the top-level storage zone
+# variable for these reservoirs is absent from the DV file, so these are hardcoded.
+CAPACITY_OVERRIDES = {
+    'FOLSM': 967.0,    # S_FOLSMLEVEL6DV (entity CSV has 975)
+    'MLRTN': 524.0,     # S_MLRTNLEVEL5DV (entity CSV has 520)
+    'OROVL': 3424.8,    # S_OROVLLEVEL6DV (entity CSV has 3537)
+    'MELON': 2420.0,    # S_MELONLEVEL5DV (entity CSV has 2400)
+}
+
 
 def load_reservoir_entities(
     csv_path: Optional[Path] = None,
@@ -87,6 +96,12 @@ def load_reservoir_entities(
                 'capacity_taf': capacity,
                 'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
             }
+
+    for code, override_taf in CAPACITY_OVERRIDES.items():
+        if code in reservoirs:
+            old = reservoirs[code]['capacity_taf']
+            reservoirs[code]['capacity_taf'] = override_taf
+            log.info(f"Capacity override: {code} {old} -> {override_taf} TAF")
 
     log.info(f"Loaded {len(reservoirs)} reservoirs from {csv_path}")
     return reservoirs

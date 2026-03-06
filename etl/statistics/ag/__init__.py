@@ -18,7 +18,9 @@ Statistics tables populated:
 
 from .calculate_ag_statistics import (
     calculate_all_ag_statistics,
-    calculate_du_delivery_monthly,
+    calculate_du_demand_monthly,
+    calculate_du_sw_delivery_monthly,
+    calculate_du_gw_pumping_monthly,
     calculate_du_shortage_monthly,
     calculate_du_period_summary,
     calculate_aggregate_monthly,
@@ -28,7 +30,9 @@ from .calculate_ag_statistics import (
 
 __all__ = [
     "calculate_all_ag_statistics",
-    "calculate_du_delivery_monthly",
+    "calculate_du_demand_monthly",
+    "calculate_du_sw_delivery_monthly",
+    "calculate_du_gw_pumping_monthly",
     "calculate_du_shortage_monthly",
     "calculate_du_period_summary",
     "calculate_aggregate_monthly",

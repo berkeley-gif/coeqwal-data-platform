@@ -2,12 +2,12 @@
 """
 Calculate delivery and demand statistics for urban demand units.
 
-Version 2: Uses database variable mappings and loads demand CSV.
+Version 2: Uses database variable mappings and SV CSV for demand data.
 
 Approach:
 1. Load variable mappings from du_urban_variable table
-2. Load main CalSim output CSV (deliveries, shortages)
-3. Load demand CSV (UD_*, DEM_D_*_PMI demands)
+2. Load main CalSim DV output CSV (deliveries, shortages) — CFS
+3. Load SV input CSV for demand variables (UD_*) — already in TAF
 4. Calculate statistics including pct_demand_met
 5. Insert into database tables
 
@@ -56,7 +56,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 # Local paths
 LOCAL_OUTPUT_DIR = PROJECT_ROOT / "etl/pipelines"
-LOCAL_DEMAND_DIR = PROJECT_ROOT / "etl/demands"
+LOCAL_REFERENCE_DIR = PROJECT_ROOT / "etl/reference"
 
 # Percentiles
 PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
@@ -66,6 +66,9 @@ EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 # TAF = CFS * seconds_per_day * days / (43560 sq ft per acre) / 1000
 # Simplified: CFS * days * 86400 / 43560 / 1000 = CFS * days * 0.001983471
 CFS_TO_TAF_PER_DAY = 0.001983471
+
+# MWD Table A contract demand (V3 DataExtraction.py line 914)
+MWD_TABLE_A_ANNUAL_TAF = 1911.5
 
 
 # =============================================================================
@@ -77,19 +80,26 @@ def get_variable_mappings(conn) -> Dict[str, Dict]:
     Load variable mappings from du_urban_variable table.
     
     Returns:
-        Dict mapping du_id to {delivery_variable, demand_variable, shortage_variable, ...}
+        Dict mapping du_id to {delivery_variable, demand_variable, demand_mode, ...}
     """
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
         SELECT du_id, delivery_variable, demand_variable, shortage_variable, 
-               variable_type, requires_sum
+               variable_type, requires_sum, demand_mode, demand_params
         FROM du_urban_variable
         WHERE is_active = TRUE
     """)
     rows = cur.fetchall()
     cur.close()
     
-    mappings = {row['du_id']: dict(row) for row in rows}
+    mappings = {}
+    for row in rows:
+        m = dict(row)
+        if m.get('demand_params') and isinstance(m['demand_params'], str):
+            import json
+            m['demand_params'] = json.loads(m['demand_params'])
+        mappings[m['du_id']] = m
+
     log.info(f"Loaded {len(mappings)} variable mappings from database")
     return mappings
 
@@ -210,54 +220,118 @@ def load_scenario_data(
     scenario_id: str,
     use_local: bool = False,
     output_csv_path: Optional[str] = None,
-    demand_csv_path: Optional[str] = None
+    sv_csv_path: Optional[str] = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Load main CalSim output and demand CSV for a scenario.
-    
+    Load main CalSim DV output and SV input CSV for a scenario.
+
+    DV output has delivery/shortage variables (CFS).
+    SV input has demand variables like UD_* (already in TAF).
+
     Args:
         scenario_id: Scenario ID (e.g., 's0020')
         use_local: Use local files instead of S3
-        output_csv_path: Override path for main output CSV
-        demand_csv_path: Override path for demand CSV
-    
+        output_csv_path: Override path for main DV output CSV
+        sv_csv_path: Override path for SV input CSV
+
     Returns:
-        Tuple of (output_df, demand_df)
+        Tuple of (output_df, sv_df)
     """
     if use_local:
-        # Local file paths
         if output_csv_path is None:
             output_csv_path = str(LOCAL_OUTPUT_DIR / f"{scenario_id}_coeqwal_calsim_output.csv")
-        if demand_csv_path is None:
-            demand_csv_path = str(LOCAL_DEMAND_DIR / f"{scenario_id}_demand.csv")
+        if sv_csv_path is None:
+            sv_csv_path = str(LOCAL_REFERENCE_DIR / f"{scenario_id}_coeqwal_sv_input.csv")
     else:
-        # S3 paths (download to temp)
         if not HAS_BOTO3:
             raise ImportError("boto3 required for S3 access")
-        
+
         s3 = boto3.client('s3')
-        
-        # Download main output
-        output_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv"
-        output_csv_path = f"/tmp/{scenario_id}_output.csv"
-        log.info(f"Downloading s3://{S3_BUCKET}/{output_key}")
-        s3.download_file(S3_BUCKET, output_key, output_csv_path)
-        
-        # Download demand CSV
-        demand_key = f"reference/{scenario_id}_demand.csv"
-        demand_csv_path = f"/tmp/{scenario_id}_demand.csv"
-        log.info(f"Downloading s3://{S3_BUCKET}/{demand_key}")
-        s3.download_file(S3_BUCKET, demand_key, demand_csv_path)
-    
+
+        # Download main DV output
+        if output_csv_path is None:
+            output_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv"
+            output_csv_path = f"/tmp/{scenario_id}_output.csv"
+            log.info(f"Downloading s3://{S3_BUCKET}/{output_key}")
+            s3.download_file(S3_BUCKET, output_key, output_csv_path)
+
+        # Download SV input
+        if sv_csv_path is None:
+            sv_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_sv_input.csv"
+            sv_csv_path = f"/tmp/{scenario_id}_sv.csv"
+            log.info(f"Downloading s3://{S3_BUCKET}/{sv_key}")
+            s3.download_file(S3_BUCKET, sv_key, sv_csv_path)
+
     # Load CSVs
-    output_df, output_cols = load_csv_with_dss_headers(output_csv_path)
-    demand_df, demand_cols = load_csv_with_dss_headers(demand_csv_path)
-    
+    output_df, _output_cols = load_csv_with_dss_headers(output_csv_path)
+    sv_df, _sv_cols = load_csv_with_dss_headers(sv_csv_path)
+
     # Add water year/month
     output_df = add_water_year_month(output_df)
-    demand_df = add_water_year_month(demand_df)
-    
-    return output_df, demand_df
+    sv_df = add_water_year_month(sv_df)
+
+    return output_df, sv_df
+
+
+# =============================================================================
+# DEMAND COMPUTATION HELPERS
+# =============================================================================
+
+def compute_demand_for_du(
+    output_df: pd.DataFrame,
+    sv_df: pd.DataFrame,
+    mapping: Dict,
+) -> pd.Series:
+    """
+    Compute demand for a DU based on its demand_mode.
+
+    Returns a monthly demand Series in TAF.
+    Returns all-NaN Series if demand cannot be computed.
+    """
+    demand_mode = mapping.get('demand_mode')
+    demand_var = mapping.get('demand_variable')
+    params = mapping.get('demand_params') or {}
+    du_id = mapping.get('du_id', '?')
+
+    if demand_mode == 'sv' and demand_var:
+        return get_column_value(sv_df, demand_var)
+
+    if demand_mode == 'table_a':
+        return pd.Series(MWD_TABLE_A_ANNUAL_TAF / 12.0, index=output_df.index, dtype=float)
+
+    if demand_mode == 'perdv':
+        perdv_vars = params.get('perdv_vars', [])
+        delivery_var = mapping.get('delivery_variable')
+        shortage_var = mapping.get('shortage_variable')
+        if not perdv_vars or not delivery_var:
+            log.warning(f"PERDV mode for {du_id} missing perdv_vars or delivery_var")
+            return pd.Series(np.nan, index=output_df.index, dtype=float)
+
+        del_cfs = get_column_value(output_df, delivery_var)
+        short_cfs = get_column_value(output_df, shortage_var) if shortage_var else 0.0
+        pv_var = perdv_vars[0]
+        pv = get_column_value(output_df, pv_var)
+        pv_safe = pv.replace(0, np.nan)
+        demand_cfs = (del_cfs + short_cfs) / pv_safe
+        return demand_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+
+    if demand_mode == 'constant_cfs':
+        cfs_value = params.get('cfs_value', 0)
+        return cfs_value * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+
+    if demand_mode == 'dv_sum':
+        columns = params.get('columns', [])
+        if not columns:
+            return pd.Series(np.nan, index=output_df.index, dtype=float)
+        total = pd.Series(0.0, index=output_df.index)
+        for col in columns:
+            total = total + get_column_value(output_df, col).fillna(0)
+        return total * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+
+    if demand_mode is None:
+        log.debug(f"No demand_mode for {du_id} — demand will be NULL")
+
+    return pd.Series(np.nan, index=output_df.index, dtype=float)
 
 
 # =============================================================================
@@ -284,14 +358,17 @@ def get_column_value(df: pd.DataFrame, column_name: str) -> pd.Series:
 
 def calculate_du_statistics(
     output_df: pd.DataFrame,
-    demand_df: pd.DataFrame,
+    sv_df: pd.DataFrame,
     mappings: Dict[str, Dict],
     delivery_arcs: Dict[str, List[str]],
     scenario_id: str
 ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """
     Calculate delivery, shortage, and demand statistics for all DUs.
-    
+
+    output_df: DV CSV data (delivery/shortage in CFS)
+    sv_df: SV CSV data (demand UD_* in TAF)
+
     Returns:
         Tuple of (delivery_monthly_rows, period_summary_rows, shortage_monthly_rows)
     """
@@ -308,30 +385,24 @@ def calculate_du_statistics(
     
     for du_id, mapping in mappings.items():
         delivery_var = mapping.get('delivery_variable')
-        demand_var = mapping.get('demand_variable')
         shortage_var = mapping.get('shortage_variable')
         requires_sum = mapping.get('requires_sum', False)
         
         # Get delivery values (in CFS)
         if requires_sum and du_id in delivery_arcs:
-            # Sum multiple delivery arcs
             arc_series = [get_column_value(output_df, arc) for arc in delivery_arcs[du_id]]
             delivery_cfs = sum(arc_series)
         else:
             delivery_cfs = get_column_value(output_df, delivery_var)
         
-        # Convert delivery from CFS to TAF (monthly)
-        # TAF = CFS * days_in_month * CFS_TO_TAF_PER_DAY
         delivery = delivery_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
         
-        # Get demand values (already in TAF from demand CSV)
-        demand = get_column_value(demand_df, demand_var)
+        # Compute demand using the appropriate mode for this DU
+        demand = compute_demand_for_du(output_df, sv_df, mapping)
         
-        # Get shortage values (in CFS, convert to TAF)
         shortage_cfs = get_column_value(output_df, shortage_var)
         shortage = shortage_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
         
-        # Skip if no data
         if delivery.isna().all() and demand.isna().all():
             log.debug(f"Skipping {du_id}: no delivery or demand data")
             skipped += 1
@@ -409,14 +480,14 @@ def calculate_du_statistics(
         # Calculate period summary
         water_years = sorted(output_df['WaterYear'].unique())
         
-        # Annual delivery (convert CFS to TAF: CFS * days * 0.001984)
+        # Annual delivery (convert CFS to TAF: CFS * days * 0.001983471)
         annual_delivery = output_df.groupby('WaterYear').apply(
             lambda g: delivery[g.index].sum(), include_groups=False
         )
         
         # Annual demand
         if demand.notna().any():
-            annual_demand = demand_df.groupby('WaterYear').apply(
+            annual_demand = sv_df.groupby('WaterYear').apply(
                 lambda g: demand[g.index].sum(), include_groups=False
             )
         else:
@@ -640,27 +711,27 @@ def process_scenario(
     conn,
     use_local: bool = False,
     output_csv_path: Optional[str] = None,
-    demand_csv_path: Optional[str] = None,
+    sv_csv_path: Optional[str] = None,
     dry_run: bool = False
 ) -> Tuple[List[Dict], List[Dict]]:
     """Process a single scenario."""
     log.info(f"Processing scenario: {scenario_id}")
-    
+
     # Load variable mappings from database
     mappings = get_variable_mappings(conn)
     delivery_arcs = get_delivery_arcs(conn)
-    
-    # Load scenario data
-    output_df, demand_df = load_scenario_data(
+
+    # Load scenario data (DV output + SV input)
+    output_df, sv_df = load_scenario_data(
         scenario_id,
         use_local=use_local,
         output_csv_path=output_csv_path,
-        demand_csv_path=demand_csv_path
+        sv_csv_path=sv_csv_path,
     )
-    
+
     # Calculate statistics
     delivery_monthly, period_summary, shortage_monthly = calculate_du_statistics(
-        output_df, demand_df, mappings, delivery_arcs, scenario_id
+        output_df, sv_df, mappings, delivery_arcs, scenario_id
     )
     
     if not dry_run:
@@ -689,8 +760,8 @@ def main():
     parser.add_argument('--scenario', '-s', help='Scenario ID (e.g., s0020)')
     parser.add_argument('--all-scenarios', action='store_true', help='Process all scenarios')
     parser.add_argument('--local', action='store_true', help='Use local files instead of S3')
-    parser.add_argument('--output-csv', help='Override main output CSV path')
-    parser.add_argument('--demand-csv', help='Override demand CSV path')
+    parser.add_argument('--output-csv', help='Override main DV output CSV path')
+    parser.add_argument('--sv-csv', help='Override SV input CSV path')
     parser.add_argument('--dry-run', action='store_true', help='Calculate but do not save')
     parser.add_argument('--output-json', action='store_true', help='Output results as JSON')
     parser.add_argument('--mock-mappings', action='store_true', help='Use mock mappings for testing (no database required)')
@@ -717,16 +788,16 @@ def main():
         for scenario_id in scenarios:
             try:
                 # Load data
-                output_df, demand_df = load_scenario_data(
+                output_df, sv_df = load_scenario_data(
                     scenario_id,
                     use_local=args.local,
                     output_csv_path=args.output_csv,
-                    demand_csv_path=args.demand_csv
+                    sv_csv_path=args.sv_csv,
                 )
-                
+
                 # Calculate statistics
                 monthly, summary, shortage = calculate_du_statistics(
-                    output_df, demand_df, mappings, delivery_arcs, scenario_id
+                    output_df, sv_df, mappings, delivery_arcs, scenario_id
                 )
                 
                 all_monthly.extend(monthly)
@@ -757,7 +828,7 @@ def main():
                     conn,
                     use_local=args.local,
                     output_csv_path=args.output_csv,
-                    demand_csv_path=args.demand_csv,
+                    sv_csv_path=args.sv_csv,
                     dry_run=args.dry_run
                 )
                 all_monthly.extend(monthly)

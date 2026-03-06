@@ -9,7 +9,6 @@ Usage inside Docker:
 """
 
 import argparse
-import sys
 from collections import defaultdict
 from pydsstools.heclib.dss import HecDss
 
@@ -83,7 +82,7 @@ def main():
         print(f"  Keys with collisions: {len(collisions)}")
 
         if collisions:
-            print(f"\n  Showing up to 10 collisions:\n")
+            print("\n  Showing up to 10 collisions:\n")
             for i, (key, entries) in enumerate(sorted(collisions.items())):
                 if i >= 10:
                     print(f"  ... and {len(collisions) - 10} more")

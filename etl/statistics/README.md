@@ -190,6 +190,62 @@ When a new scenario DSS is uploaded to S3:
 
 ---
 
+## Unit conversion: CFS to TAF
+
+All modules use the same precise conversion factor:
+
+```
+TAF = CFS × DaysInMonth × 0.001983471
+```
+
+where `0.001983471 = 86400 / 43560 / 1000` (seconds-per-day / sq-ft-per-acre / kilo-acre-feet).
+
+The V3 Jupyter notebooks use `0.001984` (rounded), which differs by 0.027% — negligible.
+
+Each module derives `DaysInMonth` from `pd.DatetimeIndex.daysinmonth` so leap years
+and short months are handled exactly.
+
+---
+
+## Data sources by module
+
+| Module | Delivery source | Demand source | Shortage source | Units (raw) |
+|--------|----------------|---------------|-----------------|-------------|
+| **Reservoirs** | DV: `S_{code}` (storage) | — | DV: `C_{code}_FLOOD` (spill) | TAF (storage), CFS (spill) |
+| **DU Urban** | DV: `DN_*`, `GP_*`, `D_*_PMI` | SV: `UD_*` (TAF) | DV: `SHRTG_*`, `SHORT_D_*_PMI` | CFS |
+| **MI Contractors** | DV: `D_*_PMI`, `DEL_SWP_MWD` | DEMANDS CSV* | DV: `SHORT_D_*_PMI` | CFS |
+| **CWS Aggregate** | DV: `DEL_SWP_PMI`, `DEL_CVP_PMI_*` | DEMANDS CSV* | DV: `SHORT_SWP_PMI`, `SHORT_CVP_PMI_*` | CFS |
+| **AG** | DV: `DN_*`, `AW_*`, `GP_*` | DV: `AW_*` | DV: `GW_SHORT_*` | CFS |
+| **Env Flows** | DV: `C_{reach}` | — | — | CFS |
+| **Refuge** | DV: `DN_*` | SV: `AWO_*` (TAF) | Computed: `max(demand − delivery, 0)` | CFS (delivery), TAF (demand) |
+
+*Modules marked with DEMANDS CSV still load from an external demand file. Planned
+refactoring will source all demand from the DV/SV CSVs directly.
+
+---
+
+## Reservoir capacity overrides
+
+For percent-of-capacity calculations, capacity should come from the highest `S_{code}LEVELxDV`
+variable in the DV file. Four major reservoirs have their top-level variable absent from the DV
+output; their capacities are hardcoded from V3's `DataExtraction.py`:
+
+| Reservoir | Entity CSV | V3 Hardcoded | Variable (absent) |
+|-----------|-----------|-------------|-------------------|
+| Folsom | 975 TAF | **967 TAF** | `S_FOLSMLEVEL6DV` |
+| Millerton | 520 TAF | **524 TAF** | `S_MLRTNLEVEL5DV` |
+| Oroville | 3537 TAF | **3424.8 TAF** | `S_OROVLLEVEL6DV` |
+| New Melones | 2400 TAF | **2420 TAF** | `S_MELONLEVEL5DV` |
+
+These overrides are applied in `CAPACITY_OVERRIDES` in both
+`calculate_reservoir_statistics.py` and `calculate_reservoir_percentiles.py`.
+
+For spill, the flood control level (one zone below capacity) is used as the
+threshold for flood pool probability. See `RESERVOIR_THRESHOLDS` in
+`reservoir_metrics.py` for the full 92-reservoir mapping.
+
+---
+
 ## Calculation methodology
 
 All calculations are aligned with the COEQWAL modeler Jupyter notebooks located at https://github.com/maramahmedd/coeqwal. See:

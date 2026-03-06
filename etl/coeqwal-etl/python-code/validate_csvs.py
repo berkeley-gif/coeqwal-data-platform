@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # validate_csvs.py
-import argparse, json, os
+import argparse
+import json
+import os
 from typing import Dict, Tuple
 import numpy as np
 import pandas as pd

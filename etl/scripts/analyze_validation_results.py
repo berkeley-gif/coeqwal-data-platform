@@ -8,7 +8,6 @@ import json
 import pandas as pd
 import argparse
 import sys
-from datetime import datetime
 import io
 
 def download_validation_summary(bucket_name, scenario_id):

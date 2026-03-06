@@ -70,7 +70,7 @@ def print_validation_report(summary: dict, mismatches_df: pd.DataFrame, show_det
         
         if len(mismatches_df) > max_details:
             print(f"... and {len(mismatches_df) - max_details:,} more mismatches")
-            print(f"Use --out-csv to save all mismatches to file")
+            print("Use --out-csv to save all mismatches to file")
 
 
 def main():

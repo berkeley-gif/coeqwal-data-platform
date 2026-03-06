@@ -1,0 +1,511 @@
+#!/usr/bin/env python3
+"""
+Calculate Delta statistics: outflow, X2, and salinity at compliance points.
+
+Variables (verified against COEQWAL_V3 variable_groupings.csv and metrics.py):
+
+  Delta Outflow:
+    NDO              — Net Delta Outflow (CFS, FLOW-NDO)
+
+  X2 Position (2 ppt salinity intrusion distance from Golden Gate):
+    X2_PRV_KM        — Previous month X2 position (KM)
+    April X2: X2_PRV_KM filtered to month=4
+    September X2: X2_PRV_KM filtered to month=9
+
+  Salinity at Compliance Points (EC = electrical conductivity, UMHOS/CM):
+    EM_EC_MONTH      — Emmaton
+    JP_EC_MONTH      — Jersey Point
+    RS_EC_MONTH      — Rock Slough
+    CO_EC_MONTH      — Collinsville
+
+  Salinity at Pumping Plants (EC, UMHOS/CM, 14-day max):
+    BANKSEC_MAX14DAY — Banks Pumping Plant (SWP)
+    TRACYEC_MAX14DAY — Tracy / Jones Pumping Plant (CVP)
+
+V3 metrics (metrics.py lines 627-665):
+  - NDO: annual avg, Sept avg, Sept CV
+  - X2_PRV_KM: Fall (Sep-Nov) avg/CV, Spring (Mar-May) avg/CV
+  - EM_EC_MONTH, JP_EC_MONTH: Fall avg, Spring avg
+
+Usage:
+    python calculate_delta_statistics.py --scenario s0020
+    python calculate_delta_statistics.py --scenario s0020 --csv-path /path/to/dv.csv
+"""
+
+import argparse
+import logging
+import os
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+try:
+    import boto3
+    HAS_BOTO3 = True
+except ImportError:
+    HAS_BOTO3 = False
+
+try:
+    import psycopg2  # noqa: F401
+    from psycopg2.extras import execute_values  # noqa: F401
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+)
+log = logging.getLogger("delta_statistics")
+
+S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
+CFS_TO_TAF_PER_DAY = 0.001983471
+
+PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
+EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
+
+# =============================================================================
+# DELTA VARIABLE DEFINITIONS (verified against V3 and s0020 DV CSV)
+# =============================================================================
+
+DELTA_VARIABLES = {
+    'ndo': {
+        'var': 'NDO',
+        'label': 'Net Delta Outflow',
+        'native_unit': 'CFS',
+        'convert_to_taf': True,
+        'category': 'outflow',
+    },
+    'x2': {
+        'var': 'X2_PRV_KM',
+        'label': 'X2 Position (2 ppt isohaline)',
+        'native_unit': 'KM',
+        'convert_to_taf': False,
+        'category': 'x2',
+    },
+    'em_ec': {
+        'var': 'EM_EC_MONTH',
+        'label': 'Emmaton EC',
+        'native_unit': 'UMHOS/CM',
+        'convert_to_taf': False,
+        'category': 'salinity_compliance',
+    },
+    'jp_ec': {
+        'var': 'JP_EC_MONTH',
+        'label': 'Jersey Point EC',
+        'native_unit': 'UMHOS/CM',
+        'convert_to_taf': False,
+        'category': 'salinity_compliance',
+    },
+    'rs_ec': {
+        'var': 'RS_EC_MONTH',
+        'label': 'Rock Slough EC',
+        'native_unit': 'UMHOS/CM',
+        'convert_to_taf': False,
+        'category': 'salinity_compliance',
+    },
+    'co_ec': {
+        'var': 'CO_EC_MONTH',
+        'label': 'Collinsville EC',
+        'native_unit': 'UMHOS/CM',
+        'convert_to_taf': False,
+        'category': 'salinity_compliance',
+    },
+    'banks_ec': {
+        'var': 'BANKSEC_MAX14DAY',
+        'label': 'Banks Pumping Plant EC (14-day max)',
+        'native_unit': 'UMHOS/CM',
+        'convert_to_taf': False,
+        'category': 'salinity_pumps',
+    },
+    'tracy_ec': {
+        'var': 'TRACYEC_MAX14DAY',
+        'label': 'Tracy/Jones Pumping Plant EC (14-day max)',
+        'native_unit': 'UMHOS/CM',
+        'convert_to_taf': False,
+        'category': 'salinity_pumps',
+    },
+}
+
+
+# =============================================================================
+# DATA LOADING
+# =============================================================================
+
+def load_calsim_csv_from_file(csv_path: str) -> pd.DataFrame:
+    """Load CalSim output CSV from local file with DSS-style headers."""
+    import csv as csv_mod
+    with open(csv_path, 'r') as f:
+        reader = csv_mod.reader(f)
+        header_rows = [next(reader) for _ in range(7)]
+
+    var_names = header_rows[1]
+
+    from collections import Counter
+    name_counts = Counter()
+    deduped = []
+    for name in var_names:
+        count = name_counts[name]
+        name_counts[name] += 1
+        deduped.append(f"{name}_dup{count}" if count > 0 else name)
+
+    df = pd.read_csv(csv_path, skiprows=7, header=None, names=deduped)
+
+    date_col = deduped[0]
+    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+    df = df.dropna(subset=[date_col])
+    df = df.set_index(date_col)
+
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    df['CalendarMonth'] = df.index.month
+    df['CalendarYear'] = df.index.year
+    df['DaysInMonth'] = df.index.days_in_month
+
+    return df
+
+
+def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+    """Load CalSim output CSV from S3."""
+    if not HAS_BOTO3:
+        raise ImportError("boto3 required for S3 access")
+    s3 = boto3.client('s3')
+    import tempfile
+
+    possible_keys = [
+        f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
+        f"scenario/{scenario_id}/csv/{scenario_id}_DV.csv",
+    ]
+    for key in possible_keys:
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as tmp:
+                s3.download_file(S3_BUCKET, key, tmp.name)
+                return load_calsim_csv_from_file(tmp.name)
+        except s3.exceptions.NoSuchKey:
+            continue
+    raise FileNotFoundError(f"No DV CSV found in S3 for {scenario_id}")
+
+
+def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
+    """Add WaterYear and WaterMonth columns."""
+    df = df.copy()
+    df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
+    df['WaterYear'] = df['CalendarYear'].copy()
+    df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
+    return df
+
+
+# =============================================================================
+# STATISTICS HELPERS
+# =============================================================================
+
+def _safe_cv(data: pd.Series) -> Optional[float]:
+    arr = data.dropna().values
+    if len(arr) == 0:
+        return None
+    mean = float(np.mean(arr))
+    if mean == 0:
+        return None
+    return round(float(np.std(arr, ddof=1) / mean), 4)
+
+
+def _percentiles(data: pd.Series, percentile_list: List[int], prefix: str = 'q') -> Dict:
+    arr = data.dropna().values
+    if len(arr) == 0:
+        return {}
+    result = {}
+    for p in percentile_list:
+        result[f'{prefix}{p}'] = round(float(np.percentile(arr, p)), 3)
+    return result
+
+
+def _exceedance(data: pd.Series, percentile_list: List[int]) -> Dict:
+    arr = data.dropna().values
+    if len(arr) == 0:
+        return {}
+    result = {}
+    for p in percentile_list:
+        result[f'exc_p{p}'] = round(float(np.percentile(arr, 100 - p)), 3)
+    return result
+
+
+# =============================================================================
+# DELTA MONTHLY STATISTICS
+# =============================================================================
+
+def calculate_delta_monthly(
+    df: pd.DataFrame,
+    var_code: str,
+    var_info: Dict,
+) -> List[Dict]:
+    """
+    Calculate monthly statistics for a Delta variable.
+
+    Returns one row per water month (12 rows).
+    """
+    col = var_info['var']
+    if col not in df.columns:
+        log.warning(f"Variable {col} not found for {var_code}")
+        return []
+
+    raw = pd.to_numeric(df[col], errors='coerce')
+    native_unit = var_info['native_unit']
+    convert = var_info.get('convert_to_taf', False)
+
+    if convert:
+        values_taf = raw * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    else:
+        values_taf = raw
+
+    results = []
+    for wm in range(1, 13):
+        mask = df['WaterMonth'] == wm
+        month_data = values_taf[mask].dropna()
+        if month_data.empty:
+            continue
+
+        row = {
+            'variable_code': var_code,
+            'water_month': wm,
+            'avg': round(float(month_data.mean()), 3),
+            'cv': _safe_cv(month_data),
+            'sample_count': len(month_data),
+            'unit': 'TAF' if convert else native_unit,
+        }
+
+        if native_unit == 'CFS':
+            raw_month = raw[mask].dropna()
+            row['avg_cfs'] = round(float(raw_month.mean()), 2)
+
+        row.update(_percentiles(month_data, PERCENTILES))
+        row.update(_exceedance(month_data, EXCEEDANCE_PERCENTILES))
+
+        results.append(row)
+
+    return results
+
+
+# =============================================================================
+# DELTA PERIOD SUMMARY
+# =============================================================================
+
+def calculate_delta_period_summary(
+    df: pd.DataFrame,
+    var_code: str,
+    var_info: Dict,
+) -> Optional[Dict]:
+    """
+    Calculate period-of-record summary for a Delta variable.
+
+    For NDO: annual total in TAF, plus annual avg in CFS.
+    For X2: annual April value, September value, Spring/Fall means (matching V3).
+    For salinity: annual mean, Spring/Fall seasonal means (matching V3).
+    """
+    col = var_info['var']
+    if col not in df.columns:
+        return None
+
+    raw = pd.to_numeric(df[col], errors='coerce')
+    native_unit = var_info['native_unit']
+    convert = var_info.get('convert_to_taf', False)
+    category = var_info.get('category', '')
+
+    if convert:
+        monthly_taf = raw * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    else:
+        monthly_taf = raw
+
+    water_years = sorted(df['WaterYear'].unique())
+
+    result = {
+        'variable_code': var_code,
+        'label': var_info['label'],
+        'category': category,
+        'native_unit': native_unit,
+        'simulation_start_year': int(water_years[0]),
+        'simulation_end_year': int(water_years[-1]),
+        'total_years': len(water_years),
+    }
+
+    # --- Outflow (NDO): annual totals in TAF + avg CFS ---
+    if category == 'outflow':
+        annual_taf = df.assign(_val=monthly_taf).groupby('WaterYear')['_val'].sum()
+        result['annual_avg_taf'] = round(float(annual_taf.mean()), 2)
+        result['annual_cv'] = _safe_cv(annual_taf)
+        result.update(_exceedance(annual_taf, EXCEEDANCE_PERCENTILES))
+
+        result['avg_cfs'] = round(float(raw.dropna().mean()), 2)
+
+        sept_mask = df['CalendarMonth'] == 9
+        sept_data = monthly_taf[sept_mask].dropna()
+        if not sept_data.empty:
+            result['sept_avg_taf'] = round(float(sept_data.mean()), 3)
+            result['sept_cv'] = _safe_cv(sept_data)
+
+    # --- X2 position ---
+    elif category == 'x2':
+        all_data = monthly_taf.dropna()
+        result['avg_km'] = round(float(all_data.mean()), 2)
+        result['cv'] = _safe_cv(all_data)
+        result.update(_exceedance(all_data, EXCEEDANCE_PERCENTILES))
+
+        apr_mask = df['CalendarMonth'] == 4
+        apr_data = raw[apr_mask].dropna()
+        if not apr_data.empty:
+            result['april_avg_km'] = round(float(apr_data.mean()), 2)
+            result['april_cv'] = _safe_cv(apr_data)
+            result.update({f'april_{k}': v for k, v in
+                           _exceedance(apr_data, EXCEEDANCE_PERCENTILES).items()})
+
+        sep_mask = df['CalendarMonth'] == 9
+        sep_data = raw[sep_mask].dropna()
+        if not sep_data.empty:
+            result['sept_avg_km'] = round(float(sep_data.mean()), 2)
+            result['sept_cv'] = _safe_cv(sep_data)
+            result.update({f'sept_{k}': v for k, v in
+                           _exceedance(sep_data, EXCEEDANCE_PERCENTILES).items()})
+
+        spring_mask = df['CalendarMonth'].isin([3, 4, 5])
+        spring = raw[spring_mask].dropna()
+        if not spring.empty:
+            result['spring_avg_km'] = round(float(spring.mean()), 2)
+            result['spring_cv'] = _safe_cv(spring)
+
+        fall_mask = df['CalendarMonth'].isin([9, 10, 11])
+        fall = raw[fall_mask].dropna()
+        if not fall.empty:
+            result['fall_avg_km'] = round(float(fall.mean()), 2)
+            result['fall_cv'] = _safe_cv(fall)
+
+    # --- Salinity (compliance + pumps) ---
+    elif category.startswith('salinity'):
+        all_data = monthly_taf.dropna()
+        result['avg_ec'] = round(float(all_data.mean()), 2)
+        result['cv'] = _safe_cv(all_data)
+        result.update(_exceedance(all_data, EXCEEDANCE_PERCENTILES))
+
+        spring_mask = df['CalendarMonth'].isin([3, 4, 5])
+        spring = raw[spring_mask].dropna()
+        if not spring.empty:
+            result['spring_avg_ec'] = round(float(spring.mean()), 2)
+            result['spring_cv'] = _safe_cv(spring)
+
+        fall_mask = df['CalendarMonth'].isin([9, 10, 11])
+        fall = raw[fall_mask].dropna()
+        if not fall.empty:
+            result['fall_avg_ec'] = round(float(fall.mean()), 2)
+            result['fall_cv'] = _safe_cv(fall)
+
+        for threshold_name, threshold_val in [('d1641', 450), ('high', 2500), ('mid', 1600), ('low', 900)]:
+            exceed_pct = (all_data > threshold_val).sum() / len(all_data) * 100
+            result[f'exceed_{threshold_name}_pct'] = round(float(exceed_pct), 2)
+
+    return result
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+def calculate_all_delta_statistics(
+    scenario_id: str,
+    csv_path: Optional[str] = None,
+) -> Tuple[List[Dict], List[Dict]]:
+    """
+    Calculate all Delta statistics for a scenario.
+
+    Returns:
+        (monthly_rows, period_summary_rows)
+    """
+    log.info(f"Processing Delta statistics for scenario: {scenario_id}")
+
+    if csv_path:
+        df = load_calsim_csv_from_file(csv_path)
+    else:
+        df = load_calsim_csv_from_s3(scenario_id)
+
+    df = add_water_year_month(df)
+    log.info(f"Loaded {len(df)} months of data, {len(df.columns)} columns")
+
+    monthly_rows = []
+    period_summary_rows = []
+    found = 0
+
+    for var_code, var_info in DELTA_VARIABLES.items():
+        col = var_info['var']
+        if col not in df.columns:
+            log.warning(f"  {var_code} ({col}): NOT FOUND in CSV")
+            continue
+        found += 1
+        log.info(f"  {var_code} ({col}): found — {var_info['label']}")
+
+        monthly = calculate_delta_monthly(df, var_code, var_info)
+        for row in monthly:
+            row['scenario_short_code'] = scenario_id
+        monthly_rows.extend(monthly)
+
+        summary = calculate_delta_period_summary(df, var_code, var_info)
+        if summary:
+            summary['scenario_short_code'] = scenario_id
+            period_summary_rows.append(summary)
+
+    log.info(f"Found {found}/{len(DELTA_VARIABLES)} Delta variables")
+    log.info(f"Generated {len(monthly_rows)} monthly rows, {len(period_summary_rows)} period summaries")
+
+    return monthly_rows, period_summary_rows
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+def main():
+    parser = argparse.ArgumentParser(description="Calculate Delta statistics")
+    parser.add_argument('--scenario', required=True, help='Scenario ID (e.g., s0020)')
+    parser.add_argument('--csv-path', help='Path to local DV CSV')
+    parser.add_argument('--output-json', help='Write results to JSON file')
+    args = parser.parse_args()
+
+    monthly, summaries = calculate_all_delta_statistics(args.scenario, args.csv_path)
+
+    if args.output_json:
+        import json
+
+        def convert(o):
+            if isinstance(o, (np.integer,)):
+                return int(o)
+            if isinstance(o, (np.floating,)):
+                return float(o)
+            if isinstance(o, np.ndarray):
+                return o.tolist()
+            return o
+
+        output = {
+            'scenario': args.scenario,
+            'monthly_count': len(monthly),
+            'summary_count': len(summaries),
+            'monthly': monthly,
+            'period_summaries': summaries,
+        }
+        with open(args.output_json, 'w') as f:
+            json.dump(output, f, indent=2, default=convert)
+        log.info(f"Wrote results to {args.output_json}")
+    else:
+        print(f"\nScenario: {args.scenario}")
+        print(f"Monthly rows: {len(monthly)}")
+        print(f"Period summaries: {len(summaries)}")
+        for s in summaries:
+            print(f"\n  {s['variable_code']} ({s['label']}):")
+            for k, v in s.items():
+                if k not in ('variable_code', 'label', 'scenario_short_code', 'category'):
+                    print(f"    {k}: {v}")
+
+
+if __name__ == '__main__':
+    main()

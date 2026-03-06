@@ -77,10 +77,17 @@ STORAGE_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 # Percentiles for storage exceedance (period summary)
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
-# CFS to TAF conversion factor (approximate for monthly data)
-# CFS * days_in_month * 1.9835 / 1000
-# Using average month of 30.4 days: CFS * 30.4 * 1.9835 / 1000 ≈ CFS * 0.0603
-CFS_TO_TAF_MONTHLY = 0.0603
+# CFS to TAF per calendar day: (ft³/s × 86400 s/day) / (43560 ft²/acre × 1000 ac/kac)
+CFS_TO_TAF_PER_DAY = 0.001983471
+
+# Capacity overrides (TAF) from V3 DataExtraction.py — the top-level storage zone
+# variable for these reservoirs is absent from the DV file, so these are hardcoded.
+CAPACITY_OVERRIDES = {
+    'FOLSM': 967.0,    # S_FOLSMLEVEL6DV (entity CSV has 975)
+    'MLRTN': 524.0,     # S_MLRTNLEVEL5DV (entity CSV has 520)
+    'OROVL': 3424.8,    # S_OROVLLEVEL6DV (entity CSV has 3537)
+    'MELON': 2420.0,    # S_MELONLEVEL5DV (entity CSV has 2400)
+}
 
 
 def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
@@ -108,6 +115,12 @@ def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[s
                 'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
             }
 
+    for code, override_taf in CAPACITY_OVERRIDES.items():
+        if code in reservoirs:
+            old = reservoirs[code]['capacity_taf']
+            reservoirs[code]['capacity_taf'] = override_taf
+            log.info(f"Capacity override: {code} {old} -> {override_taf} TAF")
+
     log.info(f"Loaded {len(reservoirs)} reservoirs from {csv_path}")
     return reservoirs
 
@@ -128,11 +141,10 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
     s3 = boto3.client('s3')
 
     # Build list of variable names to load
-    # Storage: S_{code}, Spill: C_{code}_FLOOD, Thresholds: S_{code}LEVEL*DV
+    # Storage: S_{code}, Thresholds: S_{code}LEVEL*DV
     vars_to_find = set()
     for code in reservoir_codes:
         vars_to_find.add(f'S_{code}')          # storage
-        vars_to_find.add(f'C_{code}_FLOOD')    # flood spill
 
         # Add threshold variables for flood/dead pool probability calculations
         # These are model output variables used to calculate probability metrics
@@ -223,9 +235,7 @@ def load_scenario_csv_from_file(file_path: str, reservoir_codes: List[str]) -> p
     vars_to_find = set()
     for code in reservoir_codes:
         vars_to_find.add(f'S_{code}')
-        vars_to_find.add(f'C_{code}_FLOOD')
 
-        # Add threshold variables for flood/dead pool probability calculations
         if code in RESERVOIR_THRESHOLDS:
             threshold_info = RESERVOIR_THRESHOLDS[code]
             flood_var = threshold_info.get('flood_var')
@@ -262,7 +272,7 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
 
     The CSV format has:
     - Row 0 (a): Source identifier (CALSIM)
-    - Row 1 (b): Variable names (S_SHSTA, C_SHSTA_FLOOD, etc.)
+    - Row 1 (b): Variable names (S_SHSTA, S_SHSTALEVEL5DV, etc.)
     - Row 2 (c): Description
     - Row 3 (e): Time step (1MON)
     - Row 4 (f): Dataset (L2020A)
@@ -301,14 +311,16 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Add water year and water month columns.
+    Add water year, water month, and DaysInMonth columns.
 
     Water year runs from October 1 to September 30.
     Water month: Oct=1, Nov=2, ..., Sep=12
+    DaysInMonth: actual calendar days (for CFS-to-TAF conversion)
     """
     df = df.copy()
     df['CalendarMonth'] = df['DateTime'].dt.month
     df['CalendarYear'] = df['DateTime'].dt.year
+    df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
 
     # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
     df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
@@ -381,35 +393,62 @@ def calculate_storage_monthly(
     return results
 
 
+def _get_flood_threshold(df: pd.DataFrame, reservoir_code: str) -> Optional[pd.Series]:
+    """Get the flood control level series for a reservoir.
+
+    Uses S_{RES}LEVEL(x-1)DV from the DV file, or a hardcoded constant
+    from RESERVOIR_THRESHOLDS for reservoirs without DV level variables.
+    """
+    if reservoir_code not in RESERVOIR_THRESHOLDS:
+        return None
+
+    flood_var = RESERVOIR_THRESHOLDS[reservoir_code].get('flood_var')
+    if flood_var is None:
+        return None
+    if isinstance(flood_var, str) and flood_var in df.columns:
+        return pd.to_numeric(df[flood_var], errors='coerce')
+    if isinstance(flood_var, (int, float)):
+        return pd.Series(float(flood_var), index=df.index)
+    return None
+
+
 def calculate_spill_monthly(
     df: pd.DataFrame,
     reservoir_code: str,
     capacity_taf: float
 ) -> List[Dict[str, Any]]:
-    """
-    Calculate monthly spill (flood release) statistics for a single reservoir.
+    """Calculate monthly spill probability for a single reservoir.
+
+    Spill is defined as storage >= flood control level (S_{RES}LEVEL(x-1)DV),
+    NOT from C_*_FLOOD flow variables.
 
     Returns list of dicts (one per water month) for reservoir_spill_monthly table.
     """
-    spill_col = f'C_{reservoir_code}_FLOOD'
     storage_col = f'S_{reservoir_code}'
 
-    if spill_col not in df.columns:
-        log.debug(f"Spill column {spill_col} not found")
+    if storage_col not in df.columns:
+        log.debug(f"Storage column {storage_col} not found")
         return []
 
+    flood_level = _get_flood_threshold(df, reservoir_code)
+    if flood_level is None:
+        log.debug(f"No flood threshold for {reservoir_code}")
+        return []
+
+    storage = pd.to_numeric(df[storage_col], errors='coerce')
+    at_flood = storage >= flood_level
+
     results = []
-
     for wm in range(1, 13):
-        month_df = df[df['WaterMonth'] == wm].copy()
-        spill_data = month_df[spill_col].dropna()
+        wm_mask = df['WaterMonth'] == wm
+        month_storage = storage[wm_mask].dropna()
+        month_at_flood = at_flood[wm_mask].dropna()
 
-        if spill_data.empty:
+        if month_storage.empty:
             continue
 
-        total_months = len(spill_data)
-        spill_nonzero = spill_data[spill_data > 0]
-        spill_count = len(spill_nonzero)
+        total_months = len(month_storage)
+        spill_count = int(month_at_flood.sum())
 
         row = {
             'water_month': wm,
@@ -419,29 +458,11 @@ def calculate_spill_monthly(
         }
 
         if spill_count > 0:
-            row['spill_avg_cfs'] = round(float(spill_nonzero.mean()), 2)
-            row['spill_max_cfs'] = round(float(spill_nonzero.max()), 2)
-            row['spill_q50'] = round(float(np.percentile(spill_nonzero, 50)), 2)
-            row['spill_q90'] = round(float(np.percentile(spill_nonzero, 90)), 2)
-            row['spill_q100'] = round(float(spill_nonzero.max()), 2)
-
-            # Storage at spill threshold
-            if storage_col in month_df.columns:
-                storage_at_spill = month_df[month_df[spill_col] > 0][storage_col].dropna()
-                if not storage_at_spill.empty:
-                    row['storage_at_spill_avg_pct'] = round(
-                        (storage_at_spill.mean() / capacity_taf) * 100, 2
-                    )
-                else:
-                    row['storage_at_spill_avg_pct'] = None
-            else:
-                row['storage_at_spill_avg_pct'] = None
+            flood_storage = month_storage[month_at_flood]
+            row['storage_at_spill_avg_pct'] = round(
+                (flood_storage.mean() / capacity_taf) * 100, 2
+            )
         else:
-            row['spill_avg_cfs'] = 0
-            row['spill_max_cfs'] = 0
-            row['spill_q50'] = 0
-            row['spill_q90'] = 0
-            row['spill_q100'] = 0
             row['storage_at_spill_avg_pct'] = None
 
         results.append(row)
@@ -461,7 +482,6 @@ def calculate_period_summary(
     Returns dict for reservoir_period_summary table.
     """
     storage_col = f'S_{reservoir_code}'
-    spill_col = f'C_{reservoir_code}_FLOOD'
 
     if storage_col not in df.columns:
         log.debug(f"Storage column {storage_col} not found")
@@ -495,74 +515,36 @@ def calculate_period_summary(
     result['dead_pool_taf'] = dead_pool_taf
     result['dead_pool_pct'] = round((dead_pool_taf / capacity_taf) * 100, 2) if capacity_taf > 0 else 0
 
-    # ========== Spill Statistics ==========
-    if spill_col in df.columns:
-        spill_data = df[spill_col].dropna()
+    # ========== Spill Statistics (storage >= flood control level) ==========
+    flood_level = _get_flood_threshold(df, reservoir_code)
+    if flood_level is not None:
+        storage = pd.to_numeric(df[storage_col], errors='coerce')
+        at_flood = storage >= flood_level
 
-        # Annual max spill per water year
-        annual_max_spill = df.groupby('WaterYear')[spill_col].max()
-        spill_years = (annual_max_spill > 0).sum()
+        # Annual: any month at/above flood control
+        annual_spill = df.assign(at_flood=at_flood).groupby('WaterYear')['at_flood'].any()
+        spill_years = int(annual_spill.sum())
 
-        result['spill_years_count'] = int(spill_years)
+        result['spill_years_count'] = spill_years
         result['spill_frequency_pct'] = round((spill_years / len(water_years)) * 100, 2)
 
-        # All spill events (non-zero)
-        all_spill = spill_data[spill_data > 0]
-        if len(all_spill) > 0:
-            result['spill_mean_cfs'] = round(float(all_spill.mean()), 2)
-            result['spill_peak_cfs'] = round(float(all_spill.max()), 2)
-        else:
-            result['spill_mean_cfs'] = 0
-            result['spill_peak_cfs'] = 0
+        # Monthly frequency (overall)
+        total_months = len(at_flood)
+        spill_months = int(at_flood.sum())
+        result['spill_monthly_frequency_pct'] = round((spill_months / total_months) * 100, 2) if total_months > 0 else 0
 
-        # Annual spill volume (TAF)
-        annual_spill_taf = df.groupby('WaterYear')[spill_col].apply(
-            lambda x: (x * CFS_TO_TAF_MONTHLY).sum()
-        )
-
-        result['annual_spill_avg_taf'] = round(float(annual_spill_taf.mean()), 2)
-        if annual_spill_taf.mean() > 0:
-            result['annual_spill_cv'] = round(
-                float(annual_spill_taf.std() / annual_spill_taf.mean()), 4
+        # Storage level when at flood control
+        flood_storage = storage[at_flood]
+        if not flood_storage.empty:
+            result['spill_threshold_pct'] = round(
+                (flood_storage.mean() / capacity_taf) * 100, 2
             )
-        else:
-            result['annual_spill_cv'] = 0
-        result['annual_spill_max_taf'] = round(float(annual_spill_taf.max()), 2)
-
-        # Annual max spill distribution
-        annual_max_nonzero = annual_max_spill[annual_max_spill > 0]
-        if len(annual_max_nonzero) > 0:
-            result['annual_max_spill_q50'] = round(float(np.percentile(annual_max_nonzero, 50)), 2)
-            result['annual_max_spill_q90'] = round(float(np.percentile(annual_max_nonzero, 90)), 2)
-            result['annual_max_spill_q100'] = round(float(annual_max_nonzero.max()), 2)
-        else:
-            result['annual_max_spill_q50'] = 0
-            result['annual_max_spill_q90'] = 0
-            result['annual_max_spill_q100'] = 0
-
-        # Spill threshold (avg storage % when spill occurs)
-        if storage_col in df.columns:
-            storage_at_spill = df[df[spill_col] > 0][storage_col].dropna()
-            if not storage_at_spill.empty:
-                result['spill_threshold_pct'] = round(
-                    (storage_at_spill.mean() / capacity_taf) * 100, 2
-                )
-            else:
-                result['spill_threshold_pct'] = None
         else:
             result['spill_threshold_pct'] = None
     else:
-        # No spill data available
         result['spill_years_count'] = 0
         result['spill_frequency_pct'] = 0
-        result['spill_mean_cfs'] = 0
-        result['spill_peak_cfs'] = 0
-        result['annual_spill_avg_taf'] = 0
-        result['annual_spill_cv'] = 0
-        result['annual_spill_max_taf'] = 0
-        result['annual_max_spill_q50'] = 0
-        result['annual_max_spill_q90'] = 0
-        result['annual_max_spill_q100'] = 0
+        result['spill_monthly_frequency_pct'] = 0
         result['spill_threshold_pct'] = None
 
     # ========== Flood/Dead Pool Probabilities ==========

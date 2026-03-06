@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Calculate delivery and shortage statistics for M&I contractors.
+Calculate delivery, shortage, and demand statistics for M&I contractors.
 
-This module processes SWP/CVP contractor-level data using:
-- D_*_PMI delivery variables (Project Municipal & Industrial)
-- SHORT_D_*_PMI shortage variables
+All data sourced from the DV (CalSim output) CSV:
+- D_*_PMI delivery variables (CFS)
+- SHORT_D_*_PMI shortage variables (CFS)
+- Demand = Delivery + Shortage (computed, not from SV)
 
-The contractor variable mappings are derived from:
-- CWS_shortage_variables.csv
-- swp_contractor_perdel_A.wresl (SWP contractor definitions)
+The DEM_D_*_PIN variables in SV are planned inputs that do NOT represent
+actual demand — they get scaled by SWP allocation percentage (PERDV_SWP_*).
+For our purposes, the effective demand seen by the model is delivery + shortage.
 
 Usage:
     python calculate_mi_statistics.py --scenario s0020
@@ -74,123 +75,110 @@ SHORTAGE_THRESHOLD_TAF = 0.1
 # Simplified: CFS * days * 86400 / 43560 / 1000 = CFS * days * 0.001983471
 CFS_TO_TAF_PER_DAY = 0.001983471
 
-# Local paths for DEMANDS CSV files
+# Local paths
 LOCAL_PIPELINES_DIR = PROJECT_ROOT / "etl/pipelines"
-LOCAL_DEMANDS_DIR = PROJECT_ROOT / "etl/demands"
 
 
 # =============================================================================
 # CONTRACTOR VARIABLE MAPPINGS
 # =============================================================================
 
-# SWP Contractor short codes mapped to CalSim delivery/shortage variable patterns
-# Source: CWS_shortage_variables.csv and swp_contractor_perdel_A.wresl
-MI_CONTRACTOR_VARIABLES = {
-    # Format: short_code -> {delivery_vars: [...], shortage_vars: [...], demand_var: str, description: ...}
-    # Demand variables are from the DEMANDS CSV file (e.g., s0020_DCRadjBL_2020LU_wTUCP_DEMANDS.csv)
+# MWD Table A contract demand (from V3 DataExtraction.py line 914)
+MWD_TABLE_A_ANNUAL_TAF = 1911.5
 
-    # Alameda County FC&WCD-Zone 7
+# SWP Contractor short codes mapped to CalSim delivery/shortage/PERDV variables.
+# Demand computation matches COEQWAL_V3 DataExtraction.py exactly:
+#   SWP contractors: demand_CFS = (delivery + shortage) / PERDV_SWP_x
+#   MWD: hardcoded Table A contract (1911.5 TAF/yr)
+#   Aggregates: no demand computed
+# Source: V3 DataExtraction.py lines 1061-1333, swp_contractor_perdel_A.wresl
+MI_CONTRACTOR_VARIABLES = {
+
     "ACFC": {
         "delivery_vars": ["D_SBA009_ACFC_PMI", "D_SBA020_ACFC_PMI"],
         "shortage_vars": ["SHORT_D_SBA009_ACFC_PMI", "SHORT_D_SBA020_ACFC_PMI"],
-        "demand_var": "DEM_ACFC",
+        "perdv_vars": ["PERDV_SWP_1", "PERDV_SWP_2"],
         "description": "Alameda County Flood Control & Water Conservation District - Zone 7",
     },
 
-    # Alameda County WD
     "ACWD": {
         "delivery_vars": ["D_SBA029_ACWD_PMI"],
         "shortage_vars": ["SHORT_D_SBA029_ACWD_PMI"],
-        "demand_var": "DEM_D_SBA029_ACWD_PMI",
+        "perdv_vars": ["PERDV_SWP_3"],
         "description": "Alameda County Water District",
     },
 
-    # Antelope Valley-East Kern WA
     "AVEK": {
         "delivery_vars": ["D_ESB324_AVEK_PMI"],
         "shortage_vars": ["SHORT_D_ESB324_AVEK_PMI"],
-        "demand_var": "DEM_D_ESB324_AVEK_PMI",
+        "perdv_vars": ["PERDV_SWP_4"],
         "description": "Antelope Valley-East Kern Water Agency",
     },
 
-    # Santa Clara Valley WD
     "SCVWD": {
         "delivery_vars": ["D_SBA036_SCVWD_PMI"],
         "shortage_vars": ["SHORT_D_SBA036_SCVWD_PMI"],
-        "demand_var": "DEM_D_SBA036_SCVWD_PMI",
+        "perdv_vars": ["PERDV_SWP_35"],
         "description": "Santa Clara Valley Water District",
     },
 
-    # Metropolitan WDSC - use DEL_SWP_MWD aggregate only
-    # DEL_SWP_MWD = D_PRRIS_MWDSC_PMI + D_CAA194_KERNB_PMI + D_ESB413_MWDSC_PMI + D_ESB433_MWDSC_PMI + D_WSB031_MWDSC_PMI
-    # (verified from Run/DeliveryLogic/output/deliv_short_swp.wresl)
     "MWD": {
-        "delivery_vars": [
-            "DEL_SWP_MWD",  # aggregate of all 5 MWD delivery arcs
-        ],
+        "delivery_vars": ["DEL_SWP_MWD"],
         "shortage_vars": [
             "SHORT_D_ESB413_MWDSC_PMI",
             "SHORT_D_ESB433_MWDSC_PMI",
             "SHORT_D_PRRIS_MWDSC_PMI",
             "SHORT_D_WSB031_MWDSC_PMI",
         ],
-        "demand_var": "TABLEA_CONTRACT_MWD",  # MWD uses Table A contract amount
+        "demand_mode": "table_a",
         "description": "Metropolitan Water District of Southern California",
     },
 
-    # San Luis Obispo
     "OBISPO": {
         "delivery_vars": ["D_CSB038_OBISPO_PMI"],
         "shortage_vars": ["SHORT_D_CSB038_OBISPO_PMI"],
-        "demand_var": "DEM_D_CSB038_OBISPO_PMI",
+        "perdv_vars": ["PERDV_SWP_35"],
         "description": "San Luis Obispo County FC&WCD",
     },
 
-    # Santa Barbara
     "BRBRA": {
         "delivery_vars": ["D_CSB103_BRBRA_PMI"],
         "shortage_vars": ["SHORT_D_CSB103_BRBRA_PMI"],
-        "demand_var": "DEM_D_CSB103_BRBRA_PMI",
+        "perdv_vars": ["PERDV_SWP_34"],
         "description": "Santa Barbara County FC&WCD",
     },
 
-    # Ventura County
     "VNTRA": {
         "delivery_vars": ["D_CSTIC_VNTRA_PMI", "D_PYRMD_VNTRA_PMI"],
         "shortage_vars": ["SHORT_D_CSTIC_VNTRA_PMI", "SHORT_D_PYRMD_VNTRA_PMI"],
-        "demand_var": "DEM_VNTRA_PMI",
+        "perdv_vars": ["PERDV_SWP_39", "PERDV_SWP_38"],
         "description": "Ventura County Watershed Protection District",
     },
 
-    # Palmdale
     "PLMDL": {
         "delivery_vars": ["D_ESB347_PLMDL_PMI"],
         "shortage_vars": ["SHORT_D_ESB347_PLMDL_PMI"],
-        "demand_var": "DEM_D_ESB347_PLMDL_PMI",
+        "perdv_vars": ["PERDV_SWP_29"],
         "description": "Palmdale Water District",
     },
 
-    # Littlerock Creek ID
     "LROCK": {
         "delivery_vars": ["D_ESB355_LROCK_PMI"],
         "shortage_vars": ["SHORT_D_ESB355_LROCK_PMI"],
-        "demand_var": None,  # Not available in DEMANDS CSV
         "description": "Littlerock Creek Irrigation District",
     },
 
-    # Mojave WA
     "MOJVE": {
         "delivery_vars": ["D_ESB403_MOJVE_PMI"],
         "shortage_vars": ["SHORT_D_ESB403_MOJVE_PMI"],
-        "demand_var": None,  # Not available in DEMANDS CSV
         "description": "Mojave Water Agency",
     },
 
-    # Castaic Lake (LA area) - Coachella Valley WD
+    # Castaic Lake (LA area)
     "CCHLA": {
         "delivery_vars": ["D_ESB407_CCHLA_PMI"],
         "shortage_vars": ["SHORT_D_ESB407_CCHLA_PMI"],
-        "demand_var": None,  # Not available in DEMANDS CSV
+        "demand_var": "DEM_D_ESB407_CCHLA_PIN",
         "description": "Castaic Lake Water Agency (LA area)",
     },
 
@@ -198,83 +186,71 @@ MI_CONTRACTOR_VARIABLES = {
     "DESRT": {
         "delivery_vars": ["D_ESB408_DESRT_PMI"],
         "shortage_vars": ["SHORT_D_ESB408_DESRT_PMI"],
-        "demand_var": None,  # Not available in DEMANDS CSV
         "description": "Desert Water Agency",
     },
 
-    # San Bernardino Valley MWD
     "BRDNO": {
         "delivery_vars": ["D_ESB414_BRDNO_PMI"],
         "shortage_vars": ["SHORT_D_ESB414_BRDNO_PMI"],
-        "demand_var": "DEM_D_ESB414_BRDNO_PMI",
+        "perdv_vars": ["PERDV_SWP_30"],
         "description": "San Bernardino Valley Municipal Water District",
     },
 
-    # San Gabriel Valley MWD
     "GABRL": {
         "delivery_vars": ["D_ESB415_GABRL_PMI"],
         "shortage_vars": ["SHORT_D_ESB415_GABRL_PMI"],
-        "demand_var": "DEM_D_ESB415_GABRL_PMI",
+        "perdv_vars": ["PERDV_SWP_31"],
         "description": "San Gabriel Valley Municipal Water District",
     },
 
-    # San Gorgonio Pass WA
     "GRGNO": {
         "delivery_vars": ["D_ESB420_GRGNO_PMI"],
         "shortage_vars": ["SHORT_D_ESB420_GRGNO_PMI"],
-        "demand_var": "DEM_D_ESB420_GRGNO_PMI",
+        "perdv_vars": ["PERDV_SWP_32"],
         "description": "San Gorgonio Pass Water Agency",
     },
 
-    # Kern County WA
     "KERN": {
         "delivery_vars": ["D_CAA194_KERNA_PMI", "D_CAA194_KERNB_PMI"],
         "shortage_vars": ["SHORT_D_CAA194_KERNA_PMI", "SHORT_D_CAA194_KERNB_PMI"],
-        "demand_var": "DEM_D_CAA194_KERNA_PMI",  # Use KERNA for demand
+        "perdv_vars": ["PERDV_SWP_15"],
         "description": "Kern County Water Agency",
     },
 
-    # SVRWD (Castaic Lake)
     "CSTLN": {
         "delivery_vars": ["D_SVRWD_CSTLN_PMI"],
         "shortage_vars": ["SHORT_D_SVRWD_CSTLN_PMI"],
-        "demand_var": "DEM_D_SVRWD_CSTLN_PMI",
+        "perdv_vars": ["PERDV_SWP_11"],
         "description": "Castaic Lake Water Agency (SVRWD)",
     },
 
-    # Aggregate SWP totals
     "SWP_PMI_TOTAL": {
-        "delivery_vars": ["DEL_SWP_PMI"],  # if exists
+        "delivery_vars": ["DEL_SWP_PMI"],
         "shortage_vars": ["SHORT_SWP_PMI"],
-        "demand_var": None,  # Aggregate - sum of constituent demands
         "description": "Total SWP Project M&I (aggregate)",
     },
 
     "SWP_PMI_N": {
-        "delivery_vars": ["DEL_SWP_PMI_N"],  # if exists
+        "delivery_vars": ["DEL_SWP_PMI_N"],
         "shortage_vars": ["SHORT_SWP_PMI_N"],
-        "demand_var": None,  # Aggregate - sum of constituent demands
         "description": "SWP Project M&I - North of Delta (aggregate)",
     },
 
     "SWP_PMI_S": {
-        "delivery_vars": ["DEL_SWP_PMI_S"],  # if exists
+        "delivery_vars": ["DEL_SWP_PMI_S"],
         "shortage_vars": ["SHORT_SWP_PMI_S"],
-        "demand_var": None,  # Aggregate - sum of constituent demands
         "description": "SWP Project M&I - South of Delta (aggregate)",
     },
 
     "CVP_PMI_N": {
-        "delivery_vars": ["DEL_CVP_PMI_N"],  # if exists
+        "delivery_vars": ["DEL_CVP_PMI_N"],
         "shortage_vars": ["SHORT_CVP_PMI_N"],
-        "demand_var": None,  # Aggregate - sum of constituent demands
         "description": "CVP Project M&I - North (aggregate)",
     },
 
     "CVP_PMI_S": {
-        "delivery_vars": ["DEL_CVP_PMI_S"],  # if exists
+        "delivery_vars": ["DEL_CVP_PMI_S"],
         "shortage_vars": ["SHORT_CVP_PMI_S"],
-        "demand_var": None,  # Aggregate - sum of constituent demands
         "description": "CVP Project M&I - South (aggregate)",
     },
 }
@@ -402,111 +378,6 @@ def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> p
     return data_df
 
 
-def load_demands_csv(
-    scenario_id: str,
-    use_local: bool = False,
-    demand_csv_path: Optional[str] = None
-) -> Optional[pd.DataFrame]:
-    """
-    Load DEMANDS CSV for a scenario.
-    
-    The DEMANDS CSV contains demand variables (DEM_*, TABLEA_CONTRACT_*, etc.)
-    that are used to calculate percent of demand metrics.
-    
-    Args:
-        scenario_id: Scenario ID (e.g., 's0020')
-        use_local: Use local files instead of S3
-        demand_csv_path: Override path for demand CSV
-    
-    Returns:
-        DataFrame with demand data, or None if not found
-    """
-    if demand_csv_path:
-        # Use provided path
-        if not Path(demand_csv_path).exists():
-            log.warning(f"Demand CSV not found at: {demand_csv_path}")
-            return None
-        # Demand CSV files often have duplicate columns - dedupe them
-        return load_calsim_csv_from_file(demand_csv_path, dedupe_columns=True)
-
-    if use_local:
-        # Try local paths - check both pipelines and demands folders
-        possible_paths = [
-            # Full DEMANDS CSV with scenario suffix
-            LOCAL_PIPELINES_DIR / f"{scenario_id}_DCRadjBL_2020LU_wTUCP_DEMANDS.csv",
-            LOCAL_PIPELINES_DIR / f"{scenario_id}_adjBL_wTUCP_DEMANDS.csv",
-            LOCAL_PIPELINES_DIR / f"{scenario_id}_DEMANDS.csv",
-            # Simplified demand CSV
-            LOCAL_DEMANDS_DIR / f"{scenario_id}_demand.csv",
-        ]
-
-        for path in possible_paths:
-            if path.exists():
-                log.info(f"Loading demands from: {path}")
-                # Demand CSV files often have duplicate columns - dedupe them
-                return load_calsim_csv_from_file(str(path), dedupe_columns=True)
-
-        log.warning(f"No DEMANDS CSV found for scenario {scenario_id} locally")
-        return None
-
-    # S3 access
-    if not HAS_BOTO3:
-        log.warning("boto3 not available for S3 access")
-        return None
-
-    s3 = boto3.client('s3')
-
-    # Try different possible S3 locations
-    possible_keys = [
-        f"reference/{scenario_id}_demand.csv",
-        f"scenario/{scenario_id}/csv/{scenario_id}_DEMANDS.csv",
-    ]
-
-    for key in possible_keys:
-        try:
-            log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
-            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-
-            # Read header
-            import io
-            content = response['Body'].read()
-            header_df = pd.read_csv(io.BytesIO(content), header=None, nrows=8)
-            col_names = header_df.iloc[1].tolist()
-
-            # Handle duplicate column names by keeping only the first occurrence
-            seen = set()
-            unique_col_names = []
-            duplicate_indices = []
-            for i, name in enumerate(col_names):
-                if name in seen:
-                    duplicate_indices.append(i)
-                else:
-                    seen.add(name)
-                    unique_col_names.append(name)
-
-            if duplicate_indices:
-                log.info(f"Found {len(duplicate_indices)} duplicate columns in demand CSV, keeping first occurrence")
-
-            # Read data
-            data_df = pd.read_csv(io.BytesIO(content), header=None, skiprows=7, low_memory=False)
-
-            # Drop duplicate columns
-            if duplicate_indices:
-                data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
-
-            data_df.columns = unique_col_names
-
-            log.info(f"Loaded demands from S3: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-            return data_df
-
-        except Exception as e:
-            log.debug(f"Could not load {key}: {e}")
-            continue
-
-    log.warning(f"No DEMANDS CSV found for scenario {scenario_id} in S3")
-    return None
-
-
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add water year and water month columns.
@@ -560,14 +431,14 @@ def calculate_contractor_delivery_monthly(
     df: pd.DataFrame,
     contractor_code: str,
     delivery_vars: List[str],
-    demand_var: Optional[str] = None,
-    demand_df: Optional[pd.DataFrame] = None
+    shortage_vars: Optional[List[str]] = None,
+    perdv_vars: Optional[List[str]] = None,
+    demand_mode: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Calculate monthly delivery statistics for a contractor.
+    """Calculate monthly delivery statistics for a contractor.
 
-    Aggregates multiple delivery points if contractor has several.
-    Optionally includes demand and percent-of-demand calculations.
+    Demand computed per V3 DataExtraction.py using PERDV division
+    or Table A contract for MWD.
     """
     # Find which delivery vars exist in the data
     available_vars = [v for v in delivery_vars if v in df.columns]
@@ -630,31 +501,26 @@ def calculate_contractor_delivery_monthly(
             for p in EXCEEDANCE_PERCENTILES:
                 row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
 
-            # Demand calculations for monthly (if available)
-            # NOTE: Demand values in the DEMANDS CSV are already in TAF (not CFS)
-            # Do NOT convert - just use the values directly
             row['demand_avg_taf'] = None
             row['percent_of_demand_avg'] = None
 
-            if demand_var and demand_df is not None and demand_var in demand_df.columns:
-                try:
-                    # Get demand for this month
-                    if 'WaterMonth' in demand_df.columns:
-                        demand_wm_mask = demand_df['WaterMonth'] == wm
-                        demand_month = demand_df[demand_wm_mask][demand_var].dropna()
-
-                        if not demand_month.empty:
-                            # Demand values are already in TAF - no conversion needed
-                            demand_taf = float(demand_month.mean())
-
-                            row['demand_avg_taf'] = round(demand_taf, 2)
-
-                            # Calculate percent of demand met
-                            if row['demand_avg_taf'] > 0 and row['delivery_avg_taf'] is not None:
-                                pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
-                                row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
-                except Exception as e:
-                    log.debug(f"Error calculating monthly demand for {contractor_code} month {wm}: {e}")
+            if perdv_vars:
+                month_demand = _compute_perdv_demand_taf(
+                    df_copy[wm_mask], delivery_vars, shortage_vars or [], perdv_vars
+                )
+                avg_dem = float(month_demand.mean())
+                if avg_dem > 0:
+                    row['demand_avg_taf'] = round(avg_dem, 2)
+                    row['percent_of_demand_avg'] = round(
+                        (row['delivery_avg_taf'] / avg_dem) * 100, 2
+                    )
+            elif demand_mode == 'table_a':
+                monthly_taf = MWD_TABLE_A_ANNUAL_TAF / 12.0
+                row['demand_avg_taf'] = round(monthly_taf, 2)
+                if monthly_taf > 0:
+                    row['percent_of_demand_avg'] = round(
+                        (row['delivery_avg_taf'] / monthly_taf) * 100, 2
+                    )
 
             results.append(row)
 
@@ -734,26 +600,52 @@ def calculate_contractor_shortage_monthly(
     return results
 
 
+def _compute_perdv_demand_taf(
+    df: pd.DataFrame,
+    delivery_vars: List[str],
+    shortage_vars: List[str],
+    perdv_vars: List[str],
+) -> pd.Series:
+    """Compute demand using V3's PERDV formula: demand = (delivery + shortage) / PERDV.
+
+    For multi-arc contractors (e.g., ACFC, VNTRA), each arc has its own PERDV.
+    demand = sum_i( (D_i + SHORT_i) / PERDV_i )
+
+    Returns monthly demand in TAF. Months with PERDV=0 (0/0 case) become NaN.
+    """
+    demand_cfs = pd.Series(0.0, index=df.index)
+
+    for i, (d_var, s_var) in enumerate(zip(delivery_vars, shortage_vars)):
+        if d_var not in df.columns:
+            continue
+        d = pd.to_numeric(df[d_var], errors='coerce').fillna(0)
+        s = pd.to_numeric(df[s_var], errors='coerce').fillna(0) if s_var in df.columns else 0
+
+        pv_var = perdv_vars[i] if i < len(perdv_vars) else perdv_vars[-1]
+        if pv_var in df.columns:
+            pv = pd.to_numeric(df[pv_var], errors='coerce')
+            pv_safe = pv.replace(0, np.nan)
+            demand_cfs = demand_cfs + (d + s) / pv_safe
+        else:
+            demand_cfs = demand_cfs + d + s
+
+    return demand_cfs * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+
+
 def calculate_contractor_period_summary(
     df: pd.DataFrame,
     contractor_code: str,
     delivery_vars: List[str],
     shortage_vars: List[str],
-    demand_var: Optional[str] = None,
-    demand_df: Optional[pd.DataFrame] = None
+    perdv_vars: Optional[List[str]] = None,
+    demand_mode: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Calculate period-of-record summary for a contractor.
-    
-    Args:
-        df: Main CalSim output DataFrame with delivery/shortage data
-        contractor_code: Contractor short code (e.g., 'MWD')
-        delivery_vars: List of delivery variable names
-        shortage_vars: List of shortage variable names
-        demand_var: Name of demand variable in demand_df (optional)
-        demand_df: DataFrame containing demand data (optional)
-    
-    Returns:
-        Dictionary with period summary statistics, or None if no delivery data
+
+    Demand computation matches V3 DataExtraction.py:
+    - perdv_vars present: demand = (delivery + shortage) / PERDV_SWP_x
+    - demand_mode='table_a': MWD Table A contract (1911.5 TAF/yr)
+    - neither: demand not computed
     """
     available_delivery = [v for v in delivery_vars if v in df.columns]
     available_shortage = [v for v in shortage_vars if v in df.columns]
@@ -774,7 +666,6 @@ def calculate_contractor_period_summary(
         'total_years': len(water_years),
     }
 
-    # Annual delivery statistics
     annual_delivery = df_copy.groupby('WaterYear')['total_delivery'].sum()
     result['annual_delivery_avg_taf'] = round(float(annual_delivery.mean()), 2)
     if annual_delivery.mean() > 0:
@@ -782,71 +673,53 @@ def calculate_contractor_period_summary(
     else:
         result['annual_delivery_cv'] = 0
 
-    # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
         result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
 
-    # Shortage statistics
+    # Shortage
     if available_shortage:
         total_shortage_cfs = df_copy[available_shortage].sum(axis=1)
         df_copy['total_shortage'] = total_shortage_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
         annual_shortage = df_copy.groupby('WaterYear')['total_shortage'].sum()
-        # Use threshold to filter out floating-point noise from CalSim solver
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
         result['annual_shortage_avg_taf'] = round(float(annual_shortage.mean()), 2)
         result['shortage_years_count'] = int(shortage_years)
         result['shortage_frequency_pct'] = round((shortage_years / len(water_years)) * 100, 2)
 
-        # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
             result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
 
-        # Reliability = 1 - (shortage / delivery)
-        if result['annual_delivery_avg_taf'] > 0:
-            result['reliability_pct'] = round(
-                (1 - result['annual_shortage_avg_taf'] / result['annual_delivery_avg_taf']) * 100, 2
-            )
-        else:
-            result['reliability_pct'] = None
+        result['reliability_pct'] = round(
+            ((annual_shortage <= SHORTAGE_THRESHOLD_TAF).sum() / len(water_years)) * 100, 2
+        )
     else:
         result['annual_shortage_avg_taf'] = None
         result['shortage_years_count'] = None
         result['shortage_frequency_pct'] = None
         result['reliability_pct'] = None
 
-    # Demand and percent of demand statistics
+    # Demand — matching V3 DataExtraction.py
     result['annual_demand_avg_taf'] = None
     result['avg_pct_demand_met'] = None
 
-    if demand_var and demand_df is not None and demand_var in demand_df.columns:
-        try:
-            # Ensure demand_df has water year column
-            if 'WaterYear' not in demand_df.columns:
-                demand_df = add_water_year_month(demand_df)
-
-            # Get demand values - demand data is already in TAF (no conversion needed)
-            demand_df_copy = demand_df.copy()
-
-            # NOTE: DEMANDS CSV values are already in TAF, not CFS
-            # Do NOT apply CFS_TO_TAF conversion here
-            demand_df_copy['demand_taf'] = pd.to_numeric(demand_df_copy[demand_var], errors='coerce')
-
-            # Calculate annual demand
-            annual_demand = demand_df_copy.groupby('WaterYear')['demand_taf'].sum()
-
-            if not annual_demand.empty and annual_demand.mean() > 0:
-                result['annual_demand_avg_taf'] = round(float(annual_demand.mean()), 2)
-
-                # Calculate percent of demand met
-                if result['annual_delivery_avg_taf'] and result['annual_demand_avg_taf'] > 0:
-                    pct = (result['annual_delivery_avg_taf'] / result['annual_demand_avg_taf']) * 100
-                    # Clip to 0-100 range (can exceed 100% if carryover/surplus is used)
-                    result['avg_pct_demand_met'] = round(min(100.0, max(0.0, pct)), 2)
-
-                log.debug(f"{contractor_code}: demand_avg={result['annual_demand_avg_taf']}, pct_met={result['avg_pct_demand_met']}")
-        except Exception as e:
-            log.warning(f"Error calculating demand for {contractor_code}: {e}")
+    if perdv_vars:
+        df_copy['demand_taf'] = _compute_perdv_demand_taf(
+            df_copy, delivery_vars, shortage_vars, perdv_vars
+        )
+        annual_demand = df_copy.groupby('WaterYear')['demand_taf'].sum()
+        avg_demand = float(annual_demand.mean())
+        if avg_demand > 0:
+            result['annual_demand_avg_taf'] = round(avg_demand, 2)
+            result['avg_pct_demand_met'] = round(
+                (result['annual_delivery_avg_taf'] / avg_demand) * 100, 2
+            )
+    elif demand_mode == 'table_a':
+        result['annual_demand_avg_taf'] = MWD_TABLE_A_ANNUAL_TAF
+        if MWD_TABLE_A_ANNUAL_TAF > 0:
+            result['avg_pct_demand_met'] = round(
+                (result['annual_delivery_avg_taf'] / MWD_TABLE_A_ANNUAL_TAF) * 100, 2
+            )
 
     return result
 
@@ -855,61 +728,42 @@ def calculate_all_mi_statistics(
     scenario_id: str,
     contractors: Optional[Dict[str, Dict]] = None,
     csv_path: Optional[str] = None,
-    demand_csv_path: Optional[str] = None,
     use_local: bool = False
 ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
-    """
-    Calculate all statistics for M&I contractors for a scenario.
-    
-    Args:
-        scenario_id: Scenario ID (e.g., 's0020')
-        contractors: Optional contractor mappings (defaults to MI_CONTRACTOR_VARIABLES)
-        csv_path: Optional path to main CalSim output CSV
-        demand_csv_path: Optional path to DEMANDS CSV
-        use_local: Use local files instead of S3
+    """Calculate all statistics for M&I contractors for a scenario.
 
-    Returns:
-        Tuple of (delivery_monthly_rows, shortage_monthly_rows, period_summary_rows)
+    All data sourced from DV output CSV. Demand computed per V3 DataExtraction.py:
+    - SWP contractors: (delivery + shortage) / PERDV_SWP_x
+    - MWD: Table A contract (1911.5 TAF/yr)
     """
     log.info(f"Processing scenario: {scenario_id}")
 
-    # Use built-in contractor mappings
     if contractors is None:
         contractors = MI_CONTRACTOR_VARIABLES
 
-    # Load CalSim output
     if csv_path:
         df = load_calsim_csv_from_file(csv_path)
     else:
         df = load_calsim_csv_from_s3(scenario_id, [])
 
-    # Add water year/month
     df = add_water_year_month(df)
 
     available_columns = list(df.columns)
     log.info(f"Available columns: {len(available_columns)}")
-
-    # Load DEMANDS CSV for percent of demand calculations
-    demand_df = load_demands_csv(scenario_id, use_local=use_local, demand_csv_path=demand_csv_path)
-    if demand_df is not None:
-        demand_df = add_water_year_month(demand_df)
-        log.info(f"Loaded demand data with {len(demand_df)} rows, {len(demand_df.columns)} columns")
-    else:
-        log.warning("No demand data available - percent of demand will not be calculated")
 
     delivery_monthly_rows = []
     shortage_monthly_rows = []
     period_summary_rows = []
 
     mapped_count = 0
-    demand_count = 0
 
     for code, info in contractors.items():
         delivery_vars = info.get('delivery_vars', [])
         shortage_vars = info.get('shortage_vars', [])
-        demand_var = info.get('demand_var')
 
-        # Check if any variables exist
+        perdv_vars = info.get('perdv_vars')
+        demand_mode = info.get('demand_mode')
+
         has_delivery = any(v in available_columns for v in delivery_vars)
         has_shortage = any(v in available_columns for v in shortage_vars)
 
@@ -918,38 +772,31 @@ def calculate_all_mi_statistics(
 
         mapped_count += 1
 
-        # Calculate delivery monthly (with demand if available)
         if has_delivery:
             monthly_rows = calculate_contractor_delivery_monthly(
-                df, code, delivery_vars,
-                demand_var=demand_var,
-                demand_df=demand_df
+                df, code, delivery_vars, shortage_vars=shortage_vars,
+                perdv_vars=perdv_vars, demand_mode=demand_mode,
             )
             for row in monthly_rows:
                 row['scenario_short_code'] = scenario_id
             delivery_monthly_rows.extend(monthly_rows)
 
-        # Calculate shortage monthly
         if has_shortage:
             shortage_rows = calculate_contractor_shortage_monthly(df, code, shortage_vars)
             for row in shortage_rows:
                 row['scenario_short_code'] = scenario_id
             shortage_monthly_rows.extend(shortage_rows)
 
-        # Calculate period summary (with demand if available)
         summary = calculate_contractor_period_summary(
             df, code, delivery_vars, shortage_vars,
-            demand_var=demand_var,
-            demand_df=demand_df
+            perdv_vars=perdv_vars,
+            demand_mode=demand_mode,
         )
         if summary:
             summary['scenario_short_code'] = scenario_id
             period_summary_rows.append(summary)
-            if summary.get('annual_demand_avg_taf') is not None:
-                demand_count += 1
 
     log.info(f"Mapped {mapped_count}/{len(contractors)} contractors with data")
-    log.info(f"Calculated demand for {demand_count}/{mapped_count} contractors")
     log.info(f"Generated: {len(delivery_monthly_rows)} delivery monthly, "
              f"{len(shortage_monthly_rows)} shortage monthly, "
              f"{len(period_summary_rows)} period summary rows")
@@ -974,10 +821,6 @@ def main():
     parser.add_argument(
         '--csv-path',
         help='Local CalSim output CSV file path (instead of S3)'
-    )
-    parser.add_argument(
-        '--demand-csv',
-        help='Local DEMANDS CSV file path'
     )
     parser.add_argument(
         '--use-local',
@@ -1011,7 +854,6 @@ def main():
             delivery_monthly, shortage_monthly, period_summary = calculate_all_mi_statistics(
                 scenario_id,
                 csv_path=args.csv_path,
-                demand_csv_path=args.demand_csv,
                 use_local=args.use_local
             )
 

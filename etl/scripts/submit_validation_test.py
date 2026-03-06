@@ -57,7 +57,7 @@ def submit_validation_job(
         )
         
         job_id = response['jobId']
-        print(f"✅ Job submitted successfully!")
+        print("✅ Job submitted successfully!")
         print(f"   🆔 Job ID: {job_id}")
         print(f"   📊 Monitor: https://console.aws.amazon.com/batch/home#jobs/detail/{job_id}")
         
@@ -100,11 +100,11 @@ def get_validation_results(zip_bucket, scenario_id):
     summary_key = f"scenario/{scenario_id}/validation/{scenario_id}_validation_summary.json"
     
     try:
-        print(f"📊 Downloading validation results...")
+        print("📊 Downloading validation results...")
         response = s3_client.get_object(Bucket=zip_bucket, Key=summary_key)
         summary = json.loads(response['Body'].read())
         
-        print(f"📄 VALIDATION RESULTS:")
+        print("📄 VALIDATION RESULTS:")
         print(f"   Status: {summary['status']}")
         print(f"   Common columns: {summary['columns_common']}")
         print(f"   Date range: {summary['overlap_start']} to {summary['overlap_end']}")
@@ -116,7 +116,7 @@ def get_validation_results(zip_bucket, scenario_id):
         
         # Show S3 locations
         mismatches_key = f"scenario/{scenario_id}/validation/{scenario_id}_validation_mismatches.csv"
-        print(f"📁 Detailed reports:")
+        print("📁 Detailed reports:")
         print(f"   Summary: s3://{zip_bucket}/{summary_key}")
         print(f"   Mismatches: s3://{zip_bucket}/{mismatches_key}")
         

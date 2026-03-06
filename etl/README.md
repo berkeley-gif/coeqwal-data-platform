@@ -97,6 +97,108 @@ docker run --platform linux/amd64 -v ./dss_processing:/data --entrypoint python 
 ```
 ---
 
+## Data Accuracy Verification
+
+End-to-end verification of data accuracy across the full pipeline, from DSS extraction through database statistics to API responses. Verification runs at five layers:
+
+```
+DSS Files ──► S3 CSVs (DV + SV) ──► PostgreSQL ──► JSON API ──► Frontend
+  Layer 1        Layer 2              Layer 2b       Layer 3     Layer 4
+  (extraction)   (ETL statistics)     (tier data)    (API)       (status page)
+```
+
+Variable lists sourced from `COEQWAL_V3/notebooks/variable_groupings.csv` and mapping CSVs (`DrinkingWater_Mapping.csv`, `Agricultural_Mapping.csv`, `Eflows_Mapping.csv`).
+
+### Layer 1: Extraction (DSS → CSV)
+
+Validates that `dss_to_csv.py` extracts data correctly from HEC-DSS files. Uses `validate_csvs.py` to compare extracted CSVs against reference CSVs.
+
+Manifests stored in `audits/validation_mismatches/{scenario_id}_manifest.json`.
+
+### Layer 2: ETL Statistics (CSV → DB)
+
+Computes expected values from reference CSVs and compares against database values.
+
+```bash
+# Single scenario
+python etl/statistics/verify_all_sections.py --scenario s0020
+
+# All scenarios with JSON reports
+python etl/statistics/verify_all_sections.py --all-scenarios --report-dir audits/verification_reports
+
+# CSV-only mode (no DB connection needed)
+python etl/statistics/verify_all_sections.py --scenario s0020 --csv-only
+```
+
+**Sections verified:**
+- **Reservoirs**: April/Sept storage (TAF + % capacity), annual average, spill frequency
+- **CWS Aggregates**: Annual delivery (TAF), shortage, reliability
+- **CWS Demand Units**: Per-DU annual delivery (TAF) for sample DUs
+- **AG Demand Units**: SW delivery, GW pumping, demand, reliability for sample DUs
+- **AG Aggregates**: Annual delivery (TAF)
+- **M&I Contractors**: Delivery, shortage, reliability, % demand met
+- **Env Flows**: Average CFS, Pearson r, % unimpaired, % functional flows
+- **Refuge**: Delivery, shortage, reliability
+- **Tiers**: All 9 tier codes verified against staging CSVs and DB
+
+**Tolerances**: `abs_tol=0.5`, `rel_tol=0.01` (configurable per check)
+
+**Output**: `audits/verification_reports/{scenario_id}_layer2.json`
+
+### Layer 3: API Verification (DB → API)
+
+Queries API endpoints and compares responses to direct database queries.
+
+```bash
+# Single scenario
+python etl/statistics/verify_api.py --scenario s0020
+
+# Custom API URL
+python etl/statistics/verify_api.py --scenario s0020 --api-url http://localhost:8000
+
+# All scenarios
+python etl/statistics/verify_api.py --all-scenarios
+```
+
+**Endpoints verified:**
+- `GET /api/statistics/batch` (storage, CWS, AG)
+- `GET /api/tiers/scenarios/{id}/tiers` (all 9 tier codes)
+- `GET /api/statistics/scenarios/{id}/channels/period-summary` (env flow)
+
+**Output**: `audits/verification_reports/{scenario_id}_layer3.json`
+
+### Layer 4: Public Status Page
+
+Verification results are served by `GET /api/verification/status` and displayed at `/verification` on the frontend. Shows per-scenario pass/fail grid with drill-down to individual checks.
+
+### Metric coverage
+
+**Fully verified (ETL + DB + API):**
+- CWS: delivery volume, % of demand, absolute shortage
+- AG: SW delivery, GW pumping, total shortage, shortage %, reliability
+- Env Flows: volume, % unimpaired, % functional flows, alteration index (Pearson r)
+- Refuge: delivery, shortage, reliability
+- Reservoirs: April/Sept storage (TAF + %), spill frequency
+- Tiers: CWS_DEL, AG_REV, ENV_FLOWS, RES_STOR, GW_STOR, DELTA_ECO, FW_DELTA_USES, FW_EXP, WRC_SALMON_AB
+
+**Not yet implemented:**
+- Delta outflow volumes (NDO)
+- April/September X2 position (X2_PRV_KM)
+- Salinity at Rock Slough, Collinsville (RS_EC_MONTH, CO_EC_MONTH)
+- Groundwater level, storage volume, level/storage change
+- Salmon abundance (real metric, not hardcoded tier)
+
+### How to add a new scenario
+
+1. Ensure DSS-to-CSV extraction has run and manifests show PASS in `audits/validation_mismatches/`
+2. Run the ETL statistics: `python etl/statistics/run_all.py --scenario {id}`
+3. Load tier data: `python etl/tier_data/load_all_tier_results.py`
+4. Run Layer 2 verification: `python etl/statistics/verify_all_sections.py --scenario {id}`
+5. Run Layer 3 verification: `python etl/statistics/verify_api.py --scenario {id}`
+6. Check results at `/verification` on the frontend
+
+---
+
 ## Validation framework
 
 ### Tolerance parameters
@@ -393,6 +495,74 @@ Table A contracts represent the maximum annual water entitlement each SWP contra
 Variable mappings derived from:
 - `COEQWAL_repo/coeqwal/notebooks/coeqwalpackage/DataExtraction.py` (lines 1061-1330)
 - `/etl/pipelines/MI_variable_list_comparison.md` (list comparison analysis)
+
+---
+
+## Agricultural demand units (AG)
+
+### Variable naming conventions
+
+| Metric | Variable pattern | Example | Source | Units |
+|--------|-----------------|---------|--------|-------|
+| Applied water demand | `AW_{DU_ID}` | `AW_02_PA1` | DV | CFS |
+| Surface water delivery | `DN_{DU_ID}` | `DN_02_PA1` | DV | CFS |
+| Groundwater pumping | `GP_{DU_ID}` | `GP_02_PA1` | DV | CFS |
+| GW restriction shortage | `GW_SHORT_{DU_ID}` | `GW_SHORT_50_PU` | DV | CFS |
+
+All CFS values converted to TAF via `CFS × DaysInMonth × 0.001983471`.
+
+### Shortage calculation
+
+AG shortage = `max(demand − delivery, 0)` computed in the ETL.
+
+**Important**: `GW_SHORT_*` variables track groundwater pumping restriction shortages
+(SGMA-related), not total delivery shortage. They are only defined for San Joaquin River
+basin DUs and only in scenarios with SGMA groundwater limits enabled.
+
+### AG aggregates
+
+AG demand units roll up to predefined aggregate regions (CVP North, CVP South, SWP North, SWP South, etc.) using the `ag_aggregate_entity` table. Aggregate statistics are sums of their constituent DU statistics.
+
+### Source reference
+
+Variable lists derived from:
+- `COEQWAL_V3/notebooks/variable_groupings.csv` (AG mapping)
+- `COEQWAL_V3/notebooks/coeqwalpackage/DataExtraction.py`
+- `/database/seed_tables/04_calsim_data/ag_du_entity.csv`
+
+---
+
+## Reservoir variables
+
+### Storage
+
+| Variable | Description | Units |
+|----------|-------------|-------|
+| `S_{CODE}` | End-of-month storage | TAF |
+| `S_{CODE}LEVELxDV` | Storage zone x (x = 1–6) | TAF |
+
+The highest zone (5 or 6 depending on reservoir) represents capacity.
+
+### Spill
+
+| Variable | Description | Units |
+|----------|-------------|-------|
+| `C_{CODE}_FLOOD` | Flood release (spill) | CFS |
+
+Spill is converted to TAF via `CFS × DaysInMonth × 0.001983471`.
+
+### Key capacity values
+
+| Reservoir | Code | Capacity (TAF) | Capacity variable |
+|-----------|------|----------------|-------------------|
+| Folsom | `FOLSM` | 967.0 | `S_FOLSMLEVEL6DV` (hardcoded) |
+| Millerton | `MLRTN` | 524.0 | `S_MLRTNLEVEL5DV` (hardcoded) |
+| Oroville | `OROVL` | 3424.8 | `S_OROVLLEVEL6DV` (hardcoded) |
+| New Melones | `MELON` | 2420.0 | `S_MELONLEVEL5DV` (hardcoded) |
+| Shasta | `SHSTA` | 4552.0 | `S_SHSTALEVEL5DV` (from DV) |
+| Trinity | `TRNTY` | 2447.7 | `S_TRNTYLEVEL5DV` (from DV) |
+
+See `CAPACITY_OVERRIDES` in `etl/statistics/reservoirs/calculate_reservoir_statistics.py`.
 
 ---
 

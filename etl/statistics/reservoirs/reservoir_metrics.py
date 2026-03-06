@@ -419,8 +419,8 @@ RESERVOIR_THRESHOLDS = {
         'flood_var': 'S_SHSTALEVEL5DV',
         'dead_var': 'S_SHSTALEVEL1DV',
     },
-    'TRNTY': {  # Trinity (2448 TAF)
-        'flood_var': 'S_TRNTYLEVEL5DV',
+    'TRNTY': {  # Trinity (2448 TAF) - capacity at LEVEL5DV, flood at LEVEL4DV
+        'flood_var': 'S_TRNTYLEVEL4DV',
         'dead_var': 'S_TRNTYLEVEL1DV',
     },
     'FOLSM': {  # Folsom (975 TAF)
@@ -811,8 +811,8 @@ RESERVOIR_THRESHOLDS = {
         'flood_var': 'S_PYRMDLEVEL5DV',
         'dead_var': None,
     },
-    'SVRWD': {  # Silverwood (73 TAF)
-        'flood_var': 'S_SVWRDLEVEL5DV',
+    'SVRWD': {  # Silverwood (73 TAF) — DV uses S_SVRWD_1..5, not LEVELxDV
+        'flood_var': 'S_SVRWD_5',
         'dead_var': None,
     },
     'PRRIS': {  # Perris (131 TAF)

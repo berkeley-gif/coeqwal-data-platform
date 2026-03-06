@@ -19,7 +19,6 @@ import argparse
 import json
 import logging
 import os
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -68,10 +67,8 @@ SHORTAGE_THRESHOLD_TAF = 0.1
 # Simplified: CFS * days * 86400 / 43560 / 1000 = CFS * days * 0.001983471
 CFS_TO_TAF_PER_DAY = 0.001983471
 
-# Paths to local data
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-LOCAL_PIPELINES_DIR = PROJECT_ROOT / "etl/pipelines"
-LOCAL_DEMANDS_DIR = PROJECT_ROOT / "etl/demands"
+# MWD Table A contract demand (from DataExtraction.py line 914-920)
+MWD_TABLE_A_ANNUAL_TAF = 1911.5
 
 
 # =============================================================================
@@ -79,58 +76,52 @@ LOCAL_DEMANDS_DIR = PROJECT_ROOT / "etl/demands"
 # =============================================================================
 
 CWS_AGGREGATES = {
-    # SWP Total - demand based on Table A contracts
     'swp_total': {
         'id': 1,
         'label': 'SWP Total M&I',
         'delivery_var': 'DEL_SWP_PMI',
         'shortage_var': 'SHORT_SWP_PMI',
-        'demand_var': 'DEM_SWP_PMI',  # May need to sum constituents if not available
+        'demand_mode': 'del_plus_short',
         'description': 'Total State Water Project M&I deliveries',
     },
-    # SWP North of Delta
     'swp_nod': {
         'id': 5,
         'label': 'SWP North',
         'delivery_var': 'DEL_SWP_PMI_N',
         'shortage_var': 'SHORT_SWP_PMI_N',
-        'demand_var': 'DEM_SWP_PMI_N',  # May need to sum constituents
+        'demand_mode': 'del_plus_short',
         'description': 'SWP M&I deliveries - North of Delta',
     },
-    # SWP South of Delta
     'swp_sod': {
         'id': 6,
         'label': 'SWP South',
         'delivery_var': 'DEL_SWP_PMI_S',
         'shortage_var': 'SHORT_SWP_PMI_S',
-        'demand_var': 'DEM_SWP_PMI_S',  # May need to sum constituents
+        'demand_mode': 'del_plus_short',
         'description': 'SWP M&I deliveries - South of Delta',
     },
-    # CVP North of Delta
     'cvp_nod': {
         'id': 2,
         'label': 'CVP North',
         'delivery_var': 'DEL_CVP_PMI_N',
         'shortage_var': 'SHORT_CVP_PMI_N',
-        'demand_var': 'DEM_CVP_PMI_N',  # May need to sum constituents
+        'demand_mode': 'del_plus_short',
         'description': 'CVP M&I deliveries - North of Delta',
     },
-    # CVP South of Delta
     'cvp_sod': {
         'id': 3,
         'label': 'CVP South',
         'delivery_var': 'DEL_CVP_PMI_S',
         'shortage_var': 'SHORT_CVP_PMI_S',
-        'demand_var': 'DEM_CVP_PMI_S',  # May need to sum constituents
+        'demand_mode': 'del_plus_short',
         'description': 'CVP M&I deliveries - South of Delta',
     },
-    # MWD - Metropolitan Water District
     'mwd': {
         'id': 4,
         'label': 'Metropolitan Water District',
         'delivery_var': 'DEL_SWP_MWD',
         'shortage_var': 'SHORT_SWP_MWD',
-        'demand_var': 'TABLEA_CONTRACT_MWD',  # MWD uses Table A contract
+        'demand_mode': 'table_a',
         'description': 'MWD Southern California aggregate',
     },
 }
@@ -221,111 +212,6 @@ def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> p
     return data_df
 
 
-def load_demands_csv(
-    scenario_id: str,
-    use_local: bool = False,
-    demand_csv_path: Optional[str] = None
-) -> Optional[pd.DataFrame]:
-    """
-    Load DEMANDS CSV for a scenario.
-    
-    The DEMANDS CSV contains demand variables (DEM_*, TABLEA_CONTRACT_*, etc.)
-    that are used to calculate percent of demand metrics.
-    
-    Args:
-        scenario_id: Scenario ID (e.g., 's0020')
-        use_local: Use local files instead of S3
-        demand_csv_path: Override path for demand CSV
-    
-    Returns:
-        DataFrame with demand data, or None if not found
-    """
-    if demand_csv_path:
-        # Use provided path
-        if not Path(demand_csv_path).exists():
-            log.warning(f"Demand CSV not found at: {demand_csv_path}")
-            return None
-        # Demand CSV files often have duplicate columns - dedupe them
-        return load_calsim_csv_from_file(demand_csv_path, dedupe_columns=True)
-    
-    if use_local:
-        # Try local paths - check both pipelines and demands folders
-        possible_paths = [
-            # Full DEMANDS CSV with scenario suffix
-            LOCAL_PIPELINES_DIR / f"{scenario_id}_DCRadjBL_2020LU_wTUCP_DEMANDS.csv",
-            LOCAL_PIPELINES_DIR / f"{scenario_id}_adjBL_wTUCP_DEMANDS.csv",
-            LOCAL_PIPELINES_DIR / f"{scenario_id}_DEMANDS.csv",
-            # Simplified demand CSV
-            LOCAL_DEMANDS_DIR / f"{scenario_id}_demand.csv",
-        ]
-        
-        for path in possible_paths:
-            if path.exists():
-                log.info(f"Loading demands from: {path}")
-                # Demand CSV files often have duplicate columns - dedupe them
-                return load_calsim_csv_from_file(str(path), dedupe_columns=True)
-        
-        log.warning(f"No DEMANDS CSV found for scenario {scenario_id} locally")
-        return None
-    
-    # S3 access
-    if not HAS_BOTO3:
-        log.warning("boto3 not available for S3 access")
-        return None
-    
-    s3 = boto3.client('s3')
-    
-    # Try different possible S3 locations
-    possible_keys = [
-        f"reference/{scenario_id}_demand.csv",
-        f"scenario/{scenario_id}/csv/{scenario_id}_DEMANDS.csv",
-    ]
-    
-    for key in possible_keys:
-        try:
-            log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
-            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            
-            # Read header
-            import io
-            content = response['Body'].read()
-            header_df = pd.read_csv(io.BytesIO(content), header=None, nrows=8)
-            col_names = header_df.iloc[1].tolist()
-            
-            # Handle duplicate column names by keeping only the first occurrence
-            seen = set()
-            unique_col_names = []
-            duplicate_indices = []
-            for i, name in enumerate(col_names):
-                if name in seen:
-                    duplicate_indices.append(i)
-                else:
-                    seen.add(name)
-                    unique_col_names.append(name)
-            
-            if duplicate_indices:
-                log.info(f"Found {len(duplicate_indices)} duplicate columns in demand CSV, keeping first occurrence")
-            
-            # Read data
-            data_df = pd.read_csv(io.BytesIO(content), header=None, skiprows=7, low_memory=False)
-            
-            # Drop duplicate columns
-            if duplicate_indices:
-                data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
-            
-            data_df.columns = unique_col_names
-            
-            log.info(f"Loaded demands from S3: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-            return data_df
-            
-        except Exception as e:
-            log.debug(f"Could not load {key}: {e}")
-            continue
-    
-    log.warning(f"No DEMANDS CSV found for scenario {scenario_id} in S3")
-    return None
-
-
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """Add water year and water month columns."""
     df = df.copy()
@@ -364,29 +250,25 @@ def calculate_aggregate_monthly(
     aggregate_id: int,
     delivery_var: str,
     shortage_var: str,
-    demand_var: Optional[str] = None,
-    demand_df: Optional[pd.DataFrame] = None
+    demand_mode: str = 'del_plus_short',
 ) -> List[Dict[str, Any]]:
     """
     Calculate monthly statistics for a CWS aggregate.
-    
+
     Args:
-        df: Main CalSim output DataFrame with delivery/shortage data
+        df: Main CalSim DV output DataFrame with delivery/shortage data
         short_code: Aggregate short code (e.g., 'swp_total')
         aggregate_id: Database ID for this aggregate
         delivery_var: Name of delivery variable
         shortage_var: Name of shortage variable
-        demand_var: Name of demand variable in demand_df (optional)
-        demand_df: DataFrame containing demand data (optional)
+        demand_mode: 'del_plus_short' (default) or 'table_a' (MWD constant)
 
     Returns list of dicts for cws_aggregate_monthly table.
     """
     results = []
 
-    # Check if variables exist
     has_delivery = delivery_var in df.columns
     has_shortage = shortage_var in df.columns
-    has_demand = demand_var is not None and demand_df is not None and demand_var in demand_df.columns
 
     if not has_delivery:
         log.warning(f"Delivery variable {delivery_var} not found for {short_code}")
@@ -443,19 +325,21 @@ def calculate_aggregate_monthly(
             row['shortage_cv'] = None
             row['shortage_frequency_pct'] = None
 
-        # Demand and percent of demand (annual)
+        # Demand computation
         row['demand_avg_taf'] = None
         row['percent_of_demand_avg'] = None
-        if has_demand:
-            try:
-                demand_data = demand_df[demand_var].dropna()
-                if not demand_data.empty:
-                    row['demand_avg_taf'] = round(float(demand_data.mean()), 2)
-                    if row['demand_avg_taf'] > 0:
-                        pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
-                        row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
-            except Exception as e:
-                log.warning(f"Error calculating demand for {short_code}: {e}")
+        if demand_mode == 'table_a':
+            row['demand_avg_taf'] = round(MWD_TABLE_A_ANNUAL_TAF / 12.0, 2)
+            if row['delivery_avg_taf'] is not None and row['demand_avg_taf'] > 0:
+                pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
+        elif has_shortage:
+            demand_data = (df['delivery_taf'] + df['shortage_taf']).dropna()
+            if not demand_data.empty:
+                row['demand_avg_taf'] = round(float(demand_data.mean()), 2)
+                if row['demand_avg_taf'] > 0:
+                    pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                    row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
 
         results.append(row)
     else:
@@ -502,32 +386,21 @@ def calculate_aggregate_monthly(
                 row['shortage_cv'] = None
                 row['shortage_frequency_pct'] = None
 
-            # Demand and percent of demand (monthly)
+            # Demand computation (monthly)
             row['demand_avg_taf'] = None
             row['percent_of_demand_avg'] = None
-            if has_demand:
-                try:
-                    # Get demand data for this month
-                    if 'WaterMonth' in demand_df.columns:
-                        month_demand_df = demand_df[demand_df['WaterMonth'] == wm]
-                        demand_data = month_demand_df[demand_var].dropna()
-                    else:
-                        demand_data = demand_df[demand_var].dropna()
-                    
-                    if not demand_data.empty:
-                        # Convert CFS to TAF if demand_df has DateTime column
-                        if 'DateTime' in demand_df.columns:
-                            days_in_month = month_demand_df['DateTime'].dt.daysinmonth.mean() if 'DateTime' in month_demand_df.columns else 30
-                            demand_taf = float(demand_data.mean()) * days_in_month * CFS_TO_TAF_PER_DAY
-                        else:
-                            demand_taf = float(demand_data.mean())
-                        
-                        row['demand_avg_taf'] = round(demand_taf, 2)
-                        if demand_taf > 0:
-                            pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
-                            row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
-                except Exception as e:
-                    log.warning(f"Error calculating monthly demand for {short_code} month {wm}: {e}")
+            if demand_mode == 'table_a':
+                row['demand_avg_taf'] = round(MWD_TABLE_A_ANNUAL_TAF / 12.0, 2)
+                if row['delivery_avg_taf'] is not None and row['demand_avg_taf'] > 0:
+                    pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                    row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
+            elif has_shortage and not shortage_data.empty:
+                demand_month = (month_df['delivery_taf'] + month_df['shortage_taf']).dropna()
+                if not demand_month.empty:
+                    row['demand_avg_taf'] = round(float(demand_month.mean()), 2)
+                    if row['demand_avg_taf'] > 0:
+                        pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                        row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
 
             results.append(row)
 
@@ -540,20 +413,18 @@ def calculate_aggregate_period_summary(
     aggregate_id: int,
     delivery_var: str,
     shortage_var: str,
-    demand_var: Optional[str] = None,
-    demand_df: Optional[pd.DataFrame] = None
+    demand_mode: str = 'del_plus_short',
 ) -> Optional[Dict[str, Any]]:
     """
     Calculate period-of-record summary for a CWS aggregate.
-    
+
     Args:
-        df: Main CalSim output DataFrame with delivery/shortage data
+        df: Main CalSim DV output DataFrame with delivery/shortage data
         short_code: Aggregate short code (e.g., 'swp_total')
         aggregate_id: Database ID for this aggregate
         delivery_var: Name of delivery variable
         shortage_var: Name of shortage variable
-        demand_var: Name of demand variable in demand_df (optional)
-        demand_df: DataFrame containing demand data (optional)
+        demand_mode: 'del_plus_short' (default) or 'table_a' (MWD constant)
 
     Returns dict for cws_aggregate_period_summary table.
     """
@@ -605,59 +476,34 @@ def calculate_aggregate_period_summary(
         for p in EXCEEDANCE_PERCENTILES:
             result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
 
-        # Reliability = 1 - (avg shortage / avg delivery)
-        if result['annual_delivery_avg_taf'] > 0:
-            result['reliability_pct'] = round(
-                (1 - result['annual_shortage_avg_taf'] / result['annual_delivery_avg_taf']) * 100, 2
-            )
-            result['avg_pct_allocation_met'] = result['reliability_pct']
-        else:
-            result['reliability_pct'] = None
-            result['avg_pct_allocation_met'] = None
     else:
         result['annual_shortage_avg_taf'] = None
         result['shortage_years_count'] = None
         result['shortage_frequency_pct'] = None
-        result['reliability_pct'] = None
-        result['avg_pct_allocation_met'] = None
 
-    # Demand and percent of demand
+    # Demand computation
     result['annual_demand_avg_taf'] = None
     result['avg_pct_demand_met'] = None
-    
-    has_demand = demand_var is not None and demand_df is not None and demand_var in demand_df.columns
-    if has_demand:
-        try:
-            # Ensure demand_df has water year column
-            if 'WaterYear' not in demand_df.columns:
-                demand_df_copy = add_water_year_month(demand_df.copy())
-            else:
-                demand_df_copy = demand_df.copy()
-            
-            # Calculate annual demand
-            if 'DateTime' in demand_df_copy.columns:
-                # Convert CFS to TAF
-                demand_df_copy['DaysInMonth'] = demand_df_copy['DateTime'].dt.daysinmonth
-                demand_df_copy['demand_taf'] = (
-                    pd.to_numeric(demand_df_copy[demand_var], errors='coerce') * 
-                    demand_df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-                )
-                annual_demand = demand_df_copy.groupby('WaterYear')['demand_taf'].sum()
-            else:
-                annual_demand = demand_df_copy.groupby('WaterYear')[demand_var].sum()
-            
-            if not annual_demand.empty and annual_demand.mean() > 0:
-                result['annual_demand_avg_taf'] = round(float(annual_demand.mean()), 2)
-                
-                # Calculate percent of demand met
-                if result['annual_delivery_avg_taf'] and result['annual_demand_avg_taf'] > 0:
-                    pct = (result['annual_delivery_avg_taf'] / result['annual_demand_avg_taf']) * 100
-                    # Clip to 0-100 range (can exceed 100% if carryover/surplus is used)
-                    result['avg_pct_demand_met'] = round(min(100.0, max(0.0, pct)), 2)
-                    
-                log.debug(f"{short_code}: demand_avg={result['annual_demand_avg_taf']}, pct_met={result['avg_pct_demand_met']}")
-        except Exception as e:
-            log.warning(f"Error calculating demand for {short_code}: {e}")
+    result['reliability_pct'] = None
+    result['avg_pct_allocation_met'] = None
+
+    if demand_mode == 'table_a':
+        result['annual_demand_avg_taf'] = MWD_TABLE_A_ANNUAL_TAF
+    elif has_shortage:
+        df['demand_taf'] = df['delivery_taf'] + df['shortage_taf']
+        annual_demand = df.groupby('WaterYear')['demand_taf'].sum()
+        if not annual_demand.empty and annual_demand.mean() > 0:
+            result['annual_demand_avg_taf'] = round(float(annual_demand.mean()), 2)
+
+    if result['annual_demand_avg_taf'] and result['annual_demand_avg_taf'] > 0:
+        if result['annual_delivery_avg_taf']:
+            pct = (result['annual_delivery_avg_taf'] / result['annual_demand_avg_taf']) * 100
+            result['avg_pct_demand_met'] = round(min(100.0, max(0.0, pct)), 2)
+        if result.get('annual_shortage_avg_taf') is not None:
+            result['reliability_pct'] = round(
+                (1 - result['annual_shortage_avg_taf'] / result['annual_demand_avg_taf']) * 100, 2
+            )
+            result['avg_pct_allocation_met'] = result['reliability_pct']
 
     return result
 
@@ -665,42 +511,31 @@ def calculate_aggregate_period_summary(
 def calculate_all_cws_aggregate_statistics(
     scenario_id: str,
     csv_path: Optional[str] = None,
-    demand_csv_path: Optional[str] = None,
-    use_local: bool = False
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     Calculate all statistics for CWS aggregates for a scenario.
-    
+
+    Demand is computed as delivery + shortage from the DV output.
+    No external DEMANDS CSV is required.
+
     Args:
         scenario_id: Scenario ID (e.g., 's0020')
-        csv_path: Optional path to main CalSim output CSV
-        demand_csv_path: Optional path to DEMANDS CSV
-        use_local: Use local files instead of S3
+        csv_path: Optional path to main CalSim DV output CSV
 
     Returns:
         Tuple of (monthly_rows, period_summary_rows)
     """
     log.info(f"Processing scenario: {scenario_id}")
 
-    # Load CalSim output
     if csv_path:
         df = load_calsim_csv_from_file(csv_path)
     else:
         df = load_calsim_csv_from_s3(scenario_id)
 
-    # Add water year/month
     df = add_water_year_month(df)
 
     available_columns = list(df.columns)
     log.info(f"Available columns: {len(available_columns)}")
-
-    # Load DEMANDS CSV for percent of demand calculations
-    demand_df = load_demands_csv(scenario_id, use_local=use_local, demand_csv_path=demand_csv_path)
-    if demand_df is not None:
-        demand_df = add_water_year_month(demand_df)
-        log.info(f"Loaded demand data with {len(demand_df)} rows, {len(demand_df.columns)} columns")
-    else:
-        log.warning("No demand data available - percent of demand will not be calculated")
 
     monthly_rows = []
     period_summary_rows = []
@@ -711,8 +546,8 @@ def calculate_all_cws_aggregate_statistics(
     for short_code, info in CWS_AGGREGATES.items():
         delivery_var = info['delivery_var']
         shortage_var = info['shortage_var']
-        demand_var = info.get('demand_var')
         aggregate_id = info['id']
+        demand_mode = info.get('demand_mode', 'del_plus_short')
 
         if delivery_var not in available_columns:
             log.warning(f"Delivery variable {delivery_var} not found for {short_code}")
@@ -720,21 +555,17 @@ def calculate_all_cws_aggregate_statistics(
 
         mapped_count += 1
 
-        # Calculate monthly statistics (with demand if available)
         monthly = calculate_aggregate_monthly(
             df, short_code, aggregate_id, delivery_var, shortage_var,
-            demand_var=demand_var,
-            demand_df=demand_df
+            demand_mode=demand_mode,
         )
         for row in monthly:
             row['scenario_short_code'] = scenario_id
         monthly_rows.extend(monthly)
 
-        # Calculate period summary (with demand if available)
         summary = calculate_aggregate_period_summary(
             df, short_code, aggregate_id, delivery_var, shortage_var,
-            demand_var=demand_var,
-            demand_df=demand_df
+            demand_mode=demand_mode,
         )
         if summary:
             summary['scenario_short_code'] = scenario_id
@@ -767,15 +598,7 @@ def main():
         '--csv-path',
         help='Local CalSim output CSV file path (instead of S3)'
     )
-    parser.add_argument(
-        '--demand-csv',
-        help='Local DEMANDS CSV file path'
-    )
-    parser.add_argument(
-        '--use-local',
-        action='store_true',
-        help='Use local files from etl/pipelines instead of S3'
-    )
+    
     parser.add_argument(
         '--output-json',
         action='store_true',
@@ -802,8 +625,6 @@ def main():
             monthly, period_summary = calculate_all_cws_aggregate_statistics(
                 scenario_id,
                 csv_path=args.csv_path,
-                demand_csv_path=args.demand_csv,
-                use_local=args.use_local
             )
 
             all_monthly.extend(monthly)

@@ -103,9 +103,9 @@ def main():
             print(f"  {scenario}: T1={counts.get(1,0)}, T2={counts.get(2,0)}, T3={counts.get(3,0)}, T4={counts.get(4,0)}, Total={total}")
     
     print("\n✅ Done!")
-    print(f"\nNext steps:")
-    print(f"1. Upload these files to S3: s3://coeqwal-seeds-dev/10_tier/")
-    print(f"2. Run the upsert SQL in the database")
+    print("\nNext steps:")
+    print("1. Upload these files to S3: s3://coeqwal-seeds-dev/10_tier/")
+    print("2. Run the upsert SQL in the database")
 
 if __name__ == '__main__':
     main()

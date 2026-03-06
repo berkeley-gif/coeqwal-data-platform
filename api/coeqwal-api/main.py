@@ -75,6 +75,7 @@ from routes.env_flow_endpoints import (
     router as env_flow_router,
     set_db_pool as set_env_flow_db_pool,
 )
+from routes.verification_endpoints import router as verification_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -128,6 +129,10 @@ TAGS_METADATA = [
     {
         "name": "statistics",
         "description": "**Water system statistics.** Reservoir storage and M&I delivery/shortage percentile data for band charts.",
+    },
+    {
+        "name": "verification",
+        "description": "**Data verification.** Reports on data accuracy across the ETL pipeline.",
     },
     {
         "name": "system",
@@ -230,6 +235,9 @@ app.include_router(refuge_router)
 
 # Environmental river flows statistics router
 app.include_router(env_flow_router)
+
+# Verification status (data quality reports)
+app.include_router(verification_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)

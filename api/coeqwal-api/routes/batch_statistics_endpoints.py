@@ -188,7 +188,7 @@ async def fetch_cws_aggregates_period(pool, scenario_id: str) -> Dict[str, Any]:
             p.annual_delivery_avg_taf,
             p.reliability_pct,
             p.shortage_frequency_pct
-        FROM cws_aggregate_period p
+        FROM cws_aggregate_period_summary p
         JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
         WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
         ORDER BY e.display_order
@@ -215,10 +215,10 @@ async def fetch_ag_aggregates_monthly(pool, scenario_id: str) -> Dict[str, Any]:
             e.short_code, e.label,
             m.water_month,
             m.delivery_avg_taf, m.delivery_cv,
-            m.delivery_q0, m.delivery_q10, m.delivery_q30, m.delivery_q50,
-            m.delivery_q70, m.delivery_q90, m.delivery_q100
+            m.q0, m.q10, m.q30, m.q50,
+            m.q70, m.q90, m.q100
         FROM ag_aggregate_monthly m
-        JOIN ag_aggregate_entity e ON m.ag_aggregate_id = e.id
+        JOIN ag_aggregate_entity e ON m.aggregate_code = e.short_code
         WHERE m.scenario_short_code = $1 AND e.is_active = TRUE
         ORDER BY e.display_order, m.water_month
         """
@@ -237,13 +237,13 @@ async def fetch_ag_aggregates_monthly(pool, scenario_id: str) -> Dict[str, Any]:
         aggregates[short_code]["monthly_delivery"][wm] = {
             "avg_taf": safe_float(row["delivery_avg_taf"]),
             "cv": safe_float(row["delivery_cv"]),
-            "q0": safe_float(row["delivery_q0"]),
-            "q10": safe_float(row["delivery_q10"]),
-            "q30": safe_float(row["delivery_q30"]),
-            "q50": safe_float(row["delivery_q50"]),
-            "q70": safe_float(row["delivery_q70"]),
-            "q90": safe_float(row["delivery_q90"]),
-            "q100": safe_float(row["delivery_q100"]),
+            "q0": safe_float(row["q0"]),
+            "q10": safe_float(row["q10"]),
+            "q30": safe_float(row["q30"]),
+            "q50": safe_float(row["q50"]),
+            "q70": safe_float(row["q70"]),
+            "q90": safe_float(row["q90"]),
+            "q100": safe_float(row["q100"]),
         }
 
     return {"scenario_id": scenario_id, "aggregates": aggregates}
@@ -256,8 +256,8 @@ async def fetch_ag_aggregates_period(pool, scenario_id: str) -> Dict[str, Any]:
         SELECT
             e.short_code, e.label,
             p.annual_delivery_avg_taf
-        FROM ag_aggregate_period p
-        JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+        FROM ag_aggregate_period_summary p
+        JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
         WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
         ORDER BY e.display_order
         """

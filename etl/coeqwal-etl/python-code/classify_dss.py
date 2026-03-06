@@ -42,6 +42,48 @@ CAL_TIER2: Tuple[str, ...] = ("out", "output", "results")
 # Basenames to ignore for CalSim output (lowercased)
 GW_BASENAMES = ("cvgroundwaterbudget.dss", "cvgroundwaterout.dss")
 
+# Subfolder names (lowercased) to skip -- modelers leave old versions here
+EXCLUDED_SUBFOLDERS = ("archive", "discard", "old", "backup")
+
+# Scenario-specific file overrides for ZIPs containing multiple SV/DV files.
+# Keys: scenario ID (lowercase). Values: dict with optional "sv" and/or "dv"
+# basenames (lowercase). When matched, bypasses heuristic selection.
+# TODO: remove overrides as modelers clean up their ZIPs.
+SCENARIO_OVERRIDES = {
+    "s0023": {
+        "sv": "coeqwal_s9999_sv_v0.1.2.dss",
+    },
+    "s0024": {
+        "sv": "coeqwal_s9999_sv_v0.1.2.dss",
+    },
+    "s0030": {
+        "dv": "s0030_dcradjhist_2020lu_noflowreqt_dv_20260126v02.dss",
+    },
+    "s0031": {
+        "sv": "coeqwal_s9999_sv_v0.1.14.dss",
+    },
+    "s0033": {
+        "sv": "coeqwal_s9999_sv_v0.11.15.dss",
+    },
+    "s0037": {
+        "dv": "s0037_dcradjbl_2020lu_priorityfullcwn_dv_v1_20260216.dss",
+    },
+    "s0039": {
+        "sv": "coeqwal_s9999_sv_v0.1.4.dss",
+    },
+    "s0040": {
+        "sv": "coeqwal_s9999_sv_v0.1.4.dss",
+        "dv": "s0040_usbralt3_2020lu_deltaout35_dv_v0.2_20251211.dss",
+    },
+    "s0041": {
+        "sv": "coeqwal_s9999_sv_v0.1.4.dss",
+        "dv": "s0041_usbralt3_2020lu_deltaout45_dv_v0.2_20251211.dss",
+    },
+    "s0042": {
+        "sv": "coeqwal_s9999_sv_v0.1.4.dss",
+    },
+}
+
 
 def derive_scenario_id(zip_base: str, override: Optional[str]) -> str:
     if override:
@@ -70,6 +112,14 @@ def pick_simple(candidates: List[str], tier3_token: str, tier2_tokens: Tuple[str
     return None
 
 
+def pick_by_override(candidates: List[str], required_basename: str) -> Optional[str]:
+    """Find a candidate whose basename matches the override (case-insensitive)."""
+    for p in candidates:
+        if os.path.basename(p).lower() == required_basename:
+            return p
+    return None
+
+
 def _norm_for_match(path: str) -> str:
     """
     Normalize path for folder matching:
@@ -79,6 +129,12 @@ def _norm_for_match(path: str) -> str:
     """
     norm = path.replace("\\", "/").lstrip("./").lower()
     return f"/{norm}/"
+
+
+def _in_excluded_subfolder(path: str) -> bool:
+    """Return True if any path component matches an excluded subfolder name."""
+    parts = path.replace("\\", "/").lower().split("/")
+    return any(part in EXCLUDED_SUBFOLDERS for part in parts)
 
 
 def _filename_fallback(paths: List[str]) -> Tuple[List[str], List[str]]:
@@ -118,7 +174,11 @@ def main():
     # Primary selection based on folder layout, robust to case/relative paths/backslashes
     sv_candidates: List[str] = []
     cal_candidates: List[str] = []
+    skipped: List[str] = []
     for p in paths:
+        if _in_excluded_subfolder(p):
+            skipped.append(p)
+            continue
         slug = _norm_for_match(p)  # e.g. "/dss/input/foo.dss/"
         b = os.path.basename(p).lower()
         if "/dss/input/" in slug:
@@ -126,6 +186,11 @@ def main():
         elif "/dss/output/" in slug:
             if b not in GW_BASENAMES:
                 cal_candidates.append(p)
+
+    if skipped:
+        print(f"[INFO] Skipped {len(skipped)} file(s) in excluded subfolders:")
+        for s in skipped:
+            print(f"  - {s}")
 
     # If we didn't find anything via folder structure, fall back to filename heuristics
     if not sv_candidates and not cal_candidates:
@@ -135,8 +200,27 @@ def main():
         if not cal_candidates:
             cal_candidates = fb_cal
 
-    sv_path = pick_simple(sv_candidates, SV_TIER3, SV_TIER2)
-    calsim_output_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
+    overrides = SCENARIO_OVERRIDES.get(scen, {})
+
+    if "sv" in overrides:
+        sv_path = pick_by_override(sv_candidates, overrides["sv"])
+        if sv_path:
+            print(f"[INFO] SV override for {scen}: {sv_path}")
+        else:
+            print(f"[WARN] SV override '{overrides['sv']}' not found in candidates; falling back to heuristic.")
+            sv_path = pick_simple(sv_candidates, SV_TIER3, SV_TIER2)
+    else:
+        sv_path = pick_simple(sv_candidates, SV_TIER3, SV_TIER2)
+
+    if "dv" in overrides:
+        calsim_output_path = pick_by_override(cal_candidates, overrides["dv"])
+        if calsim_output_path:
+            print(f"[INFO] DV override for {scen}: {calsim_output_path}")
+        else:
+            print(f"[WARN] DV override '{overrides['dv']}' not found in candidates; falling back to heuristic.")
+            calsim_output_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
+    else:
+        calsim_output_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
 
     with open(args.out_env, "w") as out:
         out.write(f"SCENARIO_ID={scen}\n")

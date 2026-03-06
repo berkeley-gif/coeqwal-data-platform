@@ -22,7 +22,7 @@ import os
 import sys
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from collections import Counter
 
 # Location ID to name mapping (from existing tier_location_result data)
@@ -240,7 +240,7 @@ def append_to_seed_csv(location_results: List[Dict], seed_csv_path: str):
         combined_df.to_csv(seed_csv_path, index=False)
         print(f"Added {len(new_records)} new records to {seed_csv_path}")
     else:
-        print(f"No new records to add (all already exist)")
+        print("No new records to add (all already exist)")
 
 
 def main():
@@ -270,12 +270,12 @@ def main():
     location_results = transform_to_location_results(df)
     tier_aggregates = calculate_tier_aggregates(df)
     
-    print(f"\nTransformed data:")
+    print("\nTransformed data:")
     print(f"  Location results: {len(location_results)} records")
     print(f"  Tier aggregates: {len(tier_aggregates)} records")
     
     # Print tier distribution summary
-    print(f"\nTier distribution by scenario:")
+    print("\nTier distribution by scenario:")
     for agg in tier_aggregates:
         print(f"  {agg['scenario_short_code']}: "
               f"T1={agg['tier_1_value']}, T2={agg['tier_2_value']}, "
@@ -315,7 +315,7 @@ def main():
     try:
         import psycopg2
         
-        print(f"\nConnecting to database...")
+        print("\nConnecting to database...")
         conn = psycopg2.connect(database_url)
         cur = conn.cursor()
         

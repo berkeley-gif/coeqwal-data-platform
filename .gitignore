@@ -103,6 +103,9 @@ database/secrets/
 .github/ISSUES/
 etl/COEQWAL-pydsstools-archive/
 
+# Large reference CSVs (used for local testing only, stored on S3)
+etl/reference/
+
 # Database utility scripts (local dev)
 database/scripts/*.sh
 database/setup_db_connection.sh
