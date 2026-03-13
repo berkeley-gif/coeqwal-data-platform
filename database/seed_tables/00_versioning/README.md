@@ -60,7 +60,7 @@ in `06_load_seed_data.sql`.
 | `metadata` | Metadata | Data metadata and documentation |
 | `network` | Network | CalSim network topology and connectivity |
 | `entity` | Entity | Entity data versions |
-| `infrastructure` | Infrastructure | Database infrastructure and audit system |
+| `audit` | Audit | Layer 00 system tables: versioning, developer registry, domain mapping, audit log |
 
 ## Key versioning functions
 

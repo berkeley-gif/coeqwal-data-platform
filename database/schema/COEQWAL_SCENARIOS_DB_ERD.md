@@ -4,23 +4,24 @@
 
 ### **Database Layer Structure:**
 ```
-00  VERSIONING
-    version families, versions, developer accounts, audit triggers, domain_family_map
+00  VERSIONING (audit)
+    version_family, version, developer, domain_family_map, audit_log
 
 01  LOOKUP (shared reference data)
     hydrologic_region, source, model_source, unit, spatial_scale, temporal_scale,
-    statistic_type, geometry_type, network_type, network_subtype, watershed, wba
+    statistic_category, statistic_type, geometry_type, network_entity_type,
+    network_type, network_subtype, watershed
 
 02  NETWORK (physical infrastructure)
     network, network_arc, network_node, network_gis
 
 03  ENTITY (operational entities)
     reservoir, compliance_station, du_agriculture_entity, du_urban_entity,
-    du_refuge_entity, reservoir_entity, mi_contractor
+    du_refuge_entity, reservoir_entity, mi_contractor, wba
 
 04  VARIABLE (CalSim variable definitions + type classifications)
-    calsim_model_variable_type, derived_variable_type, variable_type
-    channel_variable, reservoir_variable, inflow_variable, derived_variable
+    calsim_model_variable_type, derived_variable_type, variable_type,
+    channel_variable
 
 05  ASSUMPTIONS + OPERATIONS (scenario configuration dimensions)
     assumption_category, assumption_definition       ← land use, groundwater model
@@ -29,7 +30,7 @@
                                                         allocation priorities
 
 06  SCENARIO (scenario definitions)
-    scenario, scenario_author, scenario_source, scenario_source_link
+    scenario, scenario_author
     scenario_key_assumption_link, scenario_key_operation_link
 
 07  HYDROCLIMATE (hydrology + SLR)
@@ -37,7 +38,7 @@
     slr                                              ← sea level rise scenarios
 
 08  THEME (research themes)
-    theme, theme_scenario_link, theme_source_link
+    theme, theme_scenario_link
 
 09  (reserved)
 
@@ -70,7 +71,7 @@ Table: version_family
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (13 total):
+Values (14 total):
 ├── theme: Research themes and storylines
 ├── scenario: Water management scenarios
 ├── assumption: Scenario assumptions and parameters
@@ -83,7 +84,8 @@ Values (13 total):
 ├── interpretive: Analysis and interpretive frameworks
 ├── metadata: Data metadata and documentation
 ├── network: CalSim network topology and connectivity
-└── entity: Entity version family for tracking entity data versions
+├── entity: Entity version family for tracking entity data versions
+└── audit: Layer 00 system tables: versioning, developer registry, domain mapping, audit log
 
 Indexes:
 └── version_family_short_code_key (short_code) -- For version family lookups
@@ -95,7 +97,6 @@ Table: version
 ├── id                   SERIAL PRIMARY KEY
 ├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id
 ├── version_number       TEXT                       -- "1.0.0" (semantic versioning)
-├── manifest             JSONB                      -- Version metadata
 ├── changelog            TEXT                       -- Change description
 ├── is_active            BOOLEAN DEFAULT FALSE      -- Only one active per family
 ├── created_at           TIMESTAMP DEFAULT NOW()
@@ -186,6 +187,7 @@ Table: domain_family_map
 ├── schema_name          TEXT NOT NULL              -- "public"
 ├── table_name           TEXT NOT NULL              -- Table name
 ├── version_family_id    INTEGER NOT NULL           -- FK version_family.id
+├── database_level       TEXT                       -- Two-digit layer code ("00", "01", ... "15")
 ├── note                 TEXT                       -- Purpose note
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -193,7 +195,7 @@ Table: domain_family_map
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK developer.id
 
-Records: 70 entries (one per domain table tracked)
+Records: ~88 entries (one per domain table tracked)
 Primary key: (schema_name, table_name)
 
 Indexes:
@@ -205,7 +207,7 @@ Indexes:
 > **Provenance convention:** All lookup tables carry `created_by`, `updated_by`, `created_at`, `updated_at`
 > audit fields (FK → `developer.id`). Tables whose data originates from a specific external source
 > (e.g., geopackage, NHD, CalSim report) additionally carry a `source_id` FK → `source.id`.
-> Current tables using `source_id`: `network_type`, `network_subtype`, `wba`, `reservoir`, `compliance_station`.
+> Current tables using `source_id`: `network_type`, `network_subtype`, `reservoir`, `compliance_station`, `wba`.
 >
 > Note: variable type classification tables (`calsim_model_variable_type`, `derived_variable_type`,
 > `variable_type`) have been moved to **Layer 04 — VARIABLE**.
@@ -246,18 +248,19 @@ Table: source
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (11 total):
-├── calsim_report: CalSim-3 report final.pdf
-├── james_gilbert: James Gilbert
-├── calsim_variables: CalSim variables from output and sv data
-├── geopackage: CalSim3_GeoSchematic_20221227_COEQWAL_Revisions2024_corrected.gpkg
-├── trend_report: Variables extracted from Gilbert team trend reports
-├── metadata: Scenario metadata
-├── cvm_docs: Central Valley Model documentation
-├── network_schematic: Network schematic
-├── manual: Manual insertion
-├── NHD: National Hydrography Dataset
-└── DWR_CDEC: DWR California Data Exchange Center
+Values (12 total, IDs 1–12 sequential):
+├──  1 calsim_report: CalSim-3 report final.pdf
+├──  2 james_gilbert: James Gilbert
+├──  3 calsim_variables: CalSim variables from output and sv data
+├──  4 geopackage: CalSim3_GeoSchematic_20221227_COEQWAL_Revisions2024_corrected.gpkg
+├──  5 trend_report: Variables extracted from Gilbert team trend reports
+├──  6 metadata: Scenario metadata
+├──  7 cvm_docs: Central Valley Model documentation
+├──  8 network_schematic: Network schematic
+├──  9 manual: Manual insertion
+├── 10 NHD: National Hydrography Dataset
+├── 11 DWR_CDEC: DWR California Data Exchange Center
+└── 12 wietske_medema: Wietske Medema
 ```
 
 ### **3. model_source**
@@ -266,7 +269,6 @@ Table: model_source
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           TEXT UNIQUE NOT NULL       -- "calsim3"
 ├── name                 TEXT UNIQUE NOT NULL       -- "CalSim3"
-├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id (variable family)
 ├── description          TEXT                       -- Model description
 ├── contact              TEXT                       -- Contact information
 ├── notes                TEXT                       -- Additional notes
@@ -339,32 +341,62 @@ Values (8 total):
 └── ... (5 more scales)
 ```
 
-### **7. statistic_type**
+### **7. statistic_category**
 ```
-Table: statistic_type
+Table: statistic_category
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "MEAN", "MEDIAN", "MIN", "MAX", etc.
-├── label                TEXT NOT NULL              -- "Mean", "Median", etc.
-├── description          TEXT                       -- Statistic description
-├── is_percentile        BOOLEAN DEFAULT FALSE      -- Whether this is a percentile measure
+├── short_code           TEXT UNIQUE NOT NULL       -- "summary", "percentile_band", "exceedance"
+├── label                TEXT NOT NULL              -- "Summary", "Percentile Band", "Exceedance"
+├── description          TEXT
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
 ├── updated_at           TIMESTAMPTZ DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
+Values (3 total):
+├── summary:         Summary         — Aggregate summary statistics (mean, median, min, max, cv, stdev)
+├── percentile_band: Percentile Band — Standard quantile bands aligned with DWR water year types
+└── exceedance:      Exceedance      — Exceedance percentiles for flow duration and reliability analysis
+```
+
+### **8. statistic_type**
+```
+Table: statistic_type
+├── id                     SERIAL PRIMARY KEY
+├── short_code             TEXT UNIQUE NOT NULL       -- "MEAN", "Q90", "EXC_P90", etc.
+├── label                  TEXT NOT NULL              -- "Mean", "90th percentile", etc.
+├── description            TEXT                       -- Statistic description
+├── statistic_category_id  INTEGER NOT NULL           -- FK → statistic_category.id
+├── created_at             TIMESTAMPTZ DEFAULT NOW()
+├── created_by             INTEGER NOT NULL           -- FK → developer.id
+├── updated_at             TIMESTAMPTZ DEFAULT NOW()
+└── updated_by             INTEGER NOT NULL           -- FK → developer.id
+
 Note: no is_active column — all statistic types are always active.
 
-Values (13 total):
+Column naming convention:
+  Results tables (Layer 10+) store statistics as columns named LOWER(short_code).
+  Example: statistic_type.short_code = 'Q90'  →  column name = 'q90'
+           statistic_type.short_code = 'EXC_P90' →  column name = 'exc_p90'
+  This table is the authoritative registry of all statistics the system produces.
+  Future schema versions may restructure results tables to use statistic_type_id as FK.
 
-Non-percentile (is_percentile = false):
+Values (20 total):
+
+Summary (statistic_category_id = 1):
 ├── MEAN: Mean (Average value)
-├── MEDIAN: Median (50th percentile)
+├── MEDIAN: Median (Middle value of the distribution)
 ├── MIN: Minimum (Minimum value)
 ├── MAX: Maximum (Maximum value)
-├── STDEV: Standard deviation (Absolute spread around mean)
-└── CV: Coefficient of variation (Relative variability: stdev/mean)
+├── CV: Coefficient of variation (Relative variability: stdev/mean)
+└── STDEV: Standard deviation (Absolute spread around the mean)
 
-Percentile bands (is_percentile = true):
+Percentile Band (statistic_category_id = 2) — water year type classification:
+  Q(n) = "the value at the nth percentile" — Q90 is a HIGH value (wet).
+  Bands: [0, 10, 30, 50, 70, 90, 100] align with DWR water year types.
+  Both band and exceedance values are independently computed by the ETL
+  and stored as separate columns. They use different breakpoint sets, so
+  most exceedance values CANNOT be derived from band percentiles.
 ├── Q0: 0th percentile (Minimum in band context)
 ├── Q10: 10th percentile (Dry conditions)
 ├── Q30: 30th percentile (Below normal)
@@ -372,9 +404,21 @@ Percentile bands (is_percentile = true):
 ├── Q70: 70th percentile (Above normal)
 ├── Q90: 90th percentile (Wet conditions)
 └── Q100: 100th percentile (Maximum in band context)
+
+Exceedance (statistic_category_id = 3) — flow duration / reliability analysis:
+  EXC_P(n) = "the value exceeded n% of the time" — EXC_P90 is a LOW value (dry).
+  Relationship: EXC_P(n) = Q(100−n). So EXC_P90 = Q10, EXC_P50 = Q50, EXC_P10 = Q90.
+  Breakpoints: [5, 10, 25, 50, 75, 90, 95] follow standard hydrologic convention.
+├── EXC_P5: 5th exceedance (Very wet — exceeded only 5% of time = Q95)
+├── EXC_P10: 10th exceedance (Wet = Q90)
+├── EXC_P25: 25th exceedance (Above average = Q75)
+├── EXC_P50: 50th exceedance (Median = Q50)
+├── EXC_P75: 75th exceedance (Below average = Q25)
+├── EXC_P90: 90th exceedance (Dry = Q10)
+└── EXC_P95: 95th exceedance (Very dry — exceeded 95% of time = Q5)
 ```
 
-### **8. unit**
+### **9. unit**
 ```
 Table: unit
 ├── id                   SERIAL PRIMARY KEY
@@ -394,7 +438,7 @@ Values (5 total):
 └── ... (2 more units)
 ```
 
-### **9. network_type**
+### **10. network_type**
 ```
 Table: network_type
 ├── id                      SERIAL PRIMARY KEY
@@ -414,15 +458,14 @@ Records: 21 types (10 arc types, 11 node types)
 Seed: seed_tables/01_lookup/network_type.csv
 ```
 
-### **10. network_subtype**
+### **11. network_subtype**
 ```
 Table: network_subtype
 ├── id                      SERIAL PRIMARY KEY
 ├── short_code              TEXT NOT NULL              -- "BP", "CH", "CL", etc.
 ├── label                   TEXT NOT NULL              -- "Bypass", "Channel", etc.
 ├── description             TEXT
-├── network_entity_type_id  INTEGER                    -- FK → network_entity_type.id
-├── type_id                 INTEGER NOT NULL           -- FK → network_type.id
+├── type_id                 INTEGER NOT NULL           -- FK → network_type.id (entity type derivable via network_type)
 ├── model_source_id         INTEGER                    -- FK → model_source.id
 ├── source_id               INTEGER                    -- FK → source.id
 ├── is_active               BOOLEAN DEFAULT TRUE
@@ -431,11 +474,11 @@ Table: network_subtype
 ├── updated_at              TIMESTAMP DEFAULT NOW()
 └── updated_by              INTEGER NOT NULL           -- FK → developer.id
 
-Records: 26 subtypes
+Records: 28 subtypes
 Seed: seed_tables/01_lookup/network_subtype.csv
 ```
 
-### **11. watershed**
+### **12. watershed**
 
 ```
 Table: watershed
@@ -487,47 +530,11 @@ Notes:
   for MOK reaches without a proper natural flow reference.
 ```
 
-### **12. wba (Water Budget Areas)**
-```
-Table: wba
-├── id                   SERIAL PRIMARY KEY
-├── wba_id               VARCHAR(10)                -- WBA identifier (e.g., "02N", "06S")
-├── wba_name             TEXT                       -- Full WBA name
-├── geom_wkt             TEXT                       -- WKT geometry
-├── srid                 INTEGER DEFAULT 4326
-├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
-├── area_acres           NUMERIC                    -- Area in acres
-├── hydrologic_region    VARCHAR(10)                -- Legacy text region code
-├── hydrologic_region_id INTEGER                    -- FK hydrologic_region.id
-├── source_id            INTEGER                    -- FK source.id
-├── comments             TEXT
-├── data_source          TEXT                       -- Original data source description
-├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK developer.id
-
-Records: 42 Water Budget Areas
-Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) for GW_STOR tier mapping
-```
-
----
-
-## **Layer 02 — NETWORK LAYER** *(CalSim network topology and physical infrastructure)*
-
-> Represents the CalSim3 water infrastructure as a directed graph: `network` is the master
-> element registry; `network_arc` and `network_node` carry arc/node-specific attributes;
-> `network_gis` holds PostGIS geometry. `network_entity_type` classifies elements as arc,
-> node, or GIS feature.
->
-> Seed data: `seed_tables/02_network/`. Primary source: CalSim3 GeoSchematic geopackage.
-> All arc/node/gis records carry `source_id` and `model_source_id` (100% coverage).
-
-### **1. network_entity_type (element type classification)**
+### **13. network_entity_type (element type classification)**
 ```
 Table: network_entity_type
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "arc", "node", "gis", "entity"
+├── short_code           TEXT UNIQUE NOT NULL       -- "arc", "node", "null", "unimpaired_flows"
 ├── label                TEXT
 ├── description          TEXT
 ├── is_active            BOOLEAN DEFAULT TRUE
@@ -543,7 +550,18 @@ Indexes:
 └── idx_network_entity_type_active (is_active, short_code)
 ```
 
-### **2. network (master element registry)**
+---
+
+## **Layer 02 — NETWORK LAYER** *(CalSim network topology and physical infrastructure)*
+
+> Represents the CalSim3 water infrastructure as a directed graph: `network` is the master
+> element registry; `network_arc` and `network_node` carry arc/node-specific attributes;
+> `network_gis` holds PostGIS geometry.
+>
+> Seed data: `seed_tables/02_network/`. Primary source: CalSim3 GeoSchematic geopackage.
+> All arc/node/gis records carry `source_id` and `model_source_id` (100% coverage).
+
+### **1. network (master element registry)**
 ```
 Table: network
 ├── id                   SERIAL PRIMARY KEY
@@ -920,6 +938,29 @@ Indexes:
 ├── idx_mi_contractor_region (region)
 ├── idx_mi_contractor_type (contractor_type)
 └── idx_mi_contractor_short_code (short_code)
+```
+
+### **8. wba (Water Budget Areas)**
+```
+Table: wba
+├── id                   SERIAL PRIMARY KEY
+├── wba_id               VARCHAR(10)                -- WBA identifier (e.g., "DETAW", "02N", "06S")
+├── wba_name             TEXT                       -- Full WBA name
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
+├── source_id            INTEGER                    -- FK → source.id
+├── geom_wkt             TEXT                       -- WKT geometry
+├── srid                 INTEGER DEFAULT 4326
+├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
+├── area_acres           NUMERIC                    -- Area in acres
+├── comments             TEXT
+├── data_source          TEXT                       -- Original data source description
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+├── created_by           INTEGER NOT NULL           -- FK developer.id
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+└── updated_by           INTEGER NOT NULL           -- FK developer.id
+
+Records: 42 Water Budget Areas
+Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) for GW_STOR tier mapping
 ```
 
 ---

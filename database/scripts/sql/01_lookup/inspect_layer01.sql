@@ -27,7 +27,7 @@ FROM source ORDER BY id;
 \echo ''
 \echo '3. model_source'
 \echo '---------------'
-SELECT id, short_code, name, version_family_id, description,
+SELECT id, short_code, name, description,
        created_at, created_by, updated_at, updated_by
 FROM model_source ORDER BY id;
 
@@ -53,11 +53,20 @@ SELECT id, short_code, label, is_active,
 FROM temporal_scale ORDER BY id;
 
 \echo ''
-\echo '7. statistic_type'
-\echo '-----------------'
-SELECT id, short_code, label, is_percentile,
+\echo '7. statistic_category'
+\echo '---------------------'
+SELECT id, short_code, label, description,
        created_at, created_by, updated_at, updated_by
-FROM statistic_type ORDER BY is_percentile, id;
+FROM statistic_category ORDER BY id;
+
+\echo ''
+\echo '8. statistic_type'
+\echo '-----------------'
+SELECT st.id, st.short_code, st.label, sc.short_code AS category,
+       st.created_at, st.created_by, st.updated_at, st.updated_by
+FROM statistic_type st
+JOIN statistic_category sc ON st.statistic_category_id = sc.id
+ORDER BY st.statistic_category_id, st.id;
 
 \echo ''
 \echo '8. geometry_type'
@@ -104,7 +113,7 @@ FROM network_subtype ORDER BY type_id, id;
 \echo ''
 \echo '14. wba (Water Budget Areas) — first 10 rows'
 \echo '--------------------------------------------'
-SELECT id, wba_id, wba_name, hydrologic_region, hydrologic_region_id,
+SELECT id, wba_id, wba_name, hydrologic_region_id,
        created_at, created_by, updated_at, updated_by
 FROM wba ORDER BY id LIMIT 10;
 SELECT COUNT(*) AS total_wba_rows FROM wba;
@@ -127,6 +136,7 @@ SELECT table_name, row_count FROM (
     UNION ALL SELECT 'unit',                           COUNT(*) FROM unit
     UNION ALL SELECT 'spatial_scale',                  COUNT(*) FROM spatial_scale
     UNION ALL SELECT 'temporal_scale',                 COUNT(*) FROM temporal_scale
+    UNION ALL SELECT 'statistic_category',              COUNT(*) FROM statistic_category
     UNION ALL SELECT 'statistic_type',                 COUNT(*) FROM statistic_type
     UNION ALL SELECT 'geometry_type',                  COUNT(*) FROM geometry_type
     UNION ALL SELECT 'variable_type',                  COUNT(*) FROM variable_type
@@ -155,6 +165,7 @@ FROM (
     UNION ALL SELECT 'unit',                           MIN(created_by), MAX(updated_by) FROM unit
     UNION ALL SELECT 'spatial_scale',                  MIN(created_by), MAX(updated_by) FROM spatial_scale
     UNION ALL SELECT 'temporal_scale',                 MIN(created_by), MAX(updated_by) FROM temporal_scale
+    UNION ALL SELECT 'statistic_category',              MIN(created_by), MAX(updated_by) FROM statistic_category
     UNION ALL SELECT 'statistic_type',                 MIN(created_by), MAX(updated_by) FROM statistic_type
     UNION ALL SELECT 'geometry_type',                  MIN(created_by), MAX(updated_by) FROM geometry_type
     UNION ALL SELECT 'variable_type',                  MIN(created_by), MAX(updated_by) FROM variable_type

@@ -182,7 +182,7 @@ Each layer depends on all layers with a lower number.
 ```
 00  VERSIONING       version_family, version, developer, domain_family_map
 01  LOOKUP           hydrologic_region, source, model_source, unit, spatial_scale,
-                     temporal_scale, statistic_type, geometry_type,
+                     temporal_scale, statistic_category, statistic_type, geometry_type,
                      network_type, network_subtype, watershed, wba
 02  NETWORK          network, network_gis, network_arc, network_node
 03  ENTITY           reservoir, compliance_station,
@@ -223,9 +223,10 @@ Each layer depends on all layers with a lower number.
 
 ## Layer details
 
-### 02_NETWORK: network categorization
+### 02_NETWORK: network topology
 
 The network layer represents CalSim's water infrastructure as connected arcs and nodes.
+Classification lookups (`network_entity_type`, `network_type`, `network_subtype`) are in Layer 01.
 
 **Table hierarchy:**
 ```
@@ -233,10 +234,10 @@ network (master registry - 6908 records)
 ├── network_arc (arc-specific attributes - 2610 records)
 └── network_node (node-specific attributes - 1544 records)
 
-Classification tables:
+Classification tables (Layer 01 lookups):
 ├── network_entity_type (4 types)
 ├── network_type (21 types)
-└── network_subtype (26 subtypes)
+└── network_subtype (28 subtypes)
 ```
 
 **Network types and subtypes:**
@@ -411,7 +412,6 @@ The versioning layer provides audit trails and version control for all other lay
          │                           │ version_number                  │
          └───────────────────────────│ created_by (FK)                 │
                                      │ updated_by (FK)                 │
-                                     │ manifest (JSONB)                │
                                      │ changelog                       │
                                      │ is_active                       │
                                      └─────────────────────────────────┘

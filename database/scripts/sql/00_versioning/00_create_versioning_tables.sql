@@ -117,7 +117,6 @@ CREATE TABLE IF NOT EXISTS version (
     version_family_id INTEGER NOT NULL
         REFERENCES version_family(id) ON DELETE RESTRICT ON UPDATE CASCADE,
     version_number    TEXT,
-    manifest          JSONB,
     changelog         TEXT,
     is_active         BOOLEAN DEFAULT FALSE,
     created_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

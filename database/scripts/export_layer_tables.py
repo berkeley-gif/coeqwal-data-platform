@@ -57,6 +57,7 @@ LAYERS: dict[str, list[str]] = {
         "version_family",
         "version",
         "domain_family_map",
+        "audit_log",
     ],
     "01_lookup": [
         "hydrologic_region",
@@ -65,19 +66,15 @@ LAYERS: dict[str, list[str]] = {
         "unit",
         "spatial_scale",
         "temporal_scale",
+        "statistic_category",
         "statistic_type",
         "geometry_type",
+        "network_entity_type",
         "network_type",
         "network_subtype",
         "watershed",
-        "wba",
     ],
     "02_network": [
-        # network_entity_type is present in the live DB and verified by
-        # 09_verify_level02.sql, but is not listed in the ERD architecture
-        # overview — the ERD has no dedicated Layer 02 section. ERD gap,
-        # not a script error.
-        "network_entity_type",
         "network",
         "network_arc",
         "network_node",
@@ -91,15 +88,13 @@ LAYERS: dict[str, list[str]] = {
         "du_refuge_entity",
         "reservoir_entity",
         "mi_contractor",
+        "wba",
     ],
     "04_variable": [
         "calsim_model_variable_type",
         "derived_variable_type",
         "variable_type",
         "channel_variable",
-        "reservoir_variable",
-        "inflow_variable",
-        "derived_variable",
     ],
     "05_assumptions_operations": [
         "assumption_category",
@@ -112,8 +107,6 @@ LAYERS: dict[str, list[str]] = {
     "06_scenario": [
         "scenario",
         "scenario_author",
-        "scenario_source",
-        "scenario_source_link",
     ],
     "07_hydroclimate": [
         "hydroclimate",
@@ -122,7 +115,6 @@ LAYERS: dict[str, list[str]] = {
     "08_theme": [
         "theme",
         "theme_scenario_link",
-        "theme_source_link",
     ],
 }
 

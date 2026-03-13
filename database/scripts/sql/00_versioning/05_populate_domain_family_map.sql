@@ -10,14 +10,14 @@
 \echo '============================================================================'
 
 -- =============================================================================
--- 1. Add infrastructure version family (id=14)
+-- 1. Add audit version family (id=14)
 -- =============================================================================
 \echo ''
-\echo 'Adding infrastructure version family...'
+\echo 'Adding audit version family...'
 
-INSERT INTO version_family (id, short_code, label, is_active)
-VALUES (14, 'infrastructure', 'Infrastructure', true)
-ON CONFLICT (id) DO UPDATE SET short_code = EXCLUDED.short_code, label = EXCLUDED.label;
+INSERT INTO version_family (id, short_code, label, description, is_active)
+VALUES (14, 'audit', 'Audit', 'Layer 00 system tables: versioning, developer registry, domain mapping, audit log', true)
+ON CONFLICT (id) DO UPDATE SET short_code = EXCLUDED.short_code, label = EXCLUDED.label, description = EXCLUDED.description;
 
 INSERT INTO version (id, version_family_id, version_number, is_active)
 VALUES (14, 14, '1.0.0', true)
@@ -91,6 +91,7 @@ VALUES
     ('public', 'model_source', 11, 'Model source lookup'),
     ('public', 'source', 11, 'Data source lookup'),
     ('public', 'spatial_scale', 11, 'Spatial scale lookup'),
+    ('public', 'statistic_category', 11, 'Statistic category lookup'),
     ('public', 'statistic_type', 11, 'Statistic type lookup'),
     ('public', 'temporal_scale', 11, 'Temporal scale lookup'),
     ('public', 'unit', 11, 'Unit lookup'),
@@ -120,8 +121,8 @@ VALUES
     ('public', 'mi_contractor_group', 13, 'MI contractor groups'),
     ('public', 'mi_contractor_group_member', 13, 'MI contractor group membership'),
     
-    -- infrastructure (14)
-    ('public', 'audit_log', 14, 'Audit log infrastructure'),
+    -- audit (14)
+    ('public', 'audit_log', 14, 'Audit log'),
     ('public', 'developer', 14, 'Developer registry'),
     ('public', 'domain_family_map', 14, 'Domain-to-family mapping'),
     ('public', 'version', 14, 'Version records'),

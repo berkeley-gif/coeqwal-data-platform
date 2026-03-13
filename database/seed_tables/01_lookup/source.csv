@@ -1,13 +1,13 @@
-source,description,is_active
-calsim_report,CalSim-3 report final.pdf,true
-james_gilbert,James Gilbert,true
-wietske_medema,Wietske Medema,true
-calsim_variables,CalSim variables from output and sv data,true
-geopackage,CalSim3_GeoSchematic_20221227_COEQWAL_Revisions2024_corrected.gpkg,true
-trend_report,Variables extracted from Gilbert team trend reports,true
-metadata,Scenario metadata,true
-cvm_docs,Central Valley Model documentation,true
-network_schematic,Network schematic,true
-manual,Manual insertion,true
-NHD,National Hydrography Dataset,true
-DWR_CDEC,DWR California Data Exchange Center,true
+id,source,description,is_active
+1,calsim_report,CalSim-3 report final.pdf,true
+2,james_gilbert,James Gilbert,true
+3,calsim_variables,CalSim variables from output and sv data,true
+4,geopackage,CalSim3_GeoSchematic_20221227_COEQWAL_Revisions2024_corrected.gpkg,true
+5,trend_report,Variables extracted from Gilbert team trend reports,true
+6,metadata,Scenario metadata,true
+7,cvm_docs,Central Valley Model documentation,true
+8,network_schematic,Network schematic,true
+9,manual,Manual insertion,true
+10,NHD,National Hydrography Dataset,true
+11,DWR_CDEC,DWR California Data Exchange Center,true
+12,wietske_medema,Wietske Medema,true

@@ -486,24 +486,25 @@ def generate_schema_snapshot(conn) -> dict:
 
 LAYERS: dict[str, list[str]] = {
     "00_versioning": [
-        "developer", "version_family", "version", "domain_family_map",
+        "developer", "version_family", "version", "domain_family_map", "audit_log",
     ],
     "01_lookup": [
         "hydrologic_region", "source", "model_source", "unit",
-        "spatial_scale", "temporal_scale", "statistic_type", "geometry_type",
-        "network_type", "network_subtype", "watershed", "wba",
+        "spatial_scale", "temporal_scale", "statistic_category", "statistic_type",
+        "geometry_type",
+        "network_entity_type", "network_type", "network_subtype", "watershed",
     ],
     "02_network": [
-        "network_entity_type", "network", "network_arc", "network_node", "network_gis",
+        "network", "network_arc", "network_node", "network_gis",
     ],
     "03_entity": [
         "reservoir", "compliance_station",
         "du_agriculture_entity", "du_urban_entity", "du_refuge_entity",
-        "reservoir_entity", "mi_contractor",
+        "reservoir_entity", "mi_contractor", "wba",
     ],
     "04_variable": [
         "calsim_model_variable_type", "derived_variable_type", "variable_type",
-        "channel_variable", "reservoir_variable", "inflow_variable", "derived_variable",
+        "channel_variable",
     ],
     "05_assumptions_operations": [
         "assumption_category", "assumption_definition",
@@ -511,10 +512,10 @@ LAYERS: dict[str, list[str]] = {
         "scenario_key_assumption_link", "scenario_key_operation_link",
     ],
     "06_scenario": [
-        "scenario", "scenario_author", "scenario_source", "scenario_source_link",
+        "scenario", "scenario_author",
     ],
     "07_hydroclimate": ["hydroclimate", "slr"],
-    "08_theme": ["theme", "theme_scenario_link", "theme_source_link"],
+    "08_theme": ["theme", "theme_scenario_link"],
 }
 
 RESULTS_TABLES = [
@@ -531,11 +532,11 @@ RESULTS_TABLES = [
 ]
 
 EXPECTED_COUNTS: dict[str, int | None] = {
-    "version_family": 13, "version": 13, "developer": 2,
-    "domain_family_map": 70, "hydrologic_region": 6,
-    "network_type": 21, "network_subtype": 26,
+    "version_family": 14, "version": 14, "developer": 2,
+    "domain_family_map": None, "hydrologic_region": 6,
+    "network_type": 21, "network_subtype": 28,
     "unit": None, "source": None, "model_source": None, "watershed": None,
-    "wba": 42, "network_entity_type": 4, "network": 6908,
+    "network_entity_type": 4, "wba": 42, "network": 6908,
     "network_arc": 2610, "network_node": 1544, "network_gis": 4154,
     "reservoir": 7, "compliance_station": 2,
     "du_agriculture_entity": 144, "du_urban_entity": 145,

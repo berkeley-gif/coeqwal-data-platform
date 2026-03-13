@@ -1,13 +1,21 @@
-id,code,name,description,is_percentile,created_by,updated_by,created_at,updated_at
-1,mean,mean,Mean,False,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-2,median,median,Median,False,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-3,min,minimum,Minimum,False,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-4,max,maximum,Maximum,False,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-5,p10,10th percentile,10th percentile,True,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-6,p30,30th percentile,30th percentile,True,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-7,p70,70th percentile,70th percentile,True,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-8,p90,90th percentile,90th percentile,True,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-9,p90,90th percentile,90th percentile,True,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-10,p100,100th percentile,100th percentile,True,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-11,cv,coefficient of variation,coefficient of variation,False,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
-12,other,other statistic,custom statistic,False,1,,2024-01-01 00:00:00,2024-01-01 00:00:00
+id,short_code,label,description,statistic_category_id
+1,MEAN,Mean,Average value,1
+2,MEDIAN,Median,Middle value of the distribution,1
+3,MIN,Minimum,Minimum value,1
+4,MAX,Maximum,Maximum value,1
+5,CV,Coefficient of variation,Relative variability: stdev/mean,1
+6,STDEV,Standard deviation,Absolute spread around the mean,1
+7,Q0,0th percentile,Minimum in band context,2
+8,Q10,10th percentile,Dry conditions,2
+9,Q30,30th percentile,Below normal,2
+10,Q50,50th percentile,Median in band context,2
+11,Q70,70th percentile,Above normal,2
+12,Q90,90th percentile,Wet conditions,2
+13,Q100,100th percentile,Maximum in band context,2
+14,EXC_P5,5th exceedance,Value exceeded 5% of time (very wet),3
+15,EXC_P10,10th exceedance,Value exceeded 10% of time (wet),3
+16,EXC_P25,25th exceedance,Value exceeded 25% of time (above avg),3
+17,EXC_P50,50th exceedance,Value exceeded 50% of time (median),3
+18,EXC_P75,75th exceedance,Value exceeded 75% of time (below avg),3
+19,EXC_P90,90th exceedance,Value exceeded 90% of time (dry),3
+20,EXC_P95,95th exceedance,Value exceeded 95% of time (very dry),3

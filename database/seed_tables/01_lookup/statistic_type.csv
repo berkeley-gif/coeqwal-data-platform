@@ -1,14 +1,21 @@
-short_code,label,description,is_percentile
-MEAN,Mean,Average value,false
-MEDIAN,Median,Middle value of the distribution,false
-MIN,Minimum,Minimum value,false
-MAX,Maximum,Maximum value,false
-CV,Coefficient of variation,Relative variability: stdev/mean,false
-STDEV,Standard deviation,Absolute spread around the mean,false
-Q0,0th percentile,Minimum in band context,true
-Q10,10th percentile,Dry conditions,true
-Q30,30th percentile,Below normal,true
-Q50,50th percentile,Median in band context,true
-Q70,70th percentile,Above normal,true
-Q90,90th percentile,Wet conditions,true
-Q100,100th percentile,Maximum in band context,true
+id,short_code,label,description,statistic_category_id
+1,MEAN,Mean,Average value,1
+2,MEDIAN,Median,Middle value of the distribution,1
+3,MIN,Minimum,Minimum value,1
+4,MAX,Maximum,Maximum value,1
+5,CV,Coefficient of variation,Relative variability: stdev/mean,1
+6,STDEV,Standard deviation,Absolute spread around the mean,1
+7,Q0,0th percentile,Minimum in band context,2
+8,Q10,10th percentile,Dry conditions,2
+9,Q30,30th percentile,Below normal,2
+10,Q50,50th percentile,Median in band context,2
+11,Q70,70th percentile,Above normal,2
+12,Q90,90th percentile,Wet conditions,2
+13,Q100,100th percentile,Maximum in band context,2
+14,EXC_P5,5th exceedance,Value exceeded 5% of time (very wet),3
+15,EXC_P10,10th exceedance,Value exceeded 10% of time (wet),3
+16,EXC_P25,25th exceedance,Value exceeded 25% of time (above avg),3
+17,EXC_P50,50th exceedance,Value exceeded 50% of time (median),3
+18,EXC_P75,75th exceedance,Value exceeded 75% of time (below avg),3
+19,EXC_P90,90th exceedance,Value exceeded 90% of time (dry),3
+20,EXC_P95,95th exceedance,Value exceeded 95% of time (very dry),3

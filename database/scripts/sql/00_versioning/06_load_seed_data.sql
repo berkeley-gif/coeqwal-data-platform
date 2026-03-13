@@ -78,7 +78,7 @@ SELECT id, short_code, label FROM version_family ORDER BY id;
 -- 3. version
 -- =============================================================================
 -- CSV uses version_family short_code (not id), so we join to resolve the FK.
--- CSV columns: version_family_short_code, version_number, manifest, changelog, is_active
+-- CSV columns: version_family_short_code, version_number, changelog, is_active
 -- =============================================================================
 
 \echo ''
@@ -87,18 +87,16 @@ SELECT id, short_code, label FROM version_family ORDER BY id;
 CREATE TEMP TABLE tmp_version (
     version_family_short_code TEXT,
     version_number            TEXT,
-    manifest                  TEXT,   -- loaded as text, cast to JSONB on insert
     changelog                 TEXT,
     is_active                 BOOLEAN
 ) ON COMMIT DROP;
 
 \copy tmp_version FROM 'database/seed_tables/00_versioning/version.csv' CSV HEADER
 
-INSERT INTO version (version_family_id, version_number, manifest, changelog, is_active, created_by, updated_by)
+INSERT INTO version (version_family_id, version_number, changelog, is_active, created_by, updated_by)
 SELECT
     vf.id,
     tv.version_number,
-    tv.manifest::JSONB,
     tv.changelog,
     tv.is_active,
     1, 1
