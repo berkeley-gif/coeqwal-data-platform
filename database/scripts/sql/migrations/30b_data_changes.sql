@@ -1,0 +1,256 @@
+-- Migration 30b: Data (DML) changes — run as your own role
+--
+-- Run from Cloud9 (after 30a_schema_changes.sql):
+--   psql $DATABASE_URL -f database/scripts/sql/migrations/30b_data_changes.sql
+--
+-- Then run 30c_finalize_schema.sql as postgres.
+--
+-- NOTE: 30a disables audit triggers on domain_family_map and source so that
+-- created_by corrections aren't silently overwritten. All DML on those tables
+-- here sets audit fields explicitly.
+
+BEGIN;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 1. developer: update affiliation for id=2
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE developer
+SET    affiliation = 'Berkeley Geospatial Innovation Facility',
+       updated_at  = NOW()
+WHERE  id = 2;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 2. version_family: rename "infrastructure" → "audit"
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE version_family
+SET    short_code   = 'audit',
+       label        = 'Audit',
+       description  = 'Layer 00 system tables: versioning, developer registry, domain mapping, audit log',
+       updated_at   = NOW()
+WHERE  id = 14;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 4. domain_family_map: fix attribution (system → developer 2)
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE domain_family_map
+SET    created_by = 2,
+       updated_by = 2,
+       updated_at = NOW()
+WHERE  created_by = 1 OR updated_by = 1;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 5. domain_family_map: populate database_level
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE domain_family_map SET updated_at = NOW(), database_level = CASE table_name
+    WHEN 'developer'                        THEN '00'
+    WHEN 'version_family'                   THEN '00'
+    WHEN 'version'                          THEN '00'
+    WHEN 'domain_family_map'                THEN '00'
+    WHEN 'audit_log'                        THEN '00'
+    WHEN 'hydrologic_region'                THEN '01'
+    WHEN 'source'                           THEN '01'
+    WHEN 'model_source'                     THEN '01'
+    WHEN 'unit'                             THEN '01'
+    WHEN 'spatial_scale'                    THEN '01'
+    WHEN 'temporal_scale'                   THEN '01'
+    WHEN 'statistic_category'               THEN '01'
+    WHEN 'statistic_type'                   THEN '01'
+    WHEN 'geometry_type'                    THEN '01'
+    WHEN 'network_type'                     THEN '01'
+    WHEN 'network_subtype'                  THEN '01'
+    WHEN 'network_entity_type'              THEN '01'
+    WHEN 'watershed'                        THEN '01'
+    WHEN 'network'                          THEN '02'
+    WHEN 'network_arc'                      THEN '02'
+    WHEN 'network_node'                     THEN '02'
+    WHEN 'network_gis'                      THEN '02'
+    WHEN 'reservoir'                        THEN '03'
+    WHEN 'reservoir_entity'                 THEN '03'
+    WHEN 'reservoir_group'                  THEN '03'
+    WHEN 'reservoir_group_member'           THEN '03'
+    WHEN 'compliance_station'               THEN '03'
+    WHEN 'du_agriculture_entity'            THEN '03'
+    WHEN 'du_urban_entity'                  THEN '03'
+    WHEN 'du_urban_group'                   THEN '03'
+    WHEN 'du_urban_group_member'            THEN '03'
+    WHEN 'du_refuge_entity'                 THEN '03'
+    WHEN 'mi_contractor'                    THEN '03'
+    WHEN 'mi_contractor_group'              THEN '03'
+    WHEN 'mi_contractor_group_member'       THEN '03'
+    WHEN 'ag_aggregate_entity'              THEN '03'
+    WHEN 'cws_aggregate_entity'             THEN '03'
+    WHEN 'channel_entity'                   THEN '03'
+    WHEN 'wba'                              THEN '03'
+    WHEN 'calsim_model_variable_type'       THEN '04'
+    WHEN 'derived_variable_type'            THEN '04'
+    WHEN 'variable_type'                    THEN '04'
+    WHEN 'channel_variable'                 THEN '04'
+    WHEN 'du_urban_variable'                THEN '04'
+    WHEN 'assumption_category'              THEN '05'
+    WHEN 'assumption_definition'            THEN '05'
+    WHEN 'operation_category'               THEN '05'
+    WHEN 'operation_definition'             THEN '05'
+    WHEN 'scenario_key_assumption_link'     THEN '05'
+    WHEN 'scenario_key_operation_link'      THEN '05'
+    WHEN 'scenario'                         THEN '06'
+    WHEN 'scenario_author'                  THEN '06'
+    WHEN 'hydroclimate'                     THEN '07'
+    WHEN 'slr'                              THEN '07'
+    WHEN 'theme'                            THEN '08'
+    WHEN 'theme_scenario_link'              THEN '08'
+    WHEN 'spatial_ref_sys'                  THEN '09'
+    WHEN 'du_urban_delivery_arc'            THEN '10'
+    WHEN 'mi_contractor_delivery_arc'       THEN '10'
+    WHEN 'tier_definition'                  THEN '10'
+    WHEN 'tier_result'                      THEN '10'
+    WHEN 'tier_location_result'             THEN '10'
+    WHEN 'reservoir_storage_monthly'        THEN '11'
+    WHEN 'reservoir_spill_monthly'          THEN '11'
+    WHEN 'reservoir_period_summary'         THEN '11'
+    WHEN 'reservoir_monthly_percentile'     THEN '11'
+    WHEN 'du_delivery_monthly'              THEN '12'
+    WHEN 'du_shortage_monthly'              THEN '12'
+    WHEN 'du_period_summary'                THEN '12'
+    WHEN 'mi_delivery_monthly'              THEN '12'
+    WHEN 'mi_shortage_monthly'              THEN '12'
+    WHEN 'mi_contractor_period_summary'     THEN '12'
+    WHEN 'cws_aggregate_monthly'            THEN '12'
+    WHEN 'cws_aggregate_period_summary'     THEN '12'
+    WHEN 'ag_du_delivery_monthly'           THEN '13'
+    WHEN 'ag_du_shortage_monthly'           THEN '13'
+    WHEN 'ag_du_period_summary'             THEN '13'
+    WHEN 'ag_du_demand_monthly'             THEN '13'
+    WHEN 'ag_du_gw_pumping_monthly'         THEN '13'
+    WHEN 'ag_du_sw_delivery_monthly'        THEN '13'
+    WHEN 'ag_aggregate_monthly'             THEN '13'
+    WHEN 'ag_aggregate_period_summary'      THEN '13'
+    WHEN 'refuge_du_delivery_monthly'       THEN '13'
+    WHEN 'refuge_du_shortage_monthly'       THEN '13'
+    WHEN 'refuge_du_period_summary'         THEN '13'
+    WHEN 'env_flow_season'                  THEN '14'
+    WHEN 'env_flow_channel_monthly'         THEN '14'
+    WHEN 'env_flow_channel_seasonal'        THEN '14'
+    WHEN 'env_flow_channel_period_summary'  THEN '14'
+    WHEN 'delta_monthly'                    THEN '15'
+    WHEN 'delta_period_summary'             THEN '15'
+    ELSE NULL
+END;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 7. source: fix record 35 attribution (was inserted as postgres/system)
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE source
+SET    created_by = 2,
+       updated_by = 2,
+       updated_at = NOW()
+WHERE  id = 35;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 8. source: resequence IDs (32→9, 33→10, 34→11, 35→12)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 8a. Insert new rows with correct IDs
+INSERT INTO source (id, source, description, is_active, created_at, created_by, updated_at, updated_by)
+SELECT 9,  source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 32
+UNION ALL
+SELECT 10, source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 33
+UNION ALL
+SELECT 11, source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 34
+UNION ALL
+SELECT 12, source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 35;
+
+-- 8b. Update all child FK references
+UPDATE network_type       SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE network_subtype    SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE network_arc        SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE network_node       SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE network_gis        SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE reservoir          SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE compliance_station SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE wba                SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+UPDATE hydroclimate       SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
+
+-- 8c. Delete old source rows
+DELETE FROM source WHERE id IN (32, 33, 34, 35);
+
+-- 8d. Reset sequence
+SELECT setval('source_id_seq', (SELECT MAX(id) FROM source));
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 11. wba: set DETAW (id=1) to DELTA hydrologic region (id=3)
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE wba
+SET    hydrologic_region_id = 3,
+       updated_at = NOW()
+WHERE  id = 1;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 12. statistic_category: populate rows
+-- ═══════════════════════════════════════════════════════════════════════════
+INSERT INTO statistic_category (id, short_code, label, description, created_by, updated_by)
+VALUES
+    (1, 'summary',         'Summary',         'Aggregate summary statistics (mean, median, min, max, cv, stdev)', 2, 2),
+    (2, 'percentile_band', 'Percentile Band', 'Standard quantile bands aligned with DWR water year types',       2, 2),
+    (3, 'exceedance',      'Exceedance',      'Exceedance percentiles for flow duration and reliability analysis', 2, 2);
+
+SELECT setval('statistic_category_id_seq', (SELECT MAX(id) FROM statistic_category));
+
+-- Register statistic_category in domain_family_map
+INSERT INTO domain_family_map (schema_name, table_name, version_family_id, note, database_level, created_by, updated_by)
+VALUES ('public', 'statistic_category', 11, 'Statistic category lookup', '01', 2, 2)
+ON CONFLICT (schema_name, table_name) DO UPDATE
+SET note = EXCLUDED.note, database_level = EXCLUDED.database_level;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 13. statistic_type: resequence IDs and add exceedance percentiles
+--     No FK references statistic_type.id, so resequencing is safe.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 13a. Resequence existing rows (negative temp IDs to avoid PK collisions)
+UPDATE statistic_type SET id = -14 WHERE id = 14;  -- CV
+UPDATE statistic_type SET id = -15 WHERE id = 15;  -- STDEV
+UPDATE statistic_type SET id = -7  WHERE id = 7;   -- Q0
+UPDATE statistic_type SET id = -8  WHERE id = 8;   -- Q10
+UPDATE statistic_type SET id = -9  WHERE id = 9;   -- Q30
+UPDATE statistic_type SET id = -10 WHERE id = 10;  -- Q50
+UPDATE statistic_type SET id = -11 WHERE id = 11;  -- Q70
+UPDATE statistic_type SET id = -12 WHERE id = 12;  -- Q90
+UPDATE statistic_type SET id = -13 WHERE id = 13;  -- Q100
+
+UPDATE statistic_type SET id = 5  WHERE id = -14;  -- CV → 5
+UPDATE statistic_type SET id = 6  WHERE id = -15;  -- STDEV → 6
+UPDATE statistic_type SET id = 7  WHERE id = -7;   -- Q0 stays 7
+UPDATE statistic_type SET id = 8  WHERE id = -8;   -- Q10 stays 8
+UPDATE statistic_type SET id = 9  WHERE id = -9;   -- Q30 stays 9
+UPDATE statistic_type SET id = 10 WHERE id = -10;  -- Q50 stays 10
+UPDATE statistic_type SET id = 11 WHERE id = -11;  -- Q70 stays 11
+UPDATE statistic_type SET id = 12 WHERE id = -12;  -- Q90 stays 12
+UPDATE statistic_type SET id = 13 WHERE id = -13;  -- Q100 stays 13
+
+-- 13b. Insert exceedance percentiles
+INSERT INTO statistic_type (id, short_code, label, description, is_percentile, created_by, updated_by)
+VALUES
+    (14, 'EXC_P5',  '5th exceedance',  'Value exceeded 5% of time (very wet)',    true, 2, 2),
+    (15, 'EXC_P10', '10th exceedance', 'Value exceeded 10% of time (wet)',        true, 2, 2),
+    (16, 'EXC_P25', '25th exceedance', 'Value exceeded 25% of time (above avg)',  true, 2, 2),
+    (17, 'EXC_P50', '50th exceedance', 'Value exceeded 50% of time (median)',     true, 2, 2),
+    (18, 'EXC_P75', '75th exceedance', 'Value exceeded 75% of time (below avg)',  true, 2, 2),
+    (19, 'EXC_P90', '90th exceedance', 'Value exceeded 90% of time (dry)',        true, 2, 2),
+    (20, 'EXC_P95', '95th exceedance', 'Value exceeded 95% of time (very dry)',   true, 2, 2);
+
+-- 13c. Reset sequence
+SELECT setval('statistic_type_id_seq', (SELECT MAX(id) FROM statistic_type));
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 14. statistic_type: populate statistic_category_id
+-- ═══════════════════════════════════════════════════════════════════════════
+UPDATE statistic_type SET statistic_category_id = 1 WHERE short_code IN ('MEAN','MEDIAN','MIN','MAX','CV','STDEV');
+UPDATE statistic_type SET statistic_category_id = 2 WHERE short_code LIKE 'Q%';
+UPDATE statistic_type SET statistic_category_id = 3 WHERE short_code LIKE 'EXC_%';
+
+COMMIT;
+
+\echo ''
+\echo '30b DATA CHANGES COMPLETE'
+\echo '========================='
+\echo 'Now run 30c_finalize_schema.sql as postgres.'
