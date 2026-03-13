@@ -621,7 +621,7 @@ def _export_sample(cur, table_name: str, output_dir: Path, n: int = 10) -> dict:
 # SQL QUERIES — health, cost, verification
 # ═══════════════════════════════════════════════════════════════════════════════
 
-SQL_DB_SIZE = "SELECT pg_size_pretty(pg_database_size(current_database()))"
+SQL_DB_SIZE = "SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size"
 
 SQL_TABLE_SIZES = """
 SELECT relname AS table_name,
@@ -840,7 +840,7 @@ def main() -> None:
         )
         info = cur.fetchone()
         cur.execute(SQL_DB_SIZE)
-        db_size = cur.fetchone()[0]
+        db_size = cur.fetchone()["db_size"]
         p(
             f"**Database:** {info['db']}  \n"
             f"**Connected as:** {info['usr']}  \n"
