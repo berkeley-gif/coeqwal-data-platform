@@ -1,6 +1,6 @@
 -- Migration 30b: Data (DML) changes — run as your own role
 --
--- Run from Cloud9 (after 30a_schema_changes.sql):
+-- Run from Cloud9 (after 30a2_source_resequence.sql):
 --   psql $DATABASE_URL -f database/scripts/sql/migrations/30b_data_changes.sql
 --
 -- Then run 30c_finalize_schema.sql as postgres.
@@ -8,6 +8,8 @@
 -- NOTE: 30a disables audit triggers on domain_family_map and source so that
 -- created_by corrections aren't silently overwritten. All DML on those tables
 -- here sets audit fields explicitly.
+-- Source resequencing (steps 7-8) moved to 30a2 (requires postgres for
+-- temporary UNIQUE constraint drop).
 
 BEGIN;
 
@@ -136,62 +138,7 @@ UPDATE domain_family_map SET updated_at = NOW(), database_level = CASE table_nam
     ELSE NULL
 END;
 
--- ═══════════════════════════════════════════════════════════════════════════
--- 7. source: fix record 35 attribution (was inserted as postgres/system)
--- ═══════════════════════════════════════════════════════════════════════════
-UPDATE source
-SET    created_by = 2,
-       updated_by = 2,
-       updated_at = NOW()
-WHERE  id = 35;
-
--- ═══════════════════════════════════════════════════════════════════════════
--- 8. source: resequence IDs (32→9, 33→10, 34→11, 35→12)
---    Uses a single writeable CTE so the delete+insert+child updates are
---    atomic — UNIQUE and FK constraints are checked on the final state.
--- ═══════════════════════════════════════════════════════════════════════════
-WITH
-  old_data AS (
-    SELECT id, source, description, is_active, created_at, created_by, updated_at, updated_by,
-           CASE id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END AS new_id
-    FROM source WHERE id IN (32, 33, 34, 35)
-  ),
-  upd_network_type AS (
-    UPDATE network_type SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_network_subtype AS (
-    UPDATE network_subtype SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_network_arc AS (
-    UPDATE network_arc SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_network_node AS (
-    UPDATE network_node SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_network_gis AS (
-    UPDATE network_gis SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_reservoir AS (
-    UPDATE reservoir SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_compliance AS (
-    UPDATE compliance_station SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_wba AS (
-    UPDATE wba SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  upd_hydroclimate AS (
-    UPDATE hydroclimate SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
-  ),
-  del_old AS (
-    DELETE FROM source WHERE id IN (32, 33, 34, 35) RETURNING 1
-  )
-INSERT INTO source (id, source, description, is_active, created_at, created_by, updated_at, updated_by)
-SELECT new_id, source, description, is_active, created_at, created_by, NOW(), updated_by
-FROM old_data;
-
--- 8d. Reset sequence
-SELECT setval('source_id_seq', (SELECT MAX(id) FROM source));
+-- Steps 7-8 (source attribution fix + resequence) handled by 30a2.
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 11. wba: set DETAW (id=1) to DELTA hydrologic region (id=3)
