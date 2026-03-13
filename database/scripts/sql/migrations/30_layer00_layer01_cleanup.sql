@@ -3,7 +3,7 @@
 --
 -- Changes:
 --    1.  developer: update id=2 affiliation
---    2.  version_family: rename "infrastructure" → "foundation"
+--    2.  version_family: rename "infrastructure" → "audit"
 --    3.  version: drop unused manifest column
 --    4.  domain_family_map: fix attribution (created_by/updated_by → 2)
 --    5.  domain_family_map: add database_level column and populate
@@ -16,6 +16,10 @@
 --   12.  statistic_category: create lookup table (summary, percentile_band, exceedance)
 --   13.  statistic_type: resequence IDs and add exceedance percentiles
 --   14.  statistic_type: replace is_percentile with statistic_category_id FK
+--
+-- NOTE: DDL statements (ALTER TABLE, CREATE TABLE) require table ownership.
+--       SET ROLE postgres is used only around DDL; DML runs as your own role
+--       so audit triggers record the correct developer.
 
 BEGIN;
 
@@ -38,9 +42,11 @@ SET    short_code   = 'audit',
 WHERE  id = 14;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 3. version: drop unused manifest column
+-- 3. version: drop unused manifest column  [DDL]
 -- ═══════════════════════════════════════════════════════════════════════════
+SET ROLE postgres;
 ALTER TABLE version DROP COLUMN IF EXISTS manifest;
+RESET ROLE;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 4. domain_family_map: fix attribution
@@ -54,11 +60,13 @@ WHERE  created_by = 1 OR updated_by = 1;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 5. domain_family_map: add database_level column and populate
 -- ═══════════════════════════════════════════════════════════════════════════
+SET ROLE postgres;
 ALTER TABLE domain_family_map
     ADD COLUMN IF NOT EXISTS database_level TEXT;
+RESET ROLE;
 
 UPDATE domain_family_map SET database_level = CASE table_name
-    -- Layer 00: versioning / foundation
+    -- Layer 00: versioning
     WHEN 'developer'                        THEN '00'
     WHEN 'version_family'                   THEN '00'
     WHEN 'version'                          THEN '00'
@@ -164,9 +172,11 @@ UPDATE domain_family_map SET database_level = CASE table_name
 END;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 6. model_source: drop version_family_id (no other lookup table has it)
+-- 6. model_source: drop version_family_id (no other lookup table has it)  [DDL]
 -- ═══════════════════════════════════════════════════════════════════════════
+SET ROLE postgres;
 ALTER TABLE model_source DROP COLUMN IF EXISTS version_family_id;
+RESET ROLE;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 7. source: fix record 35 attribution (was inserted as postgres/system)
@@ -210,16 +220,20 @@ DELETE FROM source WHERE id IN (32, 33, 34, 35);
 SELECT setval('source_id_seq', (SELECT MAX(id) FROM source));
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 9. network_subtype: drop redundant network_entity_type_id
+-- 9. network_subtype: drop redundant network_entity_type_id  [DDL]
 --    (derivable via type_id → network_type.network_entity_type_id)
 -- ═══════════════════════════════════════════════════════════════════════════
+SET ROLE postgres;
 ALTER TABLE network_subtype DROP COLUMN IF EXISTS network_entity_type_id;
+RESET ROLE;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 10. wba: drop legacy hydrologic_region text column
+-- 10. wba: drop legacy hydrologic_region text column  [DDL]
 --     (hydrologic_region_id FK is the authoritative reference)
 -- ═══════════════════════════════════════════════════════════════════════════
+SET ROLE postgres;
 ALTER TABLE wba DROP COLUMN IF EXISTS hydrologic_region;
+RESET ROLE;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 11. wba: set DETAW (id=1) to DELTA hydrologic region (id=3)
@@ -230,9 +244,9 @@ SET    hydrologic_region_id = 3,
 WHERE  id = 1;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 12. statistic_category: create lookup table
+-- 12. statistic_category: create lookup table  [DDL]
 -- ═══════════════════════════════════════════════════════════════════════════
-
+SET ROLE postgres;
 CREATE TABLE IF NOT EXISTS statistic_category (
     id          SERIAL PRIMARY KEY,
     short_code  TEXT UNIQUE NOT NULL,
@@ -243,6 +257,7 @@ CREATE TABLE IF NOT EXISTS statistic_category (
     updated_at  TIMESTAMPTZ DEFAULT NOW(),
     updated_by  INTEGER NOT NULL REFERENCES developer(id)
 );
+RESET ROLE;
 
 INSERT INTO statistic_category (id, short_code, label, description, created_by, updated_by)
 VALUES
@@ -310,19 +325,23 @@ SELECT setval('statistic_type_id_seq', (SELECT MAX(id) FROM statistic_type));
 -- 14. statistic_type: replace is_percentile with statistic_category_id FK
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- 14a. Add statistic_category_id column
+-- 14a. Add statistic_category_id column  [DDL]
+SET ROLE postgres;
 ALTER TABLE statistic_type ADD COLUMN statistic_category_id INTEGER REFERENCES statistic_category(id);
+RESET ROLE;
 
 -- 14b. Populate from existing data
 UPDATE statistic_type SET statistic_category_id = 1 WHERE short_code IN ('MEAN','MEDIAN','MIN','MAX','CV','STDEV');
 UPDATE statistic_type SET statistic_category_id = 2 WHERE short_code LIKE 'Q%';
 UPDATE statistic_type SET statistic_category_id = 3 WHERE short_code LIKE 'EXC_%';
 
--- 14c. Make NOT NULL now that all rows are populated
+-- 14c. Make NOT NULL now that all rows are populated  [DDL]
+SET ROLE postgres;
 ALTER TABLE statistic_type ALTER COLUMN statistic_category_id SET NOT NULL;
 
--- 14d. Drop the old boolean column
+-- 14d. Drop the old boolean column  [DDL]
 ALTER TABLE statistic_type DROP COLUMN IF EXISTS is_percentile;
+RESET ROLE;
 
 COMMIT;
 
