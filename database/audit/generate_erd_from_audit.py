@@ -14,7 +14,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from datetime import datetime
 
 
 # Table categories for organized documentation
@@ -205,7 +204,7 @@ Examples:
     
     stats = generate_erd_from_audit(args.audit_path, args.output_path)
     
-    print(f"\nERD generated successfully!")
+    print("\nERD generated successfully!")
     print(f"  Tables documented: {stats['tables_documented']}")
     print(f"  Total records: {stats['total_records']:,}")
     print(f"  Lines generated: {stats['lines_generated']}")

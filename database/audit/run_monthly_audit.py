@@ -2,7 +2,7 @@
 """
 COEQWAL monthly database audit.
 
-One command, one report, all the CSVs. Can run from Cloud9 with DATABASE_URL set.
+One command, one report, all the CSVs. Run from Cloud9 with DATABASE_URL set.
 
 Usage
 -----
@@ -19,7 +19,7 @@ Output
 ------
     audits/monthly_YYYYMMDD_HHMMSS/
     ├── report.md                       Markdown report
-    ├── schema_snapshot.json            Full schema snapshot (same format as Lambda)
+    ├── schema_snapshot.json            Full schema snapshot
     ├── tables_summary.csv              Per-table row counts + audit field status
     ├── layer_exports/                  Full CSV exports, layers 00-08
     │   ├── 00_versioning/
@@ -29,37 +29,28 @@ Output
         └── {table}_tail.csv
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import json
 import logging
 import os
 import sys
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from textwrap import dedent
 
 import pandas as pd
 import psycopg2
 import psycopg2.extras
 
-# ── Module imports ──────────────────────────────────
-_HERE = Path(__file__).resolve().parent
-_DB_DIR = _HERE.parent
-_REPO_ROOT = _DB_DIR.parent
-
-sys.path.insert(0, str(_DB_DIR / "utils" / "db_audit_lambda"))
-from db_audit_lambda import generate_audit_report  # noqa: E402
-
-sys.path.insert(0, str(_HERE))
-from verify_erd_against_audit import (  # noqa: E402
+# verify_erd_against_audit is a sibling module in database/audit/
+from verify_erd_against_audit import (
     compare_schemas,
     load_audit_data,
     parse_erd_tables,
 )
-
-sys.path.insert(0, str(_DB_DIR / "scripts"))
-from export_layer_tables import LAYERS, build_select, export_table  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,70 +59,567 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_HERE = Path(__file__).resolve().parent
+_DB_DIR = _HERE.parent
+_REPO_ROOT = _DB_DIR.parent
 
-# ── Expected row counts (layers 00-08) ───────────────────────────────────────
-# Lower bounds: check passes if actual >= expected.
-# None = report count only, no pass/fail.
-EXPECTED_COUNTS: dict[str, int | None] = {
-    "version_family": 13,
-    "version": 13,
-    "developer": 2,
-    "domain_family_map": 70,
-    "hydrologic_region": 6,
-    "network_type": 21,
-    "network_subtype": 26,
-    "unit": None,
-    "source": None,
-    "model_source": None,
-    "watershed": None,
-    "wba": 42,
-    "network_entity_type": 4,
-    "network": 6908,
-    "network_arc": 2610,
-    "network_node": 1544,
-    "network_gis": 4154,
-    "reservoir": 7,
-    "compliance_station": 2,
-    "du_agriculture_entity": 144,
-    "du_urban_entity": 145,
-    "du_refuge_entity": 18,
-    "reservoir_entity": 92,
-    "mi_contractor": 30,
-    "scenario": None,
-    "theme": None,
-    "theme_scenario_link": None,
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCHEMA SNAPSHOT — replaces the Lambda dependency
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_NON_DOMAIN_TABLES = {
+    "spatial_ref_sys",
+    "audit_log",
+    "developer",
+    "domain_family_map",
+    "version",
+    "version_family",
 }
 
 
-# ── Layer 10+ results tables to sample ────────────────────────────────────────
+def _rows(cursor) -> list[dict]:
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+
+def _get_all_tables(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT schemaname, tablename, tableowner, hasindexes, hasrules, hastriggers
+        FROM pg_tables
+        WHERE schemaname NOT IN ('information_schema', 'pg_catalog')
+        ORDER BY schemaname, tablename;
+    """)
+    return _rows(cursor)
+
+
+def _get_table_structure(cursor, schema: str, table: str) -> list[dict]:
+    cursor.execute("""
+        SELECT column_name, data_type, is_nullable, column_default,
+               character_maximum_length, numeric_precision, numeric_scale
+        FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = %s
+        ORDER BY ordinal_position;
+    """, (schema, table))
+    return _rows(cursor)
+
+
+def _get_record_count(cursor, schema: str, table: str) -> int:
+    try:
+        cursor.execute("SAVEPOINT _count")
+        cursor.execute(f'SELECT COUNT(*) FROM "{schema}"."{table}";')
+        result = cursor.fetchone()[0]
+        cursor.execute("RELEASE SAVEPOINT _count")
+        return result
+    except Exception as exc:
+        logger.warning("Could not count %s.%s: %s", schema, table, exc)
+        cursor.execute("ROLLBACK TO SAVEPOINT _count")
+        cursor.execute("RELEASE SAVEPOINT _count")
+        return -1
+
+
+def _get_audit_field_info(cursor, schema: str, table: str, structure: list[dict]) -> dict:
+    col_names = {col["column_name"] for col in structure}
+    has_created_by = "created_by" in col_names
+    has_created_at = "created_at" in col_names
+    has_updated_by = "updated_by" in col_names
+    has_updated_at = "updated_at" in col_names
+
+    result = {
+        "has_created_by": has_created_by,
+        "has_created_at": has_created_at,
+        "has_updated_by": has_updated_by,
+        "has_updated_at": has_updated_at,
+        "created_by_values": [],
+        "created_at_range": None,
+        "sample_records": [],
+    }
+
+    if has_created_by:
+        try:
+            cursor.execute("SAVEPOINT _audit_fields")
+            cursor.execute(
+                f'SELECT DISTINCT created_by FROM "{schema}"."{table}" '
+                f"WHERE created_by IS NOT NULL ORDER BY created_by;"
+            )
+            result["created_by_values"] = [row[0] for row in cursor.fetchall()]
+
+            if has_created_at:
+                cursor.execute(
+                    f'SELECT MIN(created_at), MAX(created_at) FROM "{schema}"."{table}" '
+                    f"WHERE created_at IS NOT NULL;"
+                )
+                min_date, max_date = cursor.fetchone()
+                if min_date and max_date:
+                    result["created_at_range"] = {
+                        "min": min_date.isoformat(),
+                        "max": max_date.isoformat(),
+                    }
+
+            cursor.execute(f'SELECT * FROM "{schema}"."{table}" LIMIT 3;')
+            cols = [desc[0] for desc in cursor.description]
+            result["sample_records"] = [dict(zip(cols, row)) for row in cursor.fetchall()]
+            cursor.execute("RELEASE SAVEPOINT _audit_fields")
+        except Exception as exc:
+            result["error"] = str(exc)
+            cursor.execute("ROLLBACK TO SAVEPOINT _audit_fields")
+            cursor.execute("RELEASE SAVEPOINT _audit_fields")
+
+    return result
+
+
+def _get_indexes(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT
+            ix.tablename                                              AS table_name,
+            ix.indexname                                              AS index_name,
+            i.indisunique                                             AS is_unique,
+            i.indisprimary                                            AS is_primary,
+            string_agg(a.attname, ', ' ORDER BY k.ordinality)        AS columns,
+            ix.indexdef                                               AS definition
+        FROM pg_indexes                       ix
+        JOIN pg_class                         c  ON c.relname   = ix.indexname
+        JOIN pg_index                         i  ON i.indexrelid = c.oid
+        JOIN pg_class                         t  ON t.oid        = i.indrelid
+        JOIN LATERAL unnest(i.indkey)
+             WITH ORDINALITY AS k(attnum, ordinality)
+                                              ON TRUE
+        JOIN pg_attribute                     a  ON a.attrelid   = t.oid
+                                                 AND a.attnum    = k.attnum
+        WHERE ix.schemaname = 'public'
+        GROUP BY ix.tablename, ix.indexname, i.indisunique, i.indisprimary, ix.indexdef
+        ORDER BY ix.tablename, ix.indexname;
+    """)
+    return _rows(cursor)
+
+
+def _get_foreign_keys(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT
+            c.conname                    AS constraint_name,
+            c.conrelid::regclass::text   AS table_name,
+            a.attname                    AS column_name,
+            c.confrelid::regclass::text  AS ref_table,
+            f.attname                    AS ref_column,
+            CASE c.confdeltype
+                WHEN 'a' THEN 'NO ACTION'   WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'     WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT' END AS delete_rule,
+            CASE c.confupdtype
+                WHEN 'a' THEN 'NO ACTION'   WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'     WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT' END AS update_rule
+        FROM pg_constraint c
+        JOIN pg_class      t ON t.oid = c.conrelid
+        JOIN pg_namespace  n ON n.oid = t.relnamespace
+        JOIN pg_attribute  a ON a.attrelid = c.conrelid  AND a.attnum = ANY(c.conkey)
+        JOIN pg_attribute  f ON f.attrelid = c.confrelid AND f.attnum = ANY(c.confkey)
+        WHERE c.contype = 'f'
+          AND n.nspname  = 'public'
+        ORDER BY table_name, constraint_name, column_name;
+    """)
+    return _rows(cursor)
+
+
+def _get_check_constraints(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT tc.table_name, tc.constraint_name, cc.check_clause
+        FROM information_schema.table_constraints  tc
+        JOIN information_schema.check_constraints  cc
+             USING (constraint_name, constraint_schema)
+        WHERE tc.constraint_type = 'CHECK'
+          AND tc.table_schema    = 'public'
+          AND cc.check_clause NOT LIKE '%%IS NOT NULL'
+        ORDER BY tc.table_name, tc.constraint_name;
+    """)
+    return _rows(cursor)
+
+
+def _get_unique_constraints(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT
+            tc.table_name,
+            tc.constraint_name,
+            string_agg(kcu.column_name, ', ' ORDER BY kcu.ordinal_position) AS columns
+        FROM information_schema.table_constraints  tc
+        JOIN information_schema.key_column_usage   kcu
+             USING (constraint_name, constraint_schema)
+        WHERE tc.constraint_type = 'UNIQUE'
+          AND tc.table_schema    = 'public'
+        GROUP BY tc.table_name, tc.constraint_name
+        ORDER BY tc.table_name, tc.constraint_name;
+    """)
+    return _rows(cursor)
+
+
+def _get_trigger_details(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT
+            c.relname                           AS table_name,
+            t.tgname                            AS trigger_name,
+            CASE WHEN (t.tgtype & 2) > 0
+                 THEN 'BEFORE' ELSE 'AFTER' END AS timing,
+            ARRAY_REMOVE(ARRAY[
+                CASE WHEN (t.tgtype & 4)  > 0 THEN 'INSERT'   END,
+                CASE WHEN (t.tgtype & 8)  > 0 THEN 'DELETE'   END,
+                CASE WHEN (t.tgtype & 16) > 0 THEN 'UPDATE'   END,
+                CASE WHEN (t.tgtype & 32) > 0 THEN 'TRUNCATE' END
+            ], NULL)                             AS events,
+            p.proname                           AS function_name,
+            t.tgenabled != 'D'                  AS is_enabled
+        FROM pg_trigger    t
+        JOIN pg_class      c ON c.oid = t.tgrelid
+        JOIN pg_proc       p ON p.oid = t.tgfoid
+        JOIN pg_namespace  n ON n.oid = c.relnamespace
+        WHERE n.nspname    = 'public'
+          AND NOT t.tgisinternal
+        ORDER BY c.relname, t.tgname;
+    """)
+    rows = []
+    cols = [d[0] for d in cursor.description]
+    for row in cursor.fetchall():
+        d = dict(zip(cols, row))
+        if hasattr(d["events"], "__iter__") and not isinstance(d["events"], (str, list)):
+            d["events"] = list(d["events"])
+        rows.append(d)
+    return rows
+
+
+def _get_functions(cursor) -> list[dict]:
+    cursor.execute("""
+        SELECT
+            p.proname                               AS function_name,
+            pg_get_function_arguments(p.oid)        AS argument_types,
+            pg_get_function_result(p.oid)           AS return_type,
+            l.lanname                               AS language,
+            p.prosecdef                             AS security_definer,
+            r.rolname                               AS owner
+        FROM pg_proc       p
+        JOIN pg_namespace  n ON n.oid  = p.pronamespace
+        JOIN pg_language   l ON l.oid  = p.prolang
+        JOIN pg_roles      r ON r.oid  = p.proowner
+        WHERE n.nspname    = 'public'
+          AND p.prokind    = 'f'
+        ORDER BY p.proname;
+    """)
+    return _rows(cursor)
+
+
+def _check_versioning_system(cursor) -> dict:
+    versioning_tables = ["version_family", "version", "domain_family_map", "developer"]
+    result = {
+        "versioning_tables_exist": {},
+        "version_families": [],
+        "active_versions": [],
+        "versions": [],
+        "domain_mappings": [],
+        "developers": [],
+        "validation": {
+            "families_without_active_version": [],
+            "families_with_multiple_active_versions": [],
+            "domain_map_missing_tables": [],
+            "domain_map_unexpected_tables": [],
+        },
+    }
+
+    for table in versioning_tables:
+        try:
+            cursor.execute(f"SELECT COUNT(*) FROM public.{table};")
+            result["versioning_tables_exist"][table] = {
+                "exists": True, "count": cursor.fetchone()[0],
+            }
+        except Exception as exc:
+            result["versioning_tables_exist"][table] = {"exists": False, "error": str(exc)}
+
+    try:
+        cursor.execute("SELECT * FROM public.version_family ORDER BY id;")
+        result["version_families"] = _rows(cursor)
+    except Exception as exc:
+        result["version_families_error"] = str(exc)
+
+    try:
+        cursor.execute("SELECT * FROM public.version ORDER BY id;")
+        result["versions"] = _rows(cursor)
+
+        active_by_family: dict[int, list] = defaultdict(list)
+        for v in result["versions"]:
+            if v.get("is_active"):
+                active_by_family[v["version_family_id"]].append(v["id"])
+
+        result["active_versions"] = [
+            {"version_family_id": fid, "active_version_ids": vids}
+            for fid, vids in active_by_family.items()
+        ]
+        family_ids = {vf["id"] for vf in result["version_families"]}
+        result["validation"]["families_without_active_version"] = sorted(
+            family_ids - set(active_by_family.keys())
+        )
+        result["validation"]["families_with_multiple_active_versions"] = [
+            {"version_family_id": fid, "active_version_ids": vids}
+            for fid, vids in active_by_family.items()
+            if len(vids) > 1
+        ]
+    except Exception as exc:
+        result["versions_error"] = str(exc)
+
+    try:
+        cursor.execute(
+            "SELECT * FROM public.domain_family_map ORDER BY schema_name, table_name;"
+        )
+        result["domain_mappings"] = _rows(cursor)
+
+        mapped_tables = {row["table_name"] for row in result["domain_mappings"]} - _NON_DOMAIN_TABLES
+        cursor.execute("""
+            SELECT tablename FROM pg_tables
+            WHERE schemaname = 'public' ORDER BY tablename;
+        """)
+        all_db_tables = {row[0] for row in cursor.fetchall()} - _NON_DOMAIN_TABLES
+        result["validation"]["domain_map_missing_tables"] = sorted(all_db_tables - mapped_tables)
+        result["validation"]["domain_map_unexpected_tables"] = sorted(mapped_tables - all_db_tables)
+    except Exception as exc:
+        result["domain_mappings_error"] = str(exc)
+
+    try:
+        cursor.execute("SELECT * FROM public.developer ORDER BY id;")
+        result["developers"] = _rows(cursor)
+    except Exception as exc:
+        result["developers_error"] = str(exc)
+
+    return result
+
+
+def generate_schema_snapshot(conn) -> dict:
+    """Build a full schema snapshot. Pure Python, no AWS dependencies."""
+    cursor = conn.cursor()
+    logger.info("Starting schema snapshot...")
+
+    cursor.execute("SELECT current_database(), current_user, session_user, version();")
+    db_name, db_user, db_session_user, db_version = cursor.fetchone()
+
+    report = {
+        "audit_timestamp": datetime.now().isoformat(),
+        "database_info": {
+            "database_name": db_name,
+            "current_user": db_user,
+            "session_user": db_session_user,
+            "postgresql_version": db_version,
+        },
+        "versioning_system": _check_versioning_system(cursor),
+        "indexes": [],
+        "foreign_keys": [],
+        "check_constraints": [],
+        "unique_constraints": [],
+        "triggers": [],
+        "functions": [],
+        "tables": [],
+        "validation": {
+            "tables_missing_audit_trigger": [],
+            "tables_attributed_to_system_only": [],
+        },
+    }
+
+    logger.info("Collecting indexes...")
+    report["indexes"] = _get_indexes(cursor)
+    logger.info("Collecting foreign keys...")
+    report["foreign_keys"] = _get_foreign_keys(cursor)
+    logger.info("Collecting CHECK constraints...")
+    report["check_constraints"] = _get_check_constraints(cursor)
+    logger.info("Collecting UNIQUE constraints...")
+    report["unique_constraints"] = _get_unique_constraints(cursor)
+    logger.info("Collecting triggers...")
+    report["triggers"] = _get_trigger_details(cursor)
+    logger.info("Collecting functions...")
+    report["functions"] = _get_functions(cursor)
+
+    tables_with_triggers = {t["table_name"] for t in report["triggers"]}  # noqa: F841
+
+    tables = _get_all_tables(cursor)
+    logger.info("Auditing %d tables...", len(tables))
+
+    for i, table_info in enumerate(tables, 1):
+        schema = table_info["schemaname"]
+        table = table_info["tablename"]
+        logger.info("  [%d/%d] %s.%s", i, len(tables), schema, table)
+
+        structure = _get_table_structure(cursor, schema, table)
+        record_count = _get_record_count(cursor, schema, table)
+        audit_fields = _get_audit_field_info(cursor, schema, table, structure)
+
+        has_audit_trigger = any(
+            t["function_name"] == "set_audit_fields" and t["table_name"] == table
+            for t in report["triggers"]
+        )
+
+        report["tables"].append({
+            "schema": schema,
+            "table": table,
+            "owner": table_info["tableowner"],
+            "has_indexes": table_info["hasindexes"],
+            "has_rules": table_info["hasrules"],
+            "has_triggers": table_info["hastriggers"],
+            "has_audit_trigger": has_audit_trigger,
+            "record_count": record_count,
+            "column_count": len(structure),
+            "columns": structure,
+            "audit_fields": audit_fields,
+        })
+
+    report["validation"]["tables_missing_audit_trigger"] = sorted([
+        t["table"] for t in report["tables"]
+        if t["audit_fields"]["has_created_by"] and not t["has_audit_trigger"]
+    ])
+    report["validation"]["tables_attributed_to_system_only"] = sorted([
+        t["table"] for t in report["tables"]
+        if t["audit_fields"]["has_created_by"]
+        and t["record_count"] > 0
+        and t["audit_fields"]["created_by_values"] == [1]
+        and t["table"] != "developer"
+    ])
+
+    cursor.close()
+    return report
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LAYER TABLE EXPORT — replaces export_layer_tables.py dependency
+# ═══════════════════════════════════════════════════════════════════════════════
+
+LAYERS: dict[str, list[str]] = {
+    "00_versioning": [
+        "developer", "version_family", "version", "domain_family_map",
+    ],
+    "01_lookup": [
+        "hydrologic_region", "source", "model_source", "unit",
+        "spatial_scale", "temporal_scale", "statistic_type", "geometry_type",
+        "network_type", "network_subtype", "watershed", "wba",
+    ],
+    "02_network": [
+        "network_entity_type", "network", "network_arc", "network_node", "network_gis",
+    ],
+    "03_entity": [
+        "reservoir", "compliance_station",
+        "du_agriculture_entity", "du_urban_entity", "du_refuge_entity",
+        "reservoir_entity", "mi_contractor",
+    ],
+    "04_variable": [
+        "calsim_model_variable_type", "derived_variable_type", "variable_type",
+        "channel_variable", "reservoir_variable", "inflow_variable", "derived_variable",
+    ],
+    "05_assumptions_operations": [
+        "assumption_category", "assumption_definition",
+        "operation_category", "operation_definition",
+        "scenario_key_assumption_link", "scenario_key_operation_link",
+    ],
+    "06_scenario": [
+        "scenario", "scenario_author", "scenario_source", "scenario_source_link",
+    ],
+    "07_hydroclimate": ["hydroclimate", "slr"],
+    "08_theme": ["theme", "theme_scenario_link", "theme_source_link"],
+}
+
 RESULTS_TABLES = [
-    "tier_definition",
-    "tier_result",
-    "tier_location_result",
-    "reservoir_storage_monthly",
-    "reservoir_spill_monthly",
-    "reservoir_period_summary",
-    "reservoir_monthly_percentile",
-    "du_delivery_monthly",
-    "du_shortage_monthly",
-    "du_period_summary",
-    "mi_delivery_monthly",
-    "mi_shortage_monthly",
-    "mi_contractor_period_summary",
-    "cws_aggregate_monthly",
-    "cws_aggregate_period_summary",
-    "ag_du_delivery_monthly",
-    "ag_du_shortage_monthly",
-    "ag_du_period_summary",
-    "ag_aggregate_period_summary",
-    "env_flow_season",
-    "env_flow_channel_monthly",
-    "env_flow_channel_seasonal",
-    "env_flow_channel_period_summary",
+    "tier_definition", "tier_result", "tier_location_result",
+    "reservoir_storage_monthly", "reservoir_spill_monthly",
+    "reservoir_period_summary", "reservoir_monthly_percentile",
+    "du_delivery_monthly", "du_shortage_monthly", "du_period_summary",
+    "mi_delivery_monthly", "mi_shortage_monthly", "mi_contractor_period_summary",
+    "cws_aggregate_monthly", "cws_aggregate_period_summary",
+    "ag_du_delivery_monthly", "ag_du_shortage_monthly",
+    "ag_du_period_summary", "ag_aggregate_period_summary",
+    "env_flow_season", "env_flow_channel_monthly",
+    "env_flow_channel_seasonal", "env_flow_channel_period_summary",
 ]
 
+EXPECTED_COUNTS: dict[str, int | None] = {
+    "version_family": 13, "version": 13, "developer": 2,
+    "domain_family_map": 70, "hydrologic_region": 6,
+    "network_type": 21, "network_subtype": 26,
+    "unit": None, "source": None, "model_source": None, "watershed": None,
+    "wba": 42, "network_entity_type": 4, "network": 6908,
+    "network_arc": 2610, "network_node": 1544, "network_gis": 4154,
+    "reservoir": 7, "compliance_station": 2,
+    "du_agriculture_entity": 144, "du_urban_entity": 145,
+    "du_refuge_entity": 18, "reservoir_entity": 92, "mi_contractor": 30,
+    "scenario": None, "theme": None, "theme_scenario_link": None,
+}
 
-# ── SQL queries ───────────────────────────────────────────────────────────────
+
+def _build_select(cur, table_name: str) -> tuple[str | None, list[str]]:
+    """Return (sql, col_names). Geometry columns wrapped in ST_AsText()."""
+    cur.execute("""
+        SELECT column_name, udt_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = %s
+        ORDER BY ordinal_position
+    """, (table_name,))
+    columns = cur.fetchall()
+    if not columns:
+        return None, []
+
+    parts, col_names = [], []
+    for col_name, udt_name in columns:
+        if udt_name == "geometry":
+            parts.append(f'ST_AsText("{col_name}") AS "{col_name}"')
+        else:
+            parts.append(f'"{col_name}"')
+        col_names.append(col_name)
+
+    sql = f'SELECT {", ".join(parts)} FROM "{table_name}" ORDER BY 1'
+    return sql, col_names
+
+
+def _export_table(cur, table_name: str, output_path: Path) -> int | None:
+    """Export one table to CSV. Returns row count or None on failure."""
+    sql, col_names = _build_select(cur, table_name)
+    if sql is None:
+        logger.warning("SKIP  %s (table not found)", table_name)
+        return None
+    try:
+        cur.execute(sql)
+        rows = cur.fetchall()
+    except psycopg2.Error as exc:
+        logger.warning("ERROR %s: %s", table_name, exc)
+        return None
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(col_names)
+        writer.writerows(rows)
+    return len(rows)
+
+
+def _export_sample(cur, table_name: str, output_dir: Path, n: int = 10) -> dict:
+    """Export first N and last N rows of a table to CSV."""
+    sql, col_names = _build_select(cur, table_name)
+    if sql is None:
+        return {"table": table_name, "head": 0, "tail": 0, "status": "NOT FOUND"}
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    counts: dict = {"table": table_name, "status": "OK"}
+
+    for suffix, order in [("head", "ASC"), ("tail", "DESC")]:
+        sample_sql = sql.replace("ORDER BY 1", f"ORDER BY 1 {order}") + f" LIMIT {n}"
+        try:
+            cur.execute(sample_sql)
+            rows = cur.fetchall()
+        except psycopg2.Error:
+            counts[suffix] = 0
+            continue
+
+        csv_path = output_dir / f"{table_name}_{suffix}.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(col_names)
+            writer.writerows(rows)
+        counts[suffix] = len(rows)
+
+    return counts
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SQL QUERIES — health, cost, verification
+# ═══════════════════════════════════════════════════════════════════════════════
 
 SQL_DB_SIZE = "SELECT pg_size_pretty(pg_database_size(current_database()))"
 
@@ -249,7 +737,9 @@ ORDER BY relname
 """
 
 
-# ── Markdown helpers ──────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# REPORT HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def md_table(rows: list[dict], columns: list[str] | None = None) -> str:
     if not rows:
@@ -281,37 +771,9 @@ def json_serial(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
-# ── Sample export (head/tail for results tables) ─────────────────────────────
-
-def export_sample(cur, table_name: str, output_dir: Path, n: int = 10) -> dict:
-    """Export first N and last N rows of a table to CSV. Returns row counts."""
-    sql, col_names = build_select(cur, table_name)
-    if sql is None:
-        return {"table": table_name, "head": 0, "tail": 0, "status": "NOT FOUND"}
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    counts = {"table": table_name, "status": "OK"}
-
-    for suffix, order in [("head", "ASC"), ("tail", "DESC")]:
-        sample_sql = sql.replace("ORDER BY 1", f"ORDER BY 1 {order}") + f" LIMIT {n}"
-        try:
-            cur.execute(sample_sql)
-            rows = cur.fetchall()
-        except psycopg2.Error:
-            counts[suffix] = 0
-            continue
-
-        csv_path = output_dir / f"{table_name}_{suffix}.csv"
-        with open(csv_path, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
-            writer.writerow(col_names)
-            writer.writerows(rows)
-        counts[suffix] = len(rows)
-
-    return counts
-
-
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -350,10 +812,14 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     lines: list[str] = []
+    findings: dict[str, object] = {}
+
     def h(text: str, level: int = 2) -> None:
         lines.append(f"\n{'#' * level} {text}\n")
+
     def p(text: str) -> None:
         lines.append(text + "\n")
+
     def section(title: str, cur, sql: str, note: str = "") -> list[dict]:
         rows = run_query(cur, sql)
         h(title, 3)
@@ -390,11 +856,11 @@ def main() -> None:
 
         # ── 1a. Schema snapshot + table inventory ─────────────────────────
         h("1a. Table inventory", 3)
-        logger.info("Running schema snapshot (same logic as Lambda)...")
+        logger.info("Running schema snapshot...")
 
         snapshot_conn = psycopg2.connect(database_url)
         try:
-            audit_report = generate_audit_report(snapshot_conn)
+            audit_report = generate_schema_snapshot(snapshot_conn)
         finally:
             snapshot_conn.close()
 
@@ -402,7 +868,7 @@ def main() -> None:
         snapshot_path.write_text(
             json.dumps(audit_report, indent=2, default=json_serial)
         )
-        logger.info(f"Schema snapshot → {snapshot_path}")
+        logger.info("Schema snapshot → %s", snapshot_path)
 
         csv_summary_path = run_dir / "tables_summary.csv"
         summary_data = [
@@ -419,9 +885,8 @@ def main() -> None:
             for t in audit_report["tables"]
         ]
         pd.DataFrame(summary_data).to_csv(csv_summary_path, index=False)
-        logger.info(f"Tables summary  → {csv_summary_path}")
+        logger.info("Tables summary  → %s", csv_summary_path)
 
-        # Build layer-grouped inventory for the report
         layer_assignment = {}
         for layer_name, tables in LAYERS.items():
             for tbl in tables:
@@ -450,6 +915,8 @@ def main() -> None:
             audit_data = load_audit_data(snapshot_path)
             erd_result = compare_schemas(erd_tables, audit_data, quiet=True)
 
+            findings["erd_synced"] = erd_result["is_synchronized"]
+            findings["erd_result"] = erd_result
             if erd_result["is_synchronized"]:
                 p("**STATUS: ERD is fully synchronized with the live database.**")
             else:
@@ -470,9 +937,9 @@ def main() -> None:
                 if erd_result["column_mismatches"]:
                     p(f"**Tables with column mismatches:** "
                       f"{len(erd_result['column_mismatches'])}")
-                    for tbl, info in sorted(erd_result["column_mismatches"].items()):
-                        extra = info.get("extra_in_db", [])
-                        missing = info.get("missing_from_db", [])
+                    for tbl, col_info in sorted(erd_result["column_mismatches"].items()):
+                        extra = col_info.get("extra_in_db", [])
+                        missing = col_info.get("missing_from_db", [])
                         if extra:
                             p(f"  - `{tbl}`: extra in DB: {extra}")
                         if missing:
@@ -491,15 +958,15 @@ def main() -> None:
 
         check_results = []
         for tbl, expected in sorted(EXPECTED_COUNTS.items()):
-            info = count_map.get(tbl)
-            if info is None:
+            tbl_info = count_map.get(tbl)
+            if tbl_info is None:
                 check_results.append({
                     "table": tbl, "actual": "NOT FOUND",
                     "expected": str(expected) if expected else "—",
                     "status": "MISSING",
                 })
                 continue
-            actual = info["estimated_rows"]
+            actual = tbl_info["estimated_rows"]
             if expected is None:
                 status = "OK (no target)"
             elif actual >= expected:
@@ -512,6 +979,10 @@ def main() -> None:
                 "status": status,
             })
         lines.append(md_table(check_results, ["table", "actual", "expected", "status"]))
+        failed_counts = [r for r in check_results if r["status"].startswith("FAIL")]
+        missing_counts = [r for r in check_results if r["status"] == "MISSING"]
+        findings["row_count_failures"] = failed_counts
+        findings["row_count_missing"] = missing_counts
 
         # ── 1d. Reference data downloads (layers 00-08) ──────────────────
         h("1d. Reference data downloads (layers 00-08)", 3)
@@ -522,7 +993,7 @@ def main() -> None:
                 layer_dir = export_dir / layer_name
                 for table_name in tables:
                     csv_path = layer_dir / f"{table_name}.csv"
-                    row_count = export_table(cur, table_name, csv_path)
+                    row_count = _export_table(cur, table_name, csv_path)
                     export_summary.append({
                         "layer": layer_name, "table": table_name,
                         "rows": row_count if row_count is not None else "ERROR",
@@ -537,7 +1008,7 @@ def main() -> None:
         sample_results = []
         with conn_rw.cursor() as cur:
             for tbl in RESULTS_TABLES:
-                result = export_sample(cur, tbl, samples_dir)
+                result = _export_sample(cur, tbl, samples_dir)
                 sample_results.append(result)
         lines.append(md_table(sample_results, ["table", "head", "tail", "status"]))
         p(f"_CSVs written to `{samples_dir.relative_to(run_dir)}/`._")
@@ -553,16 +1024,21 @@ def main() -> None:
             conn_rw.set_session(readonly=True)
         with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
-            # ── 2a. Data integrity checks ─────────────────────────────────
-            section("2a. NULL audit fields", cur, SQL_NULL_AUDIT_FIELDS,
-                    "Rows with created_by = NULL — trigger was not active during insert. "
-                    "Should return no rows.")
-            section("2a. Orphaned statistics rows", cur, SQL_ORPHANED_STATS,
-                    "Results rows referencing non-existent scenarios. Should all be 0.")
-            section("2a. Invalid water_month values", cur, SQL_INVALID_WATER_MONTHS,
-                    "water_month must be 1-12. Non-zero = data integrity error.")
+            null_audit_rows = section(
+                "2a. NULL audit fields", cur, SQL_NULL_AUDIT_FIELDS,
+                "Rows with created_by = NULL — trigger was not active during insert. "
+                "Should return no rows.")
+            orphan_rows = section(
+                "2a. Orphaned statistics rows", cur, SQL_ORPHANED_STATS,
+                "Results rows referencing non-existent scenarios. Should all be 0.")
+            invalid_wm_rows = section(
+                "2a. Invalid water_month values", cur, SQL_INVALID_WATER_MONTHS,
+                "water_month must be 1-12. Non-zero = data integrity error.")
 
-            # Schema snapshot validation (from section 1a if available)
+            findings["null_audit"] = null_audit_rows
+            findings["orphans"] = orphan_rows
+            findings["invalid_water_month"] = invalid_wm_rows
+
             if "audit_report" in dir():
                 val = audit_report.get("validation", {})
                 missing_trigger = val.get("tables_missing_audit_trigger", [])
@@ -576,12 +1052,19 @@ def main() -> None:
                     p(f"Every row has `created_by = 1` (system). Likely mis-attributed bulk loads: "
                       f"{', '.join(system_only)}")
 
-            # ── 2b. Per-scenario ETL coverage ─────────────────────────────
-            section("2b. Per-scenario ETL coverage", cur, SQL_SCENARIO_COVERAGE,
-                    "Every active scenario should have non-zero rows in each results table. "
-                    "Zeros indicate a missed ETL run.")
+            coverage_rows = section(
+                "2b. Per-scenario ETL coverage", cur, SQL_SCENARIO_COVERAGE,
+                "Every active scenario should have non-zero rows in each results table. "
+                "Zeros indicate a missed ETL run.")
+            gaps = []
+            for row in coverage_rows:
+                if row.get("is_active") and not row.get("error"):
+                    for col in ("reservoir", "du_delivery", "ag_delivery",
+                                "mi_summary", "tiers"):
+                        if row.get(col, 0) == 0:
+                            gaps.append(f"{row.get('short_code', '?')}/{col}")
+            findings["etl_coverage_gaps"] = gaps
 
-        # ── 2c. ETL accuracy status summary ───────────────────────────────
         h("2c. ETL accuracy status summary", 3)
         reports_dir = _REPO_ROOT / "audits" / "verification_reports"
         if reports_dir.exists():
@@ -623,11 +1106,11 @@ def main() -> None:
             conn_rw = psycopg2.connect(database_url)
             conn_rw.set_session(readonly=True)
         with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            section("3a. Cache hit ratio", cur, SQL_CACHE_HIT,
+            cache_rows = section("3a. Cache hit ratio", cur, SQL_CACHE_HIT,
                     "Should be > 99%. Below that = too many disk reads.")
-            section("3b. Connection utilization", cur, SQL_CONNECTIONS,
+            conn_rows = section("3b. Connection utilization", cur, SQL_CONNECTIONS,
                     "Watch for pct_used > 80%. Many idle = connection leak.")
-            section("3c. Dead tuple accumulation", cur, SQL_DEAD_TUPLES,
+            dead_rows = section("3c. Dead tuple accumulation", cur, SQL_DEAD_TUPLES,
                     "Dead tuples are old row versions left by UPDATE/DELETE. "
                     "High counts after ETL = autovacuum is behind.")
             p(
@@ -638,6 +1121,20 @@ def main() -> None:
             )
             section("3d. Table bloat estimate", cur, SQL_BLOAT,
                     "bloat_pct > 20% = significant wasted space. VACUUM ANALYZE recommended.")
+
+            cache_pct = None
+            if cache_rows and not cache_rows[0].get("error"):
+                cache_pct = cache_rows[0].get("cache_hit_pct")
+            findings["cache_hit_pct"] = float(cache_pct) if cache_pct is not None else None
+
+            conn_pct = None
+            if conn_rows and not conn_rows[0].get("error"):
+                conn_pct = conn_rows[0].get("pct_used")
+            findings["conn_pct_used"] = float(conn_pct) if conn_pct is not None else None
+
+            bloated = [r["table_name"] for r in (dead_rows or [])
+                       if not r.get("error") and float(r.get("dead_pct", 0)) > 20]
+            findings["bloated_tables"] = bloated
 
     # ══════════════════════════════════════════════════════════════════════
     # 4. DATABASE COST
@@ -651,28 +1148,71 @@ def main() -> None:
         with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             section("4a. Table sizes (top 25)", cur, SQL_TABLE_SIZES,
                     "Total = data + indexes.")
-            section("4b. Unused indexes", cur, SQL_UNUSED_INDEXES,
+            unused_idx_rows = section("4b. Unused indexes", cur, SQL_UNUSED_INDEXES,
                     "idx_scan = 0 since last stats reset. PKs and UNIQUE constraints excluded. "
                     "Each unused index adds write overhead with no read benefit.")
+            findings["unused_indexes"] = [
+                r.get("index_name", "?") for r in (unused_idx_rows or [])
+                if not r.get("error")
+            ]
             h("4c. Total storage", 3)
             p(f"**Total database size:** {db_size}")
 
     # ══════════════════════════════════════════════════════════════════════
-    # 5. NEXT STEPS CHECKLIST
+    # 5. AUDIT SUMMARY
     # ══════════════════════════════════════════════════════════════════════
-    h("5. NEXT STEPS CHECKLIST")
-    lines.append(dedent("""\
-    - [ ] **Health**: Cache hit ratio > 99%?
-    - [ ] **Health**: No connections approaching max_connections?
-    - [ ] **Health**: Any tables with dead_pct > 20%? Run `VACUUM ANALYZE <table>`
-    - [ ] **Cost**: Any large unused indexes worth dropping?
-    - [ ] **Content**: All expected row counts PASS?
-    - [ ] **Content**: ERD fully synchronized with live schema?
-    - [ ] **Verification**: All active scenarios have ETL coverage (non-zero rows)?
-    - [ ] **Verification**: Zero NULL audit fields?
-    - [ ] **Verification**: Zero orphaned statistics rows?
-    - [ ] **Verification**: Any scenarios never verified? Run `verify_all_sections.py`
-    """))
+    h("5. AUDIT SUMMARY")
+
+    def check(key: str, label: str, pass_test, fail_msg_fn=None) -> None:
+        val = findings.get(key)
+        if val is None:
+            p(f"- **—** **{label}**: _skipped_")
+        elif pass_test(val):
+            p(f"- **PASS** **{label}**")
+        else:
+            detail = fail_msg_fn(val) if fail_msg_fn else ""
+            p(f"- **FAIL** **{label}**{': ' + detail if detail else ''}")
+
+    check("cache_hit_pct", "Health: Cache hit ratio > 99%",
+          lambda v: v >= 99.0,
+          lambda v: f"currently {v}% — too many disk reads")
+    check("conn_pct_used", "Health: Connections below 80% of max",
+          lambda v: v < 80.0,
+          lambda v: f"currently {v}% — approaching limit")
+    check("bloated_tables", "Health: No tables with dead_pct > 20%",
+          lambda v: len(v) == 0,
+          lambda v: f"run `VACUUM ANALYZE` on: {', '.join(v)}")
+    check("unused_indexes", "Cost: No large unused indexes",
+          lambda v: len(v) == 0,
+          lambda v: f"{len(v)} unused index(es) adding write overhead")
+    check("row_count_failures", "Content: All expected row counts pass",
+          lambda v: len(v) == 0,
+          lambda v: f"{len(v)} table(s) below target: "
+                    + ", ".join(r["table"] for r in v))
+    check("row_count_missing", "Content: No expected tables missing from DB",
+          lambda v: len(v) == 0,
+          lambda v: f"{len(v)} table(s) not found: "
+                    + ", ".join(r["table"] for r in v))
+    check("erd_synced", "Content: ERD synchronized with live schema",
+          lambda v: v is True,
+          lambda _: "see section 1b for details")
+    check("etl_coverage_gaps", "Verification: All active scenarios have ETL coverage",
+          lambda v: len(v) == 0,
+          lambda v: f"{len(v)} gap(s): " + ", ".join(v[:10])
+                    + ("..." if len(v) > 10 else ""))
+    check("null_audit", "Verification: Zero NULL audit fields",
+          lambda v: len(v) == 0 or all(r.get("error") for r in v),
+          lambda v: f"{len(v)} table(s) with NULL created_by")
+    check("orphans", "Verification: Zero orphaned statistics rows",
+          lambda v: all(r.get("orphan_rows", 0) == 0 for r in v if not r.get("error")),
+          lambda v: ", ".join(
+              f"{r['table_name']}={r['orphan_rows']}"
+              for r in v if r.get("orphan_rows", 0) > 0))
+    check("invalid_water_month", "Verification: Zero invalid water_month values",
+          lambda v: all(r.get("invalid_count", 0) == 0 for r in v if not r.get("error")),
+          lambda v: ", ".join(
+              f"{r['table_name']}={r['invalid_count']}"
+              for r in v if r.get("invalid_count", 0) > 0))
 
     # ── Close connections ─────────────────────────────────────────────────
     conn.close()
@@ -681,7 +1221,7 @@ def main() -> None:
 
     # ── Write report ──────────────────────────────────────────────────────
     elapsed = (datetime.now() - started).total_seconds()
-    lines.append(f"\n---\n")
+    lines.append("\n---\n")
     lines.append(
         f"_Report generated in {elapsed:.1f}s by "
         f"`database/audit/run_monthly_audit.py`_\n"
@@ -698,7 +1238,7 @@ def main() -> None:
     print(f"  Output:  {run_dir.resolve()}")
     print(f"  Report:  {report_path.name}")
     print(f"  Snapshot:{(run_dir / 'schema_snapshot.json').name}")
-    print(f"  Exports: layer_exports/ + results_samples/")
+    print("  Exports: layer_exports/ + results_samples/")
     print("=" * 60)
 
 

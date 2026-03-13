@@ -138,14 +138,10 @@ database/
 │       ├── 13_ag_statistics/
 │       ├── migrations/             #   applied one-time ALTER TABLE scripts
 │       └── validate_data_integrity.sql
-├── run_audit.sh                    # Shell entry point → run_local_audit.py (schema snapshot)
-├── run_local_audit.py              # Python: collects schema snapshot → audits/ JSON+CSV
+├── run_audit.sh                    # Quick schema-only snapshot → audits/ JSON+CSV
+├── run_local_audit.py              # Python: collects schema snapshot (used by run_audit.sh)
 ├── setup_db_connection.sh          # Interactive connection string setup
 └── utils/
-    ├── db_audit_lambda/            # AWS Lambda deployment of run_local_audit.py
-    │   ├── db_audit_lambda.py      #   same audit logic, Lambda handler wrapper
-    │   ├── Dockerfile
-    │   └── README.md
     ├── versioning_utils.py
     └── sync_aws_sso_users.py
 ```
@@ -160,7 +156,7 @@ audits/                             # gitignored — all audit outputs land here
 │   ├── tables_summary.csv          #     per-table row counts + audit field status
 │   ├── layer_exports/              #     full CSV exports for layers 00-08
 │   └── results_samples/            #     head/tail CSVs for layers 10+
-├── audit_YYYYMMDD_HHMMSS.json      #   quick schema snapshot (from run_audit.sh or Lambda)
+├── audit_YYYYMMDD_HHMMSS.json      #   quick schema snapshot (from run_audit.sh)
 ├── tables_summary_YYYYMMDD_HHMMSS.csv  # quick per-table summary
 ├── latest.json                     #   symlink to most recent JSON snapshot
 ├── verification_reports/           #   ETL accuracy reports (Layer 2 + Layer 3)

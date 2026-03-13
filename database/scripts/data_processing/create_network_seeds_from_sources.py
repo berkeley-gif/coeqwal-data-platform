@@ -20,9 +20,6 @@ Output Files:
 
 import pandas as pd
 import csv
-import xml.etree.ElementTree as ET
-from datetime import datetime
-import json
 
 # Increase CSV field size limit for large WKT geometries
 csv.field_size_limit(1000000)
@@ -186,7 +183,7 @@ def create_network_gis(gp_arcs, gp_nodes):
     print(f"     Created unified network_gis.csv with {len(gis_records):,} spatial records")
     print(f"      - Points: {len([r for r in gis_records if r['geometry_type'] == 'point']):,}")
     print(f"      - Linestrings: {len([r for r in gis_records if r['geometry_type'] == 'multilinestring']):,}")
-    print(f"      - PostGIS will handle mixed geometry types efficiently")
+    print("      - PostGIS will handle mixed geometry types efficiently")
 
 def create_network_arc(gp_arcs):
     """Create network_arc.csv from geopackage arc data"""
@@ -337,7 +334,7 @@ def extract_coordinates(wkt_string):
             coords = wkt_string.split('(')[1].split(')')[0].strip()
             lon, lat = coords.split()
             return float(lat), float(lon)
-    except:
+    except (ValueError, IndexError, TypeError):
         pass
     
     return None, None

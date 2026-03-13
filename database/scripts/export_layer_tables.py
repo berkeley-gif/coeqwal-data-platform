@@ -245,7 +245,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     started = datetime.now()
-    print(f"\nCOEQWAL layer table export")
+    print("\nCOEQWAL layer table export")
     print(f"Output:  {output_dir.resolve()}")
     print(f"Started: {started.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
