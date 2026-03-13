@@ -813,6 +813,8 @@ def main() -> None:
 
     lines: list[str] = []
     findings: dict[str, object] = {}
+    conn_rw = None
+    audit_report = None
 
     def h(text: str, level: int = 2) -> None:
         lines.append(f"\n{'#' * level} {text}\n")
@@ -924,26 +926,18 @@ def main() -> None:
                     p(f"**Tables in DB but missing from ERD:** "
                       f"{', '.join(erd_result['missing_from_erd'])}")
                 if erd_result["missing_from_db"]:
-                    planned = [t for t, info in erd_result["missing_from_db"].items()
-                               if info.get("is_planned")]
-                    real_missing = [t for t in erd_result["missing_from_db"]
-                                    if t not in (planned or [])]
-                    if planned:
-                        p(f"**Tables in ERD marked PLANNED (not yet built):** "
-                          f"{', '.join(planned)}")
-                    if real_missing:
-                        p(f"**Tables in ERD but NOT in DB (unexpected):** "
-                          f"{', '.join(real_missing)}")
+                    p(f"**Tables in ERD but NOT in DB:** "
+                      f"{', '.join(erd_result['missing_from_db'])}")
                 if erd_result["column_mismatches"]:
                     p(f"**Tables with column mismatches:** "
                       f"{len(erd_result['column_mismatches'])}")
-                    for tbl, col_info in sorted(erd_result["column_mismatches"].items()):
-                        extra = col_info.get("extra_in_db", [])
-                        missing = col_info.get("missing_from_db", [])
+                    for m in erd_result["column_mismatches"]:
+                        extra = m.get("missing_in_erd", [])
+                        missing = m.get("extra_in_erd", [])
                         if extra:
-                            p(f"  - `{tbl}`: extra in DB: {extra}")
+                            p(f"  - `{m['table']}`: in DB but not ERD: {extra}")
                         if missing:
-                            p(f"  - `{tbl}`: missing from DB: {missing}")
+                            p(f"  - `{m['table']}`: in ERD but not DB: {missing}")
                 p(f"\n_Correct tables: {erd_result['correct_count']}_")
         else:
             p(f"_ERD file not found at {erd_path}. Skipping comparison._")
@@ -1019,7 +1013,7 @@ def main() -> None:
     if "verification" not in args.skip:
         h("2. DATABASE CONTENT VERIFICATION")
 
-        if "conn_rw" not in dir():
+        if conn_rw is None:
             conn_rw = psycopg2.connect(database_url)
             conn_rw.set_session(readonly=True)
         with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1039,7 +1033,7 @@ def main() -> None:
             findings["orphans"] = orphan_rows
             findings["invalid_water_month"] = invalid_wm_rows
 
-            if "audit_report" in dir():
+            if audit_report is not None:
                 val = audit_report.get("validation", {})
                 missing_trigger = val.get("tables_missing_audit_trigger", [])
                 system_only = val.get("tables_attributed_to_system_only", [])
@@ -1102,7 +1096,7 @@ def main() -> None:
     if "health" not in args.skip:
         h("3. DATABASE HEALTH")
 
-        if "conn_rw" not in dir():
+        if conn_rw is None:
             conn_rw = psycopg2.connect(database_url)
             conn_rw.set_session(readonly=True)
         with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1142,7 +1136,7 @@ def main() -> None:
     if "cost" not in args.skip:
         h("4. DATABASE COST")
 
-        if "conn_rw" not in dir():
+        if conn_rw is None:
             conn_rw = psycopg2.connect(database_url)
             conn_rw.set_session(readonly=True)
         with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1216,7 +1210,7 @@ def main() -> None:
 
     # ── Close connections ─────────────────────────────────────────────────
     conn.close()
-    if "conn_rw" in dir():
+    if conn_rw is not None:
         conn_rw.close()
 
     # ── Write report ──────────────────────────────────────────────────────
