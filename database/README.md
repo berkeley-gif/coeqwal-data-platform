@@ -4,29 +4,28 @@ PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics to
 
 ## Getting started
 
-For new developers. Full details on each step are in the sections below.
-
 ### Prerequisites
 
 - AWS account access (to reach the RDS instance via Cloud9 or VPN)
-- Database credentials (ask a team member, or retrieve from AWS Secrets Manager)
+- Database credentials (ask a team member)
 
 ### First-time setup (5 steps)
 
 **1. Set your connection strings** in `~/.bashrc` on Cloud9:
 
 ```bash
-# Your personal developer connection — used for everything day-to-day
+# Your personal developer connection. Used for everything day-to-day
 export DATABASE_URL="postgresql://your_username:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
 
 # RDS master user — only needed for DDL migrations (ALTER TABLE, CREATE/DROP INDEX, GRANT)
 # Retrieve the postgres password from AWS Secrets Manager (ask an admin or see below)
-export SUPERUSER_URL="postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+export SUPERUSER_URL="postgresql://postgres:PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+
 
 source ~/.bashrc
 ```
 
-The `setup_db_connection.sh` script will prompt you for both and test each connection:
+Alternatively, the `setup_db_connection.sh` script will prompt you for both and test each connection:
 ```bash
 bash database/setup_db_connection.sh
 ```
@@ -37,9 +36,9 @@ bash database/setup_db_connection.sh
 |---|---|
 | Queries, seed loads, inspect scripts, ETL, API | `$DATABASE_URL` |
 | DDL migrations (`database/scripts/sql/migrations/`) | `$SUPERUSER_URL` |
-| Running the audit (`bash database/run_audit.sh`) | `$DATABASE_URL` — must be your named user, not `postgres` |
+| Running the audit (`python database/audit/run_monthly_audit.py`) | `$DATABASE_URL`
 
-**Finding the postgres password:** it is stored in AWS Secrets Manager. To find it:
+**Finding the postgres password:** If you forget the password, it is stored in AWS Secrets Manager. To find it:
 ```bash
 aws secretsmanager list-secrets --query "SecretList[*].Name" --output table
 aws secretsmanager get-secret-value --secret-id <secret-name> --query SecretString --output text
@@ -56,7 +55,7 @@ SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id,
 FROM developer d WHERE d.id = coeqwal_current_operator();"
 ```
 
-Your username should appear, with `developer_id` matching your row in the `developer` table. If `developer_id = 1` you are connected as `postgres` — all your writes will be attributed to the system account. Please contact an admin if there are issues or we need to run corrections (not a big deal). We are working to set up SSO auth but it's still on the TODO list.
+Your username should appear, with `developer_id` matching your row in the `developer` table. If `developer_id = 1` you are connected as `postgres`  and all your writes will be attributed to the system account. Please contact an admin if there are issues or we need to run corrections (not a big deal). We are working to set up SSO auth but it's still on the TODO list.
 
 **4. Read the ERD** before writing anything:
 
@@ -64,17 +63,13 @@ Your username should appear, with `developer_id` matching your row in the `devel
 database/schema/COEQWAL_SCENARIOS_DB_ERD.md
 ```
 
-**5. Run the audit and verify against the ERD:**
+**5. Run the monthly audit:**
 
 ```bash
-# Step 1 — collect live schema snapshot (runs as your named user)
-bash database/run_audit.sh
-
-# Step 2 — compare snapshot to ERD documentation
-python database/audit/verify_erd_against_audit.py \
-    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
-    audits/latest.json
+python database/audit/run_monthly_audit.py
 ```
+
+This single command produces a comprehensive report covering schema, content, verification, health, and cost — plus CSV exports for all reference tables. Output goes to `audits/monthly_YYYYMMDD_HHMMSS/`. See `database/audit/README.md` for details and options.
 
 Before running, confirm you are connected as yourself:
 
@@ -95,14 +90,17 @@ psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
 
 | Resource | Location |
 |----------|----------|
-| Schema documentation (ERD) | `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` |
-| Audit runner | `database/run_audit.sh` |
-| ERD vs DB comparison | `database/audit/verify_erd_against_audit.py` |
+| **Monthly audit (primary tool)** | `database/audit/run_monthly_audit.py` |
 | Audit tool docs | `database/audit/README.md` |
-| Layer 00 inspect | `database/scripts/sql/00_versioning/09_verify_level00.sql` |
-| Layer 01 inspect | `database/scripts/sql/01_lookup/inspect_layer01.sql` |
+| Schema documentation (ERD) | `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` |
+| Quick schema snapshot | `database/run_audit.sh` |
+| ERD vs DB comparison | `database/audit/verify_erd_against_audit.py` |
+| Reference data export (layers 00–08) | `database/scripts/export_layer_tables.py` |
+| Per-layer SQL verification | `database/scripts/sql/NN_layer/09_verify_levelNN.sql` |
 | Seed data | `database/seed_tables/<layer>/` |
 | Applied migrations | `database/scripts/sql/migrations/` |
+| ETL accuracy verification | `etl/statistics/verify_all_sections.py` |
+| API accuracy verification | `etl/statistics/verify_api.py` |
 
 ---
 
@@ -110,34 +108,74 @@ psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
 
 ```
 database/
-├── audit/                     # Audit and verification scripts
-│   ├── generate_erd_from_audit.py
-│   ├── verify_erd_against_audit.py
-│   └── README.md
-├── schema/                    # ERD and schema documentation
+├── audit/                          # All audit tools and documentation
+│   ├── run_monthly_audit.py        #   ★ primary tool — content, verification, health, cost
+│   ├── generate_erd_from_audit.py  #   generate draft ERD from live audit snapshot
+│   ├── verify_erd_against_audit.py #   diff ERD docs vs. live schema
+│   └── README.md                   #   audit documentation and usage guide
+├── schema/                         # ERD and schema documentation
 │   └── COEQWAL_SCENARIOS_DB_ERD.md
-├── seed_tables/               # CSV seed data organized by layer
-│   ├── 00_versioning/         # Version & developer seeds
-│   ├── 01_lookup/             # Reference data
-│   ├── 02_network/            # Network infrastructure
-│   ├── 03_entity/             # Entity definitions
-│   ├── 04_variable/           # CalSim variable definitions + type classifications
-│   ├── 05_assumptions_operations/  # Assumption + operation definitions
-│   ├── 06_scenario/           # Scenario definitions + link tables
-│   ├── 07_hydroclimate/       # Hydroclimate conditions + SLR
-│   ├── 08_theme/              # Research themes + theme-scenario links
-│   └── 10_tier/               # Tier results (layer 10)
-├── scripts/
-│   ├── sql/                   # SQL scripts
-│   │   ├── 00_versioning/     # Audit triggers, versioning, verification
-│   │   ├── 01_lookup/         # Lookup table verification
-│   │   ├── 02_network/        # Network layer verification
-│   │   ├── 11_reservoir_statistics/
-│   │   ├── 12_mi_statistics/
-│   │   ├── 13_ag_statistics/
-│   │   └── validate_data_integrity.sql
+├── seed_tables/                    # CSV seed data, one folder per schema layer
+│   ├── 00_versioning/
+│   ├── 01_lookup/
+│   ├── 02_network/
+│   ├── 03_entity/
+│   ├── 04_variable/
+│   ├── 05_assumptions_operations/
+│   ├── 06_scenario/
+│   ├── 07_hydroclimate/
+│   ├── 08_theme/
+│   └── 10_tier/
+├── scripts/                        # Runnable scripts (Python + SQL)
+│   ├── export_layer_tables.py      #   export layers 00–08 to CSV for content review
+│   ├── fix_channel_entity_csv.py   #   one-off data fix utility
+│   └── sql/
+│       ├── 00_versioning/          #   DDL + audit trigger scripts
+│       ├── 01_lookup/              #   lookup table verification
+│       ├── 02_network/             #   network layer verification
+│       ├── 11_reservoir_statistics/
+│       ├── 12_mi_statistics/
+│       ├── 13_ag_statistics/
+│       ├── migrations/             #   applied one-time ALTER TABLE scripts
+│       └── validate_data_integrity.sql
+├── run_audit.sh                    # Shell entry point → run_local_audit.py (schema snapshot)
+├── run_local_audit.py              # Python: collects schema snapshot → audits/ JSON+CSV
+├── setup_db_connection.sh          # Interactive connection string setup
 └── utils/
-    └── db_audit_lambda/       # Database audit Lambda function
+    ├── db_audit_lambda/            # AWS Lambda deployment of run_local_audit.py
+    │   ├── db_audit_lambda.py      #   same audit logic, Lambda handler wrapper
+    │   ├── Dockerfile
+    │   └── README.md
+    ├── versioning_utils.py
+    └── sync_aws_sso_users.py
+```
+
+**Audit output** lives at the repo root (not inside `database/`):
+
+```
+audits/                             # gitignored — all audit outputs land here
+├── monthly_YYYYMMDD_HHMMSS/        #   monthly audit output (from run_monthly_audit.py)
+│   ├── report.md                   #     the Markdown report you read
+│   ├── schema_snapshot.json        #     full schema snapshot
+│   ├── tables_summary.csv          #     per-table row counts + audit field status
+│   ├── layer_exports/              #     full CSV exports for layers 00-08
+│   └── results_samples/            #     head/tail CSVs for layers 10+
+├── audit_YYYYMMDD_HHMMSS.json      #   quick schema snapshot (from run_audit.sh or Lambda)
+├── tables_summary_YYYYMMDD_HHMMSS.csv  # quick per-table summary
+├── latest.json                     #   symlink to most recent JSON snapshot
+├── verification_reports/           #   ETL accuracy reports (Layer 2 + Layer 3)
+│   ├── {scenario_id}_layer2.json
+│   └── {scenario_id}_layer3.json
+└── validation_mismatches/          #   DSS extraction validation manifests (Layer 1)
+    ├── {scenario_id}_manifest.json
+    └── {scenario_id}_validation_mismatches.csv
+
+exports/                            # gitignored — layer table CSV exports
+└── layer_tables/                   #   from export_layer_tables.py
+    ├── 00_versioning/
+    ├── 01_lookup/
+    ...
+    └── summary.csv
 ```
 
 ## Schema layers
@@ -726,52 +764,143 @@ SELECT apply_audit_log_trigger_to_table('scenario');
 
 ---
 
-## Auditing and verification
+## Audit and verification strategy
 
-### Regular audits
+The database has four distinct audit concerns. Each uses different tools and answers a different question. They are **not redundant** — run them together for full confidence.
 
-Run these audits periodically to ensure database integrity:
+| # | Concern | Question | Tools | When |
+|---|---------|----------|-------|------|
+| A | **Schema structure** | Is the DB shaped the way we documented it? | `run_audit.sh` + `verify_erd_against_audit.py` + `09_verify_level*.sql` | After any schema change |
+| B | **Reference data content** | Do layers 00–08 contain the correct records? | `export_layer_tables.py` + manual diff vs `seed_tables/` | When adding or editing seed data |
+| C | **ETL statistics accuracy** | Are the computed results (layers 10+) correct? | `verify_all_sections.py` (Layer 2) + `verify_api.py` (Layer 3) | After each ETL run |
+| D | **Public verification status** | Is the verified/unverified status visible externally? | `/api/verification/status` + frontend `/verification` page | Ongoing |
 
-#### 1. Database structure audit
+---
 
-Run the Lambda audit function to capture current database state:
+### A. Schema structure audit
 
-```bash
-# Via AWS CLI
-aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
-cat response.json
+Answers: "Does the live database schema match the documented ERD? Are all triggers, indexes, and FK rules in place?"
 
-# Download reports from S3
-aws s3 ls s3://coeqwal-model-run/database_audits/ --recursive | tail -5
-aws s3 cp s3://coeqwal-model-run/database_audits/audit_YYYYMMDD_HHMMSS.json ./audits/
-aws s3 cp s3://coeqwal-model-run/database_audits/tables_summary_YYYYMMDD_HHMMSS.csv ./audits/
-```
-
-See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md) for full documentation.
-
-#### 2. ERD vs database verification
-
-Compare the documented ERD against actual database structure:
+**Step 1 — Capture a live schema snapshot** (run from repo root as postgres for full table visibility):
 
 ```bash
-cd database/audit
-
-# Verify ERD matches database
-python verify_erd_against_audit.py ../schema/COEQWAL_SCENARIOS_DB_ERD.md ../../audits/latest.json
-
-# Generate fresh ERD from database audit (if updates needed)
-python generate_erd_from_audit.py ../../audits/latest.json ../schema/GENERATED_ERD.md
+$ bash database/run_audit.sh
+# Writes: audits/audit_YYYYMMDD_HHMMSS.json
+#         audits/tables_summary_YYYYMMDD_HHMMSS.csv
+#         audits/latest.json  (symlink)
 ```
 
-See [audit/README.md](audit/README.md) for full documentation.
+**Step 2 — Compare snapshot against ERD documentation:**
 
-#### 3. Data integrity checks (after ETL runs)
+```bash
+$ python database/audit/verify_erd_against_audit.py \
+    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
+    audits/latest.json
 
-Run these SQL queries to verify data integrity:
+# Add --verbose to see full column lists for mismatched tables
+$ python database/audit/verify_erd_against_audit.py \
+    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
+    audits/latest.json --verbose
+```
+
+**Step 3 — Run per-layer structural verification** (checks triggers, FKs, naming conventions, row counts):
+
+```bash
+$ psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
+$ psql $DATABASE_URL -f database/scripts/sql/01_lookup/09_verify_level01.sql
+$ psql $DATABASE_URL -f database/scripts/sql/02_network/09_verify_level02.sql
+```
+
+Each `09_verify_level*.sql` script checks:
+
+| # | Check |
+|---|-------|
+| 1 | Audit columns present (`created_at/by`, `updated_at/by`) |
+| 2 | Audit triggers applied (`audit_fields_*`) |
+| 3 | Version family mapping registered in `domain_family_map` |
+| 4 | FK relationships to `developer` and lookup tables |
+| 5 | Row counts match expected |
+| 6 | Key columns exist and are correctly typed |
+| 7 | No orphaned FK references |
+| 8 | Naming conventions (snake_case, no plural table names) |
+| 9 | Layer-specific checks (e.g. network connectivity, subtype hierarchy) |
+
+**Layer audit modus operandi:**
+
+1. Run verification script — identify issues
+2. Write a migration script in `database/scripts/sql/migrations/` for each issue found
+3. Execute migration, re-run verification
+4. Delete the migration script after it has run (keep repo clean)
+5. Update ERD documentation if the schema changed
+
+**If the ERD is out of sync**, regenerate a draft from the live snapshot and merge manually:
+
+```bash
+$ python database/audit/generate_erd_from_audit.py \
+    audits/latest.json \
+    database/schema/GENERATED_ERD.md
+```
+
+See [audit/README.md](audit/README.md) for more detail on these tools.
+
+---
+
+### B. Reference data content audit (layers 00–08)
+
+Answers: "Do the foundational tables contain the correct records — the right scenarios, entities, variables, assumptions, and themes?"
+
+This is distinct from schema structure: the tables can have all the right columns and triggers while still containing incorrect, missing, or stale data. The seed CSVs in `database/seed_tables/` are the source of truth for layers 00–08.
+
+**Export all layer 00–08 tables to CSV:**
+
+```bash
+# Export all layers (writes to exports/layer_tables/)
+$ python database/scripts/export_layer_tables.py
+
+# Export a single layer
+$ python database/scripts/export_layer_tables.py --layer 06
+
+# Custom output directory
+$ python database/scripts/export_layer_tables.py --output-dir /tmp/review
+```
+
+Output structure:
+
+```
+exports/layer_tables/
+├── 00_versioning/   developer.csv, version_family.csv, version.csv, domain_family_map.csv
+├── 01_lookup/       hydrologic_region.csv, source.csv, unit.csv, ...
+├── 02_network/      network.csv, network_arc.csv, network_node.csv, network_gis.csv, ...
+├── 03_entity/       reservoir.csv, du_urban_entity.csv, mi_contractor.csv, ...
+├── 04_variable/     calsim_model_variable_type.csv, channel_variable.csv, ...
+├── 05_assumptions_operations/  assumption_definition.csv, operation_definition.csv, ...
+├── 06_scenario/     scenario.csv, scenario_author.csv, scenario_source_link.csv, ...
+├── 07_hydroclimate/ hydroclimate.csv, slr.csv
+├── 08_theme/        theme.csv, theme_scenario_link.csv, theme_source_link.csv
+└── summary.csv      row counts for all tables
+```
+
+**Compare exported CSVs against seed files:**
+
+The exported CSVs and seed CSVs won't be identical column-for-column (the live DB has audit columns; seeds may not), but the domain columns should match. Spot-check key fields:
+
+```bash
+# Quick row-count comparison using the summary
+cat exports/layer_tables/summary.csv
+
+# Diff a specific table (ignore audit columns)
+diff \
+  <(cut -d, -f1-5 exports/layer_tables/06_scenario/scenario.csv) \
+  <(cut -d, -f1-5 database/seed_tables/06_scenario/scenario.csv)
+```
+
+> **Note on `domain_family_map`:** The seed CSV at `database/seed_tables/00_versioning/domain_family_map.csv` is out of date (34 rows). The live database has 70+ entries populated by `05_populate_domain_family_map.sql`. Use the export as the current source of truth for this table.
+
+**SQL data integrity checks** (run in psql after ETL runs):
 
 ```sql
--- Check for orphaned statistics (no matching scenario)
-SELECT 'reservoir_period_summary' as table_name, COUNT(*) as orphans
+-- Orphaned statistics (no matching scenario)
+SELECT 'reservoir_period_summary' AS table_name, COUNT(*) AS orphans
 FROM reservoir_period_summary rps
 WHERE NOT EXISTS (SELECT 1 FROM scenario s WHERE s.id = rps.scenario_id)
 UNION ALL
@@ -783,98 +912,142 @@ SELECT 'ag_aggregate_period_summary', COUNT(*)
 FROM ag_aggregate_period_summary aps
 WHERE NOT EXISTS (SELECT 1 FROM scenario s WHERE s.id = aps.scenario_id);
 
--- Check scenarios have statistics data
-SELECT s.id, s.name,
-       (SELECT COUNT(*) FROM reservoir_period_summary rps WHERE rps.scenario_id = s.id) as reservoir_stats,
-       (SELECT COUNT(*) FROM mi_contractor_period_summary mps WHERE mps.scenario_id = s.id) as mi_stats,
-       (SELECT COUNT(*) FROM ag_aggregate_period_summary aps WHERE aps.scenario_id = s.id) as ag_stats
-FROM scenario s
-ORDER BY s.id;
+-- Statistics coverage per scenario
+SELECT s.id, s.short_code,
+       (SELECT COUNT(*) FROM reservoir_period_summary  WHERE scenario_id = s.id) AS reservoir,
+       (SELECT COUNT(*) FROM mi_contractor_period_summary WHERE scenario_id = s.id) AS mi,
+       (SELECT COUNT(*) FROM ag_aggregate_period_summary  WHERE scenario_id = s.id) AS ag
+FROM scenario s ORDER BY s.id;
 
--- Check for NULL audit fields (should be 0)
-SELECT 'Tables missing created_by' as check_type,
-       (SELECT COUNT(*) FROM reservoir_entity WHERE created_by IS NULL) +
-       (SELECT COUNT(*) FROM du_urban_entity WHERE created_by IS NULL) +
-       (SELECT COUNT(*) FROM mi_contractor WHERE created_by IS NULL) as count;
+-- NULL audit fields (should all be 0)
+SELECT 'reservoir_entity missing created_by' AS check,
+       COUNT(*) FILTER (WHERE created_by IS NULL) AS count
+FROM reservoir_entity
+UNION ALL
+SELECT 'du_urban_entity missing created_by',
+       COUNT(*) FILTER (WHERE created_by IS NULL)
+FROM du_urban_entity;
 
--- Check water_month values are valid (1-12)
-SELECT 'Invalid water_month values' as check_type,
-       (SELECT COUNT(*) FROM reservoir_monthly_percentile WHERE water_month NOT BETWEEN 1 AND 12) +
-       (SELECT COUNT(*) FROM du_delivery_monthly WHERE water_month NOT BETWEEN 1 AND 12) as count;
+-- Invalid water_month values (should be 0)
+SELECT COUNT(*) AS invalid_water_months
+FROM du_delivery_monthly
+WHERE water_month NOT BETWEEN 1 AND 12;
 ```
+
+---
+
+### C. ETL statistics accuracy verification (layers 10+)
+
+Answers: "Do the computed statistics in the results tables match the source DSS/CSV data?"
+
+This is fully documented in `etl/README.md`. Summary:
+
+```
+DSS Files ──► S3 CSVs ──► PostgreSQL ──► JSON API ──► Frontend
+  Layer 1      Layer 2      Layer 2b       Layer 3     Layer 4
+```
+
+```bash
+# Layer 2: verify CSV → DB statistics accuracy (one scenario)
+$ python etl/statistics/verify_all_sections.py --scenario s0020
+
+# Layer 2: all scenarios, write JSON reports
+$ python etl/statistics/verify_all_sections.py --all-scenarios \
+    --report-dir audits/verification_reports
+
+# Layer 3: verify DB → API accuracy
+$ python etl/statistics/verify_api.py --scenario s0020
+```
+
+Reports land in `audits/verification_reports/{scenario_id}_layer2.json` and `_layer3.json`.
+
+---
+
+### D. Public verification status (Layer 4)
+
+The API serves Layer 2 + Layer 3 report summaries at:
+
+```
+GET /api/verification/status              # all scenarios
+GET /api/verification/status/{scenario}   # one scenario with per-section breakdown
+```
+
+Reports are read from `audits/verification_reports/`. Re-running `verify_all_sections.py` and `verify_api.py` refreshes the data visible on the frontend verification page.
+
+---
 
 ### Audit schedule
 
-| Audit | Frequency | Owner | Notes |
-|-------|-----------|-------|-------|
-| Lambda structure audit | Weekly-monthly | Automated | Check S3 for reports |
-| ERD verification | Monthly | Developer | Before major releases |
-| Data integrity checks | After ETL | ETL pipeline | Run via validation scripts |
-| Record count comparison | Weekly-montly | Developer | Compare against expected counts |
+| Cadence | What to run | Command |
+|---------|------------|---------|
+| **Monthly** | Health, cost, and completeness report | `python database/scripts/monthly_audit.py` |
+| **Monthly** | Schema snapshot + ERD comparison | `bash database/run_audit.sh` then `verify_erd_against_audit.py` |
+| **After any schema change** | Per-layer SQL structural checks | `psql $DATABASE_URL -f database/scripts/sql/NN/09_verify_levelNN.sql` |
+| **After any seed data edit** | Reference data content export | `python database/scripts/export_layer_tables.py --layer NN` |
+| **After every ETL run** | ETL statistics accuracy (Layer 2) | `python etl/statistics/verify_all_sections.py --scenario {id}` |
+| **After every ETL run** | API accuracy (Layer 3) | `python etl/statistics/verify_api.py --scenario {id}` |
+| **Automated (Lambda)** | Schema snapshot to S3 | CloudWatch scheduled event → `coeqwal-database-audit` Lambda |
 
-### Audit reports location
+### Audit script inventory
 
-- **S3**: `s3://coeqwal-model-run/database_audits/`
-- **Local**: `./audits/` (gitignored)
+All runnable scripts related to audit, verification, and data quality:
 
-### Layer verification scripts
+| Script | Location | Purpose | Output |
+|--------|----------|---------|--------|
+| `run_audit.sh` | `database/` | Schema structure snapshot (interactive) | `audits/*.json`, `audits/*.csv` |
+| `monthly_audit.py` | `database/scripts/` | Health + cost + completeness Markdown report | `audits/monthly_*.md` |
+| `export_layer_tables.py` | `database/scripts/` | Export layers 00–08 reference tables to CSV | `exports/layer_tables/` |
+| `verify_erd_against_audit.py` | `database/audit/` | Diff ERD docs vs. live schema snapshot | stdout / exit code |
+| `generate_erd_from_audit.py` | `database/audit/` | Generate draft ERD from live snapshot | `database/schema/GENERATED_ERD.md` |
+| `09_verify_level*.sql` | `database/scripts/sql/NN_layer/` | Per-layer structural invariants | psql output |
+| `validate_data_integrity.sql` | `database/scripts/sql/` | FK orphan checks | psql output |
+| `verify_all_sections.py` | `etl/statistics/` | ETL accuracy: CSV → DB (Layer 2) | `audits/verification_reports/*_layer2.json` |
+| `verify_api.py` | `etl/statistics/` | API accuracy: DB → API (Layer 3) | `audits/verification_reports/*_layer3.json` |
+| `db_audit_lambda.py` | `database/utils/db_audit_lambda/` | Schema snapshot (Lambda / scheduled) | `s3://coeqwal-model-run/database_audits/` |
 
-Each database layer has a verification script that checks:
+### Audit output locations
 
-| # | Check | Description |
-|---|-------|-------------|
-| 1 | Audit columns | created_at, created_by, updated_at, updated_by exist |
-| 2 | Audit triggers | `audit_fields_*` trigger applied |
-| 3 | Version family mapping | Table registered in domain_family_map |
-| 4 | FK relationships | FKs to developer and lookup tables |
-| 5 | Row counts | Tables are populated |
-| 6 | Schema accuracy | Key columns exist |
-| 7 | Data integrity | No orphan FKs, no unexpected duplicates |
-| 8 | Naming conventions | No plural table names |
-| 9 | Layer-specific | Depends on layer (e.g., network connectivity) |
-
-**Verification script locations:**
-
-```
-database/scripts/sql/
-├── 00_versioning/09_verify_level00.sql   # Versioning layer
-├── 01_lookup/09_verify_level01.sql       # Lookup/reference tables
-├── 02_network/09_verify_level02.sql      # Network layer
-└── ... (additional layers as audited)
-```
-
-**Running verification in Cloud9:**
-
-From the bash shell (`$` prompt):
-
-```bash
-$ psql $DATABASE_URL
-```
-
-Once inside psql (`coeqwal_scenario=>` prompt):
-
-```sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/09_verify_level00.sql
-coeqwal_scenario=> \i database/scripts/sql/01_lookup/09_verify_level01.sql
-coeqwal_scenario=> \i database/scripts/sql/02_network/09_verify_level02.sql
-```
-
-**Layer audit modus operandi:**
-
-1. **Discovery** - List tables in layer, check version family mapping
-2. **Run verification script** - Identifies issues
-3. **Create migration scripts** - Only for issues found (one-time use)
-4. **Execute and verify** - Run migrations, re-run verification
-5. **Delete migration scripts** - Keep repo clean after execution
-6. **Document** - Update ERD/checklist if patterns change
+| Output | Location | Gitignored? |
+|--------|----------|-------------|
+| Schema snapshot (JSON) | `audits/audit_YYYYMMDD_HHMMSS.json` | Yes |
+| Table summary (CSV) | `audits/tables_summary_YYYYMMDD_HHMMSS.csv` | Yes |
+| Latest snapshot symlink | `audits/latest.json` | Yes |
+| Monthly health report (Markdown) | `audits/monthly_YYYYMMDD_HHMMSS.md` | Yes |
+| Lambda snapshots (archived) | `s3://coeqwal-model-run/database_audits/` | S3 |
+| Layer table exports (CSV) | `exports/layer_tables/` | Yes |
+| ETL verification reports | `audits/verification_reports/{scenario}_layer2.json` | Yes |
+| API verification reports | `audits/verification_reports/{scenario}_layer3.json` | Yes |
 
 ---
 
 ## Running the database audit
 
-The audit captures the full live schema — tables, columns, indexes, FKs, constraints, triggers, functions — and saves it as a timestamped JSON + CSV summary to the `audits/` folder at the repo root.
+The schema audit captures the full live schema — tables, columns, indexes, FKs, constraints, triggers, functions — and saves it as a timestamped JSON + CSV summary to the `audits/` folder.
 
-> **Note on audit history:** The audit previously ran as an AWS Lambda function that deposited results into an S3 bucket. That Lambda is now superseded by the local shell script below. The Lambda and its S3 outputs can be cleaned up — see `database/utils/db_audit_lambda/` for the Lambda source. The shell script runs the same underlying Python (`db_audit_lambda.py`) but locally on Cloud9, which is simpler for on-demand use.
+### Lambda vs. local shell script — use both, for different reasons
+
+Both tools run the same underlying Python (`database/utils/db_audit_lambda/db_audit_lambda.py` / `database/run_local_audit.py`). They are complementary, not alternatives:
+
+| Tool | How to invoke | When to use |
+|------|--------------|-------------|
+| **`bash database/run_audit.sh`** | Manually, on Cloud9 | On-demand, before a release, after a schema change, while actively debugging |
+| **AWS Lambda `coeqwal-database-audit`** | Scheduled (CloudWatch Events) or manual (`aws lambda invoke`) | Regular automated cadence without needing to be logged in; results persist in S3 |
+
+The Lambda keeps a durable S3 history of snapshots independent of the repo. The local script is faster for interactive use. **Do not decommission the Lambda** — its S3 output provides a dated archive you can pull from anywhere.
+
+To invoke the Lambda manually and retrieve the output:
+
+```bash
+aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
+cat response.json
+
+# Pull the latest reports from S3 into the local audits/ folder
+aws s3 ls s3://coeqwal-model-run/database_audits/ --recursive | tail -5
+aws s3 cp s3://coeqwal-model-run/database_audits/audit_YYYYMMDD_HHMMSS.json ./audits/
+aws s3 cp s3://coeqwal-model-run/database_audits/tables_summary_YYYYMMDD_HHMMSS.csv ./audits/
+```
+
+See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md) for Lambda setup details.
 
 ### Python environment (venv)
 
@@ -1079,9 +1252,15 @@ psql "postgresql://user:pass@coeqwal-db.xxxxx.us-west-2.rds.amazonaws.com:5432/c
 
 Known improvements and cleanup tasks for future work.
 
-### Infrastructure cleanup
+### Infrastructure
 
-- **Decommission the AWS Lambda audit** — the audit now runs locally via `bash database/run_audit.sh`. The old Lambda function and its S3 bucket can be removed. The Lambda source code in `database/utils/db_audit_lambda/` stays (the shell script imports from it directly); only the AWS deployment needs to be torn down.
+- **Lambda audit and `run_audit.sh` serve different purposes — keep both.** See "Running the database audit" below for details on when to use each.
+- **Update `domain_family_map` seed CSV** — `database/seed_tables/00_versioning/domain_family_map.csv` is stale (34 rows vs. 70+ in the live DB). Use `export_layer_tables.py --layer 00` to export the current state and overwrite the seed file.
+
+### Verification gaps
+
+- **Extend per-layer SQL verification** — only layers 00, 01, and 02 have `09_verify_level*.sql` scripts. Add scripts for layers 03 through 08 following the same pattern.
+- **`data_load_log` is still PLANNED** — see "ETL batch tracking" in the ERD Layer 00 section. This table would provide batch-level provenance for bulk ETL loads instead of per-row `created_by` attribution.
 
 ### Developer access and authentication
 

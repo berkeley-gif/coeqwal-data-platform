@@ -33,6 +33,20 @@ Request → Uvicorn → FastAPI → Pydantic (validates) → asyncpg (queries DB
 - **Docker** Containerization
 - **Ruff** Python linting
 
+## Data integrity
+
+The platform has a layered audit and verification strategy. Each layer answers a different question:
+
+| Layer | Question | Tools |
+|-------|----------|-------|
+| **All (monthly)** | Full audit: content + verification + health + cost | `python database/audit/run_monthly_audit.py` |
+| **Schema structure** | Is the DB shaped correctly? | `database/run_audit.sh`, `verify_erd_against_audit.py`, per-layer `09_verify_level*.sql` |
+| **Reference data content** | Are layers 00–08 correct? | `database/scripts/export_layer_tables.py` + diff vs `database/seed_tables/` |
+| **ETL statistics accuracy** | Are computed results correct? | `etl/statistics/verify_all_sections.py` (CSV→DB), `etl/statistics/verify_api.py` (DB→API) |
+| **Public status** | Is verification status visible? | `GET /api/verification/status` + frontend `/verification` page |
+
+See `database/audit/README.md` for full audit documentation and usage guide.
+
 ## API
 
 **Production:** https://api.coeqwal.org/api

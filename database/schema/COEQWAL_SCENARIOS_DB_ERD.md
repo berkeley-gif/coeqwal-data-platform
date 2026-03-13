@@ -157,7 +157,7 @@ Table: audit_log
 ├── id                   SERIAL PRIMARY KEY
 ├── table_name           TEXT NOT NULL              -- Name of the table where change occurred
 ├── record_id            INTEGER                    -- Primary key of the changed record
-├── record_key           TEXT                       -- Natural key of the record (e.g. scenario_id)
+├── record_key           JSONB                      -- Natural key of the record (e.g. {"short_code": "s0020"})
 ├── operation            TEXT NOT NULL              -- "INSERT", "UPDATE", "DELETE"
 ├── old_values           JSONB                      -- Row state before change
 ├── new_values           JSONB                      -- Row state after change
@@ -513,6 +513,169 @@ Used by: tier_location_result (location_type = 'wba', location_id = wba.wba_id) 
 
 ---
 
+## **Layer 02 — NETWORK LAYER** *(CalSim network topology and physical infrastructure)*
+
+> Represents the CalSim3 water infrastructure as a directed graph: `network` is the master
+> element registry; `network_arc` and `network_node` carry arc/node-specific attributes;
+> `network_gis` holds PostGIS geometry. `network_entity_type` classifies elements as arc,
+> node, or GIS feature.
+>
+> Seed data: `seed_tables/02_network/`. Primary source: CalSim3 GeoSchematic geopackage.
+> All arc/node/gis records carry `source_id` and `model_source_id` (100% coverage).
+
+### **1. network_entity_type (element type classification)**
+```
+Table: network_entity_type
+├── id                   SERIAL PRIMARY KEY
+├── short_code           TEXT UNIQUE NOT NULL       -- "arc", "node", "gis", "entity"
+├── label                TEXT
+├── description          TEXT
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+
+Records: 4
+Indexes:
+├── network_entity_type_pkey (id)
+├── network_entity_type_short_code_key (short_code) UNIQUE
+└── idx_network_entity_type_active (is_active, short_code)
+```
+
+### **2. network (master element registry)**
+```
+Table: network
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- CalSim code (e.g. "C_SAC296", "D_FOLSM")
+├── name                 VARCHAR
+├── description          TEXT
+├── comment              TEXT
+├── entity_type_id       INTEGER                    -- FK → network_entity_type.id (RESTRICT)
+├── type_id              INTEGER                    -- FK → network_type.id (RESTRICT)
+├── subtype_ids          INTEGER[]                  -- Array of FK → network_subtype.id
+├── model_list           TEXT[]                     -- CalSim models containing this element
+├── source_list          TEXT[]                     -- Data source identifiers
+├── has_gis              BOOLEAN DEFAULT FALSE       -- TRUE when network_gis entry exists
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (RESTRICT)
+├── riv_sys              VARCHAR                    -- River system code
+├── strm_code            VARCHAR                    -- Stream code
+├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+
+Records: 6,908
+Indexes:
+├── network_pkey (id)
+├── network_short_code_key (short_code) UNIQUE
+├── idx_network_type (type_id)
+├── idx_network_entity_type (entity_type_id)
+├── idx_network_has_gis (has_gis)
+├── idx_network_hydrologic_region (hydrologic_region_id)
+├── idx_network_model_list (model_list)         -- GIN index for array containment
+├── idx_network_source_list (source_list)       -- GIN index for array containment
+├── idx_network_strm_code (strm_code)
+└── idx_network_version (network_version_id)
+```
+
+### **3. network_arc (arc-specific attributes)**
+```
+Table: network_arc
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Matches network.short_code
+├── network_id           INTEGER                    -- FK → network.id (CASCADE delete)
+├── river                VARCHAR                    -- CalSim waterway code (e.g. "SAC", "SJR", "DMC")
+├── from_node            VARCHAR                    -- Upstream node short_code
+├── to_node              VARCHAR                    -- Downstream node short_code
+├── shape_length_m       NUMERIC                    -- Arc length in meters
+├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (RESTRICT)
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+
+Records: 2,610
+Note: CASCADE on network_id — arcs are deleted when their parent network element is removed.
+      459 distinct river/waterway codes.
+Indexes:
+├── network_arc_pkey (id)
+├── network_arc_short_code_key (short_code) UNIQUE
+├── idx_network_arc_network_id (network_id)
+├── idx_network_arc_from_node (from_node)
+├── idx_network_arc_to_node (to_node)
+├── idx_network_arc_connectivity (from_node, to_node) -- topology traversal
+├── idx_network_arc_river (river)
+└── idx_network_arc_version (network_version_id)
+```
+
+### **4. network_node (node-specific attributes)**
+```
+Table: network_node
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Matches network.short_code
+├── network_id           INTEGER                    -- FK → network.id (CASCADE delete)
+├── riv_mi               NUMERIC                    -- River mile
+├── c2vsim_gw            VARCHAR                    -- C2VSim groundwater cell link
+├── c2vsim_sw            VARCHAR                    -- C2VSim surface water subregion link
+├── nrest_gage           VARCHAR                    -- NRCS stream gauge identifier
+├── strm_code            VARCHAR                    -- Stream code
+├── rm_ii                VARCHAR                    -- River mile (alternate representation)
+├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (RESTRICT)
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+
+Records: 1,544
+Note: CASCADE on network_id — nodes are deleted when their parent network element is removed.
+Indexes:
+├── network_node_pkey (id)
+├── network_node_short_code_key (short_code) UNIQUE
+├── idx_network_node_network_id (network_id)
+├── idx_network_node_strm_code (strm_code)
+└── idx_network_node_version (network_version_id)
+```
+
+### **5. network_gis (PostGIS geometry for network elements)**
+```
+Table: network_gis
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR                    -- Matches network.short_code
+├── network_id           INTEGER UNIQUE             -- FK → network.id (CASCADE delete)
+│                                                   -- UNIQUE enforces one-to-one with network
+├── precision_level      VARCHAR DEFAULT 'precise'  -- "precise", "approximate", "schematic"
+├── geom_wkt             TEXT                       -- WKT geometry string (human-readable copy)
+├── srid                 INTEGER DEFAULT 4326       -- EPSG:4326 (WGS84)
+├── geom                 GEOMETRY                   -- PostGIS binary (GiST spatial index)
+├── estimated_accuracy_meters NUMERIC
+├── source_id            INTEGER DEFAULT 4          -- FK → source.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+
+Records: 4,154 (not all 6,908 network elements have GIS geometry; network.has_gis tracks this)
+Note: CASCADE on network_id. source = geopackage (CalSim3 GeoSchematic).
+Indexes:
+├── network_gis_pkey (id)
+├── idx_network_gis_network_id (network_id) UNIQUE
+├── idx_network_gis_short_code (short_code)
+├── idx_network_gis_precision (precision_level)
+├── idx_network_gis_version (network_version_id)
+└── idx_network_gis_geom (geom)  -- GiST spatial index
+```
+
+---
+
 ## **Layer 03 — ENTITY LAYER** *(GIS and operational entity tables)*
 
 ### **1. reservoir (reservoir geographic base table)**
@@ -564,6 +727,199 @@ Table: compliance_station
 Records: 2 compliance stations
 Used by: tier_location_result (location_type = 'compliance_station', location_id = station_code)
          for FW_DELTA_USES tier monitoring
+```
+
+### **3. du_agriculture_entity (agricultural demand units)**
+```
+Table: du_agriculture_entity
+├── id                   SERIAL PRIMARY KEY
+├── du_id                VARCHAR UNIQUE NOT NULL    -- CalSim demand unit ID (e.g. "02_PA1", "50_PU")
+├── wba_id               VARCHAR                    -- Water budget area ID
+├── hydrologic_region    VARCHAR                    -- Region name (text, legacy — prefer hydrologic_region_id)
+├── dups                 INTEGER                    -- Number of demand unit polygons
+├── du_class             VARCHAR                    -- "Agriculture"
+├── cs3_type             VARCHAR                    -- CalSim3 type code (e.g. "CVP_PAG", "SWP_PAG")
+├── total_acres          NUMERIC                    -- Total acreage across all polygons
+├── polygon_count        INTEGER
+├── source               VARCHAR                    -- Source agency abbreviation
+├── model_source         VARCHAR                    -- "calsim3"
+├── agency               VARCHAR
+├── provider             VARCHAR                    -- Water provider name
+├── gw                   BOOLEAN DEFAULT TRUE       -- Has groundwater supply
+├── sw                   BOOLEAN DEFAULT TRUE       -- Has surface water supply
+├── point_of_diversion   TEXT
+├── diversion_arc        VARCHAR                    -- CalSim arc code
+├── river_reach          VARCHAR
+├── river_mile_start     NUMERIC
+├── river_mile_end       NUMERIC
+├── bank                 VARCHAR                    -- "L" (left), "R" (right)
+├── area_acres           NUMERIC                    -- Operational area
+├── annual_diversion_taf NUMERIC                    -- Annual average diversion in TAF
+├── demand_unit          VARCHAR
+├── table_id             VARCHAR
+├── has_gis_data         BOOLEAN DEFAULT TRUE
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+├── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
+└── model_source_id      INTEGER                    -- FK → model_source.id
+
+Records: 144
+Seed: seed_tables/04_calsim_data/du_agriculture_entity.csv
+Indexes:
+├── du_agriculture_entity_pkey (id)
+├── du_agriculture_entity_du_id_key (du_id) UNIQUE
+├── idx_du_ag_region (hydrologic_region)
+├── idx_du_ag_wba (wba_id)
+├── idx_du_ag_type (cs3_type)
+└── idx_du_ag_provider (provider)
+```
+
+### **4. du_urban_entity (urban/community water system demand units)**
+```
+Table: du_urban_entity
+├── id                   SERIAL PRIMARY KEY
+├── du_id                VARCHAR UNIQUE NOT NULL    -- CalSim demand unit ID (e.g. "ACWD", "MWD")
+├── wba_id               VARCHAR                    -- Water budget area ID
+├── hydrologic_region    VARCHAR                    -- Region name (text, legacy)
+├── dups                 INTEGER DEFAULT 0
+├── du_class             VARCHAR DEFAULT 'Urban'
+├── cs3_type             VARCHAR                    -- CalSim3 type code (e.g. "CVP_PMI", "SWP_PMI")
+├── total_acres          NUMERIC
+├── polygon_count        INTEGER DEFAULT 1
+├── community_agency     TEXT                       -- Water agency name
+├── gw                   VARCHAR                    -- Groundwater supply indicator
+├── sw                   VARCHAR                    -- Surface water supply indicator
+├── point_of_diversion   TEXT
+├── source               VARCHAR
+├── model_source         VARCHAR
+├── has_gis_data         BOOLEAN DEFAULT TRUE
+├── primary_contractor_short_code VARCHAR          -- FK-style reference → mi_contractor.short_code
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+├── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
+└── model_source_id      INTEGER                    -- FK → model_source.id
+
+Records: 145
+Seed: seed_tables/04_calsim_data/du_urban_entity.csv
+Indexes:
+├── du_urban_entity_pkey (id)
+├── du_urban_entity_du_id_key (du_id) UNIQUE
+├── idx_du_urban_entity_du_id (du_id)
+├── idx_du_urban_entity_region (hydrologic_region)
+├── idx_du_urban_entity_wba_id (wba_id)
+├── idx_du_urban_entity_type (cs3_type)
+└── idx_du_urban_entity_contractor (primary_contractor_short_code)
+```
+
+### **5. du_refuge_entity (wildlife refuge demand units)**
+```
+Table: du_refuge_entity
+├── id                   SERIAL PRIMARY KEY
+├── du_id                VARCHAR UNIQUE NOT NULL    -- CalSim demand unit ID
+├── wba_id               VARCHAR                    -- Water budget area ID
+├── hydrologic_region    VARCHAR                    -- Region name (text)
+├── dups                 INTEGER
+├── du_class             VARCHAR DEFAULT 'Refuge'
+├── cs3_type             VARCHAR                    -- CalSim3 type code
+├── total_acres          NUMERIC
+├── polygon_count        INTEGER DEFAULT 1
+├── refuge_or_wildlife_area TEXT                   -- Official refuge name
+├── managed_by           VARCHAR                    -- Managing agency (e.g. "USFWS", "DFW")
+├── provider             VARCHAR
+├── gw                   BOOLEAN DEFAULT FALSE      -- Refuges typically SW only
+├── sw                   BOOLEAN DEFAULT TRUE
+├── point_of_diversion_conveyance TEXT
+├── source               VARCHAR
+├── model_source         VARCHAR DEFAULT 'calsim3'
+├── has_gis_data         BOOLEAN DEFAULT TRUE
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1          -- FK → developer.id (RESTRICT)
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER DEFAULT 1          -- FK → developer.id (RESTRICT)
+
+Records: 18
+Seed: seed_tables/04_calsim_data/du_refuge_entity.csv (or seed_tables/03_entity/)
+Indexes:
+├── du_refuge_entity_pkey (id)
+├── du_refuge_entity_du_id_key (du_id) UNIQUE
+├── idx_du_refuge_entity_cs3_type (cs3_type)
+└── idx_du_refuge_entity_hydrologic_region (hydrologic_region)
+```
+
+### **6. reservoir_entity (reservoir operational attributes)**
+```
+Table: reservoir_entity
+├── id                   INTEGER PRIMARY KEY        -- Manually assigned (not SERIAL)
+├── network_node_id      VARCHAR                    -- Matching network node short_code
+├── short_code           VARCHAR UNIQUE             -- Reservoir identifier (e.g. "SHSTA", "OROVL")
+├── name                 VARCHAR                    -- Full reservoir name
+├── description          TEXT
+├── associated_river     VARCHAR                    -- River name
+├── entity_type_id       INTEGER DEFAULT 1          -- FK → network_entity_type.id
+├── schematic_type_id    INTEGER                    -- Internal type classifier
+├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
+├── capacity_taf         NUMERIC                    -- Total capacity in TAF
+├── dead_pool_taf        NUMERIC                    -- Dead pool storage in TAF
+├── surface_area_acres   NUMERIC
+├── operational_purpose  VARCHAR                    -- "CVP", "SWP", "Local", etc.
+├── has_tiers            BOOLEAN DEFAULT FALSE      -- Whether tier results exist for this reservoir
+├── is_main              BOOLEAN DEFAULT FALSE      -- Primary reservoir in a multi-level system
+├── has_gis_data         INTEGER DEFAULT 1          -- Presence of GIS record (legacy INTEGER flag)
+├── entity_version_id    INTEGER DEFAULT 1          -- FK → version.id
+├── source_ids           TEXT                       -- Comma-separated source IDs
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
+
+Records: 92 (includes main reservoirs + storage zone sub-entries)
+Note: Companion to `reservoir` (GIS base). Join on short_code / calsim_short_code.
+      See ETL capacity override constants in calculate_reservoir_statistics.py.
+Seed: seed_tables/04_calsim_data/reservoir_entity.csv (and reservoir_sublayer/)
+Indexes:
+├── reservoir_entity_pkey (id)
+├── reservoir_entity_short_code_key (short_code) UNIQUE
+├── idx_reservoir_entity_region (hydrologic_region_id)
+├── idx_reservoir_entity_has_tiers (has_tiers)
+└── idx_reservoir_entity_is_main (is_main)
+```
+
+### **7. mi_contractor (M&I SWP/CVP contractors)**
+```
+Table: mi_contractor
+├── id                   SERIAL PRIMARY KEY
+├── short_code           VARCHAR UNIQUE NOT NULL    -- Contractor code (e.g. "ACWD", "MWD", "SCVWD")
+├── contractor_name      VARCHAR                    -- Full contractor name
+├── project              VARCHAR                    -- "SWP", "CVP", or "Both"
+├── region               VARCHAR                    -- Geographic region
+├── contractor_type      VARCHAR                    -- "Urban", "Agricultural", "Mixed"
+├── contract_amount_taf  NUMERIC                    -- Table A / Contract allocation in TAF/yr
+├── source_contractor_id INTEGER                    -- External contractor ID from source data
+├── source_file          VARCHAR                    -- Source document/file reference
+├── is_active            BOOLEAN DEFAULT TRUE
+├── created_at           TIMESTAMP DEFAULT NOW()
+├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── updated_at           TIMESTAMP DEFAULT NOW()
+└── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
+
+Records: 30
+Seed: seed_tables/04_calsim_data/mi_contractor.csv
+Used by: du_urban_entity.primary_contractor_short_code, mi_delivery_monthly, mi_contractor_period_summary
+Indexes:
+├── mi_contractor_pkey (id)
+├── mi_contractor_short_code_key (short_code) UNIQUE
+├── idx_mi_contractor_project (project)
+├── idx_mi_contractor_region (region)
+├── idx_mi_contractor_type (contractor_type)
+└── idx_mi_contractor_short_code (short_code)
 ```
 
 ---
