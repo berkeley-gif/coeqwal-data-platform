@@ -147,31 +147,48 @@ WHERE  id = 35;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 8. source: resequence IDs (32→9, 33→10, 34→11, 35→12)
+--    Uses a single writeable CTE so the delete+insert+child updates are
+--    atomic — UNIQUE and FK constraints are checked on the final state.
 -- ═══════════════════════════════════════════════════════════════════════════
-
--- 8a. Insert new rows with correct IDs
+WITH
+  old_data AS (
+    SELECT id, source, description, is_active, created_at, created_by, updated_at, updated_by,
+           CASE id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END AS new_id
+    FROM source WHERE id IN (32, 33, 34, 35)
+  ),
+  upd_network_type AS (
+    UPDATE network_type SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_network_subtype AS (
+    UPDATE network_subtype SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_network_arc AS (
+    UPDATE network_arc SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_network_node AS (
+    UPDATE network_node SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_network_gis AS (
+    UPDATE network_gis SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_reservoir AS (
+    UPDATE reservoir SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_compliance AS (
+    UPDATE compliance_station SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_wba AS (
+    UPDATE wba SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  upd_hydroclimate AS (
+    UPDATE hydroclimate SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 END WHERE source_id IN (32,33,34,35) RETURNING 1
+  ),
+  del_old AS (
+    DELETE FROM source WHERE id IN (32, 33, 34, 35) RETURNING 1
+  )
 INSERT INTO source (id, source, description, is_active, created_at, created_by, updated_at, updated_by)
-SELECT 9,  source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 32
-UNION ALL
-SELECT 10, source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 33
-UNION ALL
-SELECT 11, source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 34
-UNION ALL
-SELECT 12, source, description, is_active, created_at, created_by, NOW(), updated_by FROM source WHERE id = 35;
-
--- 8b. Update all child FK references
-UPDATE network_type       SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE network_subtype    SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE network_arc        SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE network_node       SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE network_gis        SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE reservoir          SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE compliance_station SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE wba                SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-UPDATE hydroclimate       SET source_id = CASE source_id WHEN 32 THEN 9 WHEN 33 THEN 10 WHEN 34 THEN 11 WHEN 35 THEN 12 ELSE source_id END WHERE source_id IN (32,33,34,35);
-
--- 8c. Delete old source rows
-DELETE FROM source WHERE id IN (32, 33, 34, 35);
+SELECT new_id, source, description, is_active, created_at, created_by, NOW(), updated_by
+FROM old_data;
 
 -- 8d. Reset sequence
 SELECT setval('source_id_seq', (SELECT MAX(id) FROM source));
