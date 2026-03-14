@@ -968,7 +968,7 @@ def main() -> None:
         exact_count_map = {}
         if audit_report is not None:
             for t in audit_report.get("tables", []):
-                exact_count_map[t["table_name"]] = t.get("record_count", 0)
+                exact_count_map[t["table"]] = t.get("record_count", 0)
 
         check_results = []
         for tbl, expected in sorted(EXPECTED_COUNTS.items()):
