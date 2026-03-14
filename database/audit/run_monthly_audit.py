@@ -329,12 +329,14 @@ def _check_versioning_system(cursor) -> dict:
                 "exists": True, "count": cursor.fetchone()[0],
             }
         except Exception as exc:
+            cursor.connection.rollback()
             result["versioning_tables_exist"][table] = {"exists": False, "error": str(exc)}
 
     try:
         cursor.execute("SELECT * FROM public.version_family ORDER BY id;")
         result["version_families"] = _rows(cursor)
     except Exception as exc:
+        cursor.connection.rollback()
         result["version_families_error"] = str(exc)
 
     try:
@@ -360,6 +362,7 @@ def _check_versioning_system(cursor) -> dict:
             if len(vids) > 1
         ]
     except Exception as exc:
+        cursor.connection.rollback()
         result["versions_error"] = str(exc)
 
     try:
@@ -377,12 +380,14 @@ def _check_versioning_system(cursor) -> dict:
         result["validation"]["domain_map_missing_tables"] = sorted(all_db_tables - mapped_tables)
         result["validation"]["domain_map_unexpected_tables"] = sorted(mapped_tables - all_db_tables)
     except Exception as exc:
+        cursor.connection.rollback()
         result["domain_mappings_error"] = str(exc)
 
     try:
         cursor.execute("SELECT * FROM public.developer ORDER BY id;")
         result["developers"] = _rows(cursor)
     except Exception as exc:
+        cursor.connection.rollback()
         result["developers_error"] = str(exc)
 
     return result
