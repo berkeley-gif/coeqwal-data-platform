@@ -65,7 +65,7 @@ _REPO_ROOT = _DB_DIR.parent
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SCHEMA SNAPSHOT — replaces the Lambda dependency
+# SCHEMA SNAPSHOT
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _NON_DOMAIN_TABLES = {
@@ -501,10 +501,16 @@ LAYERS: dict[str, list[str]] = {
         "reservoir", "compliance_station",
         "du_agriculture_entity", "du_urban_entity", "du_refuge_entity",
         "reservoir_entity", "mi_contractor", "wba",
+        "channel_entity",
+        "ag_aggregate_entity", "cws_aggregate_entity",
+        "du_urban_group", "du_urban_group_member",
+        "du_urban_delivery_arc", "mi_contractor_delivery_arc",
+        "mi_contractor_group", "mi_contractor_group_member",
+        "reservoir_group", "reservoir_group_member",
     ],
     "04_variable": [
         "calsim_model_variable_type", "derived_variable_type", "variable_type",
-        "channel_variable",
+        "channel_variable", "du_urban_variable",
     ],
     "05_assumptions_operations": [
         "assumption_category", "assumption_definition",
@@ -525,20 +531,26 @@ RESULTS_TABLES = [
     "du_delivery_monthly", "du_shortage_monthly", "du_period_summary",
     "mi_delivery_monthly", "mi_shortage_monthly", "mi_contractor_period_summary",
     "cws_aggregate_monthly", "cws_aggregate_period_summary",
+    "ag_du_demand_monthly", "ag_du_gw_pumping_monthly", "ag_du_sw_delivery_monthly",
     "ag_du_delivery_monthly", "ag_du_shortage_monthly",
-    "ag_du_period_summary", "ag_aggregate_period_summary",
+    "ag_du_period_summary",
+    "ag_aggregate_monthly", "ag_aggregate_period_summary",
+    "refuge_du_delivery_monthly", "refuge_du_shortage_monthly", "refuge_du_period_summary",
     "env_flow_season", "env_flow_channel_monthly",
     "env_flow_channel_seasonal", "env_flow_channel_period_summary",
+    "delta_monthly", "delta_period_summary",
 ]
 
 EXPECTED_COUNTS: dict[str, int | None] = {
     "version_family": 14, "version": 14, "developer": 2,
-    "domain_family_map": None, "hydrologic_region": 6,
-    "network_type": 21, "network_subtype": 28,
-    "unit": None, "source": None, "model_source": None, "watershed": None,
-    "network_entity_type": 4, "wba": 42, "network": 6908,
-    "network_arc": 2610, "network_node": 1544, "network_gis": 4154,
-    "reservoir": 7, "compliance_station": 2,
+    "domain_family_map": None, "audit_log": None,
+    "hydrologic_region": 6, "source": 12, "model_source": 1,
+    "unit": None, "watershed": None,
+    "spatial_scale": None, "temporal_scale": None,
+    "statistic_category": 3, "statistic_type": 20, "geometry_type": 4,
+    "network_entity_type": 4, "network_type": 21, "network_subtype": 28,
+    "network": 6908, "network_arc": 2610, "network_node": 1544, "network_gis": 4154,
+    "reservoir": 7, "compliance_station": 2, "wba": 42,
     "du_agriculture_entity": 144, "du_urban_entity": 145,
     "du_refuge_entity": 18, "reservoir_entity": 92, "mi_contractor": 30,
     "scenario": None, "theme": None, "theme_scenario_link": None,
@@ -690,11 +702,11 @@ ORDER BY pg_relation_size(indexrelid) DESC
 
 SQL_SCENARIO_COVERAGE = """
 SELECT s.short_code, s.is_active,
-       (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_id = s.id) AS reservoir,
-       (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_id = s.id) AS du_delivery,
-       (SELECT COUNT(*) FROM ag_du_delivery_monthly        WHERE scenario_id = s.id) AS ag_delivery,
-       (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_id = s.id) AS mi_summary,
-       (SELECT COUNT(*) FROM tier_result                   WHERE scenario_id = s.id) AS tiers
+       (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_short_code = s.short_code) AS reservoir,
+       (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_short_code = s.short_code) AS du_delivery,
+       (SELECT COUNT(*) FROM ag_du_delivery_monthly        WHERE scenario_short_code = s.short_code) AS ag_delivery,
+       (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_short_code = s.short_code) AS mi_summary,
+       (SELECT COUNT(*) FROM tier_result                   WHERE scenario_short_code = s.short_code) AS tiers
 FROM scenario s ORDER BY s.short_code
 """
 
@@ -722,11 +734,11 @@ FROM ag_du_delivery_monthly
 
 SQL_ORPHANED_STATS = """
 SELECT 'reservoir_period_summary' AS table_name, COUNT(*) AS orphan_rows
-FROM reservoir_period_summary WHERE scenario_id NOT IN (SELECT id FROM scenario)
+FROM reservoir_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
 UNION ALL SELECT 'mi_contractor_period_summary', COUNT(*)
-FROM mi_contractor_period_summary WHERE scenario_id NOT IN (SELECT id FROM scenario)
+FROM mi_contractor_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
 UNION ALL SELECT 'ag_aggregate_period_summary', COUNT(*)
-FROM ag_aggregate_period_summary WHERE scenario_id NOT IN (SELECT id FROM scenario)
+FROM ag_aggregate_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
 """
 
 SQL_ROW_COUNTS = """
@@ -758,9 +770,15 @@ def md_table(rows: list[dict], columns: list[str] | None = None) -> str:
 def run_query(cur, sql: str) -> list[dict]:
     try:
         cur.execute(sql)
+        rows = cur.fetchall()
+        if not rows:
+            return []
+        if isinstance(rows[0], dict):
+            return [dict(r) for r in rows]
         cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        return [dict(zip(cols, row)) for row in rows]
     except psycopg2.Error as exc:
+        cur.connection.rollback()
         return [{"error": str(exc)}]
 
 

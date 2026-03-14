@@ -3375,7 +3375,6 @@ Table: network_subtype
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- "ST", "CL", "RES", "A", "STM", etc.
 ├── label                VARCHAR NOT NULL           -- "Stream", "Canal", "Reservoir", "Agricultural", etc.
 ├── description          TEXT
-├── network_entity_type_id INTEGER NOT NULL         -- FK → network_entity_type.id (1=arc, 2=node)
 ├── type_id              INTEGER NOT NULL           -- FK → network_type.id (parent type)
 ├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (calsim3)
 ├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
