@@ -44,11 +44,18 @@
 
 10+ RESULTS / TIERS
     tier_definition, tier_result, tier_location_result
-    reservoir_storage_monthly, reservoir_spill_monthly, reservoir_period_summary
+    reservoir_storage_monthly, reservoir_spill_monthly, reservoir_monthly_percentile,
+        reservoir_period_summary
     du_delivery_monthly, du_period_summary, du_shortage_monthly
-    ag/cws/mi aggregate statistics
+    ag_du_demand_monthly, ag_du_sw_delivery_monthly, ag_du_gw_pumping_monthly,
+        ag_du_shortage_monthly, ag_du_period_summary
+    ag_aggregate_monthly, ag_aggregate_period_summary
+    mi_delivery_monthly, mi_shortage_monthly, mi_contractor_period_summary
+    cws_aggregate_monthly, cws_aggregate_period_summary
+    refuge_du_delivery_monthly, refuge_du_shortage_monthly, refuge_du_period_summary
     env_flow_season (lookup), env_flow_channel_monthly, env_flow_channel_seasonal,
-    env_flow_channel_period_summary
+        env_flow_channel_period_summary
+    delta_monthly, delta_period_summary
 
 VIEWS
     scenario_full          ← wide pivot of scenario + operations + assumptions (all in one row)
@@ -216,7 +223,7 @@ Indexes:
 ```
 Table: hydrologic_region
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "SAC", "SJR", "DELTA", "TULARE", "SOCAL", "EXPORT"
+├── short_code           TEXT UNIQUE NOT NULL       -- "SAC", "SJR", "NC", "DELTA", "TULARE", "SOCAL", "EXPORT"
 ├── label                TEXT                       -- "Sacramento River Basin", etc.
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
@@ -224,9 +231,10 @@ Table: hydrologic_region
 ├── updated_at           TIMESTAMP DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
-Values (6 total):
+Values (7 total):
 ├── SAC: Sacramento River Basin
 ├── SJR: San Joaquin River Basin
+├── NC: North Coast
 ├── DELTA: Sacramento–San Joaquin Delta
 ├── TULARE: Tulare Basin
 ├── SOCAL: Southern California
@@ -482,47 +490,52 @@ Seed: seed_tables/01_lookup/network_subtype.csv
 
 ```
 Table: watershed
-├── id                              SERIAL PRIMARY KEY
-├── short_code                      VARCHAR UNIQUE NOT NULL    -- Watershed identifier
-├── name                            VARCHAR NOT NULL           -- Full watershed name
-├── description                     TEXT                       -- Watershed description
-├── hydrologic_region_short_code    VARCHAR                    -- FK (soft) → hydrologic_region (SAC, SJR, NC)
-├── unimp_sv_variable               VARCHAR                    -- CalSim SV UNIMP_* variable for this watershed
-│                                                              -- (NULL if no SV reference exists, e.g. UPPER_MOKELUMNE)
-├── is_active                       BOOLEAN DEFAULT TRUE
-├── created_at                      TIMESTAMP DEFAULT NOW()
-├── created_by                      INTEGER NOT NULL           -- FK → developer.id
-├── updated_at                      TIMESTAMP DEFAULT NOW()
-└── updated_by                      INTEGER NOT NULL           -- FK → developer.id
+├── id                    SERIAL PRIMARY KEY
+├── short_code            VARCHAR UNIQUE NOT NULL    -- Watershed identifier
+├── name                  VARCHAR NOT NULL           -- Full watershed name
+├── description           TEXT                       -- Watershed description
+├── hydrologic_region_id  INTEGER                    -- FK → hydrologic_region.id
+├── unimp_sv_variable     VARCHAR                    -- CalSim SV UNIMP_* variable for this watershed
+│                                                    -- (NULL if no SV reference exists, e.g. UPPER_MOKELUMNE)
+├── is_active             BOOLEAN NOT NULL DEFAULT TRUE
+├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+├── created_by            INTEGER NOT NULL           -- FK → developer.id
+├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL           -- FK → developer.id
 
 Records: 13 watersheds (migration 23 added CLEAR_CREEK, SAC_LOWER, SAC_UPPER, TRINITY_RIVER, UPPER_MERCED;
          replaced SAC_RIVER with SAC_UPPER + SAC_LOWER split at Bend Bridge rm 257)
 Seed: seed_tables/01_lookup/watershed.csv
 
 Foreign keys:
+├── Ref: watershed.hydrologic_region_id > hydrologic_region.id [delete: restrict, update: cascade]
 ├── Ref: watershed.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: watershed.updated_by > developer.id [delete: restrict, update: cascade]
 
+Referenced by:
+└── channel_entity.watershed_short_code > watershed.short_code
+
 Indexes:
 ├── watershed_short_code_key (short_code) -- Unique constraint
-└── idx_watershed_hydrologic_region (hydrologic_region_short_code) -- Region lookups
+└── idx_watershed_hydrologic_region (hydrologic_region_id) -- Region lookups
 
 Values (13 total):
-├── BEAR_RIVER:       Bear River Watershed (SAC)                          — no UNIMP variable
+├── BEAR_RIVER:       Bear River Watershed (SJR)                          — no UNIMP variable
 ├── CLEAR_CREEK:      Clear Creek / Whiskeytown Watershed (SAC)           — UNIMP_WH
 ├── SAC_UPPER:        Sacramento River above Bend Bridge (SAC)            — UNIMP_SHAS
 ├── SAC_LOWER:        Sacramento River at/below Bend Bridge (SAC)         — UNIMP_SRBB
 ├── SAN_JOAQUIN:      San Joaquin River Hydrologic Region (SJR)           — UNIMP_SJ
 ├── TRINITY_RIVER:    Trinity River Watershed (NC)                        — UNIMP_TRIN
-├── UPPER_AMERICAN:   Upper American River Watershed (SAC)                — UNIMP_FOLS
-├── UPPER_FEATHER:    Upper Feather River Watershed (SAC)                 — UNIMP_OROV
+├── UPPER_AMERICAN:   Upper American River Watershed (SJR)                — UNIMP_FOLS
+├── UPPER_FEATHER:    Upper Feather River Watershed (SJR)                 — UNIMP_OROV
 ├── UPPER_MERCED:     Upper Merced River Watershed (SJR)                  — UNIMP_ME
 ├── UPPER_MOKELUMNE:  Upper Mokelumne River Watershed (SJR)               — no UNIMP variable
 ├── UPPER_STANISLAUS: Upper Stanislaus River (SJR)                        — UNIMP_ST
 ├── UPPER_TUOLUMNE:   Upper Tuolumne River Watershed (SJR)                — UNIMP_TU
-└── YUBA_RIVER:       Yuba River Watershed (SAC)                          — UNIMP_YUBA
+└── YUBA_RIVER:       Yuba River Watershed (SJR)                          — UNIMP_YUBA
 
 Notes:
+- Migration 33 normalized hydrologic_region_short_code (text) to hydrologic_region_id (FK).
 - SAC_RIVER was split at Bend Bridge (rm 257) into SAC_UPPER and SAC_LOWER (migration 23).
   All Sacramento mainstem channels at or below rm 257 use SAC_LOWER / UNIMP_SRBB.
   Channels above rm 257 (SAC289, KSWCK, SHSTA) use SAC_UPPER / UNIMP_SHAS.
@@ -1044,15 +1057,15 @@ Used by: du_urban_variable (variable_type_id)
 Seed: seed_tables/04_variable/variable_type.csv
 ```
 
-### **4. channel_variable, reservoir_variable, inflow_variable, derived_variable**
+### **4. channel_variable (and planned: reservoir_variable, inflow_variable, derived_variable)**
 ```
-These tables hold the ~500+ CalSim variable definitions (model output names).
+These tables hold CalSim variable definitions (model output names).
 Each maps a CalSim variable name to its type classification and entity association.
 
 channel_variable      -- flow/diversion arc variables   (FK → channel_entity; includes MIF regulatory vars)
-reservoir_variable    -- storage/release variables       (FK → calsim_model_variable_type)
-inflow_variable       -- inflow boundary conditions      (FK → calsim_model_variable_type)
-derived_variable      -- computed / post-processed vars  (FK → derived_variable_type)
+reservoir_variable    -- storage/release variables       [PLANNED — not yet created]
+inflow_variable       -- inflow boundary conditions      [PLANNED — not yet created]
+derived_variable      -- computed / post-processed vars  [PLANNED — not yet created]
 
 channel_variable notable fields (migration 23):
 ├── is_regulatory       BOOLEAN    -- TRUE for C_*_MIF variables (binding regulatory minimums)
@@ -1581,8 +1594,10 @@ Seed: seed_tables/08_theme/theme_scenario_link.csv
 
 ### **3. theme_source_link (theme provenance)**
 
+Status: PLANNED — not yet created in the database.
+
 ```
-Table: theme_source_link
+Table: theme_source_link   [PLANNED]
 ├── theme_id             INTEGER NOT NULL           -- FK → theme.id
 ├── source_id            INTEGER NOT NULL           -- FK → source.id
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -2341,6 +2356,8 @@ Table: du_urban_variable
 ├── variable_type         VARCHAR(20) DEFAULT 'delivery' -- Type of water supply measurement
 ├── variable_type_id      INTEGER                      -- FK variable_type.id
 ├── requires_sum          BOOLEAN DEFAULT FALSE        -- TRUE if multiple arcs need summing
+├── demand_mode           VARCHAR                      -- How demand is determined (e.g. "static", "dynamic")
+├── demand_params         JSONB                        -- Additional demand calculation parameters
 ├── notes                 TEXT                         -- Mapping context
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -2911,15 +2928,19 @@ Constraints:
 └── Unique: (scenario_short_code, aggregate_code)
 ```
 
-#### **ag_du_delivery_monthly (agriculture demand unit delivery statistics)**
+#### **ag_du_demand_monthly (agriculture demand unit demand statistics)**
+
+Note: Originally named `ag_du_delivery_monthly`, renamed in migration 04 when delivery
+was split into separate surface water and groundwater tables.
+
 ```
-Table: ag_du_delivery_monthly
+Table: ag_du_demand_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
 ├── du_id                 VARCHAR(20) NOT NULL         -- FK du_agriculture_entity.du_id
 ├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
-├── delivery_avg_taf      NUMERIC(10,2)
-├── delivery_cv           NUMERIC(6,4)
+├── demand_avg_taf        NUMERIC(10,2)
+├── demand_cv             NUMERIC(6,4)
 ├── q0                    NUMERIC(10,2)                -- Percentile bands
 ├── q10                   NUMERIC(10,2)
 ├── q30                   NUMERIC(10,2)
@@ -2937,15 +2958,96 @@ Table: ag_du_delivery_monthly
 ├── sample_count          INTEGER
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1
+├── created_by            INTEGER NOT NULL
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
-└── updated_by            INTEGER NOT NULL DEFAULT 1
+└── updated_by            INTEGER NOT NULL
 
-Records: 14,400 rows
+Records: 25,200 rows
 
 Constraints:
 ├── Unique: (scenario_short_code, du_id, water_month)
 └── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/13_ag_statistics/02_create_ag_statistics_tables.sql (original)
+     database/scripts/sql/migrations/04_add_sw_delivery_gw_pumping_tables.sql (rename)
+```
+
+#### **ag_du_sw_delivery_monthly (agriculture demand unit surface water delivery statistics)**
+```
+Table: ag_du_sw_delivery_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- FK du_agriculture_entity.du_id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── sw_delivery_avg_taf   NUMERIC(10,2)
+├── sw_delivery_cv        NUMERIC(6,4)
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 21,060 rows
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/migrations/04_add_sw_delivery_gw_pumping_tables.sql
+```
+
+#### **ag_du_gw_pumping_monthly (agriculture demand unit groundwater pumping statistics)**
+```
+Table: ag_du_gw_pumping_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR(20) NOT NULL
+├── du_id                 VARCHAR(20) NOT NULL         -- FK du_agriculture_entity.du_id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── gw_pumping_avg_taf    NUMERIC(10,2)
+├── gw_pumping_cv         NUMERIC(6,4)
+├── q0                    NUMERIC(10,2)                -- Percentile bands
+├── q10                   NUMERIC(10,2)
+├── q30                   NUMERIC(10,2)
+├── q50                   NUMERIC(10,2)
+├── q70                   NUMERIC(10,2)
+├── q90                   NUMERIC(10,2)
+├── q100                  NUMERIC(10,2)
+├── exc_p5                NUMERIC(10,2)                -- Exceedance percentiles
+├── exc_p10               NUMERIC(10,2)
+├── exc_p25               NUMERIC(10,2)
+├── exc_p50               NUMERIC(10,2)
+├── exc_p75               NUMERIC(10,2)
+├── exc_p90               NUMERIC(10,2)
+├── exc_p95               NUMERIC(10,2)
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 23,400 rows
+
+Constraints:
+├── Unique: (scenario_short_code, du_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/migrations/04_add_sw_delivery_gw_pumping_tables.sql
 ```
 
 #### **ag_du_shortage_monthly (agriculture demand unit shortage statistics)**
@@ -2996,29 +3098,33 @@ Table: ag_du_period_summary
 ├── simulation_start_year INTEGER NOT NULL
 ├── simulation_end_year   INTEGER NOT NULL
 ├── total_years           INTEGER NOT NULL
-├── annual_delivery_avg_taf NUMERIC(10,2)
-├── annual_delivery_cv    NUMERIC(6,4)
-├── delivery_exc_p5       NUMERIC(10,2)                -- Exceedance percentiles
-├── delivery_exc_p10      NUMERIC(10,2)
-├── delivery_exc_p25      NUMERIC(10,2)
-├── delivery_exc_p50      NUMERIC(10,2)
-├── delivery_exc_p75      NUMERIC(10,2)
-├── delivery_exc_p90      NUMERIC(10,2)
-├── delivery_exc_p95      NUMERIC(10,2)
+├── annual_demand_avg_taf NUMERIC(10,2)
+├── annual_demand_cv      NUMERIC(6,4)
+├── demand_exc_p5         NUMERIC(10,2)                -- Exceedance percentiles
+├── demand_exc_p10        NUMERIC(10,2)
+├── demand_exc_p25        NUMERIC(10,2)
+├── demand_exc_p50        NUMERIC(10,2)
+├── demand_exc_p75        NUMERIC(10,2)
+├── demand_exc_p90        NUMERIC(10,2)
+├── demand_exc_p95        NUMERIC(10,2)
+├── annual_sw_delivery_avg_taf NUMERIC(10,2)
+├── annual_sw_delivery_cv NUMERIC(6,4)
+├── annual_gw_pumping_avg_taf NUMERIC(10,2)
+├── annual_gw_pumping_cv  NUMERIC(6,4)
+├── gw_pumping_pct_of_demand NUMERIC(5,2)
 ├── annual_shortage_avg_taf NUMERIC(10,2)
 ├── shortage_years_count  INTEGER
 ├── shortage_frequency_pct NUMERIC(5,2)
 ├── annual_shortage_pct_of_demand NUMERIC(5,2)
 ├── reliability_pct       NUMERIC(5,2)
 ├── avg_pct_demand_met    NUMERIC(5,2)
-├── annual_demand_avg_taf NUMERIC(10,2)
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1
+├── created_by            INTEGER NOT NULL
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
-└── updated_by            INTEGER NOT NULL DEFAULT 1
+└── updated_by            INTEGER NOT NULL
 
-Records: 1,200 rows
+Records: 2,100 rows
 
 Constraints:
 └── Unique: (scenario_short_code, du_id)
@@ -3145,6 +3251,187 @@ Constraints:
 └── Unique: (scenario_short_code, du_id)
 
 ETL: etl/statistics/refuge/calculate_refuge_statistics.py
+```
+
+#### **env_flow_season (environmental flow season definitions)**
+```
+Table: env_flow_season
+├── id                    SERIAL PRIMARY KEY
+├── short_code            VARCHAR UNIQUE NOT NULL      -- "fall", "winter", "spring", "summer", "annual"
+├── label                 VARCHAR NOT NULL             -- Display name
+├── description           TEXT
+├── start_month           INTEGER                      -- Water month (Oct=1)
+├── end_month             INTEGER                      -- Water month (Oct=1)
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 5 seasons (fall, winter, spring, summer, annual)
+
+DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
+```
+
+#### **env_flow_channel_monthly (environmental flow monthly statistics)**
+```
+Table: env_flow_channel_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR NOT NULL
+├── network_arc_id        INTEGER NOT NULL             -- FK → channel_entity.id
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── flow_avg_cfs          NUMERIC                      -- Mean regulated flow (CFS)
+├── flow_cv               NUMERIC                      -- CV of regulated flow
+├── unimp_avg_cfs         NUMERIC                      -- Mean unimpaired flow (CFS)
+├── pct_unimpaired_avg    NUMERIC                      -- Mean % of unimpaired flow
+├── pct_unimpaired_cv     NUMERIC                      -- CV of % unimpaired flow
+├── q0 – q100             NUMERIC (7 cols)             -- Percentile bands (regulated flow)
+├── exc_p5 – exc_p95      NUMERIC (7 cols)             -- Exceedance percentiles (regulated flow)
+├── unimp_q0 – unimp_q100 NUMERIC (7 cols)            -- Percentile bands (unimpaired flow)
+├── unimp_exc_p5 – unimp_exc_p95 NUMERIC (7 cols)     -- Exceedance percentiles (unimpaired flow)
+├── mif_avg_cfs           NUMERIC                      -- Mean minimum instream flow (CFS)
+├── mif_cv                NUMERIC                      -- CV of MIF
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 13,452 rows
+
+Constraints:
+├── Unique: (scenario_short_code, network_arc_id, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
+```
+
+#### **env_flow_channel_seasonal (environmental flow seasonal statistics)**
+```
+Table: env_flow_channel_seasonal
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR NOT NULL
+├── network_arc_id        INTEGER NOT NULL             -- FK → channel_entity.id
+├── season_id             INTEGER NOT NULL             -- FK → env_flow_season.id
+├── flow_avg_cfs          NUMERIC                      -- Mean regulated flow (CFS)
+├── flow_cv               NUMERIC
+├── unimp_avg_cfs         NUMERIC                      -- Mean unimpaired flow (CFS)
+├── pct_unimpaired_avg    NUMERIC
+├── pct_unimpaired_cv     NUMERIC
+├── q0 – q100             NUMERIC (7 cols)             -- Percentile bands (regulated + unimpaired)
+├── exc_p5 – exc_p95      NUMERIC (7 cols)             -- Exceedance percentiles
+├── unimp_q0 – unimp_q100 NUMERIC (7 cols)
+├── unimp_exc_p5 – unimp_exc_p95 NUMERIC (7 cols)
+├── mif_avg_cfs           NUMERIC
+├── mif_cv                NUMERIC
+├── eflow_avg_cfs         NUMERIC                      -- Mean functional flow target (CFS)
+├── eflow_cv              NUMERIC
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 5,605 rows
+
+Constraints:
+└── Unique: (scenario_short_code, network_arc_id, season_id)
+
+DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
+```
+
+#### **env_flow_channel_period_summary (environmental flow period summary)**
+```
+Table: env_flow_channel_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR NOT NULL
+├── network_arc_id        INTEGER NOT NULL             -- FK → channel_entity.id
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_flow_avg_cfs   NUMERIC
+├── annual_flow_cv        NUMERIC
+├── annual_unimp_avg_cfs  NUMERIC
+├── annual_pct_unimpaired_avg NUMERIC
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 1,121 rows
+
+Constraints:
+└── Unique: (scenario_short_code, network_arc_id)
+
+DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
+```
+
+#### **delta_monthly (Delta monthly statistics)**
+```
+Table: delta_monthly
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR NOT NULL
+├── variable_name         VARCHAR NOT NULL             -- Delta variable (outflow, X2, etc.)
+├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
+├── avg                   NUMERIC
+├── cv                    NUMERIC
+├── avg_cfs               NUMERIC
+├── q0                    NUMERIC                      -- Percentile bands
+├── q10                   NUMERIC
+├── q30                   NUMERIC
+├── q50                   NUMERIC
+├── q70                   NUMERIC
+├── q90                   NUMERIC
+├── q100                  NUMERIC
+├── exc_p5                NUMERIC                      -- Exceedance percentiles
+├── exc_p10               NUMERIC
+├── exc_p25               NUMERIC
+├── exc_p50               NUMERIC
+├── exc_p75               NUMERIC
+├── exc_p90               NUMERIC
+├── exc_p95               NUMERIC
+├── sample_count          INTEGER
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 1,248 rows
+
+Constraints:
+├── Unique: (scenario_short_code, variable_name, water_month)
+└── Check: water_month BETWEEN 1 AND 12
+
+DDL: database/scripts/sql/migrations/29_create_delta_statistics_tables.sql
+```
+
+#### **delta_period_summary (Delta period summary)**
+```
+Table: delta_period_summary
+├── id                    SERIAL PRIMARY KEY
+├── scenario_short_code   VARCHAR NOT NULL
+├── variable_name         VARCHAR NOT NULL
+├── simulation_start_year INTEGER NOT NULL
+├── simulation_end_year   INTEGER NOT NULL
+├── total_years           INTEGER NOT NULL
+├── annual_avg            NUMERIC
+├── annual_cv             NUMERIC
+├── is_active             BOOLEAN DEFAULT TRUE
+├── created_at            TIMESTAMPTZ DEFAULT NOW()
+├── created_by            INTEGER NOT NULL
+├── updated_at            TIMESTAMPTZ DEFAULT NOW()
+└── updated_by            INTEGER NOT NULL
+
+Records: 104 rows
+
+Constraints:
+└── Unique: (scenario_short_code, variable_name)
+
+DDL: database/scripts/sql/migrations/29_create_delta_statistics_tables.sql
 ```
 
 ---
@@ -4197,7 +4484,7 @@ Filter: WHERE channel_entity.is_active = TRUE
 ├── channel_class_label  TEXT     -- 'Natural stream or river reach', etc.
 ├── watershed_short_code TEXT     -- FK → watershed.short_code
 ├── watershed_name       TEXT     -- watershed.name
-├── hydrologic_region    TEXT     -- watershed.hydrologic_region_short_code
+├── hydrologic_region    TEXT     -- hydrologic_region.short_code (via watershed.hydrologic_region_id)
 ├── unimp_sv_variable    TEXT     -- CalSim SV unimpaired baseline variable
 ├── has_mif              BOOLEAN  -- TRUE if C_*_MIF companion variable exists
 ├── has_eflows           BOOLEAN  -- TRUE if EFLOWS_* functional flow target exists

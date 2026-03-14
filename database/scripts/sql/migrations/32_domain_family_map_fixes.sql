@@ -50,6 +50,8 @@ CREATE TRIGGER audit_fields_domain_family_map
 COMMENT ON TABLE domain_family_map IS
 'Maps each database table to its version_family and database layer.';
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON domain_family_map TO jfantauzza;
+
 -- ══════════════════════════════════════════════════════════════════════
 -- 2. FIX database_level FOR DELIVERY ARC TABLES (10 → 03)
 -- ══════════════════════════════════════════════════════════════════════

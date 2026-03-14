@@ -537,7 +537,7 @@ RESULTS_TABLES = [
     "mi_delivery_monthly", "mi_shortage_monthly", "mi_contractor_period_summary",
     "cws_aggregate_monthly", "cws_aggregate_period_summary",
     "ag_du_demand_monthly", "ag_du_gw_pumping_monthly", "ag_du_sw_delivery_monthly",
-    "ag_du_delivery_monthly", "ag_du_shortage_monthly",
+    "ag_du_shortage_monthly",
     "ag_du_period_summary",
     "ag_aggregate_monthly", "ag_aggregate_period_summary",
     "refuge_du_delivery_monthly", "refuge_du_shortage_monthly", "refuge_du_period_summary",
@@ -549,7 +549,7 @@ RESULTS_TABLES = [
 EXPECTED_COUNTS: dict[str, int | None] = {
     "version_family": 14, "version": 14, "developer": 2,
     "domain_family_map": None, "audit_log": None,
-    "hydrologic_region": 6, "source": 12, "model_source": 1,
+    "hydrologic_region": 7, "source": 12, "model_source": 1,
     "unit": None, "watershed": None,
     "spatial_scale": None, "temporal_scale": None,
     "statistic_category": 3, "statistic_type": 20, "geometry_type": 4,
@@ -683,15 +683,15 @@ ORDER BY n_dead_tup DESC LIMIT 15
 """
 
 SQL_BLOAT = """
-SELECT relname AS table_name,
-       pg_size_pretty(pg_relation_size(oid)) AS current_size,
-       n_dead_tup AS dead_rows, n_live_tup AS live_rows,
-       CASE WHEN n_live_tup + n_dead_tup = 0 THEN 0
-            ELSE round(n_dead_tup * 100.0 / (n_live_tup + n_dead_tup), 1)
+SELECT s.relname AS table_name,
+       pg_size_pretty(pg_relation_size(c.oid)) AS current_size,
+       s.n_dead_tup AS dead_rows, s.n_live_tup AS live_rows,
+       CASE WHEN s.n_live_tup + s.n_dead_tup = 0 THEN 0
+            ELSE round(s.n_dead_tup * 100.0 / (s.n_live_tup + s.n_dead_tup), 1)
        END AS bloat_pct
-FROM pg_stat_user_tables
-JOIN pg_class ON pg_class.relname = pg_stat_user_tables.relname
-WHERE n_dead_tup > 1000 ORDER BY n_dead_tup DESC
+FROM pg_stat_user_tables s
+JOIN pg_class c ON c.relname = s.relname AND c.relnamespace = 'public'::regnamespace
+WHERE s.n_dead_tup > 1000 ORDER BY s.n_dead_tup DESC
 """
 
 SQL_UNUSED_INDEXES = """
@@ -709,7 +709,7 @@ SQL_SCENARIO_COVERAGE = """
 SELECT s.short_code, s.is_active,
        (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_short_code = s.short_code) AS reservoir,
        (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_short_code = s.short_code) AS du_delivery,
-       (SELECT COUNT(*) FROM ag_du_delivery_monthly        WHERE scenario_short_code = s.short_code) AS ag_delivery,
+       (SELECT COUNT(*) FROM ag_du_demand_monthly          WHERE scenario_short_code = s.short_code) AS ag_delivery,
        (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_short_code = s.short_code) AS mi_summary,
        (SELECT COUNT(*) FROM tier_result                   WHERE scenario_short_code = s.short_code) AS tiers
 FROM scenario s ORDER BY s.short_code
@@ -732,27 +732,24 @@ SELECT 'du_delivery_monthly' AS table_name,
        COUNT(*) FILTER (WHERE water_month NOT BETWEEN 1 AND 12) AS invalid_count
 FROM du_delivery_monthly
 UNION ALL
-SELECT 'ag_du_delivery_monthly',
+SELECT 'ag_du_demand_monthly',
        COUNT(*) FILTER (WHERE water_month NOT BETWEEN 1 AND 12)
-FROM ag_du_delivery_monthly
+FROM ag_du_demand_monthly
+UNION ALL
+SELECT 'mi_delivery_monthly',
+       COUNT(*) FILTER (WHERE water_month NOT BETWEEN 1 AND 12)
+FROM mi_delivery_monthly
 """
 
 SQL_ORPHANED_STATS = """
 SELECT 'reservoir_period_summary' AS table_name, COUNT(*) AS orphan_rows
-FROM reservoir_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
+FROM reservoir_period_summary WHERE scenario_short_code NOT IN (SELECT scenario_id FROM scenario)
 UNION ALL SELECT 'mi_contractor_period_summary', COUNT(*)
-FROM mi_contractor_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
+FROM mi_contractor_period_summary WHERE scenario_short_code NOT IN (SELECT scenario_id FROM scenario)
 UNION ALL SELECT 'ag_aggregate_period_summary', COUNT(*)
-FROM ag_aggregate_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
+FROM ag_aggregate_period_summary WHERE scenario_short_code NOT IN (SELECT scenario_id FROM scenario)
 """
 
-SQL_ROW_COUNTS = """
-SELECT relname AS table_name, reltuples::bigint AS estimated_rows,
-       pg_size_pretty(pg_total_relation_size(oid)) AS total_size
-FROM pg_class
-WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
-ORDER BY relname
-"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -968,23 +965,21 @@ def main() -> None:
 
         # ── 1c. Row counts vs. expected ───────────────────────────────────
         h("1c. Row counts vs. expected (layers 00-08)", 3)
-        conn_rw = psycopg2.connect(database_url)
-        conn_rw.set_session(readonly=True)
-        with conn_rw.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            count_rows = run_query(cur, SQL_ROW_COUNTS)
-        count_map = {r["table_name"]: r for r in count_rows}
+        exact_count_map = {}
+        if audit_report is not None:
+            for t in audit_report.get("tables", []):
+                exact_count_map[t["table_name"]] = t.get("record_count", 0)
 
         check_results = []
         for tbl, expected in sorted(EXPECTED_COUNTS.items()):
-            tbl_info = count_map.get(tbl)
-            if tbl_info is None:
+            actual = exact_count_map.get(tbl)
+            if actual is None:
                 check_results.append({
                     "table": tbl, "actual": "NOT FOUND",
                     "expected": str(expected) if expected else "—",
                     "status": "MISSING",
                 })
                 continue
-            actual = tbl_info["estimated_rows"]
             if expected is None:
                 status = "OK (no target)"
             elif actual >= expected:
@@ -1004,6 +999,9 @@ def main() -> None:
 
         # ── 1d. Reference data downloads (layers 00-08) ──────────────────
         h("1d. Reference data downloads (layers 00-08)", 3)
+        if conn_rw is None:
+            conn_rw = psycopg2.connect(database_url)
+            conn_rw.set_session(readonly=True)
         export_dir = run_dir / "layer_exports"
         export_summary = []
         with conn_rw.cursor() as cur:
