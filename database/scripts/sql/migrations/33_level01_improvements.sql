@@ -31,7 +31,8 @@ ALTER TABLE hydrologic_region ENABLE TRIGGER USER;
 -- 2. RECREATE watershed WITH FK + COLUMN REORDER + ATTRIBUTION FIX
 -- ══════════════════════════════════════════════════════════════════════
 
--- 2a. Drop the FK from channel_entity that references watershed(short_code)
+-- 2a. Drop dependent view and FK
+DROP VIEW IF EXISTS env_flow_channel_full;
 ALTER TABLE channel_entity DROP CONSTRAINT IF EXISTS channel_entity_watershed_short_code_fkey;
 
 -- 2b. Create new table with desired column order
@@ -92,6 +93,40 @@ ALTER TABLE channel_entity
 -- 2h. Grant permissions
 GRANT SELECT, INSERT, UPDATE, DELETE ON watershed TO jfantauzza;
 GRANT USAGE, SELECT ON SEQUENCE watershed_id_seq TO jfantauzza;
+
+-- 2i. Recreate env_flow_channel_full view (updated for hydrologic_region_id FK)
+CREATE VIEW env_flow_channel_full AS
+SELECT
+    ce.network_arc_id,
+    ce.short_code                                       AS label,
+    ce.channel_class,
+    CASE ce.channel_class
+        WHEN 'stream'             THEN 'Natural stream or river reach'
+        WHEN 'canal'              THEN 'Constructed conveyance canal'
+        WHEN 'reservoir_release'  THEN 'Regulated dam/reservoir outlet'
+        ELSE ce.channel_class
+    END                                                 AS channel_class_label,
+    ce.watershed_short_code,
+    w.name                                              AS watershed_name,
+    hr.short_code                                       AS hydrologic_region,
+    ce.unimp_sv_variable,
+    ce.has_mif,
+    ce.has_eflows,
+    ce.from_node,
+    ce.to_node,
+    ce.hydrologic_region_id,
+    ce.is_active
+FROM channel_entity ce
+LEFT JOIN watershed w ON w.short_code = ce.watershed_short_code
+LEFT JOIN hydrologic_region hr ON hr.id = w.hydrologic_region_id
+WHERE ce.is_active = TRUE
+ORDER BY ce.channel_class NULLS LAST, ce.watershed_short_code NULLS LAST, ce.network_arc_id;
+
+GRANT SELECT ON env_flow_channel_full TO jfantauzza;
+
+COMMENT ON VIEW env_flow_channel_full IS
+    'Denormalized channel entity view with watershed and environmental flow attributes. '
+    'Use for API responses and frontend channel selection.';
 
 -- ══════════════════════════════════════════════════════════════════════
 -- 3. RECREATE statistic_type WITH COLUMN REORDER
