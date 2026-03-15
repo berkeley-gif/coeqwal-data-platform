@@ -707,11 +707,11 @@ ORDER BY pg_relation_size(indexrelid) DESC
 
 SQL_SCENARIO_COVERAGE = """
 SELECT s.short_code, s.is_active,
-       (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_short_code = s.short_code) AS reservoir,
-       (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_short_code = s.short_code) AS du_delivery,
-       (SELECT COUNT(*) FROM ag_du_demand_monthly          WHERE scenario_short_code = s.short_code) AS ag_delivery,
-       (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_short_code = s.short_code) AS mi_summary,
-       (SELECT COUNT(*) FROM tier_result                   WHERE scenario_short_code = s.short_code) AS tiers
+       (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_short_code = s.scenario_id) AS reservoir,
+       (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_short_code = s.scenario_id) AS du_delivery,
+       (SELECT COUNT(*) FROM ag_du_demand_monthly          WHERE scenario_short_code = s.scenario_id) AS ag_delivery,
+       (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_short_code = s.scenario_id) AS mi_summary,
+       (SELECT COUNT(*) FROM tier_result                   WHERE scenario_short_code = s.scenario_id) AS tiers
 FROM scenario s ORDER BY s.short_code
 """
 
