@@ -34,57 +34,52 @@ async def get_all_scenarios(
     Get list of all scenarios with metadata.
 
     Returns scenario definitions including:
-    - `scenario_id`: Friendly identifier (e.g., 's0020')
-    - `short_code`: Technical code (e.g., 's0020_DCRadjBL_2020LU_wTUCP')
+    - `short_code`: Friendly identifier (e.g., 's0020')
+    - `run_name`: Technical run name (e.g., 's0020_DCRadjBL_2020LU_wTUCP')
     - `name`: Display name
-    - `description`: Full description
+    - `short_description`: Brief description
     - `is_active`: Whether scenario is active
 
     **Use case:** Build scenario selection UI, show scenario cards.
     """
     try:
-        # Simple query - no joins
         query = """
-        SELECT 
-            scenario_id,
+        SELECT
             short_code,
+            run_name,
             name,
-            short_title,
-            description,
-            simple_description,
+            short_description,
+            long_description,
             hydroclimate_id,
             is_active
         FROM scenario
-        WHERE is_active = 1 OR is_active::text = 'true' OR is_active::text = 't'
-        ORDER BY scenario_id
+        WHERE is_active = TRUE
+        ORDER BY short_code
         """
 
         rows = await connection.fetch(query)
 
-        # If still empty, try without the filter
         if not rows:
             query_all = """
-            SELECT 
-                scenario_id,
+            SELECT
                 short_code,
+                run_name,
                 name,
-                short_title,
-                description,
-                simple_description,
+                short_description,
+                long_description,
                 hydroclimate_id,
                 is_active
             FROM scenario
-            ORDER BY scenario_id
+            ORDER BY short_code
             """
             rows = await connection.fetch(query_all)
 
         return [
             {
-                "scenario_id": row["scenario_id"],
                 "short_code": row["short_code"],
-                "name": row["name"] or row["short_title"] or row["short_code"],
-                "short_title": row["short_title"],
-                "description": row["description"] or row["simple_description"],
+                "run_name": row["run_name"],
+                "name": row["name"] or row["short_code"],
+                "description": row["long_description"] or row["short_description"],
                 "is_active": bool(row["is_active"])
                 if row["is_active"] is not None
                 else True,
@@ -108,21 +103,18 @@ async def get_scenario(
     Returns full scenario metadata including themes and key assumptions.
     """
     try:
-        # Get scenario base info - simple query first
-        # Try matching by scenario_id first (e.g., 's0020'), then by short_code
         scenario_query = """
-        SELECT 
+        SELECT
             id,
-            scenario_id,
             short_code,
+            run_name,
             name,
-            description,
-            simple_description,
-            short_title,
+            short_description,
+            long_description,
             hydroclimate_id,
             is_active
         FROM scenario
-        WHERE scenario_id = $1 OR short_code = $1
+        WHERE short_code = $1 OR run_name = $1
         """
 
         scenario = await connection.fetchrow(scenario_query, scenario_id)
@@ -132,7 +124,6 @@ async def get_scenario(
                 status_code=404, detail=f"Scenario {scenario_id} not found"
             )
 
-        # Get hydroclimate info separately (may not exist)
         hydroclimate = None
         hydroclimate_name = None
         if scenario["hydroclimate_id"]:
@@ -144,7 +135,6 @@ async def get_scenario(
                 hydroclimate = hc["short_code"]
                 hydroclimate_name = hc["name"]
 
-        # Get associated themes (may be empty)
         theme_query = """
         SELECT t.short_code, t.name, t.short_title
         FROM theme t
@@ -153,7 +143,6 @@ async def get_scenario(
         """
         themes = await connection.fetch(theme_query, scenario["id"])
 
-        # Get key assumptions (may be empty)
         assumption_query = """
         SELECT ad.short_code, ad.name, ad.description
         FROM assumption_definition ad
@@ -162,7 +151,6 @@ async def get_scenario(
         """
         assumptions = await connection.fetch(assumption_query, scenario["id"])
 
-        # Get key operations (may be empty)
         operation_query = """
         SELECT od.short_code, od.name, od.description
         FROM operation_definition od
@@ -172,13 +160,11 @@ async def get_scenario(
         operations = await connection.fetch(operation_query, scenario["id"])
 
         return {
-            "scenario_id": scenario["scenario_id"],
             "short_code": scenario["short_code"],
-            "name": scenario["name"]
-            or scenario["short_title"]
-            or scenario["short_code"],
-            "short_title": scenario["short_title"],
-            "description": scenario["description"] or scenario["simple_description"],
+            "run_name": scenario["run_name"],
+            "name": scenario["name"] or scenario["short_code"],
+            "short_description": scenario["short_description"],
+            "long_description": scenario["long_description"],
             "hydroclimate": hydroclimate,
             "hydroclimate_name": hydroclimate_name,
             "is_active": bool(scenario["is_active"]),

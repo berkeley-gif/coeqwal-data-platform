@@ -558,7 +558,8 @@ EXPECTED_COUNTS: dict[str, int | None] = {
     "reservoir": 7, "compliance_station": 2, "wba": 42,
     "du_agriculture_entity": 144, "du_urban_entity": 145,
     "du_refuge_entity": 18, "reservoir_entity": 92, "mi_contractor": 30,
-    "scenario": None, "theme": None, "theme_scenario_link": None,
+    "scenario": None, "scenario_tag": 10, "scenario_tag_link": None,
+    "theme": None, "theme_scenario_link": None,
 }
 
 
@@ -707,11 +708,11 @@ ORDER BY pg_relation_size(indexrelid) DESC
 
 SQL_SCENARIO_COVERAGE = """
 SELECT s.short_code, s.is_active,
-       (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_short_code = s.scenario_id) AS reservoir,
-       (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_short_code = s.scenario_id) AS du_delivery,
-       (SELECT COUNT(*) FROM ag_du_demand_monthly          WHERE scenario_short_code = s.scenario_id) AS ag_delivery,
-       (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_short_code = s.scenario_id) AS mi_summary,
-       (SELECT COUNT(*) FROM tier_result                   WHERE scenario_short_code = s.scenario_id) AS tiers
+       (SELECT COUNT(*) FROM reservoir_storage_monthly     WHERE scenario_short_code = s.short_code) AS reservoir,
+       (SELECT COUNT(*) FROM du_delivery_monthly           WHERE scenario_short_code = s.short_code) AS du_delivery,
+       (SELECT COUNT(*) FROM ag_du_demand_monthly          WHERE scenario_short_code = s.short_code) AS ag_delivery,
+       (SELECT COUNT(*) FROM mi_contractor_period_summary  WHERE scenario_short_code = s.short_code) AS mi_summary,
+       (SELECT COUNT(*) FROM tier_result                   WHERE scenario_short_code = s.short_code) AS tiers
 FROM scenario s ORDER BY s.short_code
 """
 
@@ -743,11 +744,11 @@ FROM mi_delivery_monthly
 
 SQL_ORPHANED_STATS = """
 SELECT 'reservoir_period_summary' AS table_name, COUNT(*) AS orphan_rows
-FROM reservoir_period_summary WHERE scenario_short_code NOT IN (SELECT scenario_id FROM scenario)
+FROM reservoir_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
 UNION ALL SELECT 'mi_contractor_period_summary', COUNT(*)
-FROM mi_contractor_period_summary WHERE scenario_short_code NOT IN (SELECT scenario_id FROM scenario)
+FROM mi_contractor_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
 UNION ALL SELECT 'ag_aggregate_period_summary', COUNT(*)
-FROM ag_aggregate_period_summary WHERE scenario_short_code NOT IN (SELECT scenario_id FROM scenario)
+FROM ag_aggregate_period_summary WHERE scenario_short_code NOT IN (SELECT short_code FROM scenario)
 """
 
 
