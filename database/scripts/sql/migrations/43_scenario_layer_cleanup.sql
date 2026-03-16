@@ -55,6 +55,13 @@ FROM scenario;
 -- ══════════════════════════════════════════════════════════════════════
 -- PHASE 3: REMAP scenario_id IN DEPENDENT TABLES
 -- ══════════════════════════════════════════════════════════════════════
+-- PK constraints are IMMEDIATE (checked per-row), so remapping IDs can
+-- cause transient collisions. Drop PKs first, update, then re-add.
+
+ALTER TABLE scenario_key_assumption_link DROP CONSTRAINT IF EXISTS scenario_key_assumption_link_pkey;
+ALTER TABLE scenario_key_operation_link  DROP CONSTRAINT IF EXISTS scenario_key_operation_link_pkey;
+ALTER TABLE theme_scenario_link          DROP CONSTRAINT IF EXISTS theme_scenario_link_pkey;
+ALTER TABLE scenario_tag_link            DROP CONSTRAINT IF EXISTS scenario_tag_link_pkey;
 
 ALTER TABLE scenario_key_assumption_link DISABLE TRIGGER USER;
 UPDATE scenario_key_assumption_link l
@@ -79,6 +86,16 @@ UPDATE scenario_tag_link l
 SET scenario_id = m.new_id
 FROM scenario_id_map m WHERE l.scenario_id = m.old_id;
 ALTER TABLE scenario_tag_link ENABLE TRIGGER USER;
+
+-- Re-add PKs
+ALTER TABLE scenario_key_assumption_link ADD CONSTRAINT scenario_key_assumption_link_pkey
+    PRIMARY KEY (scenario_id, assumption_id);
+ALTER TABLE scenario_key_operation_link ADD CONSTRAINT scenario_key_operation_link_pkey
+    PRIMARY KEY (scenario_id, operation_id);
+ALTER TABLE theme_scenario_link ADD CONSTRAINT theme_scenario_link_pkey
+    PRIMARY KEY (scenario_id, theme_id);
+ALTER TABLE scenario_tag_link ADD CONSTRAINT scenario_tag_link_pkey
+    PRIMARY KEY (scenario_id, tag_id);
 
 -- ══════════════════════════════════════════════════════════════════════
 -- PHASE 4: RECREATE SCENARIO TABLE
