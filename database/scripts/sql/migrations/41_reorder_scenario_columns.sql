@@ -73,7 +73,10 @@ SELECT
     model_source_id, created_by, updated_by, created_at, updated_at
 FROM scenario;
 
--- ── 8. Drop old table ────────────────────────────────────────────────
+-- ── 8. Detach sequence from old table so DROP doesn't cascade to it ──
+ALTER SEQUENCE scenario_id_seq OWNED BY NONE;
+
+-- ── 9. Drop old table ────────────────────────────────────────────────
 DROP TABLE scenario;
 
 -- ── 9. Rename new table ──────────────────────────────────────────────
