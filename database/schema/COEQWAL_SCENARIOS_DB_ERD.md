@@ -1103,37 +1103,36 @@ Seed: seed_tables/04_variable/*.csv
 ```
 Table: scenario
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT NOT NULL UNIQUE       -- Friendly identifier like "s0011"
-├── run_name             TEXT NOT NULL              -- Full technical run name like "s0011_adjBL_wTUCP"
-├── name                 TEXT                       -- Display name: "DWR Historical Adjusted Baseline with TUCPs"
+├── short_code           VARCHAR NOT NULL UNIQUE    -- Friendly identifier like "s0011"
+├── run_name             VARCHAR                    -- Full technical run name like "s0011_adjBL_wTUCP"
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
+├── name                 VARCHAR                    -- Display name: "DWR Historical Adjusted Baseline with TUCPs"
 ├── short_description    TEXT                       -- Brief 1-2 sentence description
-├── long_description     TEXT                       -- Full multi-paragraph description
-├── baseline_scenario_id INTEGER                    -- FK → scenario.id (what this is compared against)
+├── baseline_scenario_id INTEGER                    -- Self-ref FK → scenario.id (what this is compared against)
 ├── hydroclimate_id      INTEGER                    -- FK → hydroclimate.id
+├── scenario_version_id  INTEGER DEFAULT 1          -- FK → version.id (scenario family)
 ├── scenario_author_id   INTEGER                    -- FK → scenario_author.id
-├── model_source_id      INTEGER NOT NULL           -- FK → model_source.id (all CalSim3 currently)
-├── scenario_version_id  INTEGER NOT NULL           -- FK → version.id (scenario family)
-├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── model_source_id      INTEGER                    -- FK → model_source.id (all CalSim3 currently)
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── long_description     TEXT                       -- Full multi-paragraph description (last column)
 
-Records: 25 scenarios (s0011–s0065); s0029 deactivated
+Records: 25 scenarios (IDs 1-25, sequential by short_code s0011–s0065); s0029 deactivated
+         23 of 25 have long_description populated from metadata word doc
 
 Note: baseline_scenario_id = what scenario this is compared against for delta analysis
+      IDs resequenced by short_code in migration 43; long_description moved to last column
 
-Dropped columns (migration 35): name (verbose title), subtitle, narrative,
-    source_scenario_id, slr_id
+Dropped columns (migration 35): subtitle, narrative, source_scenario_id, slr_id
 
 Foreign keys:
-├── Ref: scenario.baseline_scenario_id > scenario.id [delete: set null, update: cascade]
-├── Ref: scenario.hydroclimate_id > hydroclimate.id [delete: restrict, update: cascade]
 ├── Ref: scenario.scenario_author_id > scenario_author.id [delete: restrict, update: cascade]
-├── Ref: scenario.model_source_id > model_source.id [delete: restrict, update: cascade]
-├── Ref: scenario.scenario_version_id > version.id [delete: restrict, update: cascade]
-├── Ref: scenario.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: scenario.updated_by > developer.id [delete: restrict, update: cascade]
+└── Ref: scenario.model_source_id > model_source.id [delete: restrict, update: cascade]
+
+Note: baseline_scenario_id, hydroclimate_id, scenario_version_id, created_by,
+      updated_by do not have explicit FK constraints in the database.
 
 Indexes:
 ├── scenario_short_code_key (short_code) -- Unique constraint
@@ -1150,15 +1149,15 @@ Indexes:
 ```
 Table: scenario_author
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "UC_DAVIS", "DWR", etc.
-├── name                 TEXT NOT NULL              -- "UC Davis Center for Watershed Sciences"
+├── short_code           TEXT UNIQUE NOT NULL       -- "dwr", "usbr", "coeqwal"
+├── name                 TEXT NOT NULL              -- Full name / description
 ├── email                TEXT
 ├── organization         TEXT
 ├── affiliation          TEXT
-├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── is_active            INTEGER DEFAULT 1
+├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 └── updated_by           INTEGER NOT NULL           -- FK → developer.id
 
 Foreign keys:
@@ -1170,6 +1169,9 @@ Indexes:
 └── idx_scenario_author_active (is_active, short_code)
 
 Records: 3 authors
+├── 1  dwr     California Department of Water Resources
+├── 2  usbr    US Bureau of Reclamation
+└── 3  coeqwal COEQWAL modeling team based on model files provided by USBR and DWR
 ```
 
 ### **3. scenario_tag (fine-grained scenario classification tags)**
@@ -1235,7 +1237,7 @@ Indexes:
 ### **1. assumption_category (assumption categories)**
 
 Note: `assumption_definition.assumption_category_id` is an integer FK to `assumption_category.id`
-(normalized from TEXT in migration 36).
+(normalized from TEXT in migration 36). IDs resequenced in migration 42.
 
 ```
 Table: assumption_category
@@ -1243,21 +1245,19 @@ Table: assumption_category
 ├── short_code           TEXT UNIQUE NOT NULL       -- "land_use", "gw_model"
 ├── label                TEXT
 ├── description          TEXT
-├── is_active            INTEGER DEFAULT 1
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1
+├── created_by           INTEGER NOT NULL
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER
+└── updated_by           INTEGER NOT NULL
 
 Values (2):
-├── land_use (id=2):  Land use scenario (LandIQ vintages)
-└── gw_model (id=5):  Groundwater model used (C2VSimFG, etc.)
+├── land_use (id=1):  Land use scenario (LandIQ vintages)
+└── gw_model (id=2):  Groundwater model used (C2VSimFG, etc.)
 
 Indexes:
 ├── assumption_category_pkey (id) UNIQUE PRIMARY
 └── assumption_category_short_code_key (short_code) UNIQUE
-
-Seed: seed_tables/05_assumptions_operations/assumption_category.csv
 ```
 
 ### **2. assumption_definition (assumption definitions)**
@@ -1265,40 +1265,43 @@ Seed: seed_tables/05_assumptions_operations/assumption_category.csv
 ```
 Table: assumption_definition
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- "lu_2020_landiq", "gw_c2vsimfg", etc.
-├── name                 TEXT NOT NULL              -- "2020 LandIQ Land Use"
-├── short_title          TEXT
-├── subtitle             TEXT
-├── simple_description   TEXT
-├── description          TEXT
-├── narrative            JSONB
+├── short_code           VARCHAR NOT NULL UNIQUE    -- "lu_2020_landiq", "gw_model", etc.
+├── name                 VARCHAR                    -- "2020 LandIQ Land Use"
+├── short_title          VARCHAR
 ├── assumption_category_id INTEGER NOT NULL         -- FK → assumption_category.id
-├── source               TEXT                       -- Source citation
-├── source_access_date   DATE                       -- When source was accessed
-├── file                 TEXT                       -- Associated file path/name
-├── assumptions_version_id INTEGER NOT NULL         -- FK → version.id (assumptions family)
+├── description          TEXT
+├── source_id            INTEGER                    -- FK → source.id (james_gilbert = 2)
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── notes                TEXT
-├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 
-Note: TUCP, SGMA, BiOps, infrastructure, flow, delta regulation, allocation/priority rows
-      have been moved to operation_definition (migration 07). Only land_use + gw_model remain.
+Records: 6 (IDs 1-6, resequenced in migration 42)
+  1  lu_2004_2013               land_use (1)   2004-2013 average land use
+  2  lu_updated                 land_use (1)   Updated land use
+  3  lu_proj_reductions         land_use (1)   Projected reductions in land use
+  4  gw_model                   gw_model (2)   Groundwater model
+  5  lu_2020_landiq             land_use (1)   2020 LandIQ land use
+  6  lu_2020_landiq_reduced_ag  land_use (1)   2020 LandIQ with reduced ag acreage
+
+Note: Only land_use + gw_model assumptions remain here; operational policies
+      (TUCP, SGMA, BiOps, flows, etc.) are in operation_definition.
+
+Dropped columns (migration 42): subtitle, simple_description, narrative,
+    source_access_date, file, assumptions_version_id
+Changed: source (TEXT) → source_id (INTEGER FK → source.id)
+         is_active: INTEGER → BOOLEAN
 
 Foreign keys:
 ├── Ref: assumption_definition.assumption_category_id > assumption_category.id [delete: restrict, update: cascade]
-├── Ref: assumption_definition.assumptions_version_id > version.id [delete: restrict, update: cascade]
-├── Ref: assumption_definition.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: assumption_definition.updated_by > developer.id [delete: restrict, update: cascade]
+└── Ref: assumption_definition.source_id > source.id [delete: restrict, update: cascade]
 
 Indexes:
 ├── assumption_definition_short_code_key (short_code)
 ├── idx_assumption_definition_category_id (assumption_category_id)
 └── idx_assumption_definition_active (is_active)
-
-Seed: seed_tables/05_assumptions_operations/assumption_definition.csv
 ```
 
 ### **3. scenario_key_assumption_link (scenario-assumption relationships)**
@@ -1331,28 +1334,26 @@ Table: operation_category
 ├── short_code           TEXT UNIQUE NOT NULL
 ├── name                 TEXT
 ├── description          TEXT
-├── is_active            INTEGER DEFAULT 1
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id
+├── created_by           INTEGER NOT NULL            -- FK → developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id
+└── updated_by           INTEGER NOT NULL            -- FK → developer.id
 
-Values (9 total — post-reclassification):
-├── comm_delivery:       Community water delivery prioritization
-├── delta_outflow:       Delta outflow requirements
-├── carryover:           Reservoir carryover storage requirements
-├── regulatory_salinity: Delta salinity standards (X2)
-├── tucp:                Temporary Urgency Change Petitions and Orders
-├── gw_restrictions:     Groundwater pumping restrictions (SGMA-type)
-├── infrastructure:      Water infrastructure configuration (tunnels, reservoirs)
-├── flow:                Instream flow and minimum flow objectives
-└── biops:               Biological Opinions (NMFS / USFWS for USBR LTO)
+Values (9 total, IDs 1-9 — resequenced in migration 42):
+├── 1  comm_delivery:       Community water delivery prioritization
+├── 2  delta_outflow:       Delta outflow requirements
+├── 3  carryover:           Reservoir carryover storage requirements
+├── 4  regulatory_salinity: Delta salinity standards (X2)
+├── 5  tucp:                Temporary Urgency Change Petitions and Orders
+├── 6  gw_restrictions:     Groundwater pumping restrictions (SGMA-type)
+├── 7  infrastructure:      Water infrastructure configuration (tunnels, reservoirs)
+├── 8  flow:                Instream flow and minimum flow objectives
+└── 9  biops:               Biological Opinions (NMFS / USFWS for USBR LTO)
 
 Foreign keys:
 ├── Ref: operation_category.created_by > developer.id [delete: restrict, update: cascade]
 └── Ref: operation_category.updated_by > developer.id [delete: restrict, update: cascade]
-
-Seed: seed_tables/05_assumptions_operations/operation_category.csv
 ```
 
 ### **5. operation_definition (operation definitions)**
@@ -1360,81 +1361,71 @@ Seed: seed_tables/05_assumptions_operations/operation_category.csv
 ```
 Table: operation_definition
 ├── id                   SERIAL PRIMARY KEY
-├── short_code           TEXT UNIQUE NOT NULL       -- see Values section below
-├── name                 TEXT NOT NULL
-├── short_title          TEXT
-├── subtitle             TEXT
-├── simple_description   TEXT
-├── description          TEXT
-├── narrative            JSONB
+├── short_code           VARCHAR NOT NULL UNIQUE    -- see Values section below
+├── name                 VARCHAR
+├── short_title          VARCHAR
 ├── operation_category_id INTEGER NOT NULL          -- FK → operation_category.id
-├── source               TEXT                       -- FK → source.source (james_gilbert, etc.)
-├── is_active            INTEGER DEFAULT 1
+├── description          TEXT                       -- merged from simple_description + narrative
+├── source_id            INTEGER                    -- FK → source.id (james_gilbert = 2)
+├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── notes                TEXT
-├── operation_version_id INTEGER NOT NULL           -- FK → version.id (operations family)
-├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 ├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 
-Note: Rows reclassified from assumption_definition in migration 07:
-      TUCP_TUCO → tucp; SGMA (SJV/SAC/CV) → gw_restrictions; DCP_6000/Bethany → infrastructure;
-      no_min_flow/functional_flows/salmon_flows → flow; biops_2024 → biops
-Note: Standard/named variants added in migration 13 so every scenario has an explicit
-      link for each category (e.g. biops_standard, delta_regs_standard, gw_none, etc.)
+Dropped columns (migration 42): subtitle, simple_description, narrative, operation_version_id
+Changed: source (TEXT) → source_id (INTEGER FK → source.id)
+         is_active: INTEGER → BOOLEAN
+         Category IDs remapped: old 27-31 → 5-9
 
-Values (id | short_code | category):
-  -- comm_delivery (CVP/SWP allocation priorities and community delivery)
-   1  comm_delivery_HHS           comm_delivery   Prioritize human health & safety deliveries
-   2  comm_delivery_functional    comm_delivery   Prioritize functional community water needs
-   3  comm_delivery_full          comm_delivery   Prioritize full community water demands
-  27  alloc_standard              comm_delivery   Standard CVP/SWP allocation (no modification)
-  28  cvp_settlement_to_zero      comm_delivery   CVP Settlement allocations reduced to 0% (Alt3)
-  -- delta_outflow (Delta outflow requirements)
-   4  delta_outflow_35            delta_outflow   35% of unimpaired flow (Alt3)
-   5  delta_outflow_45            delta_outflow   45% of unimpaired flow (Alt3)
-   6  delta_outflow_55            delta_outflow   55% of unimpaired flow (Alt3)
-   7  delta_outflow_65            delta_outflow   65% of unimpaired flow (Alt3)
-  26  delta_regs_standard         delta_outflow   Standard D1641 delta regulations
-  -- carryover (reservoir carryover storage)
-   8  increase_Shasta_co          carryover       Increase Shasta carryover target by 20%
-  -- regulatory_salinity (Delta salinity standards)
-   9  delta_salinity_standards    regulatory_salinity  Relax Fall X2 salinity standard
-  -- tucp (Temporary Urgency Change Petitions/Orders)
-  10  TUCP_TUCO                   tucp            TUCPs/TUCOs active
-  22  tucp_not_active             tucp            TUCPs/TUCOs not active
-  -- gw_restrictions (SGMA-type groundwater restrictions)
-  11  SGMA_SJV                    gw_restrictions SGMA pumping limits — San Joaquin Valley
-  12  SGMA_SAC                    gw_restrictions SGMA pumping limits — Sacramento Valley
-  13  SGMA_CV                     gw_restrictions SGMA pumping limits — entire Central Valley
-  23  gw_none                     gw_restrictions No GW restrictions
-  -- infrastructure (water conveyance infrastructure)
-  14  DCP_6000                    infrastructure  Delta Conveyance Project at 6000 CFS
-  15  DCP_Bethany                 infrastructure  Delta Conveyance Project — Bethany alignment
-  24  infra_standard              infrastructure  Standard infrastructure (no DCP)
-  -- flow (instream flow requirements)
-  16  no_min_flow                 flow            Remove CV tributary min flow requirements
-  17  functional_flows            flow            Functional flow requirements at 17 locations
-  18  salmon_flows                flow            Salmon-friendly flows (Sacramento R.)
-  25  flow_standard               flow            Standard/existing min flow requirements
-  -- biops (Biological Opinions)
-  19  biops_2024                  biops           2024 USBR LTO proposed action BiOps
-  20  biops_standard              biops           2019 BiOps / 2020 ITP for SWP (standard)
-  21  biops_modified_2019         biops           Modified versions of 2019 BiOps (Alt3, s0044/s0045)
+Values (28 rows, IDs 1-28 | short_code | category_id → category):
+  -- comm_delivery (1) — CVP/SWP allocation priorities and community delivery
+   1  comm_delivery_HHS           1   Prioritize human health & safety deliveries
+   2  comm_delivery_functional    1   Prioritize functional community water needs
+   3  comm_delivery_full          1   Prioritize full community water demands
+  27  alloc_standard              1   Standard CVP/SWP allocation (no modification)
+  28  cvp_settlement_to_zero      1   CVP Settlement allocations reduced to 0% (Alt3)
+  -- delta_outflow (2) — Delta outflow requirements
+   4  delta_outflow_35            2   35% of unimpaired flow (Alt3)
+   5  delta_outflow_45            2   45% of unimpaired flow (Alt3)
+   6  delta_outflow_55            2   55% of unimpaired flow (Alt3)
+   7  delta_outflow_65            2   65% of unimpaired flow (Alt3)
+  26  delta_regs_standard         2   Standard D1641 delta regulations
+  -- carryover (3) — reservoir carryover storage
+   8  increase_Shasta_co          3   Increase Shasta carryover target by 20%
+  -- regulatory_salinity (4) — Delta salinity standards
+   9  delta_salinity_standards    4   Relax Fall X2 salinity standard
+  -- tucp (5) — Temporary Urgency Change Petitions/Orders
+  10  TUCP_TUCO                   5   TUCPs/TUCOs active
+  22  tucp_not_active             5   TUCPs/TUCOs not active
+  -- gw_restrictions (6) — SGMA-type groundwater restrictions
+  11  SGMA_SJV                    6   SGMA pumping limits — San Joaquin Valley
+  12  SGMA_SAC                    6   SGMA pumping limits — Sacramento Valley
+  13  SGMA_CV                     6   SGMA pumping limits — entire Central Valley
+  23  gw_none                     6   No GW restrictions
+  -- infrastructure (7) — water conveyance infrastructure
+  14  DCP_6000                    7   Delta Conveyance Project at 6000 CFS
+  15  DCP_Bethany                 7   Delta Conveyance Project — Bethany alignment
+  24  infra_standard              7   Standard infrastructure (no DCP)
+  -- flow (8) — instream flow requirements
+  16  no_min_flow                 8   Remove CV tributary min flow requirements
+  17  functional_flows            8   Functional flow requirements at 17 locations
+  18  salmon_flows                8   Salmon-friendly flows (Sacramento R.)
+  25  flow_standard               8   Standard/existing min flow requirements
+  -- biops (9) — Biological Opinions
+  19  biops_2024                  9   2024 USBR LTO proposed action BiOps
+  20  biops_standard              9   2019 BiOps / 2020 ITP for SWP (standard)
+  21  biops_modified_2019         9   Modified versions of 2019 BiOps (Alt3, s0044/s0045)
 
 Foreign keys:
 ├── Ref: operation_definition.operation_category_id > operation_category.id [delete: restrict, update: cascade]
-├── Ref: operation_definition.operation_version_id > version.id [delete: restrict, update: cascade]
-├── Ref: operation_definition.source > source.source [delete: restrict, update: cascade]
-├── Ref: operation_definition.created_by > developer.id [delete: restrict, update: cascade]
-└── Ref: operation_definition.updated_by > developer.id [delete: restrict, update: cascade]
+└── Ref: operation_definition.source_id > source.id [delete: restrict, update: cascade]
 
 Indexes:
 ├── operation_definition_short_code_key (short_code)
 ├── idx_operation_definition_category_id (operation_category_id)
 └── idx_operation_definition_active (is_active)
-
-Seed: seed_tables/05_assumptions_operations/operation_definition.csv
 ```
 
 ### **6. scenario_key_operation_link (scenario-operation relationships)**
@@ -4444,23 +4435,21 @@ tier group (id=4):
 
 ### **scenario_full**
 
-Wide, human-readable view of **active** scenario configurations (`is_active = 1` only).
+Wide, human-readable view of **active** scenario configurations (`is_active = TRUE` only).
 Pivots the normalized `scenario_key_operation_link` and `scenario_key_assumption_link`
 junction tables into named columns grouped by category. Each row represents one
 active scenario. To query inactive scenarios, query the `scenario` table directly.
 
 ```
 View: scenario_full
-Filter: WHERE scenario.is_active = 1
+Filter: WHERE scenario.is_active = TRUE
 ├── id                   INTEGER                    -- scenario.id (for ordering)
-├── scenario_id          TEXT                       -- e.g. "s0011"
-├── short_code           TEXT                       -- e.g. "s0011_adjBL_wTUCP"
-├── name                 TEXT
-├── short_title          TEXT
-├── is_active            INTEGER
+├── short_code           TEXT                       -- e.g. "s0011"
+├── run_name             TEXT                       -- e.g. "s0011_adjBL_wTUCP"
+├── name                 TEXT                       -- e.g. "DWR Historical Adjusted Baseline with TUCPs"
+├── is_active            BOOLEAN
 ├── author               TEXT                       -- scenario_author.short_code
 ├── hydroclimate         TEXT                       -- hydroclimate.short_code
-├── slr                  TEXT                       -- slr.short_code
 │
 │   ── operations (one column per operation_category, NULL if not linked) ──
 ├── biops                TEXT                       -- e.g. "biops_standard"
@@ -4480,8 +4469,8 @@ Filter: WHERE scenario.is_active = 1
 NULL in a category column = no link for that category
 (e.g. s0046 has no delta_outflow; most scenarios have no regulatory_salinity)
 
-Source: database/scripts/sql/migrations/17_create_scenario_full_view.sql
-        database/scripts/sql/migrations/18_filter_active_scenarios_in_view.sql
+Source: Recreated in migrations 42 and 43 (current definition).
+        Originally created in migration 17, filtered in 18.
 ```
 
 ---

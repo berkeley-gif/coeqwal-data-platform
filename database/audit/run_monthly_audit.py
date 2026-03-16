@@ -524,6 +524,7 @@ LAYERS: dict[str, list[str]] = {
     ],
     "06_scenario": [
         "scenario", "scenario_author",
+        "scenario_tag", "scenario_tag_link",
     ],
     "07_hydroclimate": ["hydroclimate", "slr"],
     "08_theme": ["theme", "theme_scenario_link"],
