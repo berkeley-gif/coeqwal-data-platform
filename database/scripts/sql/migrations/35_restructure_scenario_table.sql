@@ -55,6 +55,7 @@ ALTER TABLE scenario RENAME CONSTRAINT scenario_scenario_id_key TO scenario_shor
 ALTER INDEX IF EXISTS idx_scenario_short_code_active RENAME TO idx_scenario_run_name_active;
 
 -- ── 8. Change is_active from INTEGER to BOOLEAN ─────────────────────
+ALTER TABLE scenario ALTER COLUMN is_active DROP DEFAULT;
 ALTER TABLE scenario ALTER COLUMN is_active TYPE BOOLEAN USING (is_active = 1);
 ALTER TABLE scenario ALTER COLUMN is_active SET DEFAULT TRUE;
 
