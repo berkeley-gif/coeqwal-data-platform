@@ -82,6 +82,9 @@ SCENARIO_OVERRIDES = {
     "s0042": {
         "sv": "coeqwal_s9999_sv_v0.1.4.dss",
     },
+    "s0046": {
+        "dv": "s0046_dcradjhist_2020lu_eflowsv2_v0.2.dss",
+    },
 }
 
 
@@ -97,7 +100,8 @@ def derive_scenario_id(zip_base: str, override: Optional[str]) -> str:
 
 
 def pick_simple(candidates: List[str], tier3_token: str, tier2_tokens: Tuple[str, ...]) -> Optional[str]:
-    """Pick first Tier 3 candidate by basename, else first Tier 2, else None."""
+    """Pick first Tier 3 candidate by basename, else first Tier 2, else
+    sole remaining candidate (folder-based filtering already vetted it)."""
     if not candidates:
         return None
     # Tier 3
@@ -109,6 +113,8 @@ def pick_simple(candidates: List[str], tier3_token: str, tier2_tokens: Tuple[str
         b = os.path.basename(p).lower()
         if any(tok in b for tok in tier2_tokens):
             return p
+    if len(candidates) == 1:
+        return candidates[0]
     return None
 
 

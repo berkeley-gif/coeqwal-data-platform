@@ -33,6 +33,8 @@ import logging
 import os
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional
 
@@ -300,6 +302,15 @@ Examples:
         help="Continue processing other modules even if one fails",
     )
     parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=1,
+        help="Number of scenarios to process in parallel (default: 1). "
+        "Each worker downloads ~300MB CSV, so set based on available RAM. "
+        "Recommended: 4 for 8GB+ RAM.",
+    )
+    parser.add_argument(
         "--list-modules", action="store_true", help="List available modules and exit"
     )
 
@@ -337,21 +348,65 @@ Examples:
 
     # Determine scenarios
     scenarios = SCENARIOS if args.all_scenarios else [args.scenario]
+    workers = max(1, args.workers)
 
-    # Process each scenario
+    # Process scenarios
     all_results = {}
-    for scenario_id in scenarios:
-        results = run_all_modules(
-            scenario_id,
-            modules=modules,
-            dry_run=args.dry_run,
-            csv_path=args.csv_path,
-            continue_on_error=args.continue_on_error,
+    effective_modules = modules or list(ETL_MODULES.keys())
+    start_time = time.time()
+
+    if workers == 1 or len(scenarios) == 1:
+        for scenario_id in scenarios:
+            results = run_all_modules(
+                scenario_id,
+                modules=modules,
+                dry_run=args.dry_run,
+                csv_path=args.csv_path,
+                continue_on_error=args.continue_on_error,
+            )
+            all_results[scenario_id] = results
+    else:
+        log.info(
+            f"Running {len(scenarios)} scenarios with {workers} parallel workers"
         )
-        all_results[scenario_id] = results
+
+        def _process_scenario(scenario_id: str) -> tuple:
+            results = run_all_modules(
+                scenario_id,
+                modules=modules,
+                dry_run=args.dry_run,
+                csv_path=args.csv_path,
+                continue_on_error=True,
+            )
+            return scenario_id, results
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(_process_scenario, sid): sid
+                for sid in scenarios
+            }
+            for future in as_completed(futures):
+                sid = futures[future]
+                try:
+                    scenario_id, results = future.result()
+                    all_results[scenario_id] = results
+                    done_count = len(all_results)
+                    log.info(
+                        f"[{done_count}/{len(scenarios)}] {scenario_id} finished"
+                    )
+                except Exception as e:
+                    log.error(f"{sid} raised an exception: {e}")
+                    all_results[sid] = {
+                        m: "failed" for m in effective_modules
+                    }
+
+    elapsed = time.time() - start_time
+    log.info(f"Total wall-clock time: {elapsed / 60:.1f} minutes")
 
     # Print comprehensive scorecard at the end
-    has_failures = print_scorecard(all_results, scenarios, modules or list(ETL_MODULES.keys()))
+    has_failures = print_scorecard(
+        all_results, scenarios, effective_modules
+    )
     if has_failures:
         sys.exit(1)
 

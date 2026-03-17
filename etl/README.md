@@ -33,6 +33,52 @@ AWS Lambda function that triggers ETL jobs:
 - **Trigger**: S3 ObjectCreated events on DSS ZIP uploads
 - **Action**: Submits AWS Batch job with validation parameters
 - **Monitoring**: Updates DynamoDB with job status
+- **Function name**: `coeqwalEtlTrigger`
+- **Runtime**: Node.js 18+ (uses built-in AWS SDK v3, no `node_modules` needed)
+- **Source**: Single file `lambda-trigger/index.mjs`
+
+##### Deploying Lambda updates
+
+The Lambda is a single `index.mjs` file with no external dependencies. Deploy via the AWS Console:
+
+1. Go to **AWS Console → Lambda → Functions → coeqwalEtlTrigger**
+2. Click the **Code** tab
+3. Select all in the inline editor, paste the full contents of `etl/lambda-trigger/index.mjs`
+4. Click **Deploy**
+
+Alternatively, from the Cloud9 terminal:
+
+```bash
+cd ~/environment/coeqwal-backend/etl/lambda-trigger
+zip lambda.zip index.mjs
+aws lambda update-function-code --function-name coeqwalEtlTrigger --zip-file fileb://lambda.zip
+rm lambda.zip
+```
+
+##### Monitoring Lambda logs
+
+```bash
+# Tail recent logs
+aws logs tail /aws/lambda/coeqwalEtlTrigger --since 5m
+
+# Follow logs in real time
+aws logs tail /aws/lambda/coeqwalEtlTrigger --follow
+```
+
+##### Finding other log groups
+
+```bash
+aws logs describe-log-groups --query "logGroups[?contains(logGroupName, 'coeqwal')].logGroupName" --output table
+```
+
+Key log groups:
+| Log group | Service |
+|-----------|---------|
+| `/aws/lambda/coeqwalEtlTrigger` | S3 → Lambda trigger |
+| `/aws/lambda/coeqwal-database-audit` | DB audit Lambda |
+| `/aws/lambda/coeqwalPresignDownload` | Download presigner |
+| `/ecs/coeqwal-api` | API server |
+| `/aws/rds/cluster/coeqwal-scenario-db-v1/postgresql` | RDS PostgreSQL |
 
 ### AWS workflow
 
@@ -276,6 +322,13 @@ aws logs tail /aws/lambda/coeqwal-etl-trigger --follow
 # Check Batch jobs
 aws batch list-jobs --job-queue coeqwal-etl-queue --job-status RUNNING
 ```
+
+### Lambda deployment (required before first promote)
+
+Before promoting any scenarios, ensure the Lambda has the subfolder-aware version deployed. See [Deploying Lambda updates](#deploying-lambda-updates) above. The key changes:
+- Derives `sourcePrefix` from the S3 key to support `ready/<shortcode>/` subfolders
+- Passes `sourcePrefix` to `findPeerCsv` so it finds companion CSVs in the same subfolder
+- Cleans up the subfolder after processing
 
 ### How the Lambda handles subfolder uploads
 
