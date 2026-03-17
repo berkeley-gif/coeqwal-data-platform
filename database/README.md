@@ -138,7 +138,7 @@ database/
 │       ├── 13_ag_statistics/
 │       ├── migrations/             #   applied one-time ALTER TABLE scripts
 │       └── validate_data_integrity.sql
-├── run_audit.sh                    # Quick schema-only snapshot → audits/ JSON+CSV
+├── run_audit.sh                    # Quick schema-only snapshot to audits/ JSON+CSV
 ├── run_local_audit.py              # Python: collects schema snapshot (used by run_audit.sh)
 ├── setup_db_connection.sh          # Interactive connection string setup
 └── utils/
@@ -642,8 +642,8 @@ psql -h <rds-endpoint> -U jdoe -d coeqwal_scenario
 ### Cloud9 cheatsheet
 
 **Prompt key:**
-- `$` at the end of your prompt → you are in the **bash shell** — use `psql`, `export`, `git`, etc.
-- `coeqwal_scenario=>` → you are **inside psql** — only SQL and `\` meta-commands work here. Type `\q` to exit back to bash.
+- `$` at the end of your prompt to you are in the **bash shell** — use `psql`, `export`, `git`, etc.
+- `coeqwal_scenario=>` to you are **inside psql** — only SQL and `\` meta-commands work here. Type `\q` to exit back to bash.
 
 ```bash
 # Show all environment variables currently set in the session
@@ -944,14 +944,14 @@ DSS Files ──► S3 CSVs ──► PostgreSQL ──► JSON API ──► Fr
 ```
 
 ```bash
-# Layer 2: verify CSV → DB statistics accuracy (one scenario)
+# Layer 2: verify CSV to DB statistics accuracy (one scenario)
 $ python etl/statistics/verify_all_sections.py --scenario s0020
 
 # Layer 2: all scenarios, write JSON reports
 $ python etl/statistics/verify_all_sections.py --all-scenarios \
     --report-dir audits/verification_reports
 
-# Layer 3: verify DB → API accuracy
+# Layer 3: verify DB to API accuracy
 $ python etl/statistics/verify_api.py --scenario s0020
 ```
 
@@ -982,7 +982,7 @@ Reports are read from `audits/verification_reports/`. Re-running `verify_all_sec
 | **After any seed data edit** | Reference data content export | `python database/scripts/export_layer_tables.py --layer NN` |
 | **After every ETL run** | ETL statistics accuracy (Layer 2) | `python etl/statistics/verify_all_sections.py --scenario {id}` |
 | **After every ETL run** | API accuracy (Layer 3) | `python etl/statistics/verify_api.py --scenario {id}` |
-| **Automated (Lambda)** | Schema snapshot to S3 | CloudWatch scheduled event → `coeqwal-database-audit` Lambda |
+| **Automated (Lambda)** | Schema snapshot to S3 | CloudWatch scheduled event to `coeqwal-database-audit` Lambda |
 
 ### Audit script inventory
 
@@ -997,8 +997,8 @@ All runnable scripts related to audit, verification, and data quality:
 | `generate_erd_from_audit.py` | `database/audit/` | Generate draft ERD from live snapshot | `database/schema/GENERATED_ERD.md` |
 | `09_verify_level*.sql` | `database/scripts/sql/NN_layer/` | Per-layer structural invariants | psql output |
 | `validate_data_integrity.sql` | `database/scripts/sql/` | FK orphan checks | psql output |
-| `verify_all_sections.py` | `etl/statistics/` | ETL accuracy: CSV → DB (Layer 2) | `audits/verification_reports/*_layer2.json` |
-| `verify_api.py` | `etl/statistics/` | API accuracy: DB → API (Layer 3) | `audits/verification_reports/*_layer3.json` |
+| `verify_all_sections.py` | `etl/statistics/` | ETL accuracy: CSV to DB (Layer 2) | `audits/verification_reports/*_layer2.json` |
+| `verify_api.py` | `etl/statistics/` | API accuracy: DB to API (Layer 3) | `audits/verification_reports/*_layer3.json` |
 | `db_audit_lambda.py` | `database/utils/db_audit_lambda/` | Schema snapshot (Lambda / scheduled) | `s3://coeqwal-model-run/database_audits/` |
 
 ### Audit output locations
@@ -1239,7 +1239,7 @@ psql "postgresql://user:pass@coeqwal-db.xxxxx.us-west-2.rds.amazonaws.com:5432/c
 
 **Audit Lambda fails**
 - Check VPC configuration
-- Verify security group allows Lambda → RDS
+- Verify security group allows Lambda to RDS
 - See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md)
 
 ---

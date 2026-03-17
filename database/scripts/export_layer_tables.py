@@ -49,7 +49,7 @@ from pathlib import Path
 
 import psycopg2
 
-# ── Layer → table definitions ─────────────────────────────────────────────────
+# ── Layer to table definitions ─────────────────────────────────────────────────
 # Table order within each layer follows FK dependency (parents before children).
 LAYERS: dict[str, list[str]] = {
     "00_versioning": [
@@ -186,7 +186,7 @@ def export_table(
         writer.writerow(col_names)
         writer.writerows(rows)
 
-    print(f"  OK    {table_name:<40} {len(rows):>6,} rows  →  {output_path}")
+    print(f"  OK    {table_name:<40} {len(rows):>6,} rows  to  {output_path}")
     return len(rows)
 
 

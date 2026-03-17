@@ -21,7 +21,7 @@ Parses the tree-format code blocks used in COEQWAL_SCENARIOS_DB_ERD.md:
     └── column_two   INTEGER
 
     Constraints:                          ← switches to constraints section
-    ├── FK: col → ref_table.ref_col
+    ├── FK: col to ref_table.ref_col
     ├── Unique: (col1, col2)
     └── Check: col BETWEEN 1 AND 12
 
@@ -65,12 +65,12 @@ def parse_erd_tables(erd_path: Path) -> dict:
     Scans fenced code blocks for `Table: name` headers, then collects:
       - columns      from tree lines (├──/└──) before any section marker
       - indexes      from lines in the `Indexes:` subsection
-      - foreign_keys from `FK: col → ref_table.ref_col` lines in `Constraints:`
+      - foreign_keys from `FK: col to ref_table.ref_col` lines in `Constraints:`
       - check_constraints from `Check: clause` lines in `Constraints:`
       - unique_constraints from `Unique: (cols)` lines in `Constraints:`
 
     Returns:
-        dict mapping table_name → {
+        dict mapping table_name to {
             columns: list[str],
             has_audit_fields: bool,
             indexes: list[str],                        # index names only
@@ -142,8 +142,8 @@ def parse_erd_tables(erd_path: Path) -> dict:
                     indexes.append(m.group(1))
 
             elif section == 'constraints':
-                # FK: column → ref_table.ref_column
-                m = re.match(r'[├└]──\s+FK:\s+(\w+)\s*→\s*(\w+)\.(\w+)', stripped)
+                # FK: column to ref_table.ref_column
+                m = re.match(r'[├└]──\s+FK:\s+(\w+)\s*to\s*(\w+)\.(\w+)', stripped)
                 if m:
                     foreign_keys.append({
                         'column': m.group(1),
@@ -232,7 +232,7 @@ def _normalize_check(clause: str) -> str:
 
     PostgreSQL internally rewrites CHECK clauses — e.g. it:
       - Adds nested parentheses: ((col >= 1) AND (col <= 12))
-      - Expands BETWEEN: col BETWEEN 1 AND 12 → col >= 1 AND col <= 12
+      - Expands BETWEEN: col BETWEEN 1 AND 12 to col >= 1 AND col <= 12
 
     Strategy: strip ALL parentheses, collapse whitespace, lowercase, then
     convert any remaining BETWEEN syntax so ERD and DB forms can be compared.
@@ -241,7 +241,7 @@ def _normalize_check(clause: str) -> str:
     c = clause.strip().lower()
     c = c.replace('(', '').replace(')', '')        # remove all parens
     c = ' '.join(c.split())                        # normalize whitespace
-    # Convert: col BETWEEN x AND y → col >= x and col <= y
+    # Convert: col BETWEEN x AND y to col >= x and col <= y
     m = _re.match(r'^(\w+)\s+between\s+(\S+)\s+and\s+(\S+)$', c)
     if m:
         col, lo, hi = m.group(1), m.group(2), m.group(3)
@@ -452,7 +452,7 @@ def compare_schemas(
             for m in fk_mismatches:
                 out(f"\n  {m['table'].upper()}:")
                 for fk in m['missing_in_db']:
-                    out(f"    {fk['column']} → {fk['ref_table']}.{fk['ref_column']}")
+                    out(f"    {fk['column']} to {fk['ref_table']}.{fk['ref_column']}")
             out()
         else:
             out("7. Foreign keys:     OK (all documented FKs enforced in DB)")

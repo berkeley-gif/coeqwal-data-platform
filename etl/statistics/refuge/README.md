@@ -144,12 +144,12 @@ SV date (`YYYY-MM-01`) ever equals a DV date (`YYYY-MM-{28,29,30,31}`).
 
 **ETL normalisation** (`add_water_year_month`): before deriving `WaterYear`, `WaterMonth`, and
 `DaysInMonth`, the function detects period-beginning rows by checking if `day == 1` and shifts
-those dates back by one day (`1920-11-01 → 1920-10-31`). End-of-month DV dates are used as-is.
-After normalisation, both files yield October → WM=1 for the same model month, and the
+those dates back by one day (`1920-11-01 to 1920-10-31`). End-of-month DV dates are used as-is.
+After normalisation, both files yield October to WM=1 for the same model month, and the
 `WaterYear + WaterMonth` merge produces the expected row count (one row per month of record).
 
 > The raw date values in the CSV files are left unchanged — this normalisation is applied only
-> within the ETL at the point of water-year calendar derivation, never during DSS→CSV extraction.
+> within the ETL at the point of water-year calendar derivation, never during DSStoCSV extraction.
 
 ---
 
@@ -471,7 +471,7 @@ All statistics in this module are derived from CalSim 3 model outputs for COEQWA
 | Data type       | CalSim source file                             | DSS Part C        | Notes                                              |
 | --------------- | ---------------------------------------------- | ----------------- | -------------------------------------------------- |
 | Demand (AWO_*)  | SV input (`*_coeqwal_sv_input.csv`)            | `APPLIED-WATER`   | Applied water requirement, TAF                     |
-| Delivery (DN_*) | Main DV output (`*_coeqwal_calsim_output.csv`) | `SW-DELIVERY-NET` | Net surface water delivery, CFS → converted to TAF |
+| Delivery (DN_*) | Main DV output (`*_coeqwal_calsim_output.csv`) | `SW-DELIVERY-NET` | Net surface water delivery, CFS to converted to TAF |
 | Shortage        | Derived: `demand − delivery`                   | —                 | No native CalSim shortage variable for refuge DUs  |
 
 

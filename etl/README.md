@@ -41,7 +41,7 @@ AWS Lambda function that triggers ETL jobs:
 
 The Lambda is a single `index.mjs` file with no external dependencies. Deploy via the AWS Console:
 
-1. Go to **AWS Console → Lambda → Functions → coeqwalEtlTrigger**
+1. Go to **AWS Console to Lambda to Functions to coeqwalEtlTrigger**
 2. Click the **Code** tab
 3. Select all in the inline editor, paste the full contents of `etl/lambda-trigger/index.mjs`
 4. Click **Deploy**
@@ -74,7 +74,7 @@ aws logs describe-log-groups --query "logGroups[?contains(logGroupName, 'coeqwal
 Key log groups:
 | Log group | Service |
 |-----------|---------|
-| `/aws/lambda/coeqwalEtlTrigger` | S3 → Lambda trigger |
+| `/aws/lambda/coeqwalEtlTrigger` | S3 to Lambda trigger |
 | `/aws/lambda/coeqwal-database-audit` | DB audit Lambda |
 | `/aws/lambda/coeqwalPresignDownload` | Download presigner |
 | `/ecs/coeqwal-api` | API server |
@@ -131,10 +131,10 @@ If usage is above ~70%, resize the EBS volume:
 
 **Resize the EBS volume (no downtime required):**
 
-1. Open the **AWS Console → EC2 → Volumes**
+1. Open the **AWS Console to EC2 to Volumes**
 2. Find the volume attached to your Cloud9 instance (check the instance ID in Cloud9 terminal: `curl -s http://169.254.169.254/latest/meta-data/instance-id`)
-3. Select the volume → **Actions → Modify Volume**
-4. Change the size (e.g., 10 GB → 20 GB) → **Modify**
+3. Select the volume to **Actions to Modify Volume**
+4. Change the size (e.g., 10 GB to 20 GB) to **Modify**
 5. Wait ~30 seconds for the modification to complete
 6. Back in Cloud9 terminal, grow the filesystem:
 
@@ -193,7 +193,7 @@ rclone config
 #   service_account_file> (leave blank)
 #   Edit advanced config> n
 #   Use web browser to authenticate> y
-#   → Browser opens, authenticate with your UC Berkeley Google account (2FA required)
+#   to Browser opens, authenticate with your UC Berkeley Google account (2FA required)
 #   Configure as Shared Drive> y
 #   Select: COEQWAL
 #   Keep this remote> y
@@ -409,13 +409,13 @@ DSS Files ──► S3 CSVs (DV + SV) ──► PostgreSQL ──► JSON API �
 
 Variable lists sourced from `COEQWAL_V3/notebooks/variable_groupings.csv` and mapping CSVs (`DrinkingWater_Mapping.csv`, `Agricultural_Mapping.csv`, `Eflows_Mapping.csv`).
 
-### Layer 1: Extraction (DSS → CSV)
+### Layer 1: Extraction (DSS to CSV)
 
 Validates that `dss_to_csv.py` extracts data correctly from HEC-DSS files. Uses `validate_csvs.py` to compare extracted CSVs against reference CSVs.
 
 Manifests stored in `audits/validation_mismatches/{scenario_id}_manifest.json`.
 
-### Layer 2: ETL Statistics (CSV → DB)
+### Layer 2: ETL Statistics (CSV to DB)
 
 Computes expected values from reference CSVs and compares against database values.
 
@@ -445,7 +445,7 @@ python etl/statistics/verify_all_sections.py --scenario s0020 --csv-only
 
 **Output**: `audits/verification_reports/{scenario_id}_layer2.json`
 
-### Layer 3: API Verification (DB → API)
+### Layer 3: API Verification (DB to API)
 
 Queries API endpoints and compares responses to direct database queries.
 

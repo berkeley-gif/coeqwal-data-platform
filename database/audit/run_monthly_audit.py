@@ -893,7 +893,7 @@ def main() -> None:
         snapshot_path.write_text(
             json.dumps(audit_report, indent=2, default=json_serial)
         )
-        logger.info("Schema snapshot → %s", snapshot_path)
+        logger.info("Schema snapshot to %s", snapshot_path)
 
         csv_summary_path = run_dir / "tables_summary.csv"
         summary_data = [
@@ -910,7 +910,7 @@ def main() -> None:
             for t in audit_report["tables"]
         ]
         pd.DataFrame(summary_data).to_csv(csv_summary_path, index=False)
-        logger.info("Tables summary  → %s", csv_summary_path)
+        logger.info("Tables summary  to %s", csv_summary_path)
 
         layer_assignment = {}
         for layer_name, tables in LAYERS.items():

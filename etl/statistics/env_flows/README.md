@@ -39,7 +39,7 @@ in S3. No additional data pipeline work is required before building this ETL mod
 | Units | CFS (Part F = PER-AVER). Volume conversion: `TAF = CFS × 0.001984 × days_in_month` |
 | Time range | 1,200 months (October 1921 – September 2021, water years 1922–2021) |
 
-**Variables in DV (Part B pattern → Part C label):**
+**Variables in DV (Part B pattern to Part C label):**
 
 | Variable pattern | Part C | Description |
 |---|---|---|
@@ -60,7 +60,7 @@ in S3. No additional data pipeline work is required before building this ETL mod
 | Units | CFS. Same volume conversion applies where TAF is needed. |
 | Staging | **Already staged per scenario** (same file used for refuge demand ETL). |
 
-**Variables in SV (Part B pattern → Part C label):**
+**Variables in SV (Part B pattern to Part C label):**
 
 | Variable pattern | Part C | Description |
 |---|---|---|
@@ -264,7 +264,7 @@ pct_unimpaired_cv[m]  = std(pct_unimpaired[t] for t where water_month[t] == m) /
 # Store NULL where UNIMP_{watershed}[t] == 0 (divide-by-zero guard)
 ```
 
-Output: one row per (channel_entity_id, scenario_id, water_month) →
+Output: one row per (channel_entity_id, scenario_id, water_month) to
 `env_flow_channel_monthly`.
 
 ### Metric 2 — River flows (% functional flows) — seasonal
@@ -288,7 +288,7 @@ annual_mean[y] = mean(pct_ff[t] for t in water year y)
 annual_cv = std(annual_mean[y] across all y) / mean(annual_mean[y] across all y)
 ```
 
-Output: one row per (channel_entity_id, scenario_id, season_id, water_year) →
+Output: one row per (channel_entity_id, scenario_id, season_id, water_year) to
 `env_flow_channel_seasonal`.
 
 ### Metric 3 — Flow alteration index — period of record
@@ -305,7 +305,7 @@ n_months = len(C_{reach}_series)
 # r ≈  0: flow pattern substantially altered by reservoir operations
 ```
 
-Output: one row per (channel_entity_id, scenario_id) →
+Output: one row per (channel_entity_id, scenario_id) to
 `env_flow_channel_period_summary` (also includes avg_pct_unimpaired, avg_pct_ff).
 
 ---
@@ -316,8 +316,8 @@ Three statistics tables are created in migration 24:
 
 ### `env_flow_channel_monthly`
 ```
-channel_entity_id  INTEGER FK → channel_entity
-scenario_id        INTEGER FK → scenario
+channel_entity_id  INTEGER FK to channel_entity
+scenario_id        INTEGER FK to scenario
 water_year         SMALLINT
 water_month        SMALLINT (1=Oct … 12=Sep)
 flow_cfs           NUMERIC(12,3)   -- raw C_{reach} value
@@ -330,7 +330,7 @@ PRIMARY KEY (channel_entity_id, scenario_id, water_year, water_month)
 ```
 network_arc_id     VARCHAR(30)      -- References channel_entity.network_arc_id
 scenario_short_code VARCHAR(20)
-season_id          INTEGER FK → env_flow_season
+season_id          INTEGER FK to env_flow_season
 
 -- Raw flow volume (CFS) — all 60 channels
 flow_avg_cfs       NUMERIC(12,3)   -- mean of per-year seasonal mean flows
@@ -359,8 +359,8 @@ Coverage: all 60 channels (flow_* columns); 58 with UNIMP (pct_unimpaired_*); ~1
 
 ### `env_flow_channel_period_summary`
 ```
-channel_entity_id      INTEGER FK → channel_entity
-scenario_id            INTEGER FK → scenario
+channel_entity_id      INTEGER FK to channel_entity
+scenario_id            INTEGER FK to scenario
 pearson_r              NUMERIC(6,4)
 p_value                NUMERIC(8,6)
 n_months               SMALLINT
@@ -459,8 +459,8 @@ to `NUMERIC(12,3)` to accommodate these.
 
 | # | Question | Resolution |
 |---|----------|------------|
-| 1 | MOK028 → UNIMP mapping | No `UNIMP_MOK` in CalSim SV. `unimp_sv_variable = NULL` for MOK019 and MOK028. Metrics 1 and 3 skipped for Mokelumne reaches. Metric 2 (EFLOWS) still computed for MOK028. |
-| 2 | SAC mainstem UNIMP sub-reach mapping | Split at Bend Bridge (rm 257). Above rm 257 → `UNIMP_SHAS` (SAC_UPPER watershed). At/below rm 257 → `UNIMP_SRBB` (SAC_LOWER watershed). Implemented in migration 23. |
+| 1 | MOK028 to UNIMP mapping | No `UNIMP_MOK` in CalSim SV. `unimp_sv_variable = NULL` for MOK019 and MOK028. Metrics 1 and 3 skipped for Mokelumne reaches. Metric 2 (EFLOWS) still computed for MOK028. |
+| 2 | SAC mainstem UNIMP sub-reach mapping | Split at Bend Bridge (rm 257). Above rm 257 to `UNIMP_SHAS` (SAC_UPPER watershed). At/below rm 257 to `UNIMP_SRBB` (SAC_LOWER watershed). Implemented in migration 23. |
 | 3 | Season definitions | **CEFF 5-season calendar** confirmed. Seed data in `env_flow_season`. |
 | 4 | TR CSV staging | Not required. All variables are in the standard `_coeqwal_calsim_output.csv` and `_coeqwal_sv_input.csv` files already staged in S3. |
 | 5 | `UNIMP_*_UHH` variants | Excluded. `_UHH` suffix = "upper-half hydrology" alternative baseline. Always use base `UNIMP_*` names. |

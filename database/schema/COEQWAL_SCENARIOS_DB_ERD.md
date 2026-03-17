@@ -75,9 +75,9 @@ Table: version_family
 ├── description          TEXT                       -- Purpose description
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (14 total):
 ├── theme: Research themes and storylines
@@ -103,14 +103,14 @@ Indexes:
 ```
 Table: version
 ├── id                   SERIAL PRIMARY KEY
-├── version_family_id    INTEGER NOT NULL           -- FK → version_family.id
+├── version_family_id    INTEGER NOT NULL           -- FK to version_family.id
 ├── version_number       TEXT                       -- "1.0.0" (semantic versioning)
 ├── changelog            TEXT                       -- Change description
 ├── is_active            BOOLEAN DEFAULT FALSE      -- Only one active per family
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Indexes:
 └── version_version_family_id_version_number_key (version_family_id, version_number)
@@ -213,8 +213,8 @@ Indexes:
 ## **Layer 01 — LOOKUP TABLES**
 
 > **Provenance convention:** All lookup tables carry `created_by`, `updated_by`, `created_at`, `updated_at`
-> audit fields (FK → `developer.id`). Tables whose data originates from a specific external source
-> (e.g., geopackage, NHD, CalSim report) additionally carry a `source_id` FK → `source.id`.
+> audit fields (FK to `developer.id`). Tables whose data originates from a specific external source
+> (e.g., geopackage, NHD, CalSim report) additionally carry a `source_id` FK to `source.id`.
 > Current tables using `source_id`: `network_type`, `network_subtype`, `reservoir`, `compliance_station`, `wba`.
 >
 > Note: variable type classification tables (`calsim_model_variable_type`, `derived_variable_type`,
@@ -228,9 +228,9 @@ Table: hydrologic_region
 ├── label                TEXT                       -- "Sacramento River Basin", etc.
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (7 total):
 ├── SAC: Sacramento River Basin
@@ -253,9 +253,9 @@ Table: source
 ├── description          TEXT                       -- Source description
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (12 total, IDs 1–12 sequential):
 ├──  1 calsim_report: CalSim-3 report final.pdf
@@ -282,9 +282,9 @@ Table: model_source
 ├── contact              TEXT                       -- Contact information
 ├── notes                TEXT                       -- Additional notes
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (1 total):
 └── calsim3: California Central Valley water system allocation simulation model
@@ -319,9 +319,9 @@ Table: spatial_scale
 ├── description          TEXT                       -- Scale description
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (11 total):
 ├── system_wide: Entire CalSim system
@@ -339,9 +339,9 @@ Table: temporal_scale
 ├── description          TEXT                       -- Scale description
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (8 total):
 ├── daily: Daily
@@ -358,9 +358,9 @@ Table: statistic_category
 ├── label                TEXT NOT NULL              -- "Summary", "Percentile Band", "Exceedance"
 ├── description          TEXT
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMPTZ DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (3 total):
 ├── summary:         Summary         — Aggregate summary statistics (mean, median, min, max, cv, stdev)
@@ -375,18 +375,18 @@ Table: statistic_type
 ├── short_code             TEXT UNIQUE NOT NULL       -- "MEAN", "Q90", "EXC_P90", etc.
 ├── label                  TEXT NOT NULL              -- "Mean", "90th percentile", etc.
 ├── description            TEXT                       -- Statistic description
-├── statistic_category_id  INTEGER NOT NULL           -- FK → statistic_category.id
+├── statistic_category_id  INTEGER NOT NULL           -- FK to statistic_category.id
 ├── created_at             TIMESTAMPTZ DEFAULT NOW()
-├── created_by             INTEGER NOT NULL           -- FK → developer.id
+├── created_by             INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at             TIMESTAMPTZ DEFAULT NOW()
-└── updated_by             INTEGER NOT NULL           -- FK → developer.id
+└── updated_by             INTEGER NOT NULL           -- FK to developer.id
 
 Note: no is_active column — all statistic types are always active.
 
 Column naming convention:
   Results tables (Layer 10+) store statistics as columns named LOWER(short_code).
-  Example: statistic_type.short_code = 'Q90'  →  column name = 'q90'
-           statistic_type.short_code = 'EXC_P90' →  column name = 'exc_p90'
+  Example: statistic_type.short_code = 'Q90'  to  column name = 'q90'
+           statistic_type.short_code = 'EXC_P90' to  column name = 'exc_p90'
   This table is the authoritative registry of all statistics the system produces.
   Future schema versions may restructure results tables to use statistic_type_id as FK.
 
@@ -436,9 +436,9 @@ Table: unit
 ├── canonical_group      TEXT                       -- "volume", "flow", "area", etc.
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (5 total):
 ├── TAF: thousand acre-feet (volume)
@@ -454,14 +454,14 @@ Table: network_type
 ├── short_code              TEXT UNIQUE NOT NULL       -- "CH", "CT", "D", "CH_N", "S", etc.
 ├── label                   TEXT NOT NULL              -- "Channel", "Cross transfer", etc.
 ├── description             TEXT                       -- Network type description
-├── network_entity_type_id  INTEGER NOT NULL           -- FK → network_entity_type.id (1=arc, 2=node)
-├── model_source_id         INTEGER                    -- FK → model_source.id
-├── source_id               INTEGER                    -- FK → source.id
+├── network_entity_type_id  INTEGER NOT NULL           -- FK to network_entity_type.id (1=arc, 2=node)
+├── model_source_id         INTEGER                    -- FK to model_source.id
+├── source_id               INTEGER                    -- FK to source.id
 ├── is_active               BOOLEAN DEFAULT TRUE
 ├── created_at              TIMESTAMP DEFAULT NOW()
-├── created_by              INTEGER NOT NULL           -- FK → developer.id
+├── created_by              INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at              TIMESTAMP DEFAULT NOW()
-└── updated_by              INTEGER NOT NULL           -- FK → developer.id
+└── updated_by              INTEGER NOT NULL           -- FK to developer.id
 
 Records: 21 types (10 arc types, 11 node types)
 Seed: seed_tables/01_lookup/network_type.csv
@@ -474,14 +474,14 @@ Table: network_subtype
 ├── short_code              TEXT NOT NULL              -- "BP", "CH", "CL", etc.
 ├── label                   TEXT NOT NULL              -- "Bypass", "Channel", etc.
 ├── description             TEXT
-├── type_id                 INTEGER NOT NULL           -- FK → network_type.id (entity type derivable via network_type)
-├── model_source_id         INTEGER                    -- FK → model_source.id
-├── source_id               INTEGER                    -- FK → source.id
+├── type_id                 INTEGER NOT NULL           -- FK to network_type.id (entity type derivable via network_type)
+├── model_source_id         INTEGER                    -- FK to model_source.id
+├── source_id               INTEGER                    -- FK to source.id
 ├── is_active               BOOLEAN DEFAULT TRUE
 ├── created_at              TIMESTAMP DEFAULT NOW()
-├── created_by              INTEGER NOT NULL           -- FK → developer.id
+├── created_by              INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at              TIMESTAMP DEFAULT NOW()
-└── updated_by              INTEGER NOT NULL           -- FK → developer.id
+└── updated_by              INTEGER NOT NULL           -- FK to developer.id
 
 Records: 28 subtypes
 Seed: seed_tables/01_lookup/network_subtype.csv
@@ -495,14 +495,14 @@ Table: watershed
 ├── short_code            VARCHAR UNIQUE NOT NULL    -- Watershed identifier
 ├── name                  VARCHAR NOT NULL           -- Full watershed name
 ├── description           TEXT                       -- Watershed description
-├── hydrologic_region_id  INTEGER                    -- FK → hydrologic_region.id
+├── hydrologic_region_id  INTEGER                    -- FK to hydrologic_region.id
 ├── unimp_sv_variable     VARCHAR                    -- CalSim SV UNIMP_* variable for this watershed
 │                                                    -- (NULL if no SV reference exists, e.g. UPPER_MOKELUMNE)
 ├── is_active             BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-├── created_by            INTEGER NOT NULL           -- FK → developer.id
+├── created_by            INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-└── updated_by            INTEGER NOT NULL           -- FK → developer.id
+└── updated_by            INTEGER NOT NULL           -- FK to developer.id
 
 Records: 13 watersheds (migration 23 added CLEAR_CREEK, SAC_LOWER, SAC_UPPER, TRINITY_RIVER, UPPER_MERCED;
          replaced SAC_RIVER with SAC_UPPER + SAC_LOWER split at Bend Bridge rm 257)
@@ -553,9 +553,9 @@ Table: network_entity_type
 ├── description          TEXT
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── created_by           INTEGER                    -- FK to developer.id (RESTRICT)
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+└── updated_by           INTEGER                    -- FK to developer.id (RESTRICT)
 
 Records: 4
 Indexes:
@@ -583,20 +583,20 @@ Table: network
 ├── name                 VARCHAR
 ├── description          TEXT
 ├── comment              TEXT
-├── entity_type_id       INTEGER                    -- FK → network_entity_type.id (RESTRICT)
-├── type_id              INTEGER                    -- FK → network_type.id (RESTRICT)
-├── subtype_ids          INTEGER[]                  -- Array of FK → network_subtype.id
+├── entity_type_id       INTEGER                    -- FK to network_entity_type.id (RESTRICT)
+├── type_id              INTEGER                    -- FK to network_type.id (RESTRICT)
+├── subtype_ids          INTEGER[]                  -- Array of FK to network_subtype.id
 ├── model_list           TEXT[]                     -- CalSim models containing this element
 ├── source_list          TEXT[]                     -- Data source identifiers
 ├── has_gis              BOOLEAN DEFAULT FALSE       -- TRUE when network_gis entry exists
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (RESTRICT)
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id (RESTRICT)
 ├── riv_sys              VARCHAR                    -- River system code
 ├── strm_code            VARCHAR                    -- Stream code
-├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK to version.id (RESTRICT)
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── created_by           INTEGER                    -- FK to developer.id (RESTRICT)
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+└── updated_by           INTEGER                    -- FK to developer.id (RESTRICT)
 
 Records: 6,908
 Indexes:
@@ -617,19 +617,19 @@ Indexes:
 Table: network_arc
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- Matches network.short_code
-├── network_id           INTEGER                    -- FK → network.id (CASCADE delete)
+├── network_id           INTEGER                    -- FK to network.id (CASCADE delete)
 ├── river                VARCHAR                    -- CalSim waterway code (e.g. "SAC", "SJR", "DMC")
 ├── from_node            VARCHAR                    -- Upstream node short_code
 ├── to_node              VARCHAR                    -- Downstream node short_code
 ├── shape_length_m       NUMERIC                    -- Arc length in meters
-├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (RESTRICT)
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (RESTRICT)
-├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── model_source_id      INTEGER DEFAULT 1          -- FK to model_source.id (RESTRICT)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK to version.id (RESTRICT)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── created_by           INTEGER                    -- FK to developer.id (RESTRICT)
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+└── updated_by           INTEGER                    -- FK to developer.id (RESTRICT)
 
 Records: 2,610
 Note: CASCADE on network_id — arcs are deleted when their parent network element is removed.
@@ -650,21 +650,21 @@ Indexes:
 Table: network_node
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- Matches network.short_code
-├── network_id           INTEGER                    -- FK → network.id (CASCADE delete)
+├── network_id           INTEGER                    -- FK to network.id (CASCADE delete)
 ├── riv_mi               NUMERIC                    -- River mile
 ├── c2vsim_gw            VARCHAR                    -- C2VSim groundwater cell link
 ├── c2vsim_sw            VARCHAR                    -- C2VSim surface water subregion link
 ├── nrest_gage           VARCHAR                    -- NRCS stream gauge identifier
 ├── strm_code            VARCHAR                    -- Stream code
 ├── rm_ii                VARCHAR                    -- River mile (alternate representation)
-├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (RESTRICT)
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (RESTRICT)
-├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── model_source_id      INTEGER DEFAULT 1          -- FK to model_source.id (RESTRICT)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK to version.id (RESTRICT)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── created_by           INTEGER                    -- FK to developer.id (RESTRICT)
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+└── updated_by           INTEGER                    -- FK to developer.id (RESTRICT)
 
 Records: 1,544
 Note: CASCADE on network_id — nodes are deleted when their parent network element is removed.
@@ -681,19 +681,19 @@ Indexes:
 Table: network_gis
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           VARCHAR                    -- Matches network.short_code
-├── network_id           INTEGER UNIQUE             -- FK → network.id (CASCADE delete)
+├── network_id           INTEGER UNIQUE             -- FK to network.id (CASCADE delete)
 │                                                   -- UNIQUE enforces one-to-one with network
 ├── precision_level      VARCHAR DEFAULT 'precise'  -- "precise", "approximate", "schematic"
 ├── geom_wkt             TEXT                       -- WKT geometry string (human-readable copy)
 ├── srid                 INTEGER DEFAULT 4326       -- EPSG:4326 (WGS84)
 ├── geom                 GEOMETRY                   -- PostGIS binary (GiST spatial index)
 ├── estimated_accuracy_meters NUMERIC
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (RESTRICT)
-├── network_version_id   INTEGER DEFAULT 12         -- FK → version.id (RESTRICT)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (RESTRICT)
+├── network_version_id   INTEGER DEFAULT 12         -- FK to version.id (RESTRICT)
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER                    -- FK → developer.id (RESTRICT)
+├── created_by           INTEGER                    -- FK to developer.id (RESTRICT)
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER                    -- FK → developer.id (RESTRICT)
+└── updated_by           INTEGER                    -- FK to developer.id (RESTRICT)
 
 Records: 4,154 (not all 6,908 network elements have GIS geometry; network.has_gis tracks this)
 Note: CASCADE on network_id. source = geopackage (CalSim3 GeoSchematic).
@@ -792,11 +792,11 @@ Table: du_agriculture_entity
 ├── has_gis_data         BOOLEAN DEFAULT TRUE
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── created_by           INTEGER DEFAULT 1          -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-├── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
-└── model_source_id      INTEGER                    -- FK → model_source.id
+├── updated_by           INTEGER DEFAULT 1          -- FK to developer.id
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id
+└── model_source_id      INTEGER                    -- FK to model_source.id
 
 Records: 144
 Seed: seed_tables/04_calsim_data/du_agriculture_entity.csv
@@ -828,14 +828,14 @@ Table: du_urban_entity
 ├── source               VARCHAR
 ├── model_source         VARCHAR
 ├── has_gis_data         BOOLEAN DEFAULT TRUE
-├── primary_contractor_short_code VARCHAR          -- FK-style reference → mi_contractor.short_code
+├── primary_contractor_short_code VARCHAR          -- FK-style reference to mi_contractor.short_code
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── created_by           INTEGER DEFAULT 1          -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-├── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
-└── model_source_id      INTEGER                    -- FK → model_source.id
+├── updated_by           INTEGER DEFAULT 1          -- FK to developer.id
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id
+└── model_source_id      INTEGER                    -- FK to model_source.id
 
 Records: 145
 Seed: seed_tables/04_calsim_data/du_urban_entity.csv
@@ -872,9 +872,9 @@ Table: du_refuge_entity
 ├── has_gis_data         BOOLEAN DEFAULT TRUE
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1          -- FK → developer.id (RESTRICT)
+├── created_by           INTEGER DEFAULT 1          -- FK to developer.id (RESTRICT)
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER DEFAULT 1          -- FK → developer.id (RESTRICT)
+└── updated_by           INTEGER DEFAULT 1          -- FK to developer.id (RESTRICT)
 
 Records: 18
 Seed: seed_tables/04_calsim_data/du_refuge_entity.csv (or seed_tables/03_entity/)
@@ -894,9 +894,9 @@ Table: reservoir_entity
 ├── name                 VARCHAR                    -- Full reservoir name
 ├── description          TEXT
 ├── associated_river     VARCHAR                    -- River name
-├── entity_type_id       INTEGER DEFAULT 1          -- FK → network_entity_type.id
+├── entity_type_id       INTEGER DEFAULT 1          -- FK to network_entity_type.id
 ├── schematic_type_id    INTEGER                    -- Internal type classifier
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id
 ├── capacity_taf         NUMERIC                    -- Total capacity in TAF
 ├── dead_pool_taf        NUMERIC                    -- Dead pool storage in TAF
 ├── surface_area_acres   NUMERIC
@@ -904,13 +904,13 @@ Table: reservoir_entity
 ├── has_tiers            BOOLEAN DEFAULT FALSE      -- Whether tier results exist for this reservoir
 ├── is_main              BOOLEAN DEFAULT FALSE      -- Primary reservoir in a multi-level system
 ├── has_gis_data         INTEGER DEFAULT 1          -- Presence of GIS record (legacy INTEGER flag)
-├── entity_version_id    INTEGER DEFAULT 1          -- FK → version.id
+├── entity_version_id    INTEGER DEFAULT 1          -- FK to version.id
 ├── source_ids           TEXT                       -- Comma-separated source IDs
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── created_by           INTEGER DEFAULT 1          -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
+└── updated_by           INTEGER DEFAULT 1          -- FK to developer.id
 
 Records: 92 (includes main reservoirs + storage zone sub-entries)
 Note: Companion to `reservoir` (GIS base). Join on short_code / calsim_short_code.
@@ -938,9 +938,9 @@ Table: mi_contractor
 ├── source_file          VARCHAR                    -- Source document/file reference
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER DEFAULT 1          -- FK → developer.id
+├── created_by           INTEGER DEFAULT 1          -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER DEFAULT 1          -- FK → developer.id
+└── updated_by           INTEGER DEFAULT 1          -- FK to developer.id
 
 Records: 30
 Seed: seed_tables/04_calsim_data/mi_contractor.csv
@@ -960,8 +960,8 @@ Table: wba
 ├── id                   SERIAL PRIMARY KEY
 ├── wba_id               VARCHAR(10)                -- WBA identifier (e.g., "DETAW", "02N", "06S")
 ├── wba_name             TEXT                       -- Full WBA name
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id
-├── source_id            INTEGER                    -- FK → source.id
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id
+├── source_id            INTEGER                    -- FK to source.id
 ├── geom_wkt             TEXT                       -- WKT geometry
 ├── srid                 INTEGER DEFAULT 4326
 ├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
@@ -993,9 +993,9 @@ Table: calsim_model_variable_type
 ├── description          TEXT                       -- Classification description
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMPTZ DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (8 total — CalSim model variable behavior):
 ├── output:       Standard CalSim model output variables (flows, diversions, storage)
@@ -1019,9 +1019,9 @@ Table: derived_variable_type
 ├── description          TEXT                       -- Classification description
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMPTZ DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (4 total — derived/computed variable categories):
 ├── sector_aggregate:        Variables that aggregate across a sector
@@ -1042,9 +1042,9 @@ Table: variable_type
 ├── description          TEXT                       -- Variable type description
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (6 total — water use classification):
 ├── delivery: water delivery
@@ -1063,7 +1063,7 @@ Seed: seed_tables/04_variable/variable_type.csv
 These tables hold CalSim variable definitions (model output names).
 Each maps a CalSim variable name to its type classification and entity association.
 
-channel_variable      -- flow/diversion arc variables   (FK → channel_entity; includes MIF regulatory vars)
+channel_variable      -- flow/diversion arc variables   (FK to channel_entity; includes MIF regulatory vars)
 reservoir_variable    -- storage/release variables       [PLANNED — not yet created]
 inflow_variable       -- inflow boundary conditions      [PLANNED — not yet created]
 derived_variable      -- computed / post-processed vars  [PLANNED — not yet created]
@@ -1081,7 +1081,7 @@ channel_variable records: ~1352 total (migration 23 added 20 MIF + 1 ISF001_OMR0
   - NOTE: C_SAC000_MIF is absent from CalSim DV — no MIF for delta confluence reach
 
 channel_entity new columns (migration 23):
-├── watershed_short_code  VARCHAR FK → watershed.short_code  -- geographic watershed grouping
+├── watershed_short_code  VARCHAR FK to watershed.short_code  -- geographic watershed grouping
 ├── unimp_sv_variable     VARCHAR    -- specific UNIMP_* SV variable for % unimpaired calc
 │                                    -- may differ from watershed.unimp_sv_variable (e.g. SAC mainstem)
 ├── has_mif               BOOLEAN    -- companion C_*_MIF exists in DV
@@ -1108,13 +1108,13 @@ Table: scenario
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── name                 VARCHAR                    -- Display name: "DWR Historical Adjusted Baseline with TUCPs"
 ├── short_description    TEXT                       -- Brief 1-2 sentence description
-├── baseline_scenario_id INTEGER                    -- Self-ref FK → scenario.id (what this is compared against)
-├── hydroclimate_id      INTEGER                    -- FK → hydroclimate.id
-├── scenario_version_id  INTEGER DEFAULT 1          -- FK → version.id (scenario family)
-├── scenario_author_id   INTEGER                    -- FK → scenario_author.id
-├── model_source_id      INTEGER                    -- FK → model_source.id (all CalSim3 currently)
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── baseline_scenario_id INTEGER                    -- Self-ref FK to scenario.id (what this is compared against)
+├── hydroclimate_id      INTEGER                    -- FK to hydroclimate.id
+├── scenario_version_id  INTEGER DEFAULT 1          -- FK to version.id (scenario family)
+├── scenario_author_id   INTEGER                    -- FK to scenario_author.id
+├── model_source_id      INTEGER                    -- FK to model_source.id (all CalSim3 currently)
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
+├── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── long_description     TEXT                       -- Full multi-paragraph description (last column)
@@ -1156,9 +1156,9 @@ Table: scenario_author
 ├── affiliation          TEXT
 ├── is_active            INTEGER DEFAULT 1
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Foreign keys:
 ├── Ref: scenario_author.created_by > developer.id [delete: restrict, update: cascade]
@@ -1184,9 +1184,9 @@ Table: scenario_tag
 ├── description          TEXT
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (10): baseline, groundwater, agriculture, flows, drinking_water,
              infrastructure, delta, reservoir, salmon, environment
@@ -1203,12 +1203,12 @@ Note: Distinct from the 6 broad research themes in the theme table (Layer 08).
 
 ```
 Table: scenario_tag_link
-├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
-├── tag_id               INTEGER NOT NULL           -- FK → scenario_tag.id
+├── scenario_id          INTEGER NOT NULL           -- FK to scenario.id
+├── tag_id               INTEGER NOT NULL           -- FK to scenario_tag.id
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Primary key: (scenario_id, tag_id)
 
@@ -1268,13 +1268,13 @@ Table: assumption_definition
 ├── short_code           VARCHAR NOT NULL UNIQUE    -- "lu_2020_landiq", "gw_model", etc.
 ├── name                 VARCHAR                    -- "2020 LandIQ Land Use"
 ├── short_title          VARCHAR
-├── assumption_category_id INTEGER NOT NULL         -- FK → assumption_category.id
+├── assumption_category_id INTEGER NOT NULL         -- FK to assumption_category.id
 ├── description          TEXT
-├── source_id            INTEGER                    -- FK → source.id (james_gilbert = 2)
+├── source_id            INTEGER                    -- FK to source.id (james_gilbert = 2)
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── notes                TEXT
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
+├── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 
@@ -1291,8 +1291,8 @@ Note: Only land_use + gw_model assumptions remain here; operational policies
 
 Dropped columns (migration 42): subtitle, simple_description, narrative,
     source_access_date, file, assumptions_version_id
-Changed: source (TEXT) → source_id (INTEGER FK → source.id)
-         is_active: INTEGER → BOOLEAN
+Changed: source (TEXT) to source_id (INTEGER FK to source.id)
+         is_active: INTEGER to BOOLEAN
 
 Foreign keys:
 ├── Ref: assumption_definition.assumption_category_id > assumption_category.id [delete: restrict, update: cascade]
@@ -1308,12 +1308,12 @@ Indexes:
 
 ```
 Table: scenario_key_assumption_link
-├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
-├── assumption_id        INTEGER NOT NULL           -- FK → assumption_definition.id
+├── scenario_id          INTEGER NOT NULL           -- FK to scenario.id
+├── assumption_id        INTEGER NOT NULL           -- FK to assumption_definition.id
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Primary key: (scenario_id, assumption_id)
 
@@ -1336,9 +1336,9 @@ Table: operation_category
 ├── description          TEXT
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL            -- FK → developer.id
+├── created_by           INTEGER NOT NULL            -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL            -- FK → developer.id
+└── updated_by           INTEGER NOT NULL            -- FK to developer.id
 
 Values (9 total, IDs 1-9 — resequenced in migration 42):
 ├── 1  comm_delivery:       Community water delivery prioritization
@@ -1364,22 +1364,22 @@ Table: operation_definition
 ├── short_code           VARCHAR NOT NULL UNIQUE    -- see Values section below
 ├── name                 VARCHAR
 ├── short_title          VARCHAR
-├── operation_category_id INTEGER NOT NULL          -- FK → operation_category.id
+├── operation_category_id INTEGER NOT NULL          -- FK to operation_category.id
 ├── description          TEXT                       -- merged from simple_description + narrative
-├── source_id            INTEGER                    -- FK → source.id (james_gilbert = 2)
+├── source_id            INTEGER                    -- FK to source.id (james_gilbert = 2)
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── notes                TEXT
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
-├── updated_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
+├── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 
 Dropped columns (migration 42): subtitle, simple_description, narrative, operation_version_id
-Changed: source (TEXT) → source_id (INTEGER FK → source.id)
-         is_active: INTEGER → BOOLEAN
-         Category IDs remapped: old 27-31 → 5-9
+Changed: source (TEXT) to source_id (INTEGER FK to source.id)
+         is_active: INTEGER to BOOLEAN
+         Category IDs remapped: old 27-31 to 5-9
 
-Values (28 rows, IDs 1-28 | short_code | category_id → category):
+Values (28 rows, IDs 1-28 | short_code | category_id to category):
   -- comm_delivery (1) — CVP/SWP allocation priorities and community delivery
    1  comm_delivery_HHS           1   Prioritize human health & safety deliveries
    2  comm_delivery_functional    1   Prioritize functional community water needs
@@ -1432,12 +1432,12 @@ Indexes:
 
 ```
 Table: scenario_key_operation_link
-├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
-├── operation_id         INTEGER NOT NULL           -- FK → operation_definition.id
+├── scenario_id          INTEGER NOT NULL           -- FK to scenario.id
+├── operation_id         INTEGER NOT NULL           -- FK to operation_definition.id
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Primary key: (scenario_id, operation_id)
 
@@ -1470,14 +1470,14 @@ Table: hydroclimate
 ├── projection_year      INTEGER                    -- 2040, 2070, etc.
 ├── source_id            INTEGER                    -- FK source.id
 ├── notes                TEXT
-├── hydroclimate_version_id INTEGER                 -- FK → version.id (hydroclimate family)
+├── hydroclimate_version_id INTEGER                 -- FK to version.id (hydroclimate family)
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Note: slr_value and slr_unit_id removed — sea level rise is now in the slr table (see below).
-      Use scenario.slr_id → slr.id to link a scenario to its SLR condition.
+      Use scenario.slr_id to slr.id to link a scenario to its SLR condition.
 
 Foreign keys:
 ├── Ref: hydroclimate.hydroclimate_version_id > version.id [delete: restrict, update: cascade]
@@ -1511,12 +1511,12 @@ Table: slr
 ├── label                TEXT NOT NULL              -- "No sea level rise", "15mm SLR", etc.
 ├── slr_value_mm         NUMERIC                    -- SLR amount in millimetres (0, 15, 30, 60)
 ├── description          TEXT
-├── source               TEXT                       -- FK → source.source (james_gilbert, etc.)
+├── source               TEXT                       -- FK to source.source (james_gilbert, etc.)
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMPTZ DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMPTZ DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (4 total):
 ├── none:   No sea level rise (0mm)
@@ -1578,10 +1578,10 @@ Table: theme
 ├── narrative            JSONB
 ├── outcome_description  TEXT
 ├── outcome_narrative    TEXT
-├── source               TEXT                       -- FK → source.source (wietske_medema, etc.)
-├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK → version.id (theme family)
-├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
-├── updated_by           INTEGER                    -- FK → developer.id
+├── source               TEXT                       -- FK to source.source (wietske_medema, etc.)
+├── theme_version_id     INTEGER NOT NULL DEFAULT 1 -- FK to version.id (theme family)
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK to developer.id
+├── updated_by           INTEGER                    -- FK to developer.id
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 └── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 
@@ -1611,12 +1611,12 @@ Seed: seed_tables/08_theme/theme.csv
 
 ```
 Table: theme_scenario_link
-├── theme_id             INTEGER NOT NULL           -- FK → theme.id
-├── scenario_id          INTEGER NOT NULL           -- FK → scenario.id
+├── theme_id             INTEGER NOT NULL           -- FK to theme.id
+├── scenario_id          INTEGER NOT NULL           -- FK to scenario.id
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Primary key: (theme_id, scenario_id)
 
@@ -1637,12 +1637,12 @@ Status: PLANNED — not yet created in the database.
 
 ```
 Table: theme_source_link   [PLANNED]
-├── theme_id             INTEGER NOT NULL           -- FK → theme.id
-├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── theme_id             INTEGER NOT NULL           -- FK to theme.id
+├── source_id            INTEGER NOT NULL           -- FK to source.id
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Primary key: (theme_id, source_id)
 
@@ -1665,10 +1665,10 @@ Table: outcome_category   [PLANNED]
 ├── short_code            TEXT UNIQUE NOT NULL       -- "reservoir_storage", "groundwater_storage", etc.
 ├── label                 TEXT                       -- "Reservoir Storage", etc.
 ├── description           TEXT                       -- Detailed description
-├── outcome_version_id    INTEGER NOT NULL           -- FK → version.id (statistics family, version_family_id=7)
+├── outcome_version_id    INTEGER NOT NULL           -- FK to version.id (statistics family, version_family_id=7)
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (1 = system)
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id (1 = system)
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
@@ -1703,11 +1703,11 @@ Table: variable_prefix   [PLANNED]
 ├── prefix                VARCHAR(10) UNIQUE NOT NULL -- "S", "C", "I", "E", "D", "A", "X", etc.
 ├── label                 VARCHAR NOT NULL           -- "Storage", "Channel Flow", "Inflow", etc.
 ├── description           TEXT                       -- What this variable type represents
-├── unit_id               INTEGER                    -- FK → unit.id (default unit for prefix)
+├── unit_id               INTEGER                    -- FK to unit.id (default unit for prefix)
 ├── applies_to_entity     TEXT[]                     -- ["reservoir", "channel", "node", "demand_unit"]
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id (system)
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
@@ -1741,18 +1741,18 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: outcome_statistic   [PLANNED]
 ├── id                    SERIAL PRIMARY KEY
-├── outcome_category_id   INTEGER NOT NULL           -- FK → outcome_category.id
+├── outcome_category_id   INTEGER NOT NULL           -- FK to outcome_category.id
 ├── short_code            VARCHAR(50) NOT NULL       -- "monthly_percentile", "annual_exceedance", etc.
 ├── label                 VARCHAR NOT NULL           -- "Monthly Percentile Bands"
 ├── description           TEXT                       -- What this statistic measures
-├── variable_prefix_id    INTEGER                    -- FK → variable_prefix.id (e.g., "S" for storage)
+├── variable_prefix_id    INTEGER                    -- FK to variable_prefix.id (e.g., "S" for storage)
 ├── percentile_scheme     TEXT[]                     -- ['p0','p10','p30','p50','p70','p90','p100']
 ├── time_resolution       VARCHAR(20)                -- "monthly", "annual", "daily"
 ├── unit                  VARCHAR(50)                -- "percent_capacity", "taf", "cfs"
 ├── data_table            VARCHAR(100)               -- "reservoir_monthly_percentile" (target table)
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id (system)
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
@@ -1775,7 +1775,7 @@ Values (initial):
 ├── outcome_category_id=8 (reservoir_storage):
 │   └── short_code="monthly_percentile"
 │       label="Monthly Percentile Bands"
-│       variable_prefix_id → "S" (storage)
+│       variable_prefix_id to "S" (storage)
 │       percentile_scheme=['p0','p10','p30','p50','p70','p90','p100']
 │       time_resolution="monthly"
 │       unit="percent_capacity"
@@ -1857,17 +1857,17 @@ Table: reservoir_variable   [PLANNED]
 ├── calsim_id             TEXT NOT NULL              -- "S_SHSTA", "C_SHSTA", "C_SHSTA_FLOOD", etc.
 ├── name                  TEXT NOT NULL              -- "Shasta Storage", "Shasta Total Release", etc.
 ├── description           TEXT                       -- Detailed description
-├── reservoir_entity_id   INTEGER                    -- FK → reservoir_entity.id (NULL for aggregates)
+├── reservoir_entity_id   INTEGER                    -- FK to reservoir_entity.id (NULL for aggregates)
 ├── variable_type         TEXT NOT NULL              -- "storage", "storage_level", "release_total", "release_normal", "release_flood"
 ├── is_aggregate          BOOLEAN DEFAULT FALSE      -- TRUE for composite variables
 ├── aggregated_variable_ids INTEGER[]                -- IDs of component variables if aggregate
 ├── trigger_threshold     NUMERIC                    -- Threshold for alerts/triggers
-├── unit_id               INTEGER NOT NULL           -- FK → unit.id (1=TAF, 2=CFS)
-├── temporal_scale_id     INTEGER NOT NULL           -- FK → temporal_scale.id (3=monthly)
-├── variable_version_id   INTEGER NOT NULL           -- FK → version.id (variable family)
+├── unit_id               INTEGER NOT NULL           -- FK to unit.id (1=TAF, 2=CFS)
+├── temporal_scale_id     INTEGER NOT NULL           -- FK to temporal_scale.id (3=monthly)
+├── variable_version_id   INTEGER NOT NULL           -- FK to version.id (variable family)
 ├── variable_id           UUID UNIQUE NOT NULL       -- External system identifier
-├── source_ids            INTEGER[]                  -- FK array → data_source.id
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+├── source_ids            INTEGER[]                  -- FK array to data_source.id
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
 Variable Types:
@@ -1913,7 +1913,7 @@ Seed CSV: database/seed_tables/04_calsim_data/reservoir_variable.csv
 Table: reservoir_storage_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier (s0020, etc.)
-├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK to reservoir_entity.id
 ├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Sep=12)
 │
 ├── -- Storage statistics (TAF)
@@ -1964,7 +1964,7 @@ Table: reservoir_storage_monthly
 ├── -- Audit fields (ERD standard)
 ├── is_active             BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
@@ -2004,7 +2004,7 @@ notebook verification and provide absolute storage values alongside % of capacit
 Table: reservoir_spill_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier
-├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK to reservoir_entity.id
 ├── water_month           INTEGER NOT NULL           -- 1-12 (Oct=1, Sep=12)
 │
 ├── -- Spill frequency this month
@@ -2033,7 +2033,7 @@ Table: reservoir_spill_monthly
 
 Note: Spill data from C_{short_code}_FLOOD variable (flood release above release capacity).
 From constraints-FloodSpill.wresl: C_{res}_NCF + C_{res}_Flood = C_{res}
-ETL maps reservoir_entity.short_code → CalSim variable C_{short_code}_FLOOD
+ETL maps reservoir_entity.short_code to CalSim variable C_{short_code}_FLOOD
 
 Foreign keys:
 ├── Ref: reservoir_spill_monthly.reservoir_entity_id > reservoir_entity.id [delete: restrict, update: cascade]
@@ -2065,7 +2065,7 @@ ETL: etl/statistics/calculate_reservoir_statistics.py
 Table: reservoir_period_summary
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL       -- Scenario identifier
-├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK to reservoir_entity.id
 │
 ├── -- Simulation period
 ├── simulation_start_year INTEGER NOT NULL           -- First water year
@@ -2134,7 +2134,7 @@ Table: reservoir_period_summary
 ├── updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
-Note: ETL maps reservoir_entity.short_code → CalSim variables:
+Note: ETL maps reservoir_entity.short_code to CalSim variables:
 ├── Storage: S_{short_code} (e.g., S_SHSTA)
 └── Spill: C_{short_code}_FLOOD (e.g., C_SHSTA_FLOOD)
 
@@ -2187,11 +2187,11 @@ Probability Metrics (COEQWAL Research Notebooks Alignment):
 │   └── Separate CV for all months, April (spring), September (end of dry season)
 │
 └── Metric Naming (matching notebook output):
-    ├── All_Prob_S_{RES}_flood → flood_pool_prob_all
-    ├── Sep_Prob_S_{RES}_flood → flood_pool_prob_september
-    ├── All_Prob_S_{RES}_dead → dead_pool_prob_all
-    ├── Sep_Avg_S_{RES}_TAF → september_avg_taf
-    └── Sep_S_{RES}_CV → storage_cv_september
+    ├── All_Prob_S_{RES}_flood to flood_pool_prob_all
+    ├── Sep_Prob_S_{RES}_flood to flood_pool_prob_september
+    ├── All_Prob_S_{RES}_dead to dead_pool_prob_all
+    ├── Sep_Avg_S_{RES}_TAF to september_avg_taf
+    └── Sep_S_{RES}_CV to storage_cv_september
 
 Reservoir Thresholds Reference:
 ├── SHSTA: floodVar=S_SHSTALEVEL5DV, deadVar=S_SHSTALEVEL1DV
@@ -2247,7 +2247,7 @@ Table: du_urban_group
 ├── display_order         INTEGER DEFAULT 0
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER DEFAULT 1            -- FK → developer.id
+├── created_by            INTEGER DEFAULT 1            -- FK to developer.id
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
@@ -2277,8 +2277,8 @@ Seed (variable): database/scripts/sql/12_mi_statistics/02d_load_du_variable_grou
 ```
 Table: du_urban_group_member
 ├── id                    SERIAL PRIMARY KEY
-├── du_urban_group_id     INTEGER NOT NULL             -- FK → du_urban_group.id
-├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── du_urban_group_id     INTEGER NOT NULL             -- FK to du_urban_group.id
+├── du_id                 VARCHAR(20) NOT NULL         -- FK to du_urban_entity.du_id
 ├── display_order         INTEGER DEFAULT 0
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -2346,8 +2346,8 @@ DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables
 ```
 Table: mi_contractor_group_member
 ├── id                    SERIAL PRIMARY KEY
-├── mi_contractor_group_id INTEGER NOT NULL            -- FK → mi_contractor_group.id
-├── mi_contractor_id      INTEGER NOT NULL             -- FK → mi_contractor.id
+├── mi_contractor_group_id INTEGER NOT NULL            -- FK to mi_contractor_group.id
+├── mi_contractor_id      INTEGER NOT NULL             -- FK to mi_contractor.id
 ├── display_order         INTEGER DEFAULT 0
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
@@ -2367,7 +2367,7 @@ DDL: database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables
 ```
 Table: mi_contractor_delivery_arc
 ├── id                    SERIAL PRIMARY KEY
-├── mi_contractor_id      INTEGER NOT NULL             -- FK → mi_contractor.id
+├── mi_contractor_id      INTEGER NOT NULL             -- FK to mi_contractor.id
 ├── delivery_arc          VARCHAR(50) NOT NULL         -- "D_SBA029_ACWD", "D_PRRIS_MWDSC"
 ├── arc_type              VARCHAR(20)                  -- "PMI", "PAG"
 ├── is_active             BOOLEAN DEFAULT TRUE
@@ -2405,7 +2405,7 @@ Table: du_urban_variable
 └── updated_by            INTEGER DEFAULT 1
 
 Constraints:
-├── FK: du_id → du_urban_entity.du_id
+├── FK: du_id to du_urban_entity.du_id
 └── Unique: (du_id)
 
 Records: 71 mappings (canonical CWS demand units from tier matrix)
@@ -2427,7 +2427,7 @@ Seed: database/scripts/sql/12_mi_statistics/01d_load_du_urban_variable.sql
 ```
 Table: du_urban_delivery_arc
 ├── id                    SERIAL PRIMARY KEY
-├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── du_id                 VARCHAR(20) NOT NULL         -- FK to du_urban_entity.du_id
 ├── delivery_arc          VARCHAR(100) NOT NULL        -- CalSim arc variable (D_*)
 ├── arc_order             INTEGER DEFAULT 1            -- Order for summing
 ├── is_active             BOOLEAN DEFAULT TRUE
@@ -2437,7 +2437,7 @@ Table: du_urban_delivery_arc
 └── updated_by            INTEGER DEFAULT 1
 
 Constraints:
-├── FK: du_id → du_urban_entity.du_id
+├── FK: du_id to du_urban_entity.du_id
 └── Unique: (du_id, delivery_arc)
 
 Records: 10 arcs for 5 multi-arc units (AMADR, AMCYN, ANTOC, FRFLD, GRSVL)
@@ -2454,7 +2454,7 @@ Seed: database/scripts/sql/12_mi_statistics/01d_load_du_urban_variable.sql
 Table: du_delivery_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
-├── du_id                 VARCHAR(20) NOT NULL         -- FK → du_urban_entity.du_id
+├── du_id                 VARCHAR(20) NOT NULL         -- FK to du_urban_entity.du_id
 ├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
 ├── delivery_avg_taf      NUMERIC(10,2)
 ├── delivery_cv           NUMERIC(6,4)
@@ -2726,7 +2726,7 @@ Table: cws_aggregate_entity
 ├── display_order         INTEGER DEFAULT 0
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER DEFAULT 1            -- FK → developer.id
+├── created_by            INTEGER DEFAULT 1            -- FK to developer.id
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER DEFAULT 1
 
@@ -2745,7 +2745,7 @@ DDL: database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql
 Table: cws_aggregate_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
-├── cws_aggregate_id      INTEGER NOT NULL             -- FK → cws_aggregate_entity.id
+├── cws_aggregate_id      INTEGER NOT NULL             -- FK to cws_aggregate_entity.id
 ├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
 ├── delivery_avg_taf      NUMERIC(10,2)
 ├── delivery_cv           NUMERIC(6,4)
@@ -2790,7 +2790,7 @@ Table: cws_aggregate_monthly
 └── updated_by            INTEGER DEFAULT 1
 
 Constraints:
-├── FK: cws_aggregate_id → cws_aggregate_entity.id
+├── FK: cws_aggregate_id to cws_aggregate_entity.id
 ├── Unique: (scenario_short_code, cws_aggregate_id, water_month)
 └── Check: water_month BETWEEN 1 AND 12
 
@@ -2810,7 +2810,7 @@ ETL: etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py
 Table: cws_aggregate_period_summary
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR(20) NOT NULL
-├── cws_aggregate_id      INTEGER NOT NULL             -- FK → cws_aggregate_entity.id
+├── cws_aggregate_id      INTEGER NOT NULL             -- FK to cws_aggregate_entity.id
 ├── simulation_start_year INTEGER NOT NULL
 ├── simulation_end_year   INTEGER NOT NULL
 ├── total_years           INTEGER NOT NULL
@@ -2846,7 +2846,7 @@ Table: cws_aggregate_period_summary
 └── updated_by            INTEGER DEFAULT 1
 
 Constraints:
-├── FK: cws_aggregate_id → cws_aggregate_entity.id
+├── FK: cws_aggregate_id to cws_aggregate_entity.id
 └── Unique: (scenario_short_code, cws_aggregate_id)
 
 Indexes:
@@ -3317,7 +3317,7 @@ DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
 Table: env_flow_channel_monthly
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR NOT NULL
-├── network_arc_id        INTEGER NOT NULL             -- FK → channel_entity.id
+├── network_arc_id        INTEGER NOT NULL             -- FK to channel_entity.id
 ├── water_month           INTEGER NOT NULL             -- 1-12 (Oct=1, Sep=12)
 ├── flow_avg_cfs          NUMERIC                      -- Mean regulated flow (CFS)
 ├── flow_cv               NUMERIC                      -- CV of regulated flow
@@ -3351,8 +3351,8 @@ DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
 Table: env_flow_channel_seasonal
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR NOT NULL
-├── network_arc_id        INTEGER NOT NULL             -- FK → channel_entity.id
-├── season_id             INTEGER NOT NULL             -- FK → env_flow_season.id
+├── network_arc_id        INTEGER NOT NULL             -- FK to channel_entity.id
+├── season_id             INTEGER NOT NULL             -- FK to env_flow_season.id
 ├── flow_avg_cfs          NUMERIC                      -- Mean regulated flow (CFS)
 ├── flow_cv               NUMERIC
 ├── unimp_avg_cfs         NUMERIC                      -- Mean unimpaired flow (CFS)
@@ -3386,7 +3386,7 @@ DDL: database/scripts/sql/migrations/24_create_env_flow_statistics_tables.sql
 Table: env_flow_channel_period_summary
 ├── id                    SERIAL PRIMARY KEY
 ├── scenario_short_code   VARCHAR NOT NULL
-├── network_arc_id        INTEGER NOT NULL             -- FK → channel_entity.id
+├── network_arc_id        INTEGER NOT NULL             -- FK to channel_entity.id
 ├── simulation_start_year INTEGER NOT NULL
 ├── simulation_end_year   INTEGER NOT NULL
 ├── total_years           INTEGER NOT NULL
@@ -3487,12 +3487,12 @@ Table: tier_definition
 ├── description          TEXT                       -- Detailed description of the indicator
 ├── tier_type            VARCHAR NOT NULL           -- 'multi_value' or 'single_value'
 ├── tier_count           INTEGER NOT NULL           -- Number of tier values (1 or 4)
-├── tier_version_id      INTEGER NOT NULL DEFAULT 8 -- FK → version.id (tier family)
+├── tier_version_id      INTEGER NOT NULL DEFAULT 8 -- FK to version.id (tier family)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+├── created_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+└── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK to developer.id
 
 Records: 9 tier indicators
 
@@ -3530,18 +3530,18 @@ Values (9 total):
 Table: tier_location_result
 ├── id                      SERIAL PRIMARY KEY
 ├── scenario_short_code     VARCHAR NOT NULL           -- Scenario identifier (s0011, s0020, etc.) - logical ref to scenario.scenario_id
-├── tier_short_code         VARCHAR NOT NULL           -- FK → tier_definition.short_code
+├── tier_short_code         VARCHAR NOT NULL           -- FK to tier_definition.short_code
 ├── location_type           VARCHAR NOT NULL           -- 'network_node', 'wba', 'reservoir', 'compliance_station', 'region'
 ├── location_id             VARCHAR NOT NULL           -- ID in respective table (e.g., SAC232, 08N, SHSTA, JP, DELTA)
 ├── location_name           VARCHAR                    -- Display name for map tooltip
 ├── tier_level              INTEGER                    -- 1, 2, 3, or 4 (tier assignment for this location)
 ├── tier_value              INTEGER                    -- Optional: count or value at this location (usually 1)
 ├── display_order           INTEGER DEFAULT 1          -- For consistent map marker ordering
-├── tier_version_id         INTEGER NOT NULL DEFAULT 8 -- FK → version.id (tier family)
+├── tier_version_id         INTEGER NOT NULL DEFAULT 8 -- FK to version.id (tier family)
 ├── created_at              TIMESTAMP DEFAULT NOW()
-├── created_by              INTEGER NOT NULL           -- FK → developer.id
+├── created_by              INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at              TIMESTAMP DEFAULT NOW()
-└── updated_by              INTEGER NOT NULL           -- FK → developer.id
+└── updated_by              INTEGER NOT NULL           -- FK to developer.id
 
 Foreign Keys:
 ├── Ref: tier_location_result.tier_short_code > tier_definition.short_code [delete: restrict, update: cascade]
@@ -3562,11 +3562,11 @@ Constraints:
 └── tier_level CHECK (tier_level BETWEEN 1 AND 4 OR tier_level IS NULL)
 
 Location Type Reference:
-├── 'network_node' → network.short_code (ENV_FLOWS, FW_EXP evaluation points)
-├── 'wba' → wba.wba_id (GW_STOR aquifer polygons)
-├── 'reservoir' → reservoir.calsim_short_code (RES_STOR lake polygons)  
-├── 'compliance_station' → compliance_station.station_code (FW_DELTA_USES monitoring)
-└── 'region' → hydrologic_region.short_code (DELTA_ECO, WRC_SALMON_AB regional)
+├── 'network_node' to network.short_code (ENV_FLOWS, FW_EXP evaluation points)
+├── 'wba' to wba.wba_id (GW_STOR aquifer polygons)
+├── 'reservoir' to reservoir.calsim_short_code (RES_STOR lake polygons)  
+├── 'compliance_station' to compliance_station.station_code (FW_DELTA_USES monitoring)
+└── 'region' to hydrologic_region.short_code (DELTA_ECO, WRC_SALMON_AB regional)
 
 Example: ENV_FLOWS s0011 has 17 location records (one per evaluation node) with tier_levels 2-3
 ```
@@ -3577,7 +3577,7 @@ Example: ENV_FLOWS s0011 has 17 location records (one per evaluation node) with 
 Table: tier_result
 ├── id                   SERIAL PRIMARY KEY
 ├── scenario_short_code  VARCHAR NOT NULL           -- Scenario identifier (s0011, etc.) - logical ref to scenario.scenario_id
-├── tier_short_code      VARCHAR NOT NULL           -- FK → tier_definition.short_code
+├── tier_short_code      VARCHAR NOT NULL           -- FK to tier_definition.short_code
 ├── tier_1_value         INTEGER                    -- Count in Tier 1 (best performance)
 ├── tier_2_value         INTEGER                    -- Count in Tier 2 (good performance)
 ├── tier_3_value         INTEGER                    -- Count in Tier 3 (moderate performance)
@@ -3588,12 +3588,12 @@ Table: tier_result
 ├── norm_tier_4          NUMERIC(5,3)               -- Normalized Tier 4 (0-1 scale for D3)
 ├── total_value          INTEGER                    -- Sum of tier values (for multi-value)
 ├── single_tier_level    INTEGER                    -- Single tier level 1-4 (for single-value)
-├── tier_version_id      INTEGER NOT NULL DEFAULT 8 -- FK → version.id (tier family)
+├── tier_version_id      INTEGER NOT NULL DEFAULT 8 -- FK to version.id (tier family)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-├── created_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+├── created_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK to developer.id
 ├── updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK → developer.id
+└── updated_by           INTEGER NOT NULL DEFAULT coeqwal_current_operator() -- FK to developer.id
 
 Records: 64 tier results (8 scenarios × ~8 indicators)
 
@@ -3626,8 +3626,8 @@ D3 Visualization Data:
 └── Comparable bar charts enabled through normalization
 
 Sample data:
-├── ENV_FLOWS s0011: [0,5,12,0] → normalized [0, 0.294, 0.706, 0]
-├── GW_STOR s0020: [7,14,15,6] → normalized [0.167, 0.333, 0.357, 0.143]
+├── ENV_FLOWS s0011: [0,5,12,0] to normalized [0, 0.294, 0.706, 0]
+├── GW_STOR s0020: [7,14,15,6] to normalized [0.167, 0.333, 0.357, 0.143]
 └── DELTA_ECO s0011: single_tier_level = 4
 ```
 
@@ -3666,9 +3666,9 @@ Table: network_entity_type
 ├── description          TEXT                       -- Purpose description
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 ```
 
@@ -3679,14 +3679,14 @@ Table: network_type
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- "CH", "CT", "D", "STR", etc.
 ├── label                VARCHAR NOT NULL           -- "Channel", "Cross transfer", "Storage", etc.
 ├── description          TEXT
-├── network_entity_type_id INTEGER NOT NULL         -- FK → network_entity_type.id (1=arc, 2=node)
-├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (calsim3)
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
+├── network_entity_type_id INTEGER NOT NULL         -- FK to network_entity_type.id (1=arc, 2=node)
+├── model_source_id      INTEGER DEFAULT 1          -- FK to model_source.id (calsim3)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (geopackage)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (21 total):
 ├── IDs 1-10: Arc types (CH, CT, D, DA, DD, IN, RT, SP, SR, NULL)
@@ -3701,14 +3701,14 @@ Table: network_subtype
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- "ST", "CL", "RES", "A", "STM", etc.
 ├── label                VARCHAR NOT NULL           -- "Stream", "Canal", "Reservoir", "Agricultural", etc.
 ├── description          TEXT
-├── type_id              INTEGER NOT NULL           -- FK → network_type.id (parent type)
-├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (calsim3)
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
+├── type_id              INTEGER NOT NULL           -- FK to network_type.id (parent type)
+├── model_source_id      INTEGER DEFAULT 1          -- FK to model_source.id (calsim3)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (geopackage)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Values (28 total):
 ├── IDs 1-10:  Arc subtypes (BP, CH, CL, HIS, IM, LI, NA, NS, PRP, ST)
@@ -3743,20 +3743,20 @@ Table: network
 ├── name                 VARCHAR                    -- Display name from geopackage, CalSim manual, or other sources
 ├── description          TEXT                       -- Description from XML schematic or other sources
 ├── comment              TEXT                       -- Additional notes or source comments
-├── entity_type_id       INTEGER                    -- FK → network_entity_type.id (arc=1, node=2, null=3, unimpaired_flows=4)
-├── type_id              INTEGER                    -- FK → network_type.id
+├── entity_type_id       INTEGER                    -- FK to network_entity_type.id (arc=1, node=2, null=3, unimpaired_flows=4)
+├── type_id              INTEGER                    -- FK to network_type.id
 ├── subtype_ids          INTEGER[]                  -- Array of network_subtype.id values (e.g., {25,23})
 ├── model_list           INTEGER[]                  -- Array of model_source.id (e.g., {1} for CalSim3)
 ├── source_list          INTEGER[]                  -- Array of source.id (e.g., {1,4,8,9} for report+geopackage+schematic+manual)
 ├── has_gis              BOOLEAN DEFAULT FALSE      -- Spatial data available
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (1=SAC, 2=SJR, 3=DELTA, 4=TL, 5=CC)
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id (1=SAC, 2=SJR, 3=DELTA, 4=TL, 5=CC)
 ├── riv_sys              VARCHAR                    -- River system name from geopackage (e.g., "Sacramento River", "San Joaquin River")
 ├── strm_code            VARCHAR                    -- Stream code from geopackage (e.g., "SAC", "SJR", "DMC")
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family, default=12)
+├── network_version_id   INTEGER NOT NULL           -- FK to version.id (network family, default=12)
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Records: 6,908 total (2,610 arcs + 4,298 nodes)
 Data sources: XML schematic (6,466) + geopackage nodes (1,548) + geopackage arcs (2,619)
@@ -3792,19 +3792,19 @@ Constraints:
 Table: network_arc
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- Arc identifier (matches network.short_code for safety)
-├── network_id           INTEGER NOT NULL           -- FK → network.id (populated during DB load via short_code lookup)
+├── network_id           INTEGER NOT NULL           -- FK to network.id (populated during DB load via short_code lookup)
 ├── river                VARCHAR                    -- River identifier for watershed connection (AMR, CCH, ELD)
 ├── from_node            VARCHAR                    -- From node identifier
 ├── to_node              VARCHAR                    -- To node identifier  
 ├── shape_length_m       NUMERIC                    -- Arc length in meters
-├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (CalSim3)
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── model_source_id      INTEGER DEFAULT 1          -- FK to model_source.id (CalSim3)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (geopackage)
+├── network_version_id   INTEGER NOT NULL           -- FK to version.id (network family)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Records: 2,118 arcs from geopackage
 
@@ -3836,13 +3836,13 @@ Table: river_watershed   [PLANNED]
 ├── river_prefix          VARCHAR UNIQUE NOT NULL    -- River identifier (AMR, CCH, ELD, etc.)
 ├── river_name            VARCHAR NOT NULL           -- Full river name (American River, Cache Creek)
 ├── watershed_short_code  VARCHAR NOT NULL           -- FK reference to watersheds.short_code
-├── source_id             INTEGER DEFAULT 1          -- FK → source.id (CalSim report)
-├── network_version_id    INTEGER NOT NULL           -- FK → version.id (network family)
+├── source_id             INTEGER DEFAULT 1          -- FK to source.id (CalSim report)
+├── network_version_id    INTEGER NOT NULL           -- FK to version.id (network family)
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMP DEFAULT NOW()
-├── created_by            INTEGER NOT NULL           -- FK → developer.id
+├── created_by            INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at            TIMESTAMP DEFAULT NOW()
-└── updated_by            INTEGER NOT NULL           -- FK → developer.id
+└── updated_by            INTEGER NOT NULL           -- FK to developer.id
 
 Records: 268 river-watershed mappings from CalSim report
 Note: No model_source_id - rivers/watersheds are geographic features, not model-specific
@@ -3860,11 +3860,11 @@ Indexes:
 
 
 Values (268 total, 259 unique prefixes):
-├── AMR → SAC_RIVER (American River → Sacramento River Hydrologic Region)
-├── CCH → SAC_RIVER (Cache Creek → Sacramento River Hydrologic Region)
-├── ELD → UPPER_AMERICAN (Eldorado → Upper American River Watershed)
-├── SFA → UPPER_AMERICAN (South Fork American → Upper American River Watershed)
-├── TRN → SAN_JOAQUIN (Tuolumne River → San Joaquin River Hydrologic Region)
+├── AMR to SAC_RIVER (American River to Sacramento River Hydrologic Region)
+├── CCH to SAC_RIVER (Cache Creek to Sacramento River Hydrologic Region)
+├── ELD to UPPER_AMERICAN (Eldorado to Upper American River Watershed)
+├── SFA to UPPER_AMERICAN (South Fork American to Upper American River Watershed)
+├── TRN to SAN_JOAQUIN (Tuolumne River to San Joaquin River Hydrologic Region)
 └── ... (263 more river mappings)
 
 Distribution by watershed:
@@ -3885,21 +3885,21 @@ Distribution by watershed:
 Table: network_node
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           VARCHAR UNIQUE NOT NULL    -- Node identifier (matches network.short_code for safety)
-├── network_id           INTEGER NOT NULL           -- FK → network.id (populated during DB load via short_code lookup)
+├── network_id           INTEGER NOT NULL           -- FK to network.id (populated during DB load via short_code lookup)
 ├── riv_mi               NUMERIC                    -- River mile location
 ├── c2vsim_gw            VARCHAR                    -- C2VSIM groundwater connection
 ├── c2vsim_sw            VARCHAR                    -- C2VSIM surface water connection
 ├── nrest_gage           VARCHAR                    -- Nearest stream gauge
 ├── strm_code            VARCHAR                    -- Stream/river code (links to river_watershed)
 ├── rm_ii                VARCHAR                    -- River mile II designation
-├── model_source_id      INTEGER DEFAULT 1          -- FK → model_source.id (CalSim3)
-├── source_id            INTEGER DEFAULT 4          -- FK → source.id (geopackage)
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── model_source_id      INTEGER DEFAULT 1          -- FK to model_source.id (CalSim3)
+├── source_id            INTEGER DEFAULT 4          -- FK to source.id (geopackage)
+├── network_version_id   INTEGER NOT NULL           -- FK to version.id (network family)
 ├── is_active            BOOLEAN DEFAULT TRUE
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 Records: 1,400 nodes from geopackage
 
@@ -3957,18 +3957,18 @@ SELECT * FROM network WHERE array_length(subtype_ids, 1) > 1;
 Table: network_gis
 ├── id                   SERIAL PRIMARY KEY
 ├── short_code           VARCHAR NOT NULL           -- Network element identifier (matches network.short_code for safety)
-├── network_id           INTEGER NOT NULL           -- FK → network.id (populated during DB load via short_code lookup)
+├── network_id           INTEGER NOT NULL           -- FK to network.id (populated during DB load via short_code lookup)
 ├── precision_level      VARCHAR NOT NULL           -- "precise", "mapping_efficient", "regional"
 ├── geom_wkt             TEXT NOT NULL              -- Primary geometry storage
 ├── srid                 INTEGER DEFAULT 4326
 ├── geom                 GEOMETRY (computed)        -- PostGIS binary (STORED)
 ├── estimated_accuracy_meters NUMERIC               -- Actual accuracy estimate
-├── source_id            INTEGER NOT NULL           -- FK → source.id
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── source_id            INTEGER NOT NULL           -- FK to source.id
+├── network_version_id   INTEGER NOT NULL           -- FK to version.id (network family)
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 ### **3. network_arc_attribute (Arc network attribute)**
@@ -3978,19 +3978,19 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_arc_attribute   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── network_id           INTEGER NOT NULL           -- FK → network.id
+├── network_id           INTEGER NOT NULL           -- FK to network.id
 ├── name                 VARCHAR                    -- Arc name
 ├── calsim_id_stream     VARCHAR                    -- Stream/canal identifier (not unique)
 ├── arc_id_short_code    VARCHAR                    -- Arc identifier (in most cases matches network.short_code)
-├── type_id              INTEGER                    -- FK → network_arc_type.id
-├── sub_type_id          INTEGER                    -- FK → network_arc_subtype.id
+├── type_id              INTEGER                    -- FK to network_arc_type.id
+├── sub_type_id          INTEGER                    -- FK to network_arc_subtype.id
 ├── shape_length         NUMERIC                    -- Arc length in meters
 ├── attribute_source     JSONB NOT NULL             -- {"name": {"source": "geopackage", "column": "NAME"}, "calsim_id_stream": {"source": "geopackage", "column": "CalSim_ID"}, "shape_length": {"source": "geopackage", "column": "Shape_Leng"}}
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── network_version_id   INTEGER NOT NULL           -- FK to version.id (network family)
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 ```
 
@@ -4001,24 +4001,24 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_node_attribute   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── network_id           INTEGER NOT NULL           -- FK → network.id
+├── network_id           INTEGER NOT NULL           -- FK to network.id
 ├── calsim_id            VARCHAR                    -- CalSim node identifier
 ├── riv_mi               NUMERIC                    -- River mile
 ├── riv_name             VARCHAR                    -- River name
 ├── comment              TEXT                       -- Node comment
 ├── c2vsim_gw            VARCHAR                    -- C2VSIM groundwater ID
 ├── c2vsim_sw            VARCHAR                    -- C2VSIM surface water ID
-├── type_id              INTEGER                    -- FK → network_node_type.id
-├── sub_type_id          INTEGER                    -- FK → network_node_subtype.id
+├── type_id              INTEGER                    -- FK to network_node_type.id
+├── sub_type_id          INTEGER                    -- FK to network_node_subtype.id
 ├── nrest_gage           VARCHAR                    -- Nearest gage
 ├── strm_code            VARCHAR                    -- Stream code
 ├── rm_ii                VARCHAR                    -- River mile indicator
 ├── attribute_source     JSONB NOT NULL             -- {"calsim_id": {"source": "geopackage", "column": "CalSim_ID"}, "riv_mi": {"source": "geopackage", "column": "Riv_Mi"}, "type_id": {"source": "calsim_model", "column": "derived"}}
-├── network_version_id   INTEGER NOT NULL           -- FK → version.id (network family)
+├── network_version_id   INTEGER NOT NULL           -- FK to version.id (network family)
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 
 ```
 
@@ -4029,14 +4029,14 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_physical_connectivity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── arc_network_id       INTEGER NOT NULL           -- FK → network.id (arc)
-├── from_node_network_id INTEGER NOT NULL           -- FK → network.id (from node)
-├── to_node_network_id   INTEGER NOT NULL           -- FK → network.id (to node)
-├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── arc_network_id       INTEGER NOT NULL           -- FK to network.id (arc)
+├── from_node_network_id INTEGER NOT NULL           -- FK to network.id (from node)
+├── to_node_network_id   INTEGER NOT NULL           -- FK to network.id (to node)
+├── source_id            INTEGER NOT NULL           -- FK to source.id
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 ### **6. network_operational_connectivity (XML Connectivity)**
@@ -4046,14 +4046,14 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_operational_connectivity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── from_network_id      INTEGER NOT NULL           -- FK → network.id
-├── to_network_id        INTEGER NOT NULL           -- FK → network.id
-├── via_arc_network_id   INTEGER                    -- FK → network.id (connecting arc, if applicable)
-├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── from_network_id      INTEGER NOT NULL           -- FK to network.id
+├── to_network_id        INTEGER NOT NULL           -- FK to network.id
+├── via_arc_network_id   INTEGER                    -- FK to network.id (connecting arc, if applicable)
+├── source_id            INTEGER NOT NULL           -- FK to source.id
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 ### **7. network_computational_connectivity (CalSim Connectivity)**
@@ -4063,15 +4063,15 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_computational_connectivity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── from_network_id      INTEGER NOT NULL           -- FK → network.id
-├── to_network_id        INTEGER NOT NULL           -- FK → network.id
+├── from_network_id      INTEGER NOT NULL           -- FK to network.id
+├── to_network_id        INTEGER NOT NULL           -- FK to network.id
 ├── equation_name        VARCHAR                    -- "continuityAMR006"
 ├── wresl_context_list   JSONB NOT NULL             -- [{"file": "SystemTables_Sac/constraints-Connectivity.wresl", "context": "Sac"}, {"file": "SystemTables_LowerAmerican/constraints-Connectivity.wresl", "context": "LowerAmerican"}]
-├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── source_id            INTEGER NOT NULL           -- FK to source.id
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 ### **8. network_variable (future variable relationships)**
@@ -4081,15 +4081,15 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_variable   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── network_id           INTEGER NOT NULL           -- FK → network.id
-├── variable_id          INTEGER NOT NULL           -- FK → variable.id
+├── network_id           INTEGER NOT NULL           -- FK to network.id
+├── variable_id          INTEGER NOT NULL           -- FK to variable.id
 ├── variable_role        VARCHAR                    -- "flow", "storage", "diversion"
 ├── units                VARCHAR
-├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── source_id            INTEGER NOT NULL           -- FK to source.id
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 ### **9. network_source_attribution**
@@ -4099,13 +4099,13 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: network_source_attribution   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── network_id           INTEGER NOT NULL           -- FK → network.id
-├── source_id            INTEGER NOT NULL           -- FK → source.id
+├── network_id           INTEGER NOT NULL           -- FK to network.id
+├── source_id            INTEGER NOT NULL           -- FK to source.id
 ├── note                 TEXT
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 ### **10. variable_tier (Many-to-many variable-tier relationship)**
@@ -4130,7 +4130,7 @@ Table: channel_entity   [IMPLEMENTED — migration 25 complete]
 ├── name                 VARCHAR(200)
 ├── description          TEXT
 ├── subtype              VARCHAR(50)
-├── entity_type_id       INTEGER NOT NULL DEFAULT 1  -- FK → calsim_entity_type.id
+├── entity_type_id       INTEGER NOT NULL DEFAULT 1  -- FK to calsim_entity_type.id
 ├── schematic_type_id    INTEGER
 ├── hydrologic_region_id VARCHAR(10)                 -- SAC, SJR, DELTA, etc.
 ├── boundary_condition   VARCHAR(50)
@@ -4142,16 +4142,16 @@ Table: channel_entity   [IMPLEMENTED — migration 25 complete]
 ├── has_gis_data         INTEGER DEFAULT 1
 ├── entity_version_id    INTEGER NOT NULL DEFAULT 1
 ├── source_ids           TEXT
-├── watershed_short_code VARCHAR(30)                 -- FK → watershed.short_code
+├── watershed_short_code VARCHAR(30)                 -- FK to watershed.short_code
 ├── unimp_sv_variable    VARCHAR(30)                 -- CalSim SV unimpaired variable (override)
 ├── has_mif              BOOLEAN NOT NULL DEFAULT FALSE
 ├── has_eflows           BOOLEAN NOT NULL DEFAULT FALSE
 ├── channel_class        VARCHAR(30) CHECK IN ('stream','canal','reservoir_release')
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL DEFAULT 1   -- FK → developer.id
+├── created_by           INTEGER NOT NULL DEFAULT 1   -- FK to developer.id
 ├── updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL DEFAULT 1   -- FK → developer.id
+└── updated_by           INTEGER NOT NULL DEFAULT 1   -- FK to developer.id
 
 Indexes:
 ├── idx_channel_entity_network_arc   (network_arc_id)
@@ -4173,9 +4173,9 @@ Table: reservoir_entity
 ├── name                 VARCHAR(100)               -- Full reservoir name
 ├── description          TEXT                       -- Detailed description
 ├── associated_river     VARCHAR(100)               -- River system
-├── entity_type_id       INTEGER NOT NULL DEFAULT 1 -- FK → calsim_entity_type.id
-├── schematic_type_id    INTEGER                    -- FK → schematic type lookup
-├── hydrologic_region_id INTEGER                    -- FK → hydrologic_region.id (1=SAC, 2=SJR, 4=Tulare)
+├── entity_type_id       INTEGER NOT NULL DEFAULT 1 -- FK to calsim_entity_type.id
+├── schematic_type_id    INTEGER                    -- FK to schematic type lookup
+├── hydrologic_region_id INTEGER                    -- FK to hydrologic_region.id (1=SAC, 2=SJR, 4=Tulare)
 ├── capacity_taf         NUMERIC(10,2)              -- Maximum capacity in TAF
 ├── dead_pool_taf        NUMERIC(10,2)              -- Dead pool storage in TAF
 ├── surface_area_acres   NUMERIC(12,2)              -- Surface area in acres
@@ -4183,13 +4183,13 @@ Table: reservoir_entity
 ├── has_tiers            BOOLEAN DEFAULT FALSE      -- Whether tier analysis covers this reservoir
 ├── is_main              BOOLEAN DEFAULT FALSE      -- Whether this is a primary (major) reservoir
 ├── has_gis_data         INTEGER DEFAULT 1          -- Whether GIS data exists (1=yes, 0=no)
-├── entity_version_id    INTEGER NOT NULL DEFAULT 1 -- FK → version.id (entity family)
+├── entity_version_id    INTEGER NOT NULL DEFAULT 1 -- FK to version.id (entity family)
 ├── source_ids           TEXT                       -- Comma-separated source IDs
 ├── is_active            BOOLEAN DEFAULT TRUE       -- Soft delete flag
 ├── created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+├── created_by           INTEGER NOT NULL DEFAULT 1 -- FK to developer.id
 ├── updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL DEFAULT 1 -- FK → developer.id
+└── updated_by           INTEGER NOT NULL DEFAULT 1 -- FK to developer.id
 
 Indexes:
 ├── idx_reservoir_entity_short_code (short_code)
@@ -4210,18 +4210,18 @@ Status: PLANNED — not yet created in the database.
 ```
 Table: inflow_entity   [PLANNED]
 ├── id                   SERIAL PRIMARY KEY
-├── network_arc_id       INTEGER NOT NULL           -- FK → network.id (inflow arc)
+├── network_arc_id       INTEGER NOT NULL           -- FK to network.id (inflow arc)
 ├── short_code           VARCHAR UNIQUE NOT NULL
 ├── name                 VARCHAR
 ├── description          TEXT
-├── to_node_id           INTEGER                    -- FK → network.id (specific to entity role)
-├── entity_type_id       INTEGER NOT NULL           -- FK → calsim_entity_type.id
-├── entity_version_id    INTEGER NOT NULL           -- FK → version.id
+├── to_node_id           INTEGER                    -- FK to network.id (specific to entity role)
+├── entity_type_id       INTEGER NOT NULL           -- FK to calsim_entity_type.id
+├── entity_version_id    INTEGER NOT NULL           -- FK to version.id
 ├── attribute_source     JSONB NOT NULL             -- {"name": "entity_system", "to_node_id": "operational"}
 ├── created_at           TIMESTAMP DEFAULT NOW()
-├── created_by           INTEGER NOT NULL           -- FK → developer.id
+├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_at           TIMESTAMP DEFAULT NOW()
-└── updated_by           INTEGER NOT NULL           -- FK → developer.id
+└── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ```
 
 #### **du_urban_entity (community demand unit management)**
@@ -4255,8 +4255,8 @@ Table: du_urban_entity
 Records: 145 urban demand units (107 original + 19 tier matrix additions + extras)
 
 Relationships:
-├── du_urban_group_member.du_id → du_urban_entity.du_id (group memberships)
-└── primary_contractor_short_code → mi_contractor.short_code (optional SWP contractor link)
+├── du_urban_group_member.du_id to du_urban_entity.du_id (group memberships)
+└── primary_contractor_short_code to mi_contractor.short_code (optional SWP contractor link)
 
 DDL: database/scripts/sql/12_mi_statistics/01_create_du_urban_entity.sql
 Seed: s3://coeqwal-seeds-dev/04_calsim_data/du_urban_entity.csv
@@ -4336,9 +4336,9 @@ Table: du_refuge_entity
 ├── has_gis_data                  BOOLEAN DEFAULT TRUE
 ├── is_active                     BOOLEAN NOT NULL DEFAULT TRUE
 ├── created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-├── created_by                    INTEGER NOT NULL DEFAULT 1     -- FK → developer.id
+├── created_by                    INTEGER NOT NULL DEFAULT 1     -- FK to developer.id
 ├── updated_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-└── updated_by                    INTEGER NOT NULL DEFAULT 1     -- FK → developer.id
+└── updated_by                    INTEGER NOT NULL DEFAULT 1     -- FK to developer.id
 
 Foreign keys:
 ├── Ref: du_refuge_entity.created_by > developer.id [delete: restrict, update: cascade]
@@ -4363,7 +4363,7 @@ Table: reservoir_group
 ├── display_order         INTEGER DEFAULT 0          -- For UI ordering
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id (system)
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
@@ -4390,12 +4390,12 @@ Note: Regional aggregation (NOD/SOD) uses reservoir_entity.hydrologic_region_id:
 ```
 Table: reservoir_group_member
 ├── id                    SERIAL PRIMARY KEY
-├── reservoir_group_id    INTEGER NOT NULL           -- FK → reservoir_group.id
-├── reservoir_entity_id   INTEGER NOT NULL           -- FK → reservoir_entity.id
+├── reservoir_group_id    INTEGER NOT NULL           -- FK to reservoir_group.id
+├── reservoir_entity_id   INTEGER NOT NULL           -- FK to reservoir_entity.id
 ├── display_order         INTEGER DEFAULT 0          -- Order within group for UI
 ├── is_active             BOOLEAN DEFAULT TRUE
 ├── created_at            TIMESTAMPTZ DEFAULT NOW()
-├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK → developer.id (system)
+├── created_by            INTEGER NOT NULL DEFAULT 1 -- FK to developer.id (system)
 ├── updated_at            TIMESTAMPTZ DEFAULT NOW()
 └── updated_by            INTEGER NOT NULL DEFAULT 1
 
@@ -4478,7 +4478,7 @@ Source: Recreated in migrations 42 and 43 (current definition).
 ### **refuge_du_full**
 
 Denormalized, human-readable view of **active** wildlife refuge demand units.
-Decodes `cs3_type` into a plain-language label (`PR` → `Project Refuge`, `NR` → `Non-project Refuge`).
+Decodes `cs3_type` into a plain-language label (`PR` to `Project Refuge`, `NR` to `Non-project Refuge`).
 Use this view for API responses and frontend attribute panels. The `gw` and `sw` columns
 should be surfaced in the frontend (tooltip or attribute panel).
 
@@ -4519,7 +4519,7 @@ Filter: WHERE channel_entity.is_active = TRUE
 ├── label                TEXT     -- channel_entity.short_code (human label)
 ├── channel_class        TEXT     -- 'stream', 'canal', or 'reservoir_release'
 ├── channel_class_label  TEXT     -- 'Natural stream or river reach', etc.
-├── watershed_short_code TEXT     -- FK → watershed.short_code
+├── watershed_short_code TEXT     -- FK to watershed.short_code
 ├── watershed_name       TEXT     -- watershed.name
 ├── hydrologic_region    TEXT     -- hydrologic_region.short_code (via watershed.hydrologic_region_id)
 ├── unimp_sv_variable    TEXT     -- CalSim SV unimpaired baseline variable
