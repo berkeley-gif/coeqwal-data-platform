@@ -102,11 +102,33 @@ def _pick_by_override(candidates: List[str], required_basename: str) -> Optional
     return None
 
 
+def _selection_reason(
+    selected: Optional[str], candidates: List[str],
+    tier3_token: str, tier2_tokens: Tuple[str, ...],
+    overrides: Dict[str, str], override_key: str,
+) -> str:
+    """Explain why a particular DSS file was selected."""
+    if not selected:
+        return "none_found"
+    if not candidates:
+        return "no_candidates"
+    b = os.path.basename(selected).lower()
+    if override_key in overrides and b == overrides[override_key]:
+        return f"override ({override_key}={overrides[override_key]})"
+    if tier3_token in b:
+        return f"tier3 ('{tier3_token}' in filename)"
+    for tok in tier2_tokens:
+        if tok in b:
+            return f"tier2 ('{tok}' in filename)"
+    return "first_candidate"
+
+
 def classify_dss_in_zip(dss_paths: List[str], scenario_id: str) -> Dict[str, Any]:
     """Classify DSS files found in a ZIP into SV and DV candidates."""
     sv_candidates: List[str] = []
     cal_candidates: List[str] = []
     skipped: List[str] = []
+    classification_method = "folder_structure"
 
     for p in dss_paths:
         if _in_excluded_subfolder(p):
@@ -121,6 +143,7 @@ def classify_dss_in_zip(dss_paths: List[str], scenario_id: str) -> Dict[str, Any
                 cal_candidates.append(p)
 
     if not sv_candidates and not cal_candidates:
+        classification_method = "filename_heuristic"
         for p in dss_paths:
             if _in_excluded_subfolder(p):
                 continue
@@ -147,12 +170,20 @@ def classify_dss_in_zip(dss_paths: List[str], scenario_id: str) -> Dict[str, Any
     else:
         dv_selected = _pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
 
+    sv_reason = _selection_reason(
+        sv_selected, sv_candidates, SV_TIER3, SV_TIER2, overrides, "sv")
+    dv_reason = _selection_reason(
+        dv_selected, cal_candidates, CAL_TIER3, CAL_TIER2, overrides, "dv")
+
     return {
         "sv_candidates": sv_candidates,
         "dv_candidates": cal_candidates,
         "sv_selected": sv_selected,
         "dv_selected": dv_selected,
+        "sv_reason": sv_reason,
+        "dv_reason": dv_reason,
         "skipped": skipped,
+        "classification_method": classification_method,
     }
 
 
@@ -265,7 +296,14 @@ def read_scenario_listing(
 # ZIP validation
 # ---------------------------------------------------------------------------
 def validate_zip(zip_path: str, scenario_id: str) -> Dict[str, Any]:
-    """Open a ZIP, list DSS files, classify them, return validation result."""
+    """Open a ZIP, list DSS files, classify them, return validation result.
+
+    Two-level status reporting:
+      ALERT_*  = genuine problem requiring manual review
+      INFO_*   = multiple candidates but heuristic confidently selected one
+      OK       = exactly one SV and one DV, no ambiguity
+    """
+    sc = scenario_id
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
             all_names = zf.namelist()
@@ -276,26 +314,62 @@ def validate_zip(zip_path: str, scenario_id: str) -> Dict[str, Any]:
             "dv_candidate_count": 0,
             "sv_selected": "",
             "dv_selected": "",
+            "sv_reason": "",
+            "dv_reason": "",
             "sv_all_candidates": "",
             "dv_all_candidates": "",
-            "validation_status": "BAD_ZIP",
+            "skipped_dss": "",
+            "classification_method": "",
+            "validation_status": "ALERT_BAD_ZIP",
         }
 
     dss_paths = [n for n in all_names if n.lower().endswith(".dss")]
     result = classify_dss_in_zip(dss_paths, scenario_id)
 
-    statuses = []
     sv_count = len(result["sv_candidates"])
     dv_count = len(result["dv_candidates"])
 
+    # --- Detailed console logging ---
+    log.info("[%s] Found %d DSS file(s) in ZIP (classified via %s):",
+             sc, len(dss_paths), result["classification_method"])
+    if result["skipped"]:
+        for p in result["skipped"]:
+            log.info("[%s]   SKIPPED (excluded subfolder): %s", sc, p)
+
+    if sv_count > 0:
+        log.info("[%s]   SV (input) candidates (%d):", sc, sv_count)
+        for p in result["sv_candidates"]:
+            marker = " <-- SELECTED" if p == result["sv_selected"] else ""
+            log.info("[%s]     - %s%s", sc, os.path.basename(p), marker)
+        log.info("[%s]   SV selection reason: %s", sc, result["sv_reason"])
+    else:
+        log.warning("[%s]   SV (input) candidates: NONE FOUND", sc)
+
+    if dv_count > 0:
+        log.info("[%s]   DV (output) candidates (%d):", sc, dv_count)
+        for p in result["dv_candidates"]:
+            marker = " <-- SELECTED" if p == result["dv_selected"] else ""
+            log.info("[%s]     - %s%s", sc, os.path.basename(p), marker)
+        log.info("[%s]   DV selection reason: %s", sc, result["dv_reason"])
+    else:
+        log.warning("[%s]   DV (output) candidates: NONE FOUND", sc)
+
+    # --- Two-level status ---
+    statuses = []
     if sv_count == 0:
         statuses.append("ALERT_NO_SV")
+    elif sv_count > 1 and not result["sv_selected"]:
+        statuses.append("ALERT_MULTIPLE_SV_NO_MATCH")
     elif sv_count > 1:
-        statuses.append("ALERT_MULTIPLE_SV")
+        statuses.append("INFO_MULTIPLE_SV")
+
     if dv_count == 0:
         statuses.append("ALERT_NO_DV")
+    elif dv_count > 1 and not result["dv_selected"]:
+        statuses.append("ALERT_MULTIPLE_DV_NO_MATCH")
     elif dv_count > 1:
-        statuses.append("ALERT_MULTIPLE_DV")
+        statuses.append("INFO_MULTIPLE_DV")
+
     if not statuses:
         statuses.append("OK")
 
@@ -305,8 +379,12 @@ def validate_zip(zip_path: str, scenario_id: str) -> Dict[str, Any]:
         "dv_candidate_count": dv_count,
         "sv_selected": result["sv_selected"] or "",
         "dv_selected": result["dv_selected"] or "",
+        "sv_reason": result["sv_reason"],
+        "dv_reason": result["dv_reason"],
         "sv_all_candidates": ";".join(result["sv_candidates"]),
         "dv_all_candidates": ";".join(result["dv_candidates"]),
+        "skipped_dss": ";".join(result["skipped"]),
+        "classification_method": result["classification_method"],
         "validation_status": "|".join(statuses),
     }
 
@@ -335,12 +413,16 @@ def process_scenario(
         "zip_size_mb": "",
         "zip_drive_modified": "",
         "dss_file_count": 0,
+        "classification_method": "",
         "sv_candidate_count": 0,
-        "dv_candidate_count": 0,
         "sv_selected": "",
-        "dv_selected": "",
+        "sv_reason": "",
         "sv_all_candidates": "",
+        "dv_candidate_count": 0,
+        "dv_selected": "",
+        "dv_reason": "",
         "dv_all_candidates": "",
+        "skipped_dss": "",
         "trend_csv_count": 0,
         "trend_csv_selected": "",
         "trend_csv_all_files": "",
@@ -468,8 +550,13 @@ def process_scenario(
 
     with _print_lock:
         status = row["validation_status"]
-        symbol = "OK" if status == "OK" else "ALERT"
-        log.info("[%s] Done -- %s", sc, symbol)
+        if "ALERT" in status:
+            log.warning("[%s] Done -- %s (review needed)", sc, status)
+        elif "INFO" in status:
+            log.info("[%s] Done -- %s (multiple candidates, selection confident)",
+                     sc, status)
+        else:
+            log.info("[%s] Done -- %s", sc, status)
 
     return row
 
@@ -480,9 +567,10 @@ def process_scenario(
 AUDIT_COLUMNS = [
     "scenario_id", "study_name", "run_date", "drive_folder_id",
     "zip_count", "zip_selected", "zip_all_files", "zip_size_mb",
-    "zip_drive_modified", "dss_file_count", "sv_candidate_count",
-    "dv_candidate_count", "sv_selected", "dv_selected",
-    "sv_all_candidates", "dv_all_candidates",
+    "zip_drive_modified", "dss_file_count", "classification_method",
+    "sv_candidate_count", "sv_selected", "sv_reason", "sv_all_candidates",
+    "dv_candidate_count", "dv_selected", "dv_reason", "dv_all_candidates",
+    "skipped_dss",
     "trend_csv_count", "trend_csv_selected", "trend_csv_all_files",
     "s3_staging_zip_key", "s3_staging_csv_key",
     "validation_status", "notes",
@@ -509,32 +597,61 @@ def write_audit_report(rows: List[Dict], local_path: str,
                          Body=csv_text.encode("utf-8"))
     log.info("Audit report uploaded to s3://%s/%s", s3_bucket, s3_key)
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 100)
     print("  DOWNLOAD & VALIDATION SUMMARY")
-    print("=" * 80)
+    print("=" * 100)
     ok = sum(1 for r in rows if r.get("validation_status") == "OK")
+    info = sum(1 for r in rows
+               if "INFO" in r.get("validation_status", "")
+               and "ALERT" not in r.get("validation_status", ""))
     alerts = sum(1 for r in rows
                  if "ALERT" in r.get("validation_status", ""))
     missing = sum(1 for r in rows
                   if "MISSING" in r.get("validation_status", ""))
     dry = sum(1 for r in rows if r.get("validation_status") == "DRY_RUN")
-    print(f"  Total scenarios: {len(rows)}")
-    print(f"  OK:              {ok}")
-    print(f"  Alerts:          {alerts}")
-    print(f"  Missing:         {missing}")
+    print(f"  Total scenarios:  {len(rows)}")
+    print(f"  OK (clean):       {ok}")
+    print(f"  INFO (multi, ok): {info}")
+    print(f"  ALERT (review!):  {alerts}")
+    print(f"  Missing files:    {missing}")
     if dry:
-        print(f"  Dry run:         {dry}")
+        print(f"  Dry run:          {dry}")
+
+    # --- Detailed table ---
     print()
-    fmt = "  {:<10} {:<50} {}"
-    print(fmt.format("Scenario", "ZIP", "Status"))
-    print("  " + "-" * 76)
+    hdr = "  {:<8} {:<3} {:<3} {:<30} {:<30} {}"
+    row_fmt = "  {:<8} {:<3} {:<3} {:<30} {:<30} {}"
+    print(hdr.format("Scenario", "SV#", "DV#", "SV selected", "DV selected", "Status"))
+    print("  " + "-" * 96)
     for r in rows:
-        print(fmt.format(
+        sv_name = os.path.basename(r.get("sv_selected", ""))[:30] if r.get("sv_selected") else "-"
+        dv_name = os.path.basename(r.get("dv_selected", ""))[:30] if r.get("dv_selected") else "-"
+        print(row_fmt.format(
             r.get("scenario_id", ""),
-            r.get("zip_selected", "")[:50],
+            str(r.get("sv_candidate_count", "")),
+            str(r.get("dv_candidate_count", "")),
+            sv_name,
+            dv_name,
             r.get("validation_status", ""),
         ))
-    print("=" * 80 + "\n")
+
+    # --- Print scenarios needing attention ---
+    attention = [r for r in rows if "ALERT" in r.get("validation_status", "")]
+    if attention:
+        print()
+        print("  SCENARIOS REQUIRING MANUAL REVIEW:")
+        print("  " + "-" * 96)
+        for r in attention:
+            print(f"  {r.get('scenario_id', '')}:")
+            print(f"    Status:  {r.get('validation_status', '')}")
+            if r.get("sv_all_candidates"):
+                print(f"    SV candidates: {r['sv_all_candidates']}")
+            if r.get("dv_all_candidates"):
+                print(f"    DV candidates: {r['dv_all_candidates']}")
+            if r.get("skipped_dss"):
+                print(f"    Skipped DSS:   {r['skipped_dss']}")
+
+    print("=" * 100 + "\n")
 
 
 # ---------------------------------------------------------------------------
