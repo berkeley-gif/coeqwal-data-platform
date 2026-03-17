@@ -204,9 +204,10 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
                 usecols=cols_to_load
             )
 
-            # Store found variables for later reference
+            # Store found variables and units for later reference
             df.attrs['found_vars'] = found_vars
             df.attrs['col_names'] = col_names
+            df.attrs['units_row'] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
 
             log.info(f"Successfully loaded from: {key}")
             log.info(f"DataFrame shape: {df.shape}")
@@ -262,6 +263,7 @@ def load_scenario_csv_from_file(file_path: str, reservoir_codes: List[str]) -> p
     df = pd.read_csv(file_path, header=None, usecols=cols_to_load)
     df.attrs['found_vars'] = found_vars
     df.attrs['col_names'] = col_names
+    df.attrs['units_row'] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
 
     return df
 
@@ -282,6 +284,17 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
     """
     header_rows = 7
     found_vars = df.attrs.get('found_vars', {})
+    units_row = df.attrs.get('units_row', [])
+
+    if units_row and found_vars:
+        for var_name, col_idx in found_vars.items():
+            if var_name.startswith('S_') and col_idx < len(units_row):
+                unit = str(units_row[col_idx]).strip().upper()
+                if unit != 'TAF':
+                    log.warning(
+                        f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
+                        f"Storage values may be incorrect."
+                    )
 
     # Parse data portion
     data_df = df.iloc[header_rows:].copy()
@@ -311,16 +324,14 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Add water year, water month, and DaysInMonth columns.
+    Add water year and water month columns.
 
     Water year runs from October 1 to September 30.
     Water month: Oct=1, Nov=2, ..., Sep=12
-    DaysInMonth: actual calendar days (for CFS-to-TAF conversion)
     """
     df = df.copy()
     df['CalendarMonth'] = df['DateTime'].dt.month
     df['CalendarYear'] = df['DateTime'].dt.year
-    df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
 
     # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
     df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
@@ -801,15 +812,16 @@ def generate_sql_inserts(
 
         value_rows = []
         for row in spill_monthly:
-            storage_at_spill = row['storage_at_spill_avg_pct']
-            storage_at_spill_sql = 'NULL' if storage_at_spill is None else str(storage_at_spill)
+            def _sv(key):
+                v = row.get(key)
+                return 'NULL' if v is None else str(v)
 
             value_row = (
                 f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, {row['water_month']}, "
                 f"{row['spill_months_count']}, {row['total_months']}, {row['spill_frequency_pct']}, "
-                f"{row['spill_avg_cfs']}, {row['spill_max_cfs']}, "
-                f"{row['spill_q50']}, {row['spill_q90']}, {row['spill_q100']}, "
-                f"{storage_at_spill_sql}, 1, 1)"
+                f"{_sv('spill_avg_cfs')}, {_sv('spill_max_cfs')}, "
+                f"{_sv('spill_q50')}, {_sv('spill_q90')}, {_sv('spill_q100')}, "
+                f"{_sv('storage_at_spill_avg_pct')}, 1, 1)"
             )
             value_rows.append(value_row)
 
@@ -862,10 +874,10 @@ def generate_sql_inserts(
                 f"{sql_val(row.get('storage_exc_p75'))}, {sql_val(row.get('storage_exc_p90'))}, "
                 f"{sql_val(row.get('storage_exc_p95'))}, "
                 f"{row['dead_pool_taf']}, {row['dead_pool_pct']}, {sql_val(row.get('spill_threshold_pct'))}, "
-                f"{row['spill_years_count']}, {row['spill_frequency_pct']}, "
-                f"{row['spill_mean_cfs']}, {row['spill_peak_cfs']}, "
-                f"{row['annual_spill_avg_taf']}, {row['annual_spill_cv']}, {row['annual_spill_max_taf']}, "
-                f"{row['annual_max_spill_q50']}, {row['annual_max_spill_q90']}, {row['annual_max_spill_q100']}, "
+                f"{sql_val(row.get('spill_years_count'))}, {sql_val(row.get('spill_frequency_pct'))}, "
+                f"{sql_val(row.get('spill_mean_cfs'))}, {sql_val(row.get('spill_peak_cfs'))}, "
+                f"{sql_val(row.get('annual_spill_avg_taf'))}, {sql_val(row.get('annual_spill_cv'))}, {sql_val(row.get('annual_spill_max_taf'))}, "
+                f"{sql_val(row.get('annual_max_spill_q50'))}, {sql_val(row.get('annual_max_spill_q90'))}, {sql_val(row.get('annual_max_spill_q100'))}, "
                 # Probability metrics
                 f"{sql_val(row.get('flood_pool_prob_all'))}, {sql_val(row.get('flood_pool_prob_september'))}, "
                 f"{sql_val(row.get('flood_pool_prob_april'))}, "

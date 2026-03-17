@@ -177,6 +177,8 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoirs: Dict[str, Dict[str, 
                 usecols=cols_to_load
             )
             df.attrs['storage_vars'] = storage_vars
+            df.attrs['units_row'] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
+            df.attrs['reservoir_col_indices'] = reservoir_col_indices
             log.info(f"Successfully loaded from: {key}")
             log.info(f"DataFrame shape: {df.shape}")
             return df
@@ -239,6 +241,11 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     col_names = df.iloc[1].tolist()
     log.info(f"Total columns: {len(col_names)}")
 
+    # Validate units from row 6 or stored attrs
+    units_row = df.attrs.get('units_row', [])
+    if not units_row and len(df) > 6:
+        units_row = df.iloc[6].tolist()
+
     # Parse the data portion
     data_df = df.iloc[header_rows:].copy()
     data_df.columns = range(len(data_df.columns))
@@ -260,6 +267,16 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
             log.info(f"Found {name_str} at column {i}")
 
     log.info(f"Found storage columns: {list(storage_cols.keys())}")
+
+    if units_row:
+        for var_name, col_idx in storage_cols.items():
+            if col_idx < len(units_row):
+                unit = str(units_row[col_idx]).strip().upper()
+                if unit != 'TAF':
+                    log.warning(
+                        f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
+                        f"Storage values may be incorrect."
+                    )
 
     # Rename columns to storage variable names (S_SHSTA, etc.)
     for var_name, col_idx in storage_cols.items():
