@@ -35,11 +35,15 @@ Usage:
 import argparse
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 
 try:
     import boto3
@@ -66,7 +70,6 @@ log = logging.getLogger("delta_statistics")
 S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
-CFS_TO_TAF_PER_DAY = 0.001983471
 
 PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
@@ -293,14 +296,14 @@ def calculate_delta_monthly(
     convert = var_info.get("convert_to_taf", False)
 
     if convert:
-        values_taf = raw * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        values = raw * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
     else:
-        values_taf = raw
+        values = raw
 
     results = []
     for wm in range(1, 13):
         mask = df["WaterMonth"] == wm
-        month_data = values_taf[mask].dropna()
+        month_data = values[mask].dropna()
         if month_data.empty:
             continue
 
@@ -352,9 +355,9 @@ def calculate_delta_period_summary(
     category = var_info.get("category", "")
 
     if convert:
-        monthly_taf = raw * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        monthly_values = raw * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
     else:
-        monthly_taf = raw
+        monthly_values = raw
 
     water_years = sorted(df["WaterYear"].unique())
 
@@ -370,7 +373,7 @@ def calculate_delta_period_summary(
 
     # --- Outflow (NDO): annual totals in TAF + avg CFS ---
     if category == "outflow":
-        annual_taf = df.assign(_val=monthly_taf).groupby("WaterYear")["_val"].sum()
+        annual_taf = df.assign(_val=monthly_values).groupby("WaterYear")["_val"].sum()
         result["annual_avg_taf"] = round(float(annual_taf.mean()), 2)
         result["annual_cv"] = _safe_cv(annual_taf)
         result.update(_exceedance(annual_taf, EXCEEDANCE_PERCENTILES))
@@ -378,14 +381,14 @@ def calculate_delta_period_summary(
         result["avg_cfs"] = round(float(raw.dropna().mean()), 2)
 
         sept_mask = df["CalendarMonth"] == 9
-        sept_data = monthly_taf[sept_mask].dropna()
+        sept_data = monthly_values[sept_mask].dropna()
         if not sept_data.empty:
             result["sept_avg_taf"] = round(float(sept_data.mean()), 3)
             result["sept_cv"] = _safe_cv(sept_data)
 
     # --- X2 position ---
     elif category == "x2":
-        all_data = monthly_taf.dropna()
+        all_data = monthly_values.dropna()
         result["avg_km"] = round(float(all_data.mean()), 2)
         result["cv"] = _safe_cv(all_data)
         result.update(_exceedance(all_data, EXCEEDANCE_PERCENTILES))
@@ -428,7 +431,7 @@ def calculate_delta_period_summary(
 
     # --- Salinity (compliance + pumps) ---
     elif category.startswith("salinity"):
-        all_data = monthly_taf.dropna()
+        all_data = monthly_values.dropna()
         result["avg_ec"] = round(float(all_data.mean()), 2)
         result["cv"] = _safe_cv(all_data)
         result.update(_exceedance(all_data, EXCEEDANCE_PERCENTILES))

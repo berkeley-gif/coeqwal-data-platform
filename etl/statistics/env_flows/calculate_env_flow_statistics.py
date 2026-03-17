@@ -55,11 +55,15 @@ import csv
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 
 try:
     from scipy.stats import pearsonr
@@ -87,11 +91,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("env_flow_statistics")
 
-# ─── Unit conversion ─────────────────────────────────────────────────────────
-# 1 CFS for 1 day = 86 400 cubic feet
-# 1 TAF = 43 560 × 1000 cubic feet = 43 560 000 cubic feet
-# => TAF/month = CFS × days_in_month × 86400 / 43_560_000
-CFS_PER_DAY_TO_TAF = 86_400 / 43_560_000  # ≈ 0.0019835 TAF per CFS-day
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -265,9 +264,8 @@ def _extract_sv_cfs_columns(
     CalSim SV DSS files store unimpaired flow data in TAF. For env-flow
     ratio metrics (pct_unimpaired, pct_ff) we need CFS so that units cancel
     with the CFS DV channel flows. If a column is labeled CFS, use it
-    directly; if labeled TAF, convert: CFS = TAF / (DaysInMonth * 0.001983471).
+    directly; if labeled TAF, convert: CFS = TAF / (DaysInMonth * CFS_TO_TAF_PER_DAY).
     """
-    CFS_TO_TAF_PER_DAY = 0.001983471
     date_col = var_names[0]
     dates = pd.to_datetime(data_df.iloc[:, 0], errors='coerce')
     days_in_month = dates.dt.daysinmonth
@@ -509,9 +507,9 @@ def _flow_volume_stats(
 
     arr_cfs = flow_cfs.values.astype(float)
 
-    # TAF per month for each year: CFS × actual_days × CFS_PER_DAY_TO_TAF
+    # TAF per month for each year: CFS × actual_days × CFS_TO_TAF_PER_DAY
     aligned_days = days_in_month.reindex(flow_cfs.index).fillna(30.4375)
-    arr_taf = arr_cfs * aligned_days.values * CFS_PER_DAY_TO_TAF
+    arr_taf = arr_cfs * aligned_days.values * CFS_TO_TAF_PER_DAY
 
     out['flow_avg_taf'] = round(float(np.mean(arr_taf)), 3)
 
@@ -537,7 +535,7 @@ def calculate_monthly_statistics(
 
       Flow volume (all channels):
         flow_avg_cfs, flow_cv  — mean CFS and coefficient of variation
-        flow_avg_taf           — mean TAF/month (CFS × actual_days × CFS_PER_DAY_TO_TAF)
+        flow_avg_taf           — mean TAF/month (CFS × actual_days × CFS_TO_TAF_PER_DAY)
         flow_q{p}_cfs, flow_q{p}_taf, flow_exc_p{p}_cfs, flow_exc_p{p}_taf
           — percentile bands and exceedance percentiles of per-year monthly flow
 

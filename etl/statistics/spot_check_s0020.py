@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-CFS_TO_TAF_PER_DAY = 0.001983471
+from units import CFS_TO_TAF_PER_DAY
 
 REFERENCE_DIR = Path(__file__).parent.parent / "reference"
 DV_CSV = REFERENCE_DIR / "s0020_coeqwal_calsim_output.csv"

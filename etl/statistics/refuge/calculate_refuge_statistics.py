@@ -45,11 +45,15 @@ import csv
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 
 try:
     import boto3
@@ -87,8 +91,6 @@ DV_OUTPUT_S3_KEYS = [
     "scenario/{scenario}/csv/{scenario}_DV.csv",
 ]
 
-# CFS → TAF per calendar day: (ft³/s × 86400 s/day) / (43560 ft²/acre × 1000 ac/kac)
-CFS_TO_TAF_PER_DAY = 0.001983471
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DU_REFUGE_CSV = PROJECT_ROOT / "database/seed_tables/04_calsim_data/du_refuge_entity.csv"

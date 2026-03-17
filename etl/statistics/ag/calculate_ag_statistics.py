@@ -27,11 +27,15 @@ import csv
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -75,9 +79,6 @@ EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 # 0.1 TAF = 100 acre-feet, which is < 0.05% of typical delivery
 SHORTAGE_THRESHOLD_TAF = 0.1
 
-# Unit conversion: CFS to TAF
-# TAF = CFS * DaysInMonth * 0.001983471
-CFS_TO_TAF_PER_DAY = 0.001983471
 
 # Aggregate definitions — direct DV variables
 AG_AGGREGATES = {

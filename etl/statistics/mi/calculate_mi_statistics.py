@@ -21,11 +21,15 @@ import csv
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -70,10 +74,6 @@ EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 # 0.1 TAF = 100 acre-feet, which is < 0.05% of typical CVP North M&I delivery (~240 TAF/yr)
 SHORTAGE_THRESHOLD_TAF = 0.1
 
-# Unit conversion: CFS (cubic feet per second) to TAF (thousand acre-feet)
-# TAF = CFS * seconds_per_day * days / (43560 sq ft per acre) / 1000
-# Simplified: CFS * days * 86400 / 43560 / 1000 = CFS * days * 0.001983471
-CFS_TO_TAF_PER_DAY = 0.001983471
 
 # Local paths
 LOCAL_PIPELINES_DIR = PROJECT_ROOT / "etl/pipelines"
@@ -82,9 +82,6 @@ LOCAL_PIPELINES_DIR = PROJECT_ROOT / "etl/pipelines"
 # =============================================================================
 # CONTRACTOR VARIABLE MAPPINGS
 # =============================================================================
-
-# MWD Table A contract demand (from V3 DataExtraction.py line 914)
-MWD_TABLE_A_ANNUAL_TAF = 1911.5
 
 # SWP Contractor short codes mapped to CalSim delivery/shortage/PERDV variables.
 # Demand computation matches COEQWAL_V3 DataExtraction.py exactly:

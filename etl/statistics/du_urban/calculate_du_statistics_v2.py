@@ -21,11 +21,15 @@ import argparse
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
 
 # Optional imports
 try:
@@ -62,13 +66,6 @@ LOCAL_REFERENCE_DIR = PROJECT_ROOT / "etl/reference"
 PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
-# Unit conversion: CFS (cubic feet per second) to TAF (thousand acre-feet)
-# TAF = CFS * seconds_per_day * days / (43560 sq ft per acre) / 1000
-# Simplified: CFS * days * 86400 / 43560 / 1000 = CFS * days * 0.001983471
-CFS_TO_TAF_PER_DAY = 0.001983471
-
-# MWD Table A contract demand (V3 DataExtraction.py line 914)
-MWD_TABLE_A_ANNUAL_TAF = 1911.5
 
 
 # =============================================================================

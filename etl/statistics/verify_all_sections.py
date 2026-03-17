@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-CFS_TO_TAF_PER_DAY = 0.001983471
+from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 SHORTAGE_THRESHOLD_TAF = 0.1
 
 ABS_TOL = 0.5

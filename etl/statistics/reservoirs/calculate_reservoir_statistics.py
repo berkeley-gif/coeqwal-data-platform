@@ -77,8 +77,6 @@ STORAGE_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 # Percentiles for storage exceedance (period summary)
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
-# CFS to TAF per calendar day: (ft³/s × 86400 s/day) / (43560 ft²/acre × 1000 ac/kac)
-CFS_TO_TAF_PER_DAY = 0.001983471
 
 # Capacity overrides (TAF) from V3 DataExtraction.py — the top-level storage zone
 # variable for these reservoirs is absent from the DV file, so these are hardcoded.
