@@ -269,14 +269,17 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     log.info(f"Found storage columns: {list(storage_cols.keys())}")
 
     if units_row:
-        for var_name, col_idx in storage_cols.items():
-            if col_idx < len(units_row):
-                unit = str(units_row[col_idx]).strip().upper()
-                if unit != 'TAF':
-                    log.warning(
-                        f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
-                        f"Storage values may be incorrect."
-                    )
+        original_indices = df.attrs.get('reservoir_col_indices', storage_cols)
+        for var_name in storage_cols:
+            orig_idx = original_indices.get(var_name)
+            if orig_idx is not None and orig_idx < len(units_row):
+                unit = str(units_row[orig_idx]).strip().upper()
+                if unit in ('TAF', 'NONE', 'UNDEFINE', ''):
+                    continue
+                log.warning(
+                    f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
+                    f"Storage values may be incorrect."
+                )
 
     # Rename columns to storage variable names (S_SHSTA, etc.)
     for var_name, col_idx in storage_cols.items():

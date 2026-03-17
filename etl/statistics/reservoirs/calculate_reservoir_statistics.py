@@ -290,11 +290,12 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
         for var_name, col_idx in found_vars.items():
             if var_name.startswith('S_') and col_idx < len(units_row):
                 unit = str(units_row[col_idx]).strip().upper()
-                if unit != 'TAF':
-                    log.warning(
-                        f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
-                        f"Storage values may be incorrect."
-                    )
+                if unit in ('TAF', 'NONE', 'UNDEFINE', ''):
+                    continue
+                log.warning(
+                    f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
+                    f"Storage values may be incorrect."
+                )
 
     # Parse data portion
     data_df = df.iloc[header_rows:].copy()
