@@ -12,7 +12,7 @@ Key Principles:
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 # Setup logging
@@ -114,8 +114,7 @@ class VersioningManager:
         try:
             query = f"SELECT * FROM {table_name} WHERE is_active = true"
             return self.db.execute(query).fetchall()
-        except Exception as e:
-            # Fallback if no is_active column
+        except Exception:
             logger.debug(f"No is_active column in {table_name}, fetching all data")
             query = f"SELECT * FROM {table_name}"
             return self.db.execute(query).fetchall()
@@ -138,14 +137,12 @@ class VersioningManager:
         field_mappings = {
             'theme': 'theme_version_id',
             'scenario': 'scenario_version_id',
-            'assumption': 'assumption_version_id',
-            'operation': 'operation_version_id',
             'outcome_framework': 'metrics_version_id',
             'calsim_variable': 'variable_version_id',
             'hydroclimate': 'hydroclimate_version_id',
             'spatial_data': 'geometries_version_id',
             'interpretive': 'interpretive_version_id',
-            'metadata': 'metadata_version_id'
+            'metadata': 'metadata_version_id',
         }
         
         return field_mappings.get(version_family, f'{version_family}_version_id')

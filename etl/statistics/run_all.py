@@ -82,7 +82,9 @@ ETL_MODULES = {
         "path": SCRIPT_DIR / "ag" / "main.py",
         "name": "Agricultural Statistics",
         "tables": [
-            "ag_du_delivery_monthly",
+            "ag_du_demand_monthly",
+            "ag_du_sw_delivery_monthly",
+            "ag_du_gw_pumping_monthly",
             "ag_du_shortage_monthly",
             "ag_du_period_summary",
             "ag_aggregate_monthly",
