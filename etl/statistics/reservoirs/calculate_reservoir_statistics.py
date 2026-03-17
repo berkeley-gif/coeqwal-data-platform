@@ -18,11 +18,14 @@ import csv
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import reservoir metrics calculations (aligned with COEQWAL research notebooks)
 # Handle both package import and direct script execution
@@ -60,8 +63,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("reservoir_statistics")
 
-# Known scenarios
-SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027', 's0029']
+from scenarios import SCENARIOS  # noqa: E402
 
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')

@@ -36,6 +36,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -61,8 +62,6 @@ logging.basicConfig(
 log = logging.getLogger("ag_statistics")
 
 # Known scenarios
-SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027', 's0029']
-
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 

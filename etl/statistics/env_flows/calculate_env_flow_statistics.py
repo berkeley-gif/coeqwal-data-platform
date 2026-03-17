@@ -64,6 +64,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from scenarios import SCENARIOS  # noqa: E402
 
 try:
     from scipy.stats import pearsonr
@@ -94,11 +95,6 @@ log = logging.getLogger("env_flow_statistics")
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-SCENARIOS = [
-    's0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0026', 's0027',
-    's0028', 's0029', 's0030', 's0031', 's0032', 's0033', 's0039', 's0040',
-    's0041', 's0042', 's0044',
-]
 
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 
@@ -304,12 +300,6 @@ def _extract_sv_cfs_columns(
     log.info(f"Extracted {found} SV columns (CFS) from SV input")
     return pd.concat(series_list, axis=1)
 
-
-def _load_dv_from_body(body, dv_target_ids: Set[str]) -> pd.DataFrame:
-    """Parse a DV CSV body (file-like or S3 response Body) into a DataFrame."""
-    var_names, part_c = _read_dv_header(body)
-    # Re-read body (S3 streams are consumed on first read)
-    return var_names, part_c
 
 
 def load_dv_csv_from_s3(scenario_id: str, channels: List[Dict]) -> pd.DataFrame:

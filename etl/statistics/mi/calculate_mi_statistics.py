@@ -30,6 +30,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
+from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -55,8 +56,6 @@ logging.basicConfig(
 log = logging.getLogger("mi_statistics")
 
 # Known scenarios
-SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027', 's0029']
-
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 
@@ -703,9 +702,7 @@ def calculate_contractor_period_summary(
         for p in EXCEEDANCE_PERCENTILES:
             result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
 
-        result['reliability_pct'] = round(
-            ((annual_shortage <= SHORTAGE_THRESHOLD_TAF).sum() / len(water_years)) * 100, 2
-        )
+        result['reliability_pct'] = None
     else:
         result['annual_shortage_avg_taf'] = None
         result['shortage_years_count'] = None
@@ -733,6 +730,9 @@ def calculate_contractor_period_summary(
             result['avg_pct_demand_met'] = round(
                 (result['annual_delivery_avg_taf'] / MWD_TABLE_A_ANNUAL_TAF) * 100, 2
             )
+
+    if result['avg_pct_demand_met'] is not None:
+        result['reliability_pct'] = result['avg_pct_demand_met']
 
     return result
 

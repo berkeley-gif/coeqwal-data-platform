@@ -54,6 +54,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from scenarios import SCENARIOS  # noqa: E402
 
 try:
     import boto3
@@ -77,11 +78,6 @@ log = logging.getLogger("refuge_statistics")
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-SCENARIOS = [
-    's0011', 's0020', 's0021', 's0023', 's0024', 's0025',
-    's0026', 's0027', 's0028', 's0029', 's0030', 's0031',
-    's0032', 's0033',
-]
 
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 

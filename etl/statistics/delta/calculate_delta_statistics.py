@@ -47,10 +47,12 @@ from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 
 try:
     import boto3
+    from botocore.exceptions import ClientError
 
     HAS_BOTO3 = True
 except ImportError:
     HAS_BOTO3 = False
+    ClientError = None
 
 try:
     import psycopg2  # noqa: F401
@@ -217,8 +219,10 @@ def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
                 s3.download_file(S3_BUCKET, key, tmp_path)
             df = load_calsim_csv_from_file(tmp_path)
             return df
-        except s3.exceptions.NoSuchKey:
-            continue
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                continue
+            raise
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)

@@ -30,6 +30,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
+from scenarios import SCENARIOS  # noqa: E402
 
 # Optional imports
 try:
@@ -54,7 +55,6 @@ logging.basicConfig(
 log = logging.getLogger("du_statistics_v2")
 
 # Configuration
-SCENARIOS = ['s0011', 's0020', 's0021', 's0024', 's0025', 's0027', 's0029']
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
@@ -539,11 +539,9 @@ def calculate_du_statistics(
             shortage_years = (ash > SHORTAGE_THRESHOLD_TAF).sum()
             summary['shortage_years_count'] = int(shortage_years)
             summary['shortage_frequency_pct'] = round(shortage_years / len(ash) * 100, 2)
-            summary['reliability_pct'] = round(100 - summary['shortage_frequency_pct'], 2)
         
-        # Percent demand met (annual)
+        # Percent demand met (annual) — also used as reliability_pct
         if not ad.empty and not adm.empty:
-            # Align by water year
             common_years = ad.index.intersection(adm.index)
             if len(common_years) > 0:
                 pct_met = (ad[common_years] / adm[common_years]) * 100
@@ -551,6 +549,7 @@ def calculate_du_statistics(
                 pct_met = pct_met.dropna()
                 if len(pct_met) > 0:
                     summary['avg_pct_demand_met'] = round(float(pct_met.mean()), 2)
+                    summary['reliability_pct'] = summary['avg_pct_demand_met']
         
         period_summary_rows.append(summary)
     

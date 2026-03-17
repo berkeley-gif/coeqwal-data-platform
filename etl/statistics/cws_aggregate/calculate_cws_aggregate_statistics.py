@@ -8,7 +8,7 @@ This module processes CalSim output to calculate statistics for:
 - SWP South of Delta (DEL_SWP_PMI_S, SHORT_SWP_PMI_S)
 - CVP North (DEL_CVP_PMI_N, SHORT_CVP_PMI_N)
 - CVP South (DEL_CVP_PMI_S, SHORT_CVP_PMI_S)
-- MWD (DEL_SWP_MWD, SHORT_MWD_PMI)
+- MWD (DEL_SWP_MWD, SHORT_SWP_MWD)
 
 Usage:
     python calculate_cws_aggregate_statistics.py --scenario s0020
@@ -28,6 +28,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
+from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -53,8 +54,6 @@ logging.basicConfig(
 log = logging.getLogger("cws_aggregate_statistics")
 
 # Known scenarios
-SCENARIOS = ['s0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0027', 's0029']
-
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 

@@ -51,32 +51,7 @@ DEFAULT_API_URL = "https://api.coeqwal.org"
 ABS_TOL = 0.01
 REL_TOL = 0.001
 
-ALL_SCENARIOS = [
-    "s0011",
-    "s0020",
-    "s0021",
-    "s0023",
-    "s0024",
-    "s0025",
-    "s0026",
-    "s0027",
-    "s0028",
-    "s0030",
-    "s0031",
-    "s0032",
-    "s0033",
-    "s0035",
-    "s0036",
-    "s0037",
-    "s0039",
-    "s0040",
-    "s0041",
-    "s0042",
-    "s0044",
-    "s0045",
-    "s0046",
-    "s0065",
-]
+from scenarios import SCENARIOS as ALL_SCENARIOS  # noqa: E402
 
 
 # ── Data Classes ─────────────────────────────────────────────────────────────

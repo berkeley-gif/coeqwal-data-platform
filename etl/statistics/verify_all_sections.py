@@ -51,6 +51,8 @@ log = logging.getLogger(__name__)
 # ── Constants ────────────────────────────────────────────────────────────────
 
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from scenarios import SCENARIOS as ALL_SCENARIOS  # noqa: E402
+
 SHORTAGE_THRESHOLD_TAF = 0.1
 
 ABS_TOL = 0.5
@@ -60,33 +62,6 @@ SCENARIO_RUN_IDS = {
     "s0020": "s0020_DCRadjBL_2020LU_wTUCP",
     "s0028": "s0028_CVgwLimit_SGMALU_wTUCP",
 }
-
-ALL_SCENARIOS = [
-    "s0011",
-    "s0020",
-    "s0021",
-    "s0023",
-    "s0024",
-    "s0025",
-    "s0026",
-    "s0027",
-    "s0028",
-    "s0030",
-    "s0031",
-    "s0032",
-    "s0033",
-    "s0035",
-    "s0036",
-    "s0037",
-    "s0039",
-    "s0040",
-    "s0041",
-    "s0042",
-    "s0044",
-    "s0045",
-    "s0046",
-    "s0065",
-]
 
 # Variable lists from COEQWAL_V3/notebooks/variable_groupings.csv
 RESERVOIR_VARS = {
