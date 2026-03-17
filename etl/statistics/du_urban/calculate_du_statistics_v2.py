@@ -536,7 +536,7 @@ def calculate_du_statistics(
         ash = annual_shortage.dropna()
         if not ash.empty:
             summary['annual_shortage_avg_taf'] = round(float(ash.mean()), 2)
-            shortage_years = (ash > 0).sum()
+            shortage_years = (ash > SHORTAGE_THRESHOLD_TAF).sum()
             summary['shortage_years_count'] = int(shortage_years)
             summary['shortage_frequency_pct'] = round(shortage_years / len(ash) * 100, 2)
             summary['reliability_pct'] = round(100 - summary['shortage_frequency_pct'], 2)

@@ -471,9 +471,25 @@ def calculate_contractor_delivery_monthly(
         for p in EXCEEDANCE_PERCENTILES:
             row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
 
-        # Demand calculations for annual (if available)
         row['demand_avg_taf'] = None
         row['percent_of_demand_avg'] = None
+
+        if perdv_vars:
+            annual_demand = _compute_perdv_demand_taf(
+                df_copy, delivery_vars, shortage_vars or [], perdv_vars
+            )
+            avg_dem = float(annual_demand.mean())
+            if avg_dem > 0:
+                row['demand_avg_taf'] = round(avg_dem, 2)
+                row['percent_of_demand_avg'] = round(
+                    (row['delivery_avg_taf'] / avg_dem) * 100, 2
+                )
+        elif demand_mode == 'table_a':
+            row['demand_avg_taf'] = round(MWD_TABLE_A_ANNUAL_TAF, 2)
+            if MWD_TABLE_A_ANNUAL_TAF > 0:
+                row['percent_of_demand_avg'] = round(
+                    (row['delivery_avg_taf'] / MWD_TABLE_A_ANNUAL_TAF) * 100, 2
+                )
 
         results.append(row)
     else:

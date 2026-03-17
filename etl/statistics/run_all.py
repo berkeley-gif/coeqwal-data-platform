@@ -63,6 +63,7 @@ ETL_MODULES = {
         "path": SCRIPT_DIR / "du_urban" / "main.py",
         "name": "Urban Demand Unit Statistics",
         "tables": ["du_delivery_monthly", "du_shortage_monthly", "du_period_summary"],
+        "csv_arg": "--output-csv",
     },
     "mi": {
         "path": SCRIPT_DIR / "mi" / "main.py",
@@ -99,6 +100,7 @@ ETL_MODULES = {
             "refuge_du_shortage_monthly",
             "refuge_du_period_summary",
         ],
+        "csv_arg": "--dv-path",
     },
     "env_flows": {
         "path": SCRIPT_DIR / "env_flows" / "main.py",
@@ -108,6 +110,7 @@ ETL_MODULES = {
             "env_flow_channel_seasonal",
             "env_flow_channel_period_summary",
         ],
+        "csv_arg": "--dv-path",
     },
     "delta": {
         "path": SCRIPT_DIR / "delta" / "main.py",
@@ -177,9 +180,9 @@ def run_module(
         cmd.append("--dry-run")
 
     if csv_path:
-        # Convert to absolute path for submodules running in different directories
         abs_csv_path = str(Path(csv_path).resolve())
-        cmd.extend(["--csv-path", abs_csv_path])
+        csv_arg_name = module.get("csv_arg", "--csv-path")
+        cmd.extend([csv_arg_name, abs_csv_path])
 
     # Run the script
     try:
@@ -373,14 +376,17 @@ Examples:
         all_results[scenario_id] = results
 
     # Print comprehensive scorecard at the end
-    print_scorecard(all_results, scenarios, modules or list(ETL_MODULES.keys()))
+    has_failures = print_scorecard(all_results, scenarios, modules or list(ETL_MODULES.keys()))
+    if has_failures:
+        sys.exit(1)
 
 
-def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str]):
+def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str]) -> bool:
     """
     Print a comprehensive scorecard showing results for all scenarios and modules.
 
     This is displayed at the very end so it's visible after logs scroll away.
+    Returns True if any tasks failed.
     """
     # Build the scorecard
     print("\n")
@@ -509,6 +515,8 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
         print("                    ⚪ NO TASKS WERE RUN")
     print("=" * 80)
     print()
+
+    return total_failed > 0
 
 
 if __name__ == "__main__":
