@@ -57,6 +57,253 @@ s3://coeqwal-model-run/scenario/{scenario_short_code}/
 
 ---
 
+## Bulk Loading Scenarios from Google Drive
+
+When the modeling team delivers new or rerun scenarios, use the `gdrive_bulk_download.py` script to download model run ZIPs and trend report CSVs from the COEQWAL Shared Drive, validate DSS contents, stage to S3, and promote to trigger the extraction pipeline.
+
+### Prerequisites
+
+| Requirement | Where | Notes |
+|-------------|-------|-------|
+| **rclone** | Cloud9 (or local Mac) | Handles Google Drive auth; no GCP project needed |
+| **rclone config** (`~/.config/rclone/rclone.conf`) | Cloud9 | Must be configured with a `gdrive` remote pointing to the COEQWAL Shared Drive |
+| **Python 3.9+** | Cloud9 | Already available on Cloud9 |
+| **boto3, openpyxl** | Cloud9 | `pip install -r etl/scripts/requirements-gdrive.txt` |
+| **AWS credentials** | Cloud9 | Already configured on Cloud9 (IAM role) |
+| **Scenario listing Excel** | `reference/COEQWAL_Completed_Scenario_Listing.xlsx` | Contains scenario short codes and Drive folder hyperlinks |
+
+### Step 0: Check and increase Cloud9 storage
+
+Cloud9 instances default to **10 GB** EBS, which is tight when downloading ~200 MB ZIPs for 24 scenarios. The script streams files through `/tmp/` and uploads to S3 immediately, so you only need space for one ZIP at a time per worker — but it's still good practice to check.
+
+**Check current disk usage:**
+```bash
+df -h /
+```
+
+If usage is above ~70%, resize the EBS volume:
+
+**Resize the EBS volume (no downtime required):**
+
+1. Open the **AWS Console → EC2 → Volumes**
+2. Find the volume attached to your Cloud9 instance (check the instance ID in Cloud9 terminal: `curl -s http://169.254.169.254/latest/meta-data/instance-id`)
+3. Select the volume → **Actions → Modify Volume**
+4. Change the size (e.g., 10 GB → 20 GB) → **Modify**
+5. Wait ~30 seconds for the modification to complete
+6. Back in Cloud9 terminal, grow the filesystem:
+
+```bash
+# Check the partition name (usually /dev/xvda1 or /dev/nvme0n1p1)
+lsblk
+
+# Grow the partition (adjust device name as needed)
+sudo growpart /dev/xvda 1
+
+# Resize the filesystem
+sudo resize2fs /dev/xvda1
+
+# Verify
+df -h /
+```
+
+**Alternative — skip local storage entirely:** The script uses `/tmp/` as a transient staging area and uploads to S3 immediately. With `--workers 1` you only need ~200 MB free. With `--workers 4` you need ~800 MB. If storage is a concern, reduce workers.
+
+### Step 1: Install rclone on Cloud9
+
+```bash
+curl https://rclone.org/install.sh | sudo bash
+rclone version   # confirm installation
+```
+
+### Step 2: Set up rclone config
+
+rclone must be authenticated on a machine with a web browser (e.g., your Mac) because Google OAuth requires a browser redirect. Once authenticated, copy the config to Cloud9.
+
+**If you already authenticated on your Mac:**
+
+```bash
+# On your Mac, display the config:
+cat ~/.config/rclone/rclone.conf
+
+# On Cloud9, paste it:
+mkdir -p ~/.config/rclone
+nano ~/.config/rclone/rclone.conf
+# Paste the contents, save with Ctrl+O, exit with Ctrl+X
+```
+
+**If you need to set up rclone from scratch:**
+
+```bash
+# On your Mac (which has a browser):
+rclone config
+
+# Choose:
+#   n) New remote
+#   name> gdrive
+#   Storage> drive (Google Drive)
+#   client_id> (leave blank — uses rclone's built-in OAuth client)
+#   client_secret> (leave blank)
+#   scope> 2 (drive.readonly)
+#   service_account_file> (leave blank)
+#   Edit advanced config> n
+#   Use web browser to authenticate> y
+#   → Browser opens, authenticate with your UC Berkeley Google account (2FA required)
+#   Configure as Shared Drive> y
+#   Select: COEQWAL
+#   Keep this remote> y
+```
+
+**Verify it works on Cloud9:**
+
+```bash
+rclone lsd gdrive:   # Should list top-level Shared Drive folders
+```
+
+**Token refresh:** The rclone config contains a refresh token. It should auto-renew, but if you get 401 errors after weeks of inactivity, re-run `rclone config reconnect gdrive:` on your Mac and re-copy the config.
+
+### Step 3: Install Python dependencies
+
+```bash
+cd ~/environment/coeqwal-backend
+pip install -r etl/scripts/requirements-gdrive.txt
+```
+
+### Step 4: Dry run (no downloads, no S3 writes)
+
+```bash
+python etl/scripts/gdrive_bulk_download.py download \
+  --listing reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  --s3-bucket coeqwal-model-run \
+  --dry-run
+```
+
+This will:
+- Read the Excel listing and extract Drive folder IDs from hyperlinks
+- List `Model_Files/` and `Data_Extraction/Variables_From_trend_report_variables_v5/` for each scenario via rclone
+- Report what *would* be downloaded, including any alerts (multiple ZIPs, missing CSVs, etc.)
+- Print a summary table
+
+Review the output before proceeding.
+
+### Step 5: Download a single scenario (smoke test)
+
+```bash
+python etl/scripts/gdrive_bulk_download.py download \
+  --listing reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  --s3-bucket coeqwal-model-run \
+  --scenarios s0020
+```
+
+This will:
+1. Download the most recent ZIP from `Model_Files/`
+2. **Validate** the ZIP — open it, list all `.dss` files, classify them as SV (input) or DV (output), and alert if there is not exactly one of each type
+3. Upload the ZIP to `s3://coeqwal-model-run/staging/s0020/`
+4. Download the trend report CSV (starting with `s0020`) from `Data_Extraction/Variables_From_trend_report_variables_v5/`
+5. Upload the CSV to `s3://coeqwal-model-run/staging/s0020/`
+6. Write `audit_report.csv` locally and to `s3://coeqwal-model-run/staging/`
+
+**Verify in S3:**
+```bash
+aws s3 ls s3://coeqwal-model-run/staging/s0020/
+```
+
+### Step 6: Review the audit report
+
+```bash
+# View locally
+column -s, -t < audit_report.csv | less -S
+
+# Or download from S3
+aws s3 cp s3://coeqwal-model-run/staging/audit_report.csv .
+```
+
+Key columns to check:
+| Column | What to look for |
+|--------|-----------------|
+| `validation_status` | Should be `OK`. Anything with `ALERT` needs manual review. |
+| `sv_candidate_count` | Should be `1`. More means extra SV DSS files in the ZIP. |
+| `dv_candidate_count` | Should be `1`. More means extra DV DSS files in the ZIP. |
+| `zip_count` | Should be `1`. More means multiple ZIPs in `Model_Files/`. |
+| `trend_csv_count` | Should be `1`. `0` means missing trend report. |
+
+### Step 7: Download all scenarios
+
+Once the smoke test looks good:
+
+```bash
+python etl/scripts/gdrive_bulk_download.py download \
+  --listing reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  --s3-bucket coeqwal-model-run \
+  --workers 4
+```
+
+This processes 4 scenarios in parallel. Each downloads to `/tmp/`, validates, uploads to S3 staging, and cleans up. Total time depends on network speed; expect ~30–60 minutes for 24 scenarios.
+
+**To download a subset:**
+```bash
+python etl/scripts/gdrive_bulk_download.py download \
+  --listing reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  --s3-bucket coeqwal-model-run \
+  --scenarios s0020 s0023 s0024 s0025
+```
+
+### Step 8: Promote to trigger extraction
+
+Files in `staging/` do not trigger the Lambda. To trigger extraction, promote to `ready/`:
+
+```bash
+# Promote one scenario (recommended first time)
+python etl/scripts/gdrive_bulk_download.py promote \
+  --s3-bucket coeqwal-model-run \
+  --upload-single s0020
+
+# Promote all staged scenarios
+python etl/scripts/gdrive_bulk_download.py promote \
+  --s3-bucket coeqwal-model-run
+```
+
+The promote command:
+1. Lists all files in `staging/<shortcode>/`
+2. Shows what will be copied and asks for confirmation
+3. Copies each file to `ready/<shortcode>/`
+4. The Lambda triggers on the ZIP upload and starts the Batch extraction job
+
+**Monitor extraction:**
+```bash
+# Check Lambda logs
+aws logs tail /aws/lambda/coeqwal-etl-trigger --follow
+
+# Check Batch jobs
+aws batch list-jobs --job-queue coeqwal-etl-queue --job-status RUNNING
+```
+
+### How the Lambda handles subfolder uploads
+
+The Lambda trigger (`lambda-trigger/index.mjs`) supports both flat and subfolder uploads:
+
+| Upload pattern | How it works |
+|---------------|-------------|
+| `ready/scenario.zip` | Original flat pattern. Lambda finds peer CSV in `ready/`. |
+| `ready/s0020/scenario.zip` | Subfolder pattern. Lambda finds peer CSV in `ready/s0020/`. After processing, cleans up the subfolder. |
+
+The companion trend report CSV (uploaded alongside the ZIP in the same subfolder) is used as the validation reference for the extraction job.
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `rclone: command not found` | Run `curl https://rclone.org/install.sh \| sudo bash` |
+| `Failed to create file system: google drive: didn't find section in config file` | rclone config is missing. Copy from Mac (see Step 2). |
+| `rclone lsjson` returns empty | Check the Drive folder ID in the Excel hyperlinks. Try manually: `rclone lsjson --drive-root-folder-id=<ID> gdrive:` |
+| `401 Unauthorized` | Token expired. Re-authenticate on Mac: `rclone config reconnect gdrive:` and re-copy config. |
+| `ALERT_MULTIPLE_SV` or `ALERT_MULTIPLE_DV` | ZIP contains extra DSS files. Check `sv_all_candidates` / `dv_all_candidates` in audit report. May need to add override in `SCENARIO_OVERRIDES`. |
+| `ALERT_NO_SV` or `ALERT_NO_DV` | ZIP is missing expected DSS type. Check the ZIP contents manually. |
+| `MISSING_ZIP` | `Model_Files/` in Drive folder has no ZIPs. Check the Drive folder link. |
+| `MISSING_TREND_REPORT` | No CSV starting with scenario shortcode in `Variables_From_trend_report_variables_v5/`. |
+| `No space left on device` | Reduce `--workers` to 1, or resize EBS volume (see Step 0). |
+
+---
+
 ## Local development & processing
 
 ### Prerequisites

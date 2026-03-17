@@ -42,6 +42,8 @@ export async function handler(event) {
   const fileName = sourceKey.split('/').pop();
   const stem = fileName.replace(/\.zip$/i, '');
   const scenarioId = (fileName.split('_')[0] || '').toLowerCase(); // e.g., s0020
+  // Support both flat ready/file.zip and ready/<subfolder>/file.zip
+  const sourcePrefix = sourceKey.substring(0, sourceKey.lastIndexOf('/') + 1);
 
   if (!/^s\d{4}$/.test(scenarioId)) {
     console.warn('⚠️ Could not derive scenario id from file name:', fileName);
@@ -61,8 +63,8 @@ export async function handler(event) {
     console.log('🗑️ Deleting original ZIP from ready/');
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: sourceKey }));
 
-    // --- Try to find a peer csv in ready/ ---
-    let validationCsvReadyKey = await findPeerCsv(bucket, stem, scenarioId);
+    // --- Try to find a peer csv in the same prefix (supports subfolders) ---
+    let validationCsvReadyKey = await findPeerCsv(bucket, stem, scenarioId, sourcePrefix);
 
     // If found, move csv to scenario/<id>/verify/
     let validationCsvFinalKey = '';
@@ -80,6 +82,18 @@ export async function handler(event) {
       await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: validationCsvReadyKey }));
     } else {
       console.log('ℹ️ No peer CSV found in ready/ for', scenarioId);
+    }
+
+    // --- Clean up subfolder if source was nested (e.g., ready/s0020/) ---
+    if (sourcePrefix !== 'ready/') {
+      const remaining = await s3.send(new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: sourcePrefix,
+      }));
+      for (const obj of (remaining.Contents || [])) {
+        console.log('🗑️ Cleaning up leftover:', obj.Key);
+        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key }));
+      }
     }
 
     // --- Submit Batch job ---
@@ -155,14 +169,15 @@ export async function handler(event) {
 }
 
 /**
- * Find a peer csv sitting in ready/ that matches the uploaded ZIP.
+ * Find a peer csv sitting alongside the uploaded ZIP.
+ * Searches in the given prefix (e.g., "ready/" or "ready/s0020/").
  * Preference order:
- *   1) ready/<zip_stem>.csv      (exact match)
- *   2) newest ready/*<scenarioId>*.csv (broader pattern)
- * Returns the key under ready/ (string) or '' if none.
+ *   1) <prefix><zip_stem>.csv      (exact match)
+ *   2) newest <prefix>*<scenarioId>*.csv (broader pattern)
+ * Returns the S3 key (string) or '' if none.
  */
-async function findPeerCsv(bucket, zipStem, scenarioId) {
-  const exactKey = `ready/${zipStem}.csv`;
+async function findPeerCsv(bucket, zipStem, scenarioId, prefix = 'ready/') {
+  const exactKey = `${prefix}${zipStem}.csv`;
   try {
     await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: exactKey }));
     console.log('🔎 Found exact peer CSV:', exactKey);
@@ -171,8 +186,6 @@ async function findPeerCsv(bucket, zipStem, scenarioId) {
     // ignore 404
   }
 
-  // List any ready/*s####*.csv and pick the newest
-  const prefix = `ready/`;
   let candidates = [];
   let ContinuationToken = undefined;
   do {
