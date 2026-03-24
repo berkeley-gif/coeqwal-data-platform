@@ -252,18 +252,15 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:*",
         "https://coeqwal.org",
         "https://www.coeqwal.org",
         "https://dev.coeqwal.org",
         "https://staging.coeqwal.org",
-        "https://scenario-list-main.vercel.app",
         "https://yuya737.github.io",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    # Allow localhost and any Vercel preview deployments
     allow_origin_regex=r"https?://localhost:\d+|https://.*\.vercel\.app",
 )
 

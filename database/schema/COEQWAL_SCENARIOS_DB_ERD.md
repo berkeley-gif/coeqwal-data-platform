@@ -1113,16 +1113,20 @@ Table: scenario
 ├── scenario_version_id  INTEGER DEFAULT 1          -- FK to version.id (scenario family)
 ├── scenario_author_id   INTEGER                    -- FK to scenario_author.id
 ├── model_source_id      INTEGER                    -- FK to model_source.id (all CalSim3 currently)
+├── sibling_group        VARCHAR                    -- Cross-hydroclimate grouping key (e.g. "1.1", "2.3")
 ├── created_by           INTEGER NOT NULL           -- FK to developer.id
 ├── updated_by           INTEGER NOT NULL           -- FK to developer.id
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 ├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 └── long_description     TEXT                       -- Full multi-paragraph description (last column)
 
-Records: 25 scenarios (IDs 1-25, sequential by short_code s0011–s0065); s0029 deactivated
-         23 of 25 have long_description populated from metadata word doc
+Records: 75 active scenarios across 3 hydroclimates (24 dwr_hist_adj + 24 cc50 + 24 cc95 + 3 in each)
+         3 inactive scenarios (s0022 USBR Alt2V1, s0029 eflows v1, s0038 USBR Alt3)
+         24 sibling_group values, each grouping 3 scenarios (one per hydroclimate)
 
-Note: baseline_scenario_id = what scenario this is compared against for delta analysis
+Note: baseline_scenario_id = derivation parent (what scenario this is based on).
+      Within each hydroclimate, the baseline chain mirrors the hist_adj derivation tree.
+      sibling_group links operationally identical scenarios across hydroclimates.
       IDs resequenced by short_code in migration 43; long_description moved to last column
 
 Dropped columns (migration 35): subtitle, narrative, source_scenario_id, slr_id
@@ -1141,7 +1145,8 @@ Indexes:
 ├── idx_scenario_baseline (baseline_scenario_id)
 ├── idx_scenario_hydroclimate (hydroclimate_id)
 ├── idx_scenario_model_source (model_source_id)
-└── idx_scenario_active_version (is_active, scenario_version_id)
+├── idx_scenario_active_version (is_active, scenario_version_id)
+└── idx_scenario_sibling_group (sibling_group)
 ```
 
 ### **2. scenario_author (scenario authors/groups)**
@@ -1490,16 +1495,15 @@ Indexes:
 ├── idx_hydroclimate_active (is_active, short_code)
 └── idx_hydroclimate_source (source_id)
 
-Values (7 total):
-├── historical: Historical (1922-2021)
-├── 2040_central: 2040 Central Tendency
-├── 2040_dry: 2040 Dry Extreme
-├── 2040_wet: 2040 Wet Extreme
-├── 2070_central: 2070 Central Tendency
-├── 2070_dry: 2070 Dry Extreme
-└── 2070_wet: 2070 Wet Extreme
+Values (6 total):
+├── dwr_hist (id=1): DWR historical (1922-2021)
+├── dwr_hist_adj (id=2): DWR historically-adjusted (adjusted for 20th century climate warming)
+├── cc50 (id=3): Warmer and Drier I — 50% exceedance, median future (+1.5C, -3% precip, 2043)
+├── cc95 (id=4): Warmer and Drier II — 95% exceedance, extreme hot/dry (+1.8C, -9% precip, 2043)
+├── CMIP6_TaiESM1_SSP370 (id=5): Warmer and Drier III (+1.9C, -7% precip, 2043)
+└── CMIP6_CESM2-LENS_SSP370 (id=6): Warmer and Drier IV (+1.4C, -12% precip, 2043)
 
-Records: 7 hydroclimate conditions
+Records: 6 hydroclimate conditions
 ```
 
 ### **2. slr (sea level rise scenarios)**

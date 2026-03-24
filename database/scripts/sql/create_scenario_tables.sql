@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS scenario (
     scenario_version_id INTEGER DEFAULT 1,
     scenario_author_id INTEGER,
     model_source_id INTEGER,
+    sibling_group VARCHAR,
     created_by INTEGER NOT NULL DEFAULT 2,
     updated_by INTEGER NOT NULL DEFAULT 2,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

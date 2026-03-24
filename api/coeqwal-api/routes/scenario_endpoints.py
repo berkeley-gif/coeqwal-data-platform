@@ -51,6 +51,8 @@ async def get_all_scenarios(
             short_description,
             long_description,
             hydroclimate_id,
+            baseline_scenario_id,
+            sibling_group,
             is_active
         FROM scenario
         WHERE is_active = TRUE
@@ -68,11 +70,24 @@ async def get_all_scenarios(
                 short_description,
                 long_description,
                 hydroclimate_id,
+                baseline_scenario_id,
+                sibling_group,
                 is_active
             FROM scenario
             ORDER BY short_code
             """
             rows = await connection.fetch(query_all)
+
+        baseline_id_to_code = {}
+        if rows:
+            baseline_ids = {row["baseline_scenario_id"] for row in rows if row["baseline_scenario_id"]}
+            if baseline_ids:
+                placeholders = ", ".join(f"${i+1}" for i in range(len(baseline_ids)))
+                bl_rows = await connection.fetch(
+                    f"SELECT id, short_code FROM scenario WHERE id IN ({placeholders})",
+                    *baseline_ids,
+                )
+                baseline_id_to_code = {r["id"]: r["short_code"] for r in bl_rows}
 
         return [
             {
@@ -80,6 +95,9 @@ async def get_all_scenarios(
                 "run_name": row["run_name"],
                 "name": row["name"] or row["short_code"],
                 "description": row["long_description"] or row["short_description"],
+                "hydroclimate_id": row["hydroclimate_id"],
+                "baseline_scenario": baseline_id_to_code.get(row["baseline_scenario_id"]),
+                "sibling_group": row["sibling_group"],
                 "is_active": bool(row["is_active"])
                 if row["is_active"] is not None
                 else True,
@@ -112,6 +130,8 @@ async def get_scenario(
             short_description,
             long_description,
             hydroclimate_id,
+            baseline_scenario_id,
+            sibling_group,
             is_active
         FROM scenario
         WHERE short_code = $1 OR run_name = $1
@@ -159,6 +179,15 @@ async def get_scenario(
         """
         operations = await connection.fetch(operation_query, scenario["id"])
 
+        baseline_scenario = None
+        if scenario["baseline_scenario_id"]:
+            bl = await connection.fetchrow(
+                "SELECT short_code FROM scenario WHERE id = $1",
+                scenario["baseline_scenario_id"],
+            )
+            if bl:
+                baseline_scenario = bl["short_code"]
+
         return {
             "short_code": scenario["short_code"],
             "run_name": scenario["run_name"],
@@ -167,6 +196,8 @@ async def get_scenario(
             "long_description": scenario["long_description"],
             "hydroclimate": hydroclimate,
             "hydroclimate_name": hydroclimate_name,
+            "baseline_scenario": baseline_scenario,
+            "sibling_group": scenario["sibling_group"],
             "is_active": bool(scenario["is_active"]),
             "themes": [
                 {
