@@ -8,7 +8,7 @@ PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics to
 
 All database operations use one of two connection strings stored in `~/.bashrc` on Cloud9:
 
-- **`$DATABASE_URL`** — a developer's own connection (their registered PostgreSQL role). Used for queries, seed loads, ETL, API, audits. Each developer has their own — see "Setting up a new developer" below.
+- **`$DATABASE_URL`** — a developer's own connection (their registered PostgreSQL role). Used for queries, seed loads, ETL, API, audits. Each developer should have their own. See "Setting up a new developer" below.
 - **`$SUPERUSER_URL`** — the RDS master (`postgres`) user. Required only for DDL migrations (`ALTER TABLE`, `CREATE INDEX`, `GRANT`). Shared among admins; password is in AWS Secrets Manager.
 
 See "First-time setup" below for how to set these up. See "When to use which" for the full decision table.
@@ -59,6 +59,10 @@ After new scenarios are loaded into the `scenario` table and their statistics ET
 1. Compute tier results for the new scenarios using the existing tier definitions
 2. INSERT into `tier_result` and `tier_location_result`
 3. Verify with the monthly audit's per-scenario ETL coverage check
+
+### Redeploying the API
+
+If you changed the API endpoint code (anything under `api/`), including query logic, response fields, or CORS settings, you need to redeploy. Push the changes to `main` on GitHub — the CI pipeline handles the rest. See the [API README](../../api/coeqwal-api/README.md) for details and manual deployment fallback.
 
 ---
 
