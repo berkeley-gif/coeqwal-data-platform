@@ -261,7 +261,9 @@ INSERT INTO domain_family_map (table_name, version_family_id, created_by, update
 SELECT 'sibling_group', vf.id, 2, 2
 FROM version_family vf
 WHERE vf.short_code = 'scenario'
-ON CONFLICT (table_name) DO NOTHING;
+  AND NOT EXISTS (
+      SELECT 1 FROM domain_family_map WHERE table_name = 'sibling_group'
+  );
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- VERIFICATION
