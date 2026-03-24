@@ -2,6 +2,66 @@
 
 PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics topology.
 
+## Making changes to the database
+
+### Connection strings
+
+All database operations use one of two connection strings stored in `~/.bashrc` on Cloud9:
+
+- **`$DATABASE_URL`** — a developer's own connection (their registered PostgreSQL role). Used for queries, seed loads, ETL, API, audits. Each developer has their own — see "Setting up a new developer" below.
+- **`$SUPERUSER_URL`** — the RDS master (`postgres`) user. Required only for DDL migrations (`ALTER TABLE`, `CREATE INDEX`, `GRANT`). Shared among admins; password is in AWS Secrets Manager.
+
+See "First-time setup" below for how to set these up. See "When to use which" for the full decision table.
+
+### Turning on the Cloud9 environment
+
+Because most of the backend development is finished, the EC2 instance `aws-cloud9-coeqwal-db-admin-48dc921ad0fd48ea93c2a2e218bd8ace` is normally turned off to save costs. To make database changes:
+
+1. Go to the AWS EC2 console and start the instance
+2. Open Cloud9 from the AWS console
+3. `cd ~/environment/coeqwal-backend && git pull origin main`
+4. Run your scripts
+5. Stop the instance when done
+
+For bulk operations (e.g., loading batches of scenario statistics data), the ETL scripts support multi-threading. If loads are slow, consider temporarily upgrading the EC2 instance type — see [AWS EC2 instance types](https://aws.amazon.com/ec2/instance-types/) for options.
+
+### Adding new scenarios
+
+1. Prepare scenario metadata (short_code, run_name, name, descriptions, hydroclimate_id, baseline_scenario_id, sibling_group, etc.) — see the [ERD](schema/COEQWAL_SCENARIOS_DB_ERD.md) for the full `scenario` table schema
+2. Write a migration SQL script in `database/scripts/sql/migrations/` that INSERTs the new rows into the `scenario` table and populates the link tables (`scenario_tag_link`, `theme_scenario_link`, `scenario_key_assumption_link`, `scenario_key_operation_link`)
+3. Run the migration: `psql $SUPERUSER_URL -f database/scripts/sql/migrations/<script>.sql`
+4. Verify: `psql $DATABASE_URL -c "SELECT short_code, hydroclimate_id, sibling_group FROM scenario ORDER BY short_code;"`
+5. Run a fresh audit: `python database/audit/run_monthly_audit.py`
+
+Reference: Migration 45 (`45_baseline_and_sibling_expansion.sql`) added 48 cc50/cc95 sibling scenarios using this pattern.
+
+### Adding new scenario data (results/statistics)
+
+1. Upload the scenario's CalSim3 DSS output to S3
+2. Update the ETL path configuration to include the new scenario's S3 paths
+3. Run the ETL pipeline (supports multi-threading for bulk loads)
+4. Verify accuracy: `python etl/statistics/verify_all_sections.py --scenario <short_code>`
+5. Verify API: `python etl/statistics/verify_api.py --scenario <short_code>`
+
+### Adding new tiers (future)
+
+Tier definitions live in the `tier_definition` table. Adding a new tier requires:
+
+1. INSERT the tier definition row
+2. Compute tier results for all scenarios and INSERT into `tier_result`
+3. Compute location-level results and INSERT into `tier_location_result`
+4. Update the frontend tier configuration to display the new tier
+
+### Adding tier data for new scenarios
+
+After new scenarios are loaded into the `scenario` table and their statistics ETL is complete:
+
+1. Compute tier results for the new scenarios using the existing tier definitions
+2. INSERT into `tier_result` and `tier_location_result`
+3. Verify with the monthly audit's per-scenario ETL coverage check
+
+---
+
 ## Getting started
 
 ### Prerequisites
