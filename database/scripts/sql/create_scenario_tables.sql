@@ -154,21 +154,13 @@ CREATE TABLE IF NOT EXISTS scenario_hydroclimate_sibling (
     short_description TEXT,
     long_description TEXT,
     baseline_group VARCHAR,
-    scenario_author_id INTEGER,
-    model_source_id INTEGER,
     created_by INTEGER NOT NULL DEFAULT 2,
     updated_by INTEGER NOT NULL DEFAULT 2,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_hydro_sibling_baseline
         FOREIGN KEY (baseline_group) REFERENCES scenario_hydroclimate_sibling(short_code)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_hydro_sibling_author
-        FOREIGN KEY (scenario_author_id) REFERENCES scenario_author(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT fk_hydro_sibling_model_source
-        FOREIGN KEY (model_source_id) REFERENCES model_source(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE
+        ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
 -- =============================================================================
@@ -182,13 +174,21 @@ CREATE TABLE IF NOT EXISTS scenario (
     hydroclimate_id INTEGER,
     hydroclimate_sibling VARCHAR,
     scenario_version_id INTEGER DEFAULT 1,
+    scenario_author_id INTEGER,
+    model_source_id INTEGER,
     created_by INTEGER NOT NULL DEFAULT 2,
     updated_by INTEGER NOT NULL DEFAULT 2,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     CONSTRAINT fk_scenario_hydro_sibling
         FOREIGN KEY (hydroclimate_sibling) REFERENCES scenario_hydroclimate_sibling(short_code)
-        ON UPDATE CASCADE ON DELETE RESTRICT
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_scenario_scenario_author
+        FOREIGN KEY (scenario_author_id) REFERENCES scenario_author(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_scenario_model_source
+        FOREIGN KEY (model_source_id) REFERENCES model_source(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- =============================================================================
