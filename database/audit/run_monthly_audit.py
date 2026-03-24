@@ -523,7 +523,7 @@ LAYERS: dict[str, list[str]] = {
         "scenario_key_assumption_link", "scenario_key_operation_link",
     ],
     "06_scenario": [
-        "sibling_group", "scenario", "scenario_author",
+        "scenario_hydroclimate_sibling", "scenario", "scenario_author",
         "scenario_tag", "scenario_tag_link",
     ],
     "07_hydroclimate": ["hydroclimate", "slr"],

@@ -48,14 +48,15 @@ async def get_all_scenarios(
             s.short_code,
             s.run_name,
             s.hydroclimate_id,
-            s.sibling_group,
+            s.hydroclimate_sibling,
             s.is_active,
             sg.name,
             sg.short_description,
             sg.long_description,
             sg.baseline_group
         FROM scenario s
-        LEFT JOIN sibling_group sg ON s.sibling_group = sg.short_code
+        LEFT JOIN scenario_hydroclimate_sibling sg
+            ON s.hydroclimate_sibling = sg.short_code
         WHERE s.is_active = TRUE
         ORDER BY s.short_code
         """
@@ -68,14 +69,15 @@ async def get_all_scenarios(
                 s.short_code,
                 s.run_name,
                 s.hydroclimate_id,
-                s.sibling_group,
+                s.hydroclimate_sibling,
                 s.is_active,
                 sg.name,
                 sg.short_description,
                 sg.long_description,
                 sg.baseline_group
             FROM scenario s
-            LEFT JOIN sibling_group sg ON s.sibling_group = sg.short_code
+            LEFT JOIN scenario_hydroclimate_sibling sg
+                ON s.hydroclimate_sibling = sg.short_code
             ORDER BY s.short_code
             """
             rows = await connection.fetch(query_all)
@@ -88,7 +90,7 @@ async def get_all_scenarios(
                 "description": row["long_description"] or row["short_description"],
                 "hydroclimate_id": row["hydroclimate_id"],
                 "baseline_scenario": row["baseline_group"],
-                "sibling_group": row["sibling_group"],
+                "sibling_group": row["hydroclimate_sibling"],
                 "is_active": bool(row["is_active"])
                 if row["is_active"] is not None
                 else True,
@@ -118,14 +120,15 @@ async def get_scenario(
             s.short_code,
             s.run_name,
             s.hydroclimate_id,
-            s.sibling_group,
+            s.hydroclimate_sibling,
             s.is_active,
             sg.name,
             sg.short_description,
             sg.long_description,
             sg.baseline_group
         FROM scenario s
-        LEFT JOIN sibling_group sg ON s.sibling_group = sg.short_code
+        LEFT JOIN scenario_hydroclimate_sibling sg
+            ON s.hydroclimate_sibling = sg.short_code
         WHERE s.short_code = $1 OR s.run_name = $1
         """
 
@@ -180,7 +183,7 @@ async def get_scenario(
             "hydroclimate": hydroclimate,
             "hydroclimate_name": hydroclimate_name,
             "baseline_scenario": scenario["baseline_group"],
-            "sibling_group": scenario["sibling_group"],
+            "sibling_group": scenario["hydroclimate_sibling"],
             "is_active": bool(scenario["is_active"]),
             "themes": [
                 {

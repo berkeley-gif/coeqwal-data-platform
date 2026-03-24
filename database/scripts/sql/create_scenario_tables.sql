@@ -146,9 +146,9 @@ CREATE TABLE IF NOT EXISTS operation_definition (
 );
 
 -- =============================================================================
--- 8a. SIBLING_GROUP TABLE (Layer 06 — operational configuration families)
+-- 8a. SCENARIO_HYDROCLIMATE_SIBLING TABLE (Layer 06 — operational config families)
 -- =============================================================================
-CREATE TABLE IF NOT EXISTS sibling_group (
+CREATE TABLE IF NOT EXISTS scenario_hydroclimate_sibling (
     short_code VARCHAR PRIMARY KEY,
     name VARCHAR,
     short_description TEXT,
@@ -160,13 +160,13 @@ CREATE TABLE IF NOT EXISTS sibling_group (
     updated_by INTEGER NOT NULL DEFAULT 2,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_sibling_group_baseline
-        FOREIGN KEY (baseline_group) REFERENCES sibling_group(short_code)
+    CONSTRAINT fk_hydro_sibling_baseline
+        FOREIGN KEY (baseline_group) REFERENCES scenario_hydroclimate_sibling(short_code)
         ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_sibling_group_author
+    CONSTRAINT fk_hydro_sibling_author
         FOREIGN KEY (scenario_author_id) REFERENCES scenario_author(id)
         ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT fk_sibling_group_model_source
+    CONSTRAINT fk_hydro_sibling_model_source
         FOREIGN KEY (model_source_id) REFERENCES model_source(id)
         ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -180,14 +180,14 @@ CREATE TABLE IF NOT EXISTS scenario (
     run_name VARCHAR,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     hydroclimate_id INTEGER,
-    sibling_group VARCHAR,
+    hydroclimate_sibling VARCHAR,
     scenario_version_id INTEGER DEFAULT 1,
     created_by INTEGER NOT NULL DEFAULT 2,
     updated_by INTEGER NOT NULL DEFAULT 2,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_scenario_sibling_group
-        FOREIGN KEY (sibling_group) REFERENCES sibling_group(short_code)
+    CONSTRAINT fk_scenario_hydro_sibling
+        FOREIGN KEY (hydroclimate_sibling) REFERENCES scenario_hydroclimate_sibling(short_code)
         ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
