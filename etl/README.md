@@ -214,6 +214,50 @@ cd ~/environment/coeqwal-backend
 pip install -r etl/scripts/requirements-gdrive.txt
 ```
 
+### Scan subcommand (v6 CSV-based workflow)
+
+For loading CC50/CC95 sibling scenarios (or any set described in the v6 scenario listing CSV), use the `scan` subcommand. It reads `reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv` directly -- no Excel parsing or hyperlink extraction needed.
+
+**Phase 1: Local-only validation (no rclone, no Drive access)**
+
+Run this on your Mac to validate CSV paths before touching Cloud9:
+
+```bash
+python etl/scripts/gdrive_bulk_download.py scan \
+  --listing-csv "reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv" \
+  --local-only
+```
+
+This parses the CSV, extracts folder IDs from `ModelFilesLink` URLs, compares `GoogleDriveFolderName` against the `DV_Path` root, and writes `scan_manifest.csv`. Review the output for `FOLDER_MISMATCH` and `NO_FOLDER_ID` flags.
+
+**Phase 2: Drive scan (rclone required -- run on Cloud9)**
+
+```bash
+python etl/scripts/gdrive_bulk_download.py scan \
+  --listing-csv "reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv" \
+  --workers 4
+```
+
+This lists `Model_Files/` and `Data_Extraction/Variables_From_trend_report_variables_v5/` for each scenario via rclone, counts ZIP files and trend report CSVs, and writes `scan_audit.csv`.
+
+**Scan a subset of scenarios:**
+```bash
+python etl/scripts/gdrive_bulk_download.py scan \
+  --listing-csv "reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv" \
+  --scenarios s0070 s0090
+```
+
+**Scan audit statuses:**
+| Status | Meaning |
+|--------|---------|
+| `OK` | Exactly 1 ZIP and 1 trend CSV found |
+| `ALERT_MULTIPLE_ZIP` | More than 1 ZIP in `Model_Files/` -- most recent is auto-selected |
+| `ALERT_MULTIPLE_TREND` | More than 1 trend CSV -- most recent is auto-selected |
+| `MISSING_ZIP` | No ZIP file found in `Model_Files/` |
+| `MISSING_TREND` | No trend report CSV found |
+| `FOLDER_MISMATCH` | `GoogleDriveFolderName` differs from `DV_Path` root (cosmetic issue) |
+| `NO_FOLDER_ID` | `ModelFilesLink` has no extractable Google Drive folder ID |
+
 ### Step 4: Dry run (no downloads, no S3 writes)
 
 ```bash

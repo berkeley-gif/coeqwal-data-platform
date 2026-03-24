@@ -58,6 +58,6 @@ FROM scenario;
 SELECT hydroclimate_sibling, COUNT(*) AS members
 FROM scenario
 WHERE hydroclimate_sibling = 's0029'
-ORDER BY hydroclimate_sibling;
+GROUP BY hydroclimate_sibling;
 
 COMMIT;

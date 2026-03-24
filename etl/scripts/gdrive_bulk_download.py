@@ -196,9 +196,11 @@ RCLONE_REMOTE = "gdrive"
 
 
 def rclone_lsjson(folder_id: str, subpath: str = "",
-                  dirs_only: bool = False) -> List[Dict]:
+                  dirs_only: bool = False,
+                  rclone_remote: Optional[str] = None) -> List[Dict]:
     """List contents of a Drive folder via rclone lsjson."""
-    target = f"{RCLONE_REMOTE}:{subpath}"
+    remote = rclone_remote or RCLONE_REMOTE
+    target = f"{remote}:{subpath}"
     cmd = [
         "rclone", "lsjson", target,
         f"--drive-root-folder-id={folder_id}",
@@ -769,6 +771,297 @@ def cmd_promote(args):
 
 
 # ---------------------------------------------------------------------------
+# Scan subcommand — CSV-based path validation and Drive content auditing
+# ---------------------------------------------------------------------------
+
+SCAN_AUDIT_COLUMNS = [
+    "scenario_id", "hydroclimate", "drive_folder_name", "drive_folder_id",
+    "folder_name_match", "model_files_link",
+    "zip_count", "zip_names", "zip_selected", "zip_size_mb",
+    "trend_csv_count", "trend_csv_names", "trend_csv_selected",
+    "expected_dv_filename", "expected_sv_filename",
+    "dv_root", "status",
+]
+
+
+def read_scenario_listing_csv(csv_path: str) -> List[Dict[str, str]]:
+    """Read v6 scenario listing CSV, extracting folder IDs from URLs."""
+    scenarios = []
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            short_code = row.get("Index", "").strip()
+            if not short_code:
+                continue
+
+            model_link = row.get("ModelFilesLink", "").strip()
+            folder_id = ""
+            m = RE_FOLDER_ID.search(model_link)
+            if m:
+                folder_id = m.group(1)
+
+            dv_path = row.get("DV_Path", "").strip().replace("\\", "/")
+            sv_path = row.get("SV_Path", "").strip().replace("\\", "/")
+
+            dv_filename = dv_path.rsplit("/", 1)[-1] if dv_path else ""
+            sv_filename = sv_path.rsplit("/", 1)[-1] if sv_path else ""
+            dv_root = dv_path.split("/Model_Files/")[0] if "/Model_Files/" in dv_path else ""
+
+            scenarios.append({
+                "short_code": short_code,
+                "study_name": row.get("StudyName", "").strip(),
+                "drive_folder_name": row.get("GoogleDriveFolderName", "").strip(),
+                "drive_folder_id": folder_id,
+                "model_files_link": model_link,
+                "hydroclimate": row.get("HydroClimate", "").strip(),
+                "dv_filename": dv_filename,
+                "sv_filename": sv_filename,
+                "dv_root": dv_root,
+            })
+    return scenarios
+
+
+def scan_scenario(
+    scenario: Dict, rclone_remote: str,
+) -> Dict[str, Any]:
+    """List Drive contents for one scenario, report zip/csv counts."""
+    sc = scenario["short_code"]
+    folder_id = scenario["drive_folder_id"]
+    folder_name = scenario["drive_folder_name"]
+
+    row: Dict[str, Any] = {
+        "scenario_id": sc,
+        "hydroclimate": scenario["hydroclimate"],
+        "drive_folder_name": folder_name,
+        "drive_folder_id": folder_id[:16] + "..." if len(folder_id) > 16 else folder_id,
+        "folder_name_match": "",
+        "model_files_link": scenario["model_files_link"][:60],
+        "zip_count": 0,
+        "zip_names": "",
+        "zip_selected": "",
+        "zip_size_mb": "",
+        "trend_csv_count": 0,
+        "trend_csv_names": "",
+        "trend_csv_selected": "",
+        "expected_dv_filename": scenario["dv_filename"],
+        "expected_sv_filename": scenario["sv_filename"],
+        "dv_root": scenario["dv_root"],
+        "status": "",
+    }
+
+    dv_root = scenario["dv_root"]
+    if dv_root and dv_root != folder_name:
+        row["folder_name_match"] = "MISMATCH"
+    elif dv_root:
+        row["folder_name_match"] = "OK"
+    else:
+        row["folder_name_match"] = "NO_DV_PATH"
+
+    if not folder_id:
+        row["status"] = "NO_FOLDER_ID"
+        log.warning("[%s] No Drive folder ID (ModelFilesLink: %s)",
+                    sc, scenario["model_files_link"][:40])
+        return row
+
+    statuses = []
+
+    log.info("[%s] Listing Model_Files/ (folder_id: %s) ...", sc, folder_id[:12])
+    model_files = rclone_lsjson(folder_id, "Model_Files/", rclone_remote=rclone_remote)
+    zips = [f for f in model_files if f["Name"].lower().endswith(".zip")]
+    row["zip_count"] = len(zips)
+    row["zip_names"] = ";".join(sorted(f["Name"] for f in zips))
+
+    if not zips:
+        statuses.append("MISSING_ZIP")
+        log.warning("[%s] No ZIP files in Model_Files/", sc)
+    else:
+        zips.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
+        selected = zips[0]
+        row["zip_selected"] = selected["Name"]
+        row["zip_size_mb"] = f"{int(selected.get('Size', 0)) / (1024 * 1024):.1f}"
+        if len(zips) > 1:
+            statuses.append("ALERT_MULTIPLE_ZIP")
+            log.warning("[%s] Multiple ZIPs (%d): %s", sc, len(zips),
+                        ", ".join(f["Name"] for f in zips))
+
+    log.info("[%s] Listing Data_Extraction/trend report CSVs ...", sc)
+    trend_files = rclone_lsjson(
+        folder_id,
+        "Data_Extraction/Variables_From_trend_report_variables_v5/",
+        rclone_remote=rclone_remote,
+    )
+    trend_csvs = [
+        f for f in trend_files
+        if f["Name"].lower().endswith(".csv")
+        and f["Name"].lower().startswith(sc.lower())
+    ]
+    row["trend_csv_count"] = len(trend_csvs)
+    row["trend_csv_names"] = ";".join(sorted(f["Name"] for f in trend_csvs))
+
+    if not trend_csvs:
+        statuses.append("MISSING_TREND")
+        log.warning("[%s] No trend report CSV found", sc)
+    else:
+        trend_csvs.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
+        row["trend_csv_selected"] = trend_csvs[0]["Name"]
+        if len(trend_csvs) > 1:
+            statuses.append("ALERT_MULTIPLE_TREND")
+            log.warning("[%s] Multiple trend CSVs (%d): %s", sc, len(trend_csvs),
+                        ", ".join(f["Name"] for f in trend_csvs))
+
+    if dv_root and dv_root != folder_name:
+        statuses.append("FOLDER_MISMATCH")
+
+    row["status"] = "|".join(statuses) if statuses else "OK"
+
+    log.info("[%s] Scan done -- %s (zips=%d, trend_csvs=%d)",
+             sc, row["status"], row["zip_count"], row["trend_csv_count"])
+    return row
+
+
+def write_scan_audit(rows: List[Dict], local_path: str):
+    """Write scan audit CSV to disk."""
+    rows.sort(key=lambda r: r.get("scenario_id", ""))
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=SCAN_AUDIT_COLUMNS,
+                            extrasaction="ignore")
+    writer.writeheader()
+    for r in rows:
+        writer.writerow(r)
+    csv_text = buf.getvalue()
+
+    with open(local_path, "w") as f:
+        f.write(csv_text)
+    log.info("Scan audit written to %s", local_path)
+
+    print("\n" + "=" * 100)
+    print("  SCAN AUDIT SUMMARY")
+    print("=" * 100)
+    ok = sum(1 for r in rows if r.get("status") == "OK")
+    no_id = sum(1 for r in rows if r.get("status") == "NO_FOLDER_ID")
+    alerts = sum(1 for r in rows if "ALERT" in r.get("status", ""))
+    missing = sum(1 for r in rows if "MISSING" in r.get("status", ""))
+    mismatch = sum(1 for r in rows if "FOLDER_MISMATCH" in r.get("status", ""))
+    print(f"  Total scenarios:       {len(rows)}")
+    print(f"  OK (clean):            {ok}")
+    print(f"  No folder ID:          {no_id}")
+    print(f"  Alerts (multi files):  {alerts}")
+    print(f"  Missing files:         {missing}")
+    print(f"  Folder mismatches:     {mismatch}")
+
+    print()
+    hdr = "  {:<8} {:<26} {:>4} {:>4} {:<8} {}"
+    print(hdr.format("Scenario", "Hydroclimate", "Zips", "CSVs", "Match", "Status"))
+    print("  " + "-" * 90)
+    for r in rows:
+        hydro = r.get("hydroclimate", "")[:26]
+        print(hdr.format(
+            r.get("scenario_id", ""),
+            hydro,
+            str(r.get("zip_count", "")),
+            str(r.get("trend_csv_count", "")),
+            r.get("folder_name_match", ""),
+            r.get("status", ""),
+        ))
+
+    attention = [r for r in rows
+                 if r.get("status", "") not in ("OK", "NO_FOLDER_ID", "LOCAL_ONLY")]
+    if attention:
+        print()
+        print("  SCENARIOS REQUIRING ATTENTION:")
+        print("  " + "-" * 90)
+        for r in attention:
+            print(f"  {r['scenario_id']}: {r['status']}")
+            if r.get("zip_names"):
+                print(f"    ZIPs: {r['zip_names']}")
+            if r.get("trend_csv_names"):
+                print(f"    Trend CSVs: {r['trend_csv_names']}")
+            if r.get("folder_name_match") == "MISMATCH":
+                print(f"    Folder name: {r['drive_folder_name']}")
+                print(f"    DV_Path root: {r['dv_root']}")
+
+    print("=" * 100 + "\n")
+
+
+def cmd_scan(args):
+    """Scan Drive contents using the v6 CSV listing."""
+    global RCLONE_REMOTE
+    RCLONE_REMOTE = args.rclone_remote
+
+    scenarios = read_scenario_listing_csv(args.listing_csv)
+
+    if args.scenarios:
+        filter_set = set(s.lower() for s in args.scenarios)
+        scenarios = [s for s in scenarios if s["short_code"].lower() in filter_set]
+
+    if not scenarios:
+        log.error("No scenarios found in listing")
+        return
+
+    log.info("Loaded %d scenarios from CSV", len(scenarios))
+
+    if args.local_only:
+        log.info("Local-only mode: writing manifest without Drive access")
+        results = []
+        for sc in scenarios:
+            row = {
+                "scenario_id": sc["short_code"],
+                "hydroclimate": sc["hydroclimate"],
+                "drive_folder_name": sc["drive_folder_name"],
+                "drive_folder_id": sc["drive_folder_id"][:16] + "..."
+                    if len(sc["drive_folder_id"]) > 16 else sc["drive_folder_id"],
+                "folder_name_match": "MISMATCH" if sc["dv_root"] and sc["dv_root"] != sc["drive_folder_name"]
+                    else ("OK" if sc["dv_root"] else "NO_DV_PATH"),
+                "model_files_link": sc["model_files_link"][:60],
+                "zip_count": "",
+                "zip_names": "",
+                "zip_selected": "",
+                "zip_size_mb": "",
+                "trend_csv_count": "",
+                "trend_csv_names": "",
+                "trend_csv_selected": "",
+                "expected_dv_filename": sc["dv_filename"],
+                "expected_sv_filename": sc["sv_filename"],
+                "dv_root": sc["dv_root"],
+                "status": "LOCAL_ONLY" + ("|FOLDER_MISMATCH"
+                    if sc["dv_root"] and sc["dv_root"] != sc["drive_folder_name"] else "")
+                    + ("|NO_FOLDER_ID" if not sc["drive_folder_id"] else ""),
+            }
+            results.append(row)
+        local_path = os.path.join(os.getcwd(), "scan_manifest.csv")
+        write_scan_audit(results, local_path)
+        return
+
+    results: List[Dict] = []
+    workers = args.workers
+
+    if workers <= 1:
+        for sc in scenarios:
+            row = scan_scenario(sc, RCLONE_REMOTE)
+            results.append(row)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(scan_scenario, sc, RCLONE_REMOTE): sc
+                for sc in scenarios
+            }
+            for future in as_completed(futures):
+                sc = futures[future]
+                try:
+                    row = future.result()
+                    results.append(row)
+                except Exception:
+                    log.exception("[%s] Scan worker failed", sc["short_code"])
+                    results.append({
+                        "scenario_id": sc["short_code"],
+                        "status": "WORKER_ERROR",
+                    })
+
+    local_path = os.path.join(os.getcwd(), "scan_audit.csv")
+    write_scan_audit(results, local_path)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def main():
@@ -806,11 +1099,26 @@ def main():
     pr.add_argument("--upload-single",
                     help="Only promote this one scenario (e.g., s0020)")
 
+    sc = sub.add_parser("scan",
+                        help="Scan Drive contents using v6 CSV listing")
+    sc.add_argument("--listing-csv", required=True,
+                    help="Path to v6 scenario listing CSV")
+    sc.add_argument("--rclone-remote", default="gdrive",
+                    help="Name of the rclone remote (default: gdrive)")
+    sc.add_argument("--workers", type=int, default=4,
+                    help="Number of concurrent scan workers (default: 4)")
+    sc.add_argument("--scenarios", nargs="*",
+                    help="Optional: only scan these scenario short codes")
+    sc.add_argument("--local-only", action="store_true",
+                    help="Parse CSV and write manifest without Drive access")
+
     args = parser.parse_args()
     if args.command == "download":
         cmd_download(args)
     elif args.command == "promote":
         cmd_promote(args)
+    elif args.command == "scan":
+        cmd_scan(args)
 
 
 if __name__ == "__main__":
