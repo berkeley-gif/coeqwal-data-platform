@@ -44,8 +44,10 @@ ALTER TABLE scenario
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- STEP 4: Drop columns from scenario_hydroclimate_sibling
+-- STEP 4: Drop view (depends on columns we're about to remove), then drop columns
 -- ═══════════════════════════════════════════════════════════════════════════════
+
+DROP VIEW IF EXISTS scenario_full;
 
 ALTER TABLE scenario_hydroclimate_sibling DROP CONSTRAINT IF EXISTS fk_hydro_sibling_author;
 ALTER TABLE scenario_hydroclimate_sibling DROP CONSTRAINT IF EXISTS fk_hydro_sibling_model_source;
@@ -74,10 +76,8 @@ SET hydroclimate_sibling = 's0029', updated_by = 2
 WHERE short_code = 's0029';
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- STEP 6: Recreate scenario_full view (columns moved)
+-- STEP 6: Recreate scenario_full view (author join now on scenario)
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-DROP VIEW IF EXISTS scenario_full;
 
 CREATE OR REPLACE VIEW scenario_full AS
 SELECT
