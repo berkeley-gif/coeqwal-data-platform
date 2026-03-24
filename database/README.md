@@ -13,11 +13,11 @@ PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics to
    - [Adding tier data for new scenarios](#adding-tier-data-for-new-scenarios)
    - [Redeploying the API](#redeploying-the-api)
 2. [Running the database audit](#running-the-database-audit)
-   - [Lambda vs. local shell script](#lambda-vs-local-shell-script--use-both-for-different-reasons)
-   - [Python environment (venv)](#python-environment-venv)
-   - [Running the audit](#running-the-audit)
-   - [Verifying the audit output](#verifying-the-audit-output)
-   - [Comparing the audit against the ERD](#comparing-the-audit-against-the-erd)
+   - [Running the monthly audit](#running-the-monthly-audit)
+   - [What it produces](#what-it-produces)
+   - [Report sections](#report-sections)
+   - [Other audit tools](#other-audit-tools)
+   - [Lambda S3 archive](#lambda-s3-archive)
 3. [Getting started](#getting-started)
 4. [Directory structure](#directory-structure)
 5. [Schema layers](#schema-layers)
@@ -1067,9 +1067,8 @@ Reports are read from `audits/verification_reports/`. Re-running `verify_all_sec
 
 | Cadence | What to run | Command |
 |---------|------------|---------|
-| **Monthly** | Health, cost, and completeness report | `python database/scripts/monthly_audit.py` |
-| **Monthly** | Schema snapshot + ERD comparison | `bash database/run_audit.sh` then `verify_erd_against_audit.py` |
-| **After any schema change** | Per-layer SQL structural checks | `psql $DATABASE_URL -f database/scripts/sql/NN/09_verify_levelNN.sql` |
+| **Monthly** | Full audit (schema, content, health, cost) | `python database/audit/run_monthly_audit.py` |
+| **After any schema change** | Per-layer SQL structural checks | `psql $DATABASE_URL -f database/scripts/sql/NN_layer/09_verify_levelNN.sql` |
 | **After any seed data edit** | Reference data content export | `python database/scripts/export_layer_tables.py --layer NN` |
 | **After every ETL run** | ETL statistics accuracy (Layer 2) | `python etl/statistics/verify_all_sections.py --scenario {id}` |
 | **After every ETL run** | API accuracy (Layer 3) | `python etl/statistics/verify_api.py --scenario {id}` |
@@ -1081,11 +1080,11 @@ All runnable scripts related to audit, verification, and data quality:
 
 | Script | Location | Purpose | Output |
 |--------|----------|---------|--------|
-| `run_audit.sh` | `database/` | Schema structure snapshot (interactive) | `audits/*.json`, `audits/*.csv` |
-| `monthly_audit.py` | `database/scripts/` | Health + cost + completeness Markdown report | `audits/monthly_*.md` |
-| `export_layer_tables.py` | `database/scripts/` | Export layers 00–08 reference tables to CSV | `exports/layer_tables/` |
+| `run_monthly_audit.py` | `database/audit/` | **Primary audit** — schema, content, ERD comparison, health, cost | `audits/monthly_YYYYMMDD_HHMMSS/` |
+| `run_audit.sh` | `database/` | Quick schema-only snapshot | `audits/*.json`, `audits/*.csv` |
 | `verify_erd_against_audit.py` | `database/audit/` | Diff ERD docs vs. live schema snapshot | stdout / exit code |
 | `generate_erd_from_audit.py` | `database/audit/` | Generate draft ERD from live snapshot | `database/schema/GENERATED_ERD.md` |
+| `export_layer_tables.py` | `database/scripts/` | Export layers 00–08 reference tables to CSV | `exports/layer_tables/` |
 | `09_verify_level*.sql` | `database/scripts/sql/NN_layer/` | Per-layer structural invariants | psql output |
 | `validate_data_integrity.sql` | `database/scripts/sql/` | FK orphan checks | psql output |
 | `verify_all_sections.py` | `etl/statistics/` | ETL accuracy: CSV to DB (Layer 2) | `audits/verification_reports/*_layer2.json` |
@@ -1096,12 +1095,15 @@ All runnable scripts related to audit, verification, and data quality:
 
 | Output | Location | Gitignored? |
 |--------|----------|-------------|
-| Schema snapshot (JSON) | `audits/audit_YYYYMMDD_HHMMSS.json` | Yes |
-| Table summary (CSV) | `audits/tables_summary_YYYYMMDD_HHMMSS.csv` | Yes |
-| Latest snapshot symlink | `audits/latest.json` | Yes |
-| Monthly health report (Markdown) | `audits/monthly_YYYYMMDD_HHMMSS.md` | Yes |
+| **Monthly audit folder** | `audits/monthly_YYYYMMDD_HHMMSS/` | Yes |
+| — Markdown report | `audits/monthly_.../report.md` | Yes |
+| — Schema snapshot | `audits/monthly_.../schema_snapshot.json` | Yes |
+| — Table summary | `audits/monthly_.../tables_summary.csv` | Yes |
+| — Layer CSV exports | `audits/monthly_.../layer_exports/` | Yes |
+| — Results samples | `audits/monthly_.../results_samples/` | Yes |
+| Quick schema snapshot | `audits/audit_YYYYMMDD_HHMMSS.json` | Yes |
 | Lambda snapshots (archived) | `s3://coeqwal-model-run/database_audits/` | S3 |
-| Layer table exports (CSV) | `exports/layer_tables/` | Yes |
+| Layer table exports (standalone) | `exports/layer_tables/` | Yes |
 | ETL verification reports | `audits/verification_reports/{scenario}_layer2.json` | Yes |
 | API verification reports | `audits/verification_reports/{scenario}_layer3.json` | Yes |
 
@@ -1109,113 +1111,93 @@ All runnable scripts related to audit, verification, and data quality:
 
 ## Running the database audit
 
-The schema audit captures the full live schema — tables, columns, indexes, FKs, constraints, triggers, functions — and saves it as a timestamped JSON + CSV summary to the `audits/` folder.
+The primary audit tool is `run_monthly_audit.py`. It produces a comprehensive report covering schema structure, ERD comparison, data content, ETL coverage, database health, and cost — all in one run.
 
-### Lambda vs. local shell script — use both, for different reasons
+See [audit/README.md](audit/README.md) for full documentation of all audit tools.
 
-Both tools run the same underlying Python (`database/utils/db_audit_lambda/db_audit_lambda.py` / `database/run_local_audit.py`). They are complementary, not alternatives:
+### Running the monthly audit
 
-| Tool | How to invoke | When to use |
-|------|--------------|-------------|
-| **`bash database/run_audit.sh`** | Manually, on Cloud9 | On-demand, before a release, after a schema change, while actively debugging |
-| **AWS Lambda `coeqwal-database-audit`** | Scheduled (CloudWatch Events) or manual (`aws lambda invoke`) | Regular automated cadence without needing to be logged in; results persist in S3 |
-
-The Lambda keeps a durable S3 history of snapshots independent of the repo. The local script is faster for interactive use. **Do not decommission the Lambda** — its S3 output provides a dated archive you can pull from anywhere.
-
-To invoke the Lambda manually and retrieve the output:
+From Cloud9, with `DATABASE_URL` set:
 
 ```bash
-aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
-cat response.json
+cd ~/environment/coeqwal-backend
+source venv/bin/activate
+python database/audit/run_monthly_audit.py
+```
 
-# Pull the latest reports from S3 into the local audits/ folder
+Running as your own user works for most tables. To get full visibility (including tables where your role lacks SELECT), use the superuser connection:
+
+```bash
+DATABASE_URL=$SUPERUSER_URL python database/audit/run_monthly_audit.py
+```
+
+### What it produces
+
+A timestamped folder under `audits/`:
+
+```
+audits/monthly_YYYYMMDD_HHMMSS/
+├── report.md                       Markdown report (the main thing to read)
+├── schema_snapshot.json            Full schema snapshot
+├── tables_summary.csv              Per-table row counts + audit field status
+├── layer_exports/                  Full CSV exports for layers 00-08
+│   ├── 00_versioning/
+│   └── ...through 08_theme/
+└── results_samples/                First 10 + last 10 rows for layers 10+
+    ├── reservoir_storage_monthly_head.csv
+    └── ...
+```
+
+### Report sections
+
+| # | Section | What it checks |
+|---|---------|----------------|
+| 1a | Table inventory | Every table: name, layer, columns, rows, size |
+| 1b | Schema vs. ERD | Tables/columns in DB but not ERD, and vice versa |
+| 1c | Row counts vs. expected | Layers 00-08 counts against known targets |
+| 1d | Reference data downloads | Full CSV export of layers 00-08 |
+| 1e | Results data samples | Head/tail CSV samples of layers 10+ |
+| 2a | Data integrity | NULL audit fields, orphaned rows, invalid values |
+| 2b | ETL coverage | Per-scenario row counts across all results tables |
+| 2c | ETL accuracy summary | Reads existing Layer 2/3 verification reports |
+| 3a-d | Database health | Cache hit ratio, connections, dead tuples, bloat |
+| 4a-c | Database cost | Table sizes, unused indexes, total storage |
+| 5 | Audit summary | PASS/FAIL for each check, with details on failures |
+
+### Skipping sections
+
+```bash
+python database/audit/run_monthly_audit.py --skip health
+python database/audit/run_monthly_audit.py --skip health --skip cost
+```
+
+Valid sections: `content`, `verification`, `health`, `cost`.
+
+### Other audit tools
+
+These standalone tools can be run independently for quick one-off checks, but the monthly audit already calls them internally:
+
+| Tool | Command | Use case |
+|------|---------|----------|
+| Schema-only snapshot | `bash database/run_audit.sh` | Quick schema check without health/cost/content |
+| ERD comparison | `python database/audit/verify_erd_against_audit.py <erd.md> <snapshot.json>` | After editing ERD docs |
+| Generate draft ERD | `python database/audit/generate_erd_from_audit.py <snapshot.json> <output.md>` | When ERD needs updating |
+| Layer CSV export | `python database/scripts/export_layer_tables.py --layer NN` | Quick spot-check of seed data |
+
+### Lambda S3 archive
+
+An AWS Lambda (`coeqwal-database-audit`) runs on a CloudWatch schedule and archives schema snapshots to S3 independently of anyone being logged in. **Do not decommission it** — its S3 output provides a dated archive.
+
+```bash
+# Invoke manually
+aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
+
+# Pull archived snapshots
 aws s3 ls s3://coeqwal-model-run/database_audits/ --recursive | tail -5
 aws s3 cp s3://coeqwal-model-run/database_audits/audit_YYYYMMDD_HHMMSS.json ./audits/
-aws s3 cp s3://coeqwal-model-run/database_audits/tables_summary_YYYYMMDD_HHMMSS.csv ./audits/
 ```
 
 See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md) for Lambda setup details.
-
-### Python environment (venv)
-
-Activate the venv before running the audit (from the repo root):
-
-```bash
-$ source venv/bin/activate
-```
-
-### Running the audit
-
-The audit is an administrative tool that inspects the whole database. Run it as `postgres` so it has access to all tables regardless of per-developer grants. Use an inline variable override — this does not affect your normal `$DATABASE_URL`:
-
-```bash
-$ cd ~/environment/coeqwal-backend
-$ DATABASE_URL="postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario" bash database/run_audit.sh
-```
-
-Running as your own user will work for most tables but will fail on any table where your role lacks SELECT permission (the script will log a warning and skip those tables).
-
-The script checks for `$DATABASE_URL` and required Python packages before running. Output:
-
-```
-audits/audit_YYYYMMDD_HHMMSS.json         ← full schema snapshot
-audits/tables_summary_YYYYMMDD_HHMMSS.csv ← per-table row counts and audit field status
-audits/latest.json                         ← symlink to the most recent JSON
-```
-
-### Verifying the audit output
-
-A successful run prints a summary like this:
-
-```
-AUDIT COMPLETE
-==============
-  Database:            coeqwal_scenario
-  Tables audited:      70
-  Total records:       124,184
-  Indexes captured:    280
-  Foreign keys:        117
-  CHECK constraints:   20
-  UNIQUE constraints:  66
-
-  Version families:    14
-  domain_family_map MISSING 26 expected tables:
-    - analysis
-    - channel_entity
-    ...
-```
-
-**What each line means:**
-
-| Field | Meaning |
-|---|---|
-| Tables audited | All tables visible to the connecting user. Running as `postgres` gives the full count. |
-| Total records | Sum of row counts across all tables. |
-| Indexes / FKs / constraints | Structural metadata captured for ERD comparison. |
-| Version families | Count of rows in `version_family` — should match your versioning setup. |
-| `domain_family_map MISSING` | Tables registered in the version/domain mapping as planned but **not yet built** in the database. This is expected for planned tables listed in the ERD. It is not an error — it tracks the gap between the data model roadmap and what's actually been implemented. |
-
-The full detail is in the JSON report. Top-level keys:
-
-```
-generated_at       — timestamp
-database_info      — db name, current_user, session_user
-total_tables       — count of audited tables
-validation         — warnings: missing triggers, unregistered users, etc.
-tables             — per-table detail: columns, indexes, FKs, constraints, triggers
-```
-
-### Comparing the audit against the ERD
-
-```bash
-$ python database/audit/verify_erd_against_audit.py database/schema/COEQWAL_SCENARIOS_DB_ERD.md audits/latest.json
-```
-
-Add `--verbose` to see full column lists for any mismatched tables:
-
-```bash
-$ python database/audit/verify_erd_against_audit.py database/schema/COEQWAL_SCENARIOS_DB_ERD.md audits/latest.json --verbose
-```
 
 ---
 
