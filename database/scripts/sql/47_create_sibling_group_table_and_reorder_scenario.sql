@@ -143,8 +143,11 @@ WHERE short_code IN ('s0022', 's0038') AND sibling_group IS NULL;
 SELECT setval('scenario_new_id_seq', (SELECT MAX(id) FROM scenario_new));
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- STEP 8: Drop all FK constraints referencing old scenario table
+-- STEP 8: Drop dependent views and FK constraints
 -- ═══════════════════════════════════════════════════════════════════════════════
+
+-- Drop views that depend on the old scenario table
+DROP VIEW IF EXISTS scenario_full;
 
 -- Link tables → scenario.id
 ALTER TABLE scenario_tag_link DROP CONSTRAINT IF EXISTS scenario_tag_link_scenario_id_fkey;
@@ -213,7 +216,45 @@ CREATE TRIGGER audit_fields_scenario
     FOR EACH ROW EXECUTE FUNCTION set_audit_fields();
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- STEP 13: Register sibling_group in domain_family_map
+-- STEP 13: Recreate scenario_full view (now joins sibling_group for name/author)
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE VIEW scenario_full AS
+SELECT
+    s.id,
+    s.short_code,
+    s.run_name,
+    sg.name,
+    s.is_active,
+    sa.short_code AS author,
+    h.short_code  AS hydroclimate,
+    MAX(CASE WHEN oc.short_code = 'biops'              THEN od.short_code END) AS biops,
+    MAX(CASE WHEN oc.short_code = 'tucp'               THEN od.short_code END) AS tucp,
+    MAX(CASE WHEN oc.short_code = 'gw_restrictions'    THEN od.short_code END) AS gw_restrictions,
+    MAX(CASE WHEN oc.short_code = 'infrastructure'     THEN od.short_code END) AS infrastructure,
+    MAX(CASE WHEN oc.short_code = 'flow'               THEN od.short_code END) AS flow,
+    MAX(CASE WHEN oc.short_code = 'delta_outflow'      THEN od.short_code END) AS delta_outflow,
+    MAX(CASE WHEN oc.short_code = 'comm_delivery'      THEN od.short_code END) AS comm_delivery,
+    MAX(CASE WHEN oc.short_code = 'regulatory_salinity' THEN od.short_code END) AS regulatory_salinity,
+    MAX(CASE WHEN oc.short_code = 'carryover'          THEN od.short_code END) AS carryover,
+    MAX(CASE WHEN ac.short_code = 'land_use'           THEN ad.short_code END) AS land_use,
+    MAX(CASE WHEN ac.short_code = 'gw_model'           THEN ad.short_code END) AS gw_model
+FROM scenario s
+LEFT JOIN sibling_group sg ON s.sibling_group = sg.short_code
+LEFT JOIN scenario_author sa ON sg.scenario_author_id = sa.id
+LEFT JOIN hydroclimate h ON s.hydroclimate_id = h.id
+LEFT JOIN scenario_key_operation_link skol ON s.id = skol.scenario_id
+LEFT JOIN operation_definition od ON skol.operation_id = od.id
+LEFT JOIN operation_category oc ON od.operation_category_id = oc.id
+LEFT JOIN scenario_key_assumption_link skal ON s.id = skal.scenario_id
+LEFT JOIN assumption_definition ad ON skal.assumption_id = ad.id
+LEFT JOIN assumption_category ac ON ad.assumption_category_id = ac.id
+WHERE s.is_active = TRUE
+GROUP BY s.id, s.short_code, s.run_name, sg.name, s.is_active,
+         sa.short_code, h.short_code;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- STEP 14: Register sibling_group in domain_family_map
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 INSERT INTO domain_family_map (table_name, version_family_id, created_by, updated_by)
