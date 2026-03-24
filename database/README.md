@@ -2,6 +2,33 @@
 
 PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics topology.
 
+## Table of contents
+
+1. [Making changes to the database](#making-changes-to-the-database)
+   - [Connection strings](#connection-strings)
+   - [Turning on the Cloud9 environment](#turning-on-the-cloud9-environment)
+   - [Adding new scenarios](#adding-new-scenarios)
+   - [Adding new scenario data (results/statistics)](#adding-new-scenario-data-resultsstatistics)
+   - [Adding new tiers (future)](#adding-new-tiers-future)
+   - [Adding tier data for new scenarios](#adding-tier-data-for-new-scenarios)
+   - [Redeploying the API](#redeploying-the-api)
+2. [Running the database audit](#running-the-database-audit)
+   - [Lambda vs. local shell script](#lambda-vs-local-shell-script--use-both-for-different-reasons)
+   - [Python environment (venv)](#python-environment-venv)
+   - [Running the audit](#running-the-audit)
+   - [Verifying the audit output](#verifying-the-audit-output)
+   - [Comparing the audit against the ERD](#comparing-the-audit-against-the-erd)
+3. [Getting started](#getting-started)
+4. [Directory structure](#directory-structure)
+5. [Schema layers](#schema-layers)
+6. [Schema implementation status](#schema-implementation-status)
+7. [Layer details](#layer-details)
+8. [Best practices checklist](#best-practices-checklist)
+9. [Layer 00_VERSIONING schema](#layer-00_versioning-schema)
+10. [Automatic audit triggers](#automatic-audit-triggers)
+11. [Audit and verification strategy](#audit-and-verification-strategy)
+12. [Data validation tools](#data-validation-tools)
+
 ## Making changes to the database
 
 ### Connection strings
