@@ -1098,7 +1098,42 @@ Seed: seed_tables/04_variable/*.csv
 
 > Theme definitions and theme-scenario links are in **Layer 08 — THEME LAYER**.
 
-### **1. scenario (water management scenarios)**
+### **1. sibling_group (operational configuration families)**
+
+```
+Table: sibling_group
+├── short_code          VARCHAR PRIMARY KEY        -- Hist_adj scenario code (e.g. 's0020')
+├── name                VARCHAR                    -- Display name: "DWR Adjusted Hydrology with 2020 Land Use and TUCPs"
+├── short_description   TEXT                       -- Brief 1-2 sentence description
+├── long_description    TEXT                       -- Full multi-paragraph description
+├── baseline_group      VARCHAR                    -- FK to sibling_group.short_code (NULL for roots)
+├── scenario_author_id  INTEGER                    -- FK to scenario_author.id
+├── model_source_id     INTEGER                    -- FK to model_source.id
+├── created_by          INTEGER NOT NULL DEFAULT 2 -- FK to developer.id
+├── updated_by          INTEGER NOT NULL DEFAULT 2 -- FK to developer.id
+├── created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+└── updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+
+Records: 26 (24 active operational configs + 2 inactive agency baselines: s0022, s0038)
+
+Note: Each row represents an operational configuration that may be run across multiple
+      hydroclimates. The short_code matches the hist_adj scenario that first defined
+      this configuration. All scenarios with the same sibling_group share the same
+      operational assumptions and differ only in hydroclimate inputs.
+
+      baseline_group points to the sibling_group this config was derived from.
+      Root baselines (s0011, s0022, s0038, s0065) have baseline_group = NULL.
+
+Foreign keys:
+├── Ref: sibling_group.baseline_group > sibling_group.short_code [delete: restrict, update: cascade]
+├── Ref: sibling_group.scenario_author_id > scenario_author.id [delete: restrict, update: cascade]
+└── Ref: sibling_group.model_source_id > model_source.id [delete: restrict, update: cascade]
+
+Indexes:
+└── idx_sibling_group_baseline (baseline_group)
+```
+
+### **2. scenario (water management scenarios)**
 
 ```
 Table: scenario
@@ -1106,50 +1141,44 @@ Table: scenario
 ├── short_code           VARCHAR NOT NULL UNIQUE    -- Friendly identifier like "s0011"
 ├── run_name             VARCHAR                    -- Full technical run name like "s0011_adjBL_wTUCP"
 ├── is_active            BOOLEAN NOT NULL DEFAULT TRUE
-├── name                 VARCHAR                    -- Display name: "DWR Historical Adjusted Baseline with TUCPs"
-├── short_description    TEXT                       -- Brief 1-2 sentence description
-├── baseline_scenario_id INTEGER                    -- Self-ref FK to scenario.id (what this is compared against)
 ├── hydroclimate_id      INTEGER                    -- FK to hydroclimate.id
+├── sibling_group        VARCHAR                    -- FK to sibling_group.short_code
 ├── scenario_version_id  INTEGER DEFAULT 1          -- FK to version.id (scenario family)
-├── scenario_author_id   INTEGER                    -- FK to scenario_author.id
-├── model_source_id      INTEGER                    -- FK to model_source.id (all CalSim3 currently)
-├── sibling_group        VARCHAR                    -- Cross-hydroclimate grouping key (e.g. "1.1", "2.3")
-├── created_by           INTEGER NOT NULL           -- FK to developer.id
-├── updated_by           INTEGER NOT NULL           -- FK to developer.id
+├── created_by           INTEGER NOT NULL DEFAULT 2 -- FK to developer.id
+├── updated_by           INTEGER NOT NULL DEFAULT 2 -- FK to developer.id
 ├── created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-├── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-└── long_description     TEXT                       -- Full multi-paragraph description (last column)
+└── updated_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 
-Records: 75 active scenarios across 3 hydroclimates (24 dwr_hist_adj + 24 cc50 + 24 cc95 + 3 in each)
+Records: 72 active scenarios across 3 hydroclimates (24 dwr_hist_adj + 24 cc50 + 24 cc95)
          3 inactive scenarios (s0022 USBR Alt2V1, s0029 eflows v1, s0038 USBR Alt3)
-         24 sibling_group values, each grouping 3 scenarios (one per hydroclimate)
 
-Note: baseline_scenario_id = derivation parent (what scenario this is based on).
-      Within each hydroclimate, the baseline chain mirrors the hist_adj derivation tree.
-      sibling_group links operationally identical scenarios across hydroclimates.
-      IDs resequenced by short_code in migration 43; long_description moved to last column
+Note: Shared operational configuration attributes (name, descriptions, baseline,
+      scenario_author, model_source) live in the sibling_group table.
+      Each sibling_group groups operationally identical scenarios across hydroclimates.
+      The sibling_group short_code is the hist_adj scenario's short_code (e.g. 's0020').
+
+Columns moved to sibling_group table (migration 47):
+  name, short_description, long_description, baseline_scenario_id,
+  scenario_author_id, model_source_id
 
 Dropped columns (migration 35): subtitle, narrative, source_scenario_id, slr_id
 
 Foreign keys:
-├── Ref: scenario.scenario_author_id > scenario_author.id [delete: restrict, update: cascade]
-└── Ref: scenario.model_source_id > model_source.id [delete: restrict, update: cascade]
+└── Ref: scenario.sibling_group > sibling_group.short_code [delete: restrict, update: cascade]
 
-Note: baseline_scenario_id, hydroclimate_id, scenario_version_id, created_by,
-      updated_by do not have explicit FK constraints in the database.
+Note: hydroclimate_id, scenario_version_id, created_by, updated_by
+      do not have explicit FK constraints in the database.
 
 Indexes:
 ├── scenario_short_code_key (short_code) -- Unique constraint
 ├── idx_scenario_run_name_active (run_name, is_active)
 ├── idx_scenario_active (is_active)
-├── idx_scenario_baseline (baseline_scenario_id)
 ├── idx_scenario_hydroclimate (hydroclimate_id)
-├── idx_scenario_model_source (model_source_id)
 ├── idx_scenario_active_version (is_active, scenario_version_id)
 └── idx_scenario_sibling_group (sibling_group)
 ```
 
-### **2. scenario_author (scenario authors/groups)**
+### **3. scenario_author (scenario authors/groups)**
 
 ```
 Table: scenario_author
@@ -1179,7 +1208,7 @@ Records: 3 authors
 └── 3  coeqwal COEQWAL modeling team based on model files provided by USBR and DWR
 ```
 
-### **3. scenario_tag (fine-grained scenario classification tags)**
+### **4. scenario_tag (fine-grained scenario classification tags)**
 
 ```
 Table: scenario_tag
@@ -1204,7 +1233,7 @@ Note: Distinct from the 6 broad research themes in the theme table (Layer 08).
       Tags are fine-grained classifications derived from scenario metadata.
 ```
 
-### **4. scenario_tag_link (scenario-tag relationships)**
+### **5. scenario_tag_link (scenario-tag relationships)**
 
 ```
 Table: scenario_tag_link

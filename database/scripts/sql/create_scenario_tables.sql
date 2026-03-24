@@ -146,32 +146,49 @@ CREATE TABLE IF NOT EXISTS operation_definition (
 );
 
 -- =============================================================================
--- 8. SCENARIO TABLE (Layer 06)
+-- 8a. SIBLING_GROUP TABLE (Layer 06 — operational configuration families)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS sibling_group (
+    short_code VARCHAR PRIMARY KEY,
+    name VARCHAR,
+    short_description TEXT,
+    long_description TEXT,
+    baseline_group VARCHAR,
+    scenario_author_id INTEGER,
+    model_source_id INTEGER,
+    created_by INTEGER NOT NULL DEFAULT 2,
+    updated_by INTEGER NOT NULL DEFAULT 2,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_sibling_group_baseline
+        FOREIGN KEY (baseline_group) REFERENCES sibling_group(short_code)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_sibling_group_author
+        FOREIGN KEY (scenario_author_id) REFERENCES scenario_author(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_sibling_group_model_source
+        FOREIGN KEY (model_source_id) REFERENCES model_source(id)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- =============================================================================
+-- 8b. SCENARIO TABLE (Layer 06)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS scenario (
     id SERIAL PRIMARY KEY,
     short_code VARCHAR NOT NULL UNIQUE,
     run_name VARCHAR,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    name VARCHAR,
-    short_description TEXT,
-    baseline_scenario_id INTEGER,
     hydroclimate_id INTEGER,
-    scenario_version_id INTEGER DEFAULT 1,
-    scenario_author_id INTEGER,
-    model_source_id INTEGER,
     sibling_group VARCHAR,
+    scenario_version_id INTEGER DEFAULT 1,
     created_by INTEGER NOT NULL DEFAULT 2,
     updated_by INTEGER NOT NULL DEFAULT 2,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    long_description TEXT,
-    CONSTRAINT fk_scenario_scenario_author
-        FOREIGN KEY (scenario_author_id) REFERENCES scenario_author(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT scenario_model_source_id_fkey
-        FOREIGN KEY (model_source_id) REFERENCES model_source(id)
-        ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT fk_scenario_sibling_group
+        FOREIGN KEY (sibling_group) REFERENCES sibling_group(short_code)
+        ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
 -- =============================================================================
