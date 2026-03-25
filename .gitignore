@@ -124,6 +124,8 @@ database/scripts/sql/**/*_cloud9.sql
 # Local audit outputs
 audits/
 
-reference/
+reference/*
+!reference/coeqwal_cs3_scenario_listing_v6*
 
 database/scripts/sql/migrations/
+database/reference/
