@@ -198,13 +198,17 @@ RCLONE_REMOTE = "gdrive"
 def rclone_lsjson(folder_id: str, subpath: str = "",
                   dirs_only: bool = False,
                   rclone_remote: Optional[str] = None) -> List[Dict]:
-    """List contents of a Drive folder via rclone lsjson."""
+    """List contents of a Drive folder via rclone lsjson.
+
+    If folder_id is a Google Drive folder ID, navigates by ID.
+    If folder_id is empty/None, navigates by path (subpath is the full
+    Shared Drive path, e.g. "s0011_adjBL_wTUCP/Model_Files/").
+    """
     remote = rclone_remote or RCLONE_REMOTE
     target = f"{remote}:{subpath}"
-    cmd = [
-        "rclone", "lsjson", target,
-        f"--drive-root-folder-id={folder_id}",
-    ]
+    cmd = ["rclone", "lsjson", target]
+    if folder_id:
+        cmd.append(f"--drive-root-folder-id={folder_id}")
     if dirs_only:
         cmd.append("--dirs-only")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -776,7 +780,7 @@ def cmd_promote(args):
 
 SCAN_AUDIT_COLUMNS = [
     "scenario_id", "hydroclimate", "drive_folder_name", "drive_folder_id",
-    "folder_name_match", "model_files_link",
+    "folder_name_match", "access_mode", "model_files_link",
     "zip_count", "zip_names", "zip_selected", "zip_size_mb",
     "trend_csv_count", "trend_csv_names", "trend_csv_selected",
     "expected_dv_filename", "expected_sv_filename",
@@ -821,13 +825,52 @@ def read_scenario_listing_csv(csv_path: str) -> List[Dict[str, str]]:
     return scenarios
 
 
+def _resolve_drive_access(scenario: Dict) -> tuple:
+    """Determine how to access a scenario's Drive folder.
+
+    Returns (folder_id_or_empty, model_files_path, trend_path, access_mode).
+    access_mode is "id" (folder ID) or "path" (Shared Drive path fallback).
+    """
+    folder_id = scenario["drive_folder_id"]
+    folder_name = scenario["drive_folder_name"]
+    dv_root = scenario["dv_root"]
+
+    if folder_id:
+        return (
+            folder_id,
+            "Model_Files/",
+            "Data_Extraction/Variables_From_trend_report_variables_v5/",
+            "id",
+        )
+
+    # No folder ID -- fall back to Shared Drive path navigation.
+    # Prefer dv_root (from DV_Path) since it's the actual folder name on Drive;
+    # fall back to GoogleDriveFolderName if dv_root is empty.
+    base = dv_root or folder_name
+    if not base:
+        return ("", "", "", "none")
+
+    return (
+        "",
+        f"{base}/Model_Files/",
+        f"{base}/Data_Extraction/Variables_From_trend_report_variables_v5/",
+        "path",
+    )
+
+
 def scan_scenario(
     scenario: Dict, rclone_remote: str,
 ) -> Dict[str, Any]:
-    """List Drive contents for one scenario, report zip/csv counts."""
+    """List Drive contents for one scenario, report zip/csv counts.
+
+    Navigates by folder ID when available; falls back to Shared Drive
+    path navigation for scenarios whose ModelFilesLink has no URL.
+    When folder_name != dv_root, tries both paths and reports which worked.
+    """
     sc = scenario["short_code"]
     folder_id = scenario["drive_folder_id"]
     folder_name = scenario["drive_folder_name"]
+    dv_root = scenario["dv_root"]
 
     row: Dict[str, Any] = {
         "scenario_id": sc,
@@ -836,6 +879,7 @@ def scan_scenario(
         "drive_folder_id": folder_id[:16] + "..." if len(folder_id) > 16 else folder_id,
         "folder_name_match": "",
         "model_files_link": scenario["model_files_link"][:60],
+        "access_mode": "",
         "zip_count": 0,
         "zip_names": "",
         "zip_selected": "",
@@ -845,35 +889,43 @@ def scan_scenario(
         "trend_csv_selected": "",
         "expected_dv_filename": scenario["dv_filename"],
         "expected_sv_filename": scenario["sv_filename"],
-        "dv_root": scenario["dv_root"],
+        "dv_root": dv_root,
         "status": "",
     }
 
-    dv_root = scenario["dv_root"]
     if dv_root and dv_root != folder_name:
         row["folder_name_match"] = "MISMATCH"
+        log.info("[%s] Folder name mismatch: GoogleDriveFolderName='%s' vs DV_Path root='%s'",
+                 sc, folder_name, dv_root)
     elif dv_root:
         row["folder_name_match"] = "OK"
     else:
         row["folder_name_match"] = "NO_DV_PATH"
 
-    if not folder_id:
-        row["status"] = "NO_FOLDER_ID"
-        log.warning("[%s] No Drive folder ID (ModelFilesLink: %s)",
-                    sc, scenario["model_files_link"][:40])
+    fid, model_path, trend_path, access_mode = _resolve_drive_access(scenario)
+    row["access_mode"] = access_mode
+
+    if access_mode == "none":
+        row["status"] = "NO_DRIVE_ACCESS"
+        log.warning("[%s] No folder ID and no folder name -- cannot scan", sc)
         return row
+
+    if access_mode == "path":
+        log.info("[%s] No folder ID; using Shared Drive path: %s", sc, model_path)
+    else:
+        log.info("[%s] Using folder ID: %s ...", sc, folder_id[:12])
 
     statuses = []
 
-    log.info("[%s] Listing Model_Files/ (folder_id: %s) ...", sc, folder_id[:12])
-    model_files = rclone_lsjson(folder_id, "Model_Files/", rclone_remote=rclone_remote)
+    # --- List Model_Files/ for ZIPs ---
+    model_files = rclone_lsjson(fid, model_path, rclone_remote=rclone_remote)
     zips = [f for f in model_files if f["Name"].lower().endswith(".zip")]
     row["zip_count"] = len(zips)
     row["zip_names"] = ";".join(sorted(f["Name"] for f in zips))
 
     if not zips:
         statuses.append("MISSING_ZIP")
-        log.warning("[%s] No ZIP files in Model_Files/", sc)
+        log.warning("[%s] No ZIP files found in Model_Files/", sc)
     else:
         zips.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
         selected = zips[0]
@@ -884,12 +936,8 @@ def scan_scenario(
             log.warning("[%s] Multiple ZIPs (%d): %s", sc, len(zips),
                         ", ".join(f["Name"] for f in zips))
 
-    log.info("[%s] Listing Data_Extraction/trend report CSVs ...", sc)
-    trend_files = rclone_lsjson(
-        folder_id,
-        "Data_Extraction/Variables_From_trend_report_variables_v5/",
-        rclone_remote=rclone_remote,
-    )
+    # --- List Data_Extraction/ for trend report CSVs ---
+    trend_files = rclone_lsjson(fid, trend_path, rclone_remote=rclone_remote)
     trend_csvs = [
         f for f in trend_files
         if f["Name"].lower().endswith(".csv")
@@ -914,8 +962,8 @@ def scan_scenario(
 
     row["status"] = "|".join(statuses) if statuses else "OK"
 
-    log.info("[%s] Scan done -- %s (zips=%d, trend_csvs=%d)",
-             sc, row["status"], row["zip_count"], row["trend_csv_count"])
+    log.info("[%s] Scan done -- %s (access=%s, zips=%d, trend_csvs=%d)",
+             sc, row["status"], access_mode, row["zip_count"], row["trend_csv_count"])
     return row
 
 
@@ -950,14 +998,15 @@ def write_scan_audit(rows: List[Dict], local_path: str):
     print(f"  Folder mismatches:     {mismatch}")
 
     print()
-    hdr = "  {:<8} {:<26} {:>4} {:>4} {:<8} {}"
-    print(hdr.format("Scenario", "Hydroclimate", "Zips", "CSVs", "Match", "Status"))
-    print("  " + "-" * 90)
+    hdr = "  {:<8} {:<26} {:<5} {:>4} {:>4} {:<8} {}"
+    print(hdr.format("Scenario", "Hydroclimate", "Via", "Zips", "CSVs", "Match", "Status"))
+    print("  " + "-" * 96)
     for r in rows:
         hydro = r.get("hydroclimate", "")[:26]
         print(hdr.format(
             r.get("scenario_id", ""),
             hydro,
+            r.get("access_mode", "")[:5],
             str(r.get("zip_count", "")),
             str(r.get("trend_csv_count", "")),
             r.get("folder_name_match", ""),
@@ -1012,6 +1061,8 @@ def cmd_scan(args):
                     if len(sc["drive_folder_id"]) > 16 else sc["drive_folder_id"],
                 "folder_name_match": "MISMATCH" if sc["dv_root"] and sc["dv_root"] != sc["drive_folder_name"]
                     else ("OK" if sc["dv_root"] else "NO_DV_PATH"),
+                "access_mode": "id" if sc["drive_folder_id"] else (
+                    "path" if (sc["dv_root"] or sc["drive_folder_name"]) else "none"),
                 "model_files_link": sc["model_files_link"][:60],
                 "zip_count": "",
                 "zip_names": "",
