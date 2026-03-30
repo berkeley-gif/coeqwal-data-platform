@@ -410,8 +410,8 @@ def process_scenario(
     folder_id = scenario["drive_folder_id"]
     row: Dict[str, Any] = {
         "scenario_id": sc,
-        "study_name": scenario["study_name"],
-        "run_date": scenario["run_date"],
+        "study_name": scenario.get("study_name", ""),
+        "run_date": scenario.get("run_date", ""),
         "drive_folder_id": folder_id,
         "zip_count": 0,
         "zip_selected": "",
@@ -435,7 +435,7 @@ def process_scenario(
         "s3_staging_zip_key": "",
         "s3_staging_csv_key": "",
         "validation_status": "",
-        "notes": scenario["notes"],
+        "notes": scenario.get("notes", ""),
     }
 
     if not folder_id:
@@ -455,12 +455,25 @@ def process_scenario(
         log.error("[%s] No ZIP files in Model_Files/", sc)
         return row
 
-    if len(zips) > 1:
-        log.warning("[%s] Multiple ZIPs found (%d): %s", sc, len(zips),
-                    ", ".join(f["Name"] for f in zips))
-
-    zips.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
-    selected_zip = zips[0]
+    pinned_zip = scenario.get("pinned_zip", "")
+    if pinned_zip:
+        match = [f for f in zips if f["Name"] == pinned_zip]
+        if match:
+            selected_zip = match[0]
+            if len(zips) > 1:
+                log.info("[%s] Pinned ZIP '%s' selected (%d total on Drive)",
+                         sc, pinned_zip, len(zips))
+        else:
+            row["validation_status"] = "PINNED_ZIP_NOT_FOUND"
+            log.error("[%s] Pinned ZIP '%s' not found among: %s",
+                      sc, pinned_zip, ", ".join(f["Name"] for f in zips))
+            return row
+    else:
+        if len(zips) > 1:
+            log.warning("[%s] Multiple ZIPs found (%d): %s", sc, len(zips),
+                        ", ".join(f["Name"] for f in zips))
+        zips.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
+        selected_zip = zips[0]
     row["zip_selected"] = selected_zip["Name"]
     row["zip_drive_modified"] = selected_zip.get("ModTime", "")
     size_bytes = int(selected_zip.get("Size", 0))
@@ -481,7 +494,21 @@ def process_scenario(
     row["trend_csv_all_files"] = ";".join(sorted(f["Name"] for f in trend_csvs))
 
     selected_csv = None
-    if trend_csvs:
+    pinned_trend = scenario.get("pinned_trend", "")
+    if not trend_csvs:
+        log.warning("[%s] No trend report CSV found", sc)
+    elif pinned_trend:
+        match = [f for f in trend_csvs if f["Name"] == pinned_trend]
+        if match:
+            selected_csv = match[0]
+            row["trend_csv_selected"] = selected_csv["Name"]
+            if len(trend_csvs) > 1:
+                log.info("[%s] Pinned trend CSV '%s' selected (%d total on Drive)",
+                         sc, pinned_trend, len(trend_csvs))
+        else:
+            log.warning("[%s] Pinned trend CSV '%s' not found among: %s",
+                        sc, pinned_trend, ", ".join(f["Name"] for f in trend_csvs))
+    else:
         trend_csvs.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
         selected_csv = trend_csvs[0]
         row["trend_csv_selected"] = selected_csv["Name"]
@@ -489,8 +516,6 @@ def process_scenario(
             log.warning("[%s] Multiple trend CSVs found (%d): %s", sc,
                         len(trend_csvs),
                         ", ".join(f["Name"] for f in trend_csvs))
-    else:
-        log.warning("[%s] No trend report CSV found", sc)
 
     if dry_run:
         log.info("[%s] DRY RUN -- would download %s (%.1f MB) + %s",
@@ -668,7 +693,23 @@ def cmd_download(args):
     global RCLONE_REMOTE
     RCLONE_REMOTE = args.rclone_remote
 
-    scenarios = read_scenario_listing(args.listing, args.sheet)
+    fmt = _detect_csv_format(args.listing_csv)
+    if fmt == "source":
+        scenarios = read_scenario_source_csv(args.listing_csv)
+        log.info("Using model_run_file_source.csv format")
+        if not args.include_all:
+            before = len(scenarios)
+            scenarios = [s for s in scenarios if s["download_status"] == "ready"]
+            skipped = before - len(scenarios)
+            if skipped:
+                log.info("Filtered to 'ready' scenarios (%d skipped; use --include-all to download all)", skipped)
+    elif fmt == "excel":
+        scenarios = read_scenario_listing(args.listing_csv, args.sheet)
+        log.info("Using legacy Excel listing format")
+    else:
+        scenarios = read_scenario_listing_csv(args.listing_csv)
+        log.info("Using legacy v6 CSV listing format")
+
     if args.scenarios:
         filter_set = set(s.lower() for s in args.scenarios)
         scenarios = [s for s in scenarios if s["short_code"].lower() in filter_set]
@@ -679,8 +720,10 @@ def cmd_download(args):
 
     log.info("Found %d scenarios to process", len(scenarios))
     for s in scenarios:
-        log.info("  %s: %s (folder: %s)", s["short_code"], s["study_name"],
-                 s["drive_folder_id"][:12] + "..." if s["drive_folder_id"] else "NONE")
+        fid = s["drive_folder_id"]
+        log.info("  %s: %s (folder: %s)", s["short_code"],
+                 s.get("study_name") or s["drive_folder_name"],
+                 fid[:12] + "..." if fid else "NONE")
 
     s3_client = boto3.client("s3")
     results: List[Dict] = []
@@ -707,9 +750,9 @@ def cmd_download(args):
                     log.exception("[%s] Worker failed", sc["short_code"])
                     results.append({
                         "scenario_id": sc["short_code"],
-                        "study_name": sc["study_name"],
+                        "study_name": sc.get("study_name", ""),
                         "validation_status": "WORKER_ERROR",
-                        "notes": sc["notes"],
+                        "notes": sc.get("notes", ""),
                     })
 
     local_report = os.path.join(os.getcwd(), "audit_report.csv")
@@ -788,8 +831,44 @@ SCAN_AUDIT_COLUMNS = [
 ]
 
 
+def read_scenario_source_csv(csv_path: str) -> List[Dict[str, str]]:
+    """Read model_run_file_source.csv (our curated source of truth).
+
+    Columns: short_code, drive_folder_id, drive_folder_name,
+             pinned_model_run_zip, pinned_trend_csv, download_status, notes
+    """
+    scenarios = []
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            short_code = row.get("short_code", "").strip()
+            if not short_code:
+                continue
+            folder_name = row.get("drive_folder_name", "").strip()
+            scenarios.append({
+                "short_code": short_code,
+                "drive_folder_id": row.get("drive_folder_id", "").strip(),
+                "drive_folder_name": folder_name,
+                "pinned_zip": row.get("pinned_model_run_zip", "").strip(),
+                "pinned_trend": row.get("pinned_trend_csv", "").strip(),
+                "download_status": row.get("download_status", "").strip(),
+                "notes": row.get("notes", "").strip(),
+                "dv_root": folder_name,
+                "model_files_link": "",
+                "hydroclimate": "",
+                "dv_filename": "",
+                "sv_filename": "",
+                "study_name": "",
+                "run_date": "",
+            })
+    return scenarios
+
+
 def read_scenario_listing_csv(csv_path: str) -> List[Dict[str, str]]:
-    """Read v6 scenario listing CSV, extracting folder IDs from URLs."""
+    """Read external team's v6 scenario listing CSV (legacy format).
+
+    Kept for backward compatibility. Prefer read_scenario_source_csv().
+    """
     scenarios = []
     with open(csv_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -823,6 +902,16 @@ def read_scenario_listing_csv(csv_path: str) -> List[Dict[str, str]]:
                 "dv_root": dv_root,
             })
     return scenarios
+
+
+def _detect_csv_format(path: str) -> str:
+    """Return 'source' for model_run_file_source.csv, 'listing' for legacy CSV,
+    or 'excel' for .xlsx files."""
+    if path.lower().endswith(".xlsx"):
+        return "excel"
+    with open(path, encoding="utf-8-sig") as f:
+        header = f.readline()
+    return "source" if "short_code" in header else "listing"
 
 
 def _resolve_drive_access(scenario: Dict) -> tuple:
@@ -923,9 +1012,22 @@ def scan_scenario(
     row["zip_count"] = len(zips)
     row["zip_names"] = ";".join(sorted(f["Name"] for f in zips))
 
+    pinned_zip = scenario.get("pinned_zip", "")
     if not zips:
         statuses.append("MISSING_ZIP")
         log.warning("[%s] No ZIP files found in Model_Files/", sc)
+    elif pinned_zip:
+        match = [f for f in zips if f["Name"] == pinned_zip]
+        if match:
+            row["zip_selected"] = match[0]["Name"]
+            row["zip_size_mb"] = f"{int(match[0].get('Size', 0)) / (1024 * 1024):.1f}"
+            if len(zips) > 1:
+                log.info("[%s] Pinned ZIP '%s' selected (%d total on Drive)",
+                         sc, pinned_zip, len(zips))
+        else:
+            statuses.append("PINNED_ZIP_NOT_FOUND")
+            log.warning("[%s] Pinned ZIP '%s' not found among: %s",
+                        sc, pinned_zip, ", ".join(f["Name"] for f in zips))
     else:
         zips.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
         selected = zips[0]
@@ -946,9 +1048,21 @@ def scan_scenario(
     row["trend_csv_count"] = len(trend_csvs)
     row["trend_csv_names"] = ";".join(sorted(f["Name"] for f in trend_csvs))
 
+    pinned_trend = scenario.get("pinned_trend", "")
     if not trend_csvs:
         statuses.append("MISSING_TREND")
         log.warning("[%s] No trend report CSV found", sc)
+    elif pinned_trend:
+        match = [f for f in trend_csvs if f["Name"] == pinned_trend]
+        if match:
+            row["trend_csv_selected"] = match[0]["Name"]
+            if len(trend_csvs) > 1:
+                log.info("[%s] Pinned trend CSV '%s' selected (%d total on Drive)",
+                         sc, pinned_trend, len(trend_csvs))
+        else:
+            statuses.append("PINNED_TREND_NOT_FOUND")
+            log.warning("[%s] Pinned trend CSV '%s' not found among: %s",
+                        sc, pinned_trend, ", ".join(f["Name"] for f in trend_csvs))
     else:
         trend_csvs.sort(key=lambda f: f.get("ModTime", ""), reverse=True)
         row["trend_csv_selected"] = trend_csvs[0]["Name"]
@@ -1033,11 +1147,23 @@ def write_scan_audit(rows: List[Dict], local_path: str):
 
 
 def cmd_scan(args):
-    """Scan Drive contents using the v6 CSV listing."""
+    """Scan Drive contents using scenario_source.csv or legacy v6 CSV."""
     global RCLONE_REMOTE
     RCLONE_REMOTE = args.rclone_remote
 
-    scenarios = read_scenario_listing_csv(args.listing_csv)
+    fmt = _detect_csv_format(args.listing_csv)
+    if fmt == "source":
+        scenarios = read_scenario_source_csv(args.listing_csv)
+        log.info("Using scenario_source.csv format")
+        if not args.include_all:
+            before = len(scenarios)
+            scenarios = [s for s in scenarios if s["download_status"] == "ready"]
+            skipped = before - len(scenarios)
+            if skipped:
+                log.info("Filtered to 'ready' scenarios (%d skipped; use --include-all to scan all)", skipped)
+    else:
+        scenarios = read_scenario_listing_csv(args.listing_csv)
+        log.info("Using legacy v6 listing CSV format")
 
     if args.scenarios:
         filter_set = set(s.lower() for s in args.scenarios)
@@ -1128,10 +1254,10 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     dl = sub.add_parser("download", help="Download, validate, and stage to S3")
-    dl.add_argument("--listing", required=True,
-                    help="Path to COEQWAL_Completed_Scenario_Listing.xlsx")
+    dl.add_argument("--listing-csv", required=True,
+                    help="Path to model_run_file_source.csv (or legacy Excel listing)")
     dl.add_argument("--sheet", default="HistHydro_20260223",
-                    help="Excel sheet name (default: HistHydro_20260223)")
+                    help="Excel sheet name (only for legacy .xlsx format)")
     dl.add_argument("--s3-bucket", required=True,
                     help="S3 bucket for staging (e.g., coeqwal-model-run)")
     dl.add_argument("--workers", type=int, default=4,
@@ -1140,6 +1266,8 @@ def main():
                     help="Optional: only process these scenario short codes")
     dl.add_argument("--rclone-remote", default="gdrive",
                     help="Name of the rclone remote (default: gdrive)")
+    dl.add_argument("--include-all", action="store_true",
+                    help="Include needs_review/skip scenarios (default: ready only)")
     dl.add_argument("--dry-run", action="store_true",
                     help="List files without downloading")
 
@@ -1151,15 +1279,17 @@ def main():
                     help="Only promote this one scenario (e.g., s0020)")
 
     sc = sub.add_parser("scan",
-                        help="Scan Drive contents using v6 CSV listing")
+                        help="Scan Drive contents using scenario_source.csv")
     sc.add_argument("--listing-csv", required=True,
-                    help="Path to v6 scenario listing CSV")
+                    help="Path to scenario_source.csv (or legacy v6 CSV)")
     sc.add_argument("--rclone-remote", default="gdrive",
                     help="Name of the rclone remote (default: gdrive)")
     sc.add_argument("--workers", type=int, default=4,
                     help="Number of concurrent scan workers (default: 4)")
     sc.add_argument("--scenarios", nargs="*",
                     help="Optional: only scan these scenario short codes")
+    sc.add_argument("--include-all", action="store_true",
+                    help="Include needs_review/skip scenarios (default: ready only)")
     sc.add_argument("--local-only", action="store_true",
                     help="Parse CSV and write manifest without Drive access")
 

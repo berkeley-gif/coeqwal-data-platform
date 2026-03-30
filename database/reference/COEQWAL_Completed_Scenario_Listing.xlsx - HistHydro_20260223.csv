@@ -1,0 +1,26 @@
+,,,,,,
+,Web Platform ID,Modeling Identifier,Study Name (with link to Google Drive),Short Description,Run/ Update Date,Notes
+,1.2,s0011,s0011_adjBL_wTUCP,DWR 2023 Baseline,7/10/2025,
+,1.1,s0020,s0020_DCRadjBL_2020LU_wTUCP,DWR 2023 Baseline with TUCPs & 2020 land use,8/6/2025,
+,1.3,s0021,s0021_DCRadjBL_2020LU_woTUCP,DWR 2023 Baseline without TUCPs & 2020 land use,8/15/2025,
+,1.5,s0023,s0023_USBR24Alt2V1_adjBL_2020LU_woTUCP,USBR 2024 Alt2V1 with 2020 land use,2/17/2026*,Rerun to correct an issue with SLR specification; Tier teams must rerun
+,1.4,s0024,s0024_USBR24Alt2V1_adjHist_2020LU_wTUCP,USBR 2024 Alt2V1 with 2020 land use & TUCPs,2/17/2026*,Rerun to correct an issue with SLR specification; Tier teams must rerun
+,2.1,s0025,s0025_SJVgwLimit_2020LU_wTUCP_v0.2,Limiting groundwater pumping in the San Joaquin,11/2/2025,
+,2.2,s0026,s0026_SJVgwLimit_SGMALU_wTUCP,Reducing irrigated acreage in the San Joaquin,1/13/2026,
+,2.3,s0027,s0027_CVgwLimit_2020LU_wTUCP_v0.2,Limiting groundwater pumping in the Central Valley,11/2/2025,
+,2.4,s0028,s0028_CVgwLimit_SGMALU_wTUCP,Reducing irrigated acreage in the Central Valley,1/13/2026,
+,3.1,s0030,s0030_DCRadjHist_2020LU_NoFlowReqt,Remove minimum flow requirements throughout CV,1/27/2026,
+,3.4,s0031,s0031_DCRadjHist_2020LU_salmonflows,Salmon-friendly flows on the Sac & SJR with Shasta storage protections,1/26/2026,
+,3.3,s0032,s0032_DCRadjHist_CVgwLU_eflows,Functional flows for all sites with reduced irrigated acreage for CV,1/12/2026,
+,3.5,s0033,s0033_DCRadjHist_CVgwLU_salmonflows,Salmon-friendly flows on the Sac & SJR with Shasta storage protections and reduced irrigated acreage for CV,1/26/2026,
+,4.1,s0035,s0035_DCRadjBL_2020LU_PriorityHHS,Prioritizing health and human safety surface delivery levels to community water systems,2/16/2026,
+,4.2,s0036,s0036_DCRadjBL_2020LU_PriorityFuncCWN,Prioritizing functional delivery levels to community water systems,2/16/2026,
+,4.3,s0037,s0037_DCRadjBL_2020LU_PriorityFullCWN,Prioritizing full contract or demand levels to community water systems,2/16/2026,
+,5.4,s0039,s0039_USBRAlt3_2020LU_DeltaOut65,USBR Alt3 with 2020 land use - 65% unimpaired Delta outflow with upstream actions to protect storage,11/20/2025,
+,5.1,s0040,s0040_USBRAlt3_2020LU_DeltaOut35,USBR Alt3 with 2020 land use - 35% unimpaired Delta outflow with upstream actions to protect storage,12/11/2025,
+,5.2,s0041,s0041_USBRAlt3_2020LU_DeltaOut45,USBR Alt3 with 2020 land use - 45% unimpaired Delta outflow with upstream actions to protect storage,12/11/2025,
+,5.3,s0042,s0042_USBRAlt3_2020LU_DeltaOut55,USBR Alt3 with 2020 land use - 55% unimpaired Delta outflow with upstream actions to protect storage,12/11/2025,
+,6.1,s0044,s0044_DCRadjHist_2020LU_ShastaCarryOver20,Target an increase in Shasta carryover of 20% compared to s0020 baseline,12/11/2025,
+,6.4,s0045,s0045_DCRadjBL_2020LU_RelaxFallX2,Remove the fall X2 requirement in the Delta,1/2/2026,
+,3.2,s0046,s0046_DCRadjHist_2020LU_EflowsV2,"Variation of functional flows that removes the downstream Sac, SJR, and Delta flow requirements",10/15/2025,"Note: this replaces the original ""functional flows"" scenario (s0029)"
+,7.4,s0065,s0065_DWRadapt25_2020LU_DCP,An updated version of the Delta Conveyance Project with 2020 land use,1/19/2026,Note: this replaces the older DCP version s0010
