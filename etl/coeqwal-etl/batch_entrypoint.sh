@@ -5,7 +5,6 @@
 # - Converts DSS -> CSV (SV + CalSim output)
 # - (Optional) Validates against a reference CSV if provided in the S3 bucket
 # - Uploads CSVs + manifest to S3
-# - Updates DynamoDB status
 
 set -euo pipefail
 
@@ -14,7 +13,6 @@ set -euo pipefail
 : "${ZIP_KEY:?ZIP_KEY required}"
 
 # ----------------------------- Optional env ------------------------------
-DDB_TABLE="${DDB_TABLE:-coeqwal_scenario}"
 OUTPUT_PREFIX="${OUTPUT_PREFIX:-scenario/}"
 JOB_ID="${AWS_BATCH_JOB_ID:-unknown}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
@@ -32,31 +30,6 @@ echo "[INFO] Input: s3://${ZIP_BUCKET}/${ZIP_KEY}"
 
 ZIP_BASENAME="$(basename "${ZIP_KEY}")"
 ZIP_LOCAL="${WORKDIR}/input.zip"
-
-# ----------------------------- Dynamo helper -----------------------------
-ddb_update () {
-  local status="$1"; shift
-  local epoch
-  epoch="$(date +%s)"
-  local ue="SET #s=:s, updated=:u"
-  local names='{"#s":"status"}'
-  local vals="{\":s\":{\"S\":\"${status}\"},\":u\":{\"N\":\"${epoch}\"}"
-  while (( "$#" )); do
-    local kv="$1"; shift
-    local k="${kv%%=*}"; local v="${kv#*=}"
-    ue="${ue}, ${k}=:${k}"
-    vals="${vals},\":${k}\":{\"S\":\"${v}\"}"
-  done
-  vals="${vals}}"
-  aws dynamodb update-item \
-    --region "${AWS_REGION}" \
-    --table-name "${DDB_TABLE}" \
-    --key "{\"scenario_id\":{\"S\":\"${SCENARIO_ID:-unknown}\"}}" \
-    --update-expression "${ue}" \
-    --expression-attribute-names "${names}" \
-    --expression-attribute-values "${vals}" \
-    >/dev/null 2>&1 || echo "[WARN] DDB update failed (${status})."
-}
 
 # ----------------------------- Download & unzip --------------------------
 aws s3 cp "s3://${ZIP_BUCKET}/${ZIP_KEY}" "${ZIP_LOCAL}"
@@ -82,9 +55,6 @@ cat "${CLASSIFY_ENV}"
 
 # shellcheck disable=SC1090
 source "${CLASSIFY_ENV}"   # exports: SCENARIO_ID, SV_PATH, CALSIM_OUTPUT_PATH
-
-# Mark RUNNING (Lambda wrote SUBMITTED earlier)
-SCENARIO_ID="${SCENARIO_ID}" ddb_update "RUNNING" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
 
 # ----------------------------- Convert DSS -> CSV ------------------------
 SV_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_sv_input.csv"
@@ -246,7 +216,6 @@ if [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
 elif [[ -n "${SV_PATH}" || -n "${CALSIM_OUTPUT_PATH}" ]]; then
   FINAL_STATUS="SUCCEEDED_PARTIAL"
 else
-  ddb_update "FAILED" "job_id=${JOB_ID}" "zip_key=${ZIP_KEY}"
   echo "[ERROR] No DSS candidates in expected folders; failing." >&2
   exit 1
 fi
@@ -291,14 +260,6 @@ cat > "${WORKDIR}/manifest.json" <<MF
 MF
 
 aws s3 cp "${WORKDIR}/manifest.json" "s3://${ZIP_BUCKET}/${MANIFEST_KEY}"
-
-# ----------------------------- Final DDB status --------------------------
-ddb_update "${FINAL_STATUS}" \
-  "job_id=${JOB_ID}" \
-  "zip_key=${ZIP_KEY}" \
-  "sv_csv_key=${SV_CSV_KEY}" \
-  "calsim_csv_key=${CAL_CSV_KEY}" \
-  "manifest_key=${MANIFEST_KEY}"
 
 echo "[INFO] Job ${JOB_ID} complete: ${FINAL_STATUS}"
 exit 0

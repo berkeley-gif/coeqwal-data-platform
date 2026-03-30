@@ -7,7 +7,6 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { BatchClient, SubmitJobCommand } from '@aws-sdk/client-batch';
-import { DynamoDBClient, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 
 const REGION = process.env.AWS_REGION || 'us-west-2';
 
@@ -15,11 +14,9 @@ const REGION = process.env.AWS_REGION || 'us-west-2';
 const BUCKET = process.env.COEQWAL_S3_BUCKET || 'coeqwal-model-run';
 const JOB_QUEUE = process.env.COEQWAL_BATCH_QUEUE || 'coeqwal-dss-queue';
 const JOB_DEFINITION = process.env.COEQWAL_BATCH_JOBDEF || 'coeqwal-dss-jobdef';
-const DDB_TABLE = process.env.DDB_TABLE || ''; // optional; if blank, DDB status is skipped
 
 const s3 = new S3Client({ region: REGION });
 const batch = new BatchClient({ region: REGION });
-const ddb = new DynamoDBClient({ region: REGION });
 
 export async function handler(event) {
   console.log('📦 Incoming Event:', JSON.stringify(event, null, 2));
@@ -108,7 +105,6 @@ export async function handler(event) {
       // Add validation tolerances for enhanced validation
       { name: 'ABS_TOL', value: '1e-6' },
       { name: 'REL_TOL', value: '1e-6' },
-      // can also pass OUTPUT_PREFIX / DDB_TABLE etc. here if to override defaults in the container
     ];
 
     console.log('🚀 Submitting Batch job:', { jobName, JOB_QUEUE, JOB_DEFINITION, environment });
@@ -141,27 +137,6 @@ export async function handler(event) {
       console.log(`⚠️ Validation DISABLED - No reference CSV found`);
     }
 
-    // --- Optional: write SUBMITTED state to DynamoDB ---
-    if (DDB_TABLE) {
-      try {
-        console.log(`📝 Updating DynamoDB (${DDB_TABLE}) with SUBMITTED`);
-        await ddb.send(new UpdateItemCommand({
-          TableName: DDB_TABLE,
-          Key: { scenario_id: { S: scenarioId } },
-          UpdateExpression: 'SET #s = :s, zip_key = :z, job_id = :j, updated = :u, validation_enabled = :v',
-          ExpressionAttributeNames: { '#s': 'status' },
-          ExpressionAttributeValues: {
-            ':s': { S: 'SUBMITTED' },
-            ':z': { S: zipDestKey },
-            ':j': { S: jobId || 'unknown' },
-            ':u': { N: String(Math.floor(Date.now() / 1000)) },
-            ':v': { BOOL: !!validationCsvFinalKey },
-          },
-        }));
-      } catch (e) {
-        console.warn('⚠️ DDB update failed (non-fatal):', e);
-      }
-    }
   } catch (err) {
     console.error('❌ Error in Lambda handler:', err);
     throw err;

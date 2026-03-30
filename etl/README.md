@@ -151,8 +151,8 @@ The pipeline has automated and manual stages. Understanding the boundary is impo
 Google Drive ──►   │  S3 ready/ ──► Lambda    │          │  Statistics ETL              │
 (gdrive_bulk_      │  ──► Batch (DSS→CSV)     │          │  (run_all.py)                │
  download.py)      │  ──► S3 scenario/csv/    │          │  ──► PostgreSQL tables       │
-   [manual]        │  ──► DynamoDB status      │          │  Verification                │
-                   │  ──► S3 validation/       │          │  (verify_all_sections.py,    │
+   [manual]        │  ──► S3 validation/       │          │  Verification                │
+                   │  ──► S3 manifest.json     │          │  (verify_all_sections.py,    │
                    └──────────────────────────┘          │   verify_api.py)             │
                                                          └──────────────────────────────┘
 ```
@@ -319,7 +319,6 @@ Docker-based DSS extraction using `pydsstools`:
 AWS Lambda function that triggers ETL jobs:
 - **Trigger**: S3 ObjectCreated events on DSS ZIP uploads
 - **Action**: Submits AWS Batch job with validation parameters
-- **Monitoring**: Updates DynamoDB with job status
 - **Function name**: `coeqwalEtlTrigger`
 - **Runtime**: Node.js 18+ (uses built-in AWS SDK v3, no `node_modules` needed)
 - **Source**: Single file `lambda-trigger/index.mjs`
