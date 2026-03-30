@@ -17,7 +17,7 @@ Usage:
 
   # Phase 2a: smoke-test one scenario
   python gdrive_bulk_download.py promote \
-    --s3-bucket coeqwal-model-run --upload-single s0020
+    --s3-bucket coeqwal-model-run --scenarios s0020
 
   # Phase 2b: promote all
   python gdrive_bulk_download.py promote --s3-bucket coeqwal-model-run
@@ -779,11 +779,15 @@ def cmd_promote(args):
             if re.match(r"^s\d{4}$", sc):
                 groups.setdefault(sc, []).append(key)
 
-    if args.upload_single:
-        target = args.upload_single.lower()
-        groups = {k: v for k, v in groups.items() if k == target}
+    filter_ids = None
+    if args.scenarios:
+        filter_ids = {s.strip().lower() for s in args.scenarios.split(",")}
+
+    if filter_ids:
+        groups = {k: v for k, v in groups.items() if k in filter_ids}
         if not groups:
-            log.error("No staged files found for %s", target)
+            log.error("No staged files found for %s",
+                      ", ".join(sorted(filter_ids)))
             return
 
     if not groups:
@@ -1275,8 +1279,8 @@ def main():
                         help="Copy staged files from staging/ to ready/")
     pr.add_argument("--s3-bucket", required=True,
                     help="S3 bucket (e.g., coeqwal-model-run)")
-    pr.add_argument("--upload-single",
-                    help="Only promote this one scenario (e.g., s0020)")
+    pr.add_argument("--scenarios",
+                    help="Comma-separated scenario IDs to promote (default: all in staging)")
 
     sc = sub.add_parser("scan",
                         help="Scan Drive contents using scenario_source.csv")
