@@ -8,34 +8,44 @@ Automated DSS file processing pipeline that:
 
 ---
 
-## How to load new scenarios (end-to-end)
+## How to load new scenarios
 
-This is the high-level process for bringing new CalSim model runs from the COEQWAL Shared Drive into the data platform. Each scenario is a CalSim3 model run packaged as a ZIP file on Google Drive, with a companion Trend Report CSV for validation.
+This is the process for bringing new CalSim model runs from the COEQWAL Shared Drive into the data platform. Each scenario is a CalSim3 model run packaged as a ZIP file on Google Drive, with a companion Trend Report CSV for validation.
 
-### 1. Update the scenario listing CSV
+### 1. Update the model run file source CSV
 
-All scenario metadata and Google Drive paths are tracked in a single CSV file:
+Google Drive paths and file selections for every scenario are tracked in our CSV:
 
 ```
-reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv
+database/reference/model_run_file_source.csv
 ```
 
-For each new scenario, ensure these columns are populated:
+This file is maintained from the model run file lists, often with corrected folder IDs, verified paths, and pinned filenames.
 
-| Column | What to fill in | Example |
-|--------|----------------|---------|
-| `Index` | Scenario short code (e.g. `s0070`) | `s0070` |
-| `StudyName` | Full study/run name | `s0070_DCRadjHist_cc50_2020LU_eflowsV1` |
-| `GoogleDriveFolderName` | Exact folder name on the Shared Drive | `s0070_DCRadjHist_cc50_2020LU_eflowsV1` |
-| `ModelFilesLink` | Google Drive folder URL (preferred) or folder name | `https://drive.google.com/drive/folders/1AxM4...` |
-| `HydroClimate` | Hydroclimate condition | `2023DCR CC50-2043` |
-| `DV_Path` | Relative path to DV DSS file (backslashes OK) | `s0070_...\Model_Files\DSS\output\s0070_..._DV.dss` |
-| `SV_Path` | Relative path to SV DSS file | `s0070_...\Model_Files\DSS\input\coeqwal_s9999_SV_v1.1.3.dss` |
+| Column | Purpose | Example |
+|--------|---------|---------|
+| `short_code` | Scenario identifier | `s0070` |
+| `drive_folder_id` | Google Drive folder ID (from folder URL) | `1AxM4DmuTuoX...` |
+| `drive_folder_name` | Folder name on the Shared Drive | `s0070_DCRadjHist_cc50_2020LU_eflowsV1` |
+| `pinned_model_run_zip` | Exact ZIP filename to download (blank = auto-select single file) | `s0023_..._v2_20260217.zip` |
+| `pinned_trend_csv` | Exact trend report CSV to download (blank = auto-select) | `s0023_..._DV_v2_20260217.csv` |
+| `download_status` | `ready`, `needs_review`, or `skip` | `ready` |
+| `notes` | Any issues or disambiguation notes | |
 
-**Important notes on `ModelFilesLink`:**
-- Prefer pasting the full Google Drive folder URL. The script extracts the folder ID from the URL and uses it for fast, unambiguous access via `rclone`.
-- If a URL is not available, the script falls back to navigating the Shared Drive by folder name. This works but is slower and requires the folder name to exactly match what's on Drive.
-- The `DV_Path` and `SV_Path` columns give the script the exact DSS filenames to expect inside the ZIP, which eliminates ambiguity when a ZIP contains multiple DSS files.
+**How to get the `drive_folder_id`:**
+1. Navigate to the scenario's top-level folder on the Shared Drive (e.g., `s0070_DCRadjHist_cc50_2020LU_eflowsV1`)
+2. Copy the URL from the browser address bar: `https://drive.google.com/drive/folders/1AxM4DmuTuoX...`
+3. The folder ID is the part after `/folders/` (before any `?` query string)
+
+**When to pin filenames:**
+- If a Drive folder contains **multiple ZIPs** (old + new versions), set `pinned_model_run_zip` to the correct one. Use the version/date suffix from the modeling team's DV_Path to identify it.
+- If there are **multiple trend CSVs**, set `pinned_trend_csv` similarly.
+- If there's only **one file**, leave the column blank — the script auto-selects it.
+
+**`download_status` values:**
+- `ready` — folder ID verified, files confirmed by scan, ready to download
+- `needs_review` — known issue (missing files, wrong folder ID, etc.)
+- `skip` — intentionally excluded from download
 
 ### 2. Add scenario metadata to the database
 
@@ -46,46 +56,52 @@ Before loading data, each scenario needs a row in the `scenario` table. Write a 
 
 If the scenario belongs to an existing sibling group (same operational configuration, different hydroclimate), set `hydroclimate_sibling` to the group's reference short code. If it's a new operational configuration, also add a row to `scenario_hydroclimate_sibling`.
 
-### 3. Scan Google Drive (dry run)
+### 3. Scan Google Drive
 
-Before downloading, validate that all files are where you expect them:
+Before downloading, validate that all files are accessible:
 
 ```bash
-# Phase 1 — local-only (run on Mac, no rclone needed):
 python etl/scripts/gdrive_bulk_download.py scan \
-  --listing-csv "reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv" \
-  --local-only
-
-# Phase 2 — Drive scan (run on Cloud9 with rclone configured):
-python etl/scripts/gdrive_bulk_download.py scan \
-  --listing-csv "reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv" \
-  --workers 4
+  --listing-csv database/reference/model_run_file_source.csv \
+  --workers 4 2>&1 | tee scan_$(date +%Y%m%d).log
 ```
+
+By default, only scenarios with `download_status=ready` are scanned. Use `--include-all` to scan everything, or `--scenarios s0070 s0090` to scan specific ones.
 
 The scan lists `Model_Files/` for ZIPs and `Data_Extraction/Variables_From_trend_report_variables_v5/` for trend report CSVs. It reports:
 - How many ZIPs and trend CSVs exist per scenario
-- Which file it would select (most recent by modification time)
-- Mismatches between the `GoogleDriveFolderName` and the `DV_Path` root folder name
-- Scenarios with no Google Drive folder URL (falls back to Shared Drive path navigation)
+- Which file it would select (pinned filename if specified, otherwise most recent by date)
+- `OK` = exactly one file found (or pinned file found among multiples)
+- `ALERT_MULTIPLE_ZIP` / `ALERT_MULTIPLE_TREND` = multiple files, no pinned filename set — add one to the CSV
+- `MISSING_ZIP` / `MISSING_TREND` = file not found on Drive
+- `PINNED_ZIP_NOT_FOUND` / `PINNED_TREND_NOT_FOUND` = pinned filename doesn't match any file on Drive
 
-**How Drive access works:**
-- **With folder URL** (most scenarios): The script extracts the folder ID from the URL and uses `rclone --drive-root-folder-id=<id>` for direct access. Fast and unambiguous.
-- **Without folder URL** (e.g. s0011, s0020): The script navigates the Shared Drive by path, e.g. `rclone lsjson gdrive:s0011_adjBL_wTUCP/Model_Files/`. Works as long as the folder name is correct.
-- **Folder name mismatch** (e.g. s0050, s0058, s0094): If the initial listing returns nothing, the script retries using the `DV_Path` root as the folder name and logs the fallback.
-
-Review `scan_audit.csv` before proceeding. All scenarios should show `OK` status.
+Review `scan_audit.csv` before proceeding. All scenarios should show `OK` (except known missing trend reports like s0011).
 
 ### 4. Download and stage to S3
 
 ```bash
+# Dry run first (lists files, validates ZIPs, no S3 upload):
 python etl/scripts/gdrive_bulk_download.py download \
-  --listing reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  --listing-csv database/reference/model_run_file_source.csv \
   --s3-bucket coeqwal-model-run \
-  --scenarios s0070 s0090 \
-  --workers 2
+  --dry-run \
+  --workers 4 2>&1 | tee download_dryrun_$(date +%Y%m%d).log
+
+# Real download:
+python etl/scripts/gdrive_bulk_download.py download \
+  --listing-csv database/reference/model_run_file_source.csv \
+  --s3-bucket coeqwal-model-run \
+  --workers 4 2>&1 | tee download_$(date +%Y%m%d).log
 ```
 
-Files are staged to `s3://coeqwal-model-run/staging/<shortcode>/`.
+For each scenario, the download command:
+1. Lists `Model_Files/` on Drive and selects the ZIP (pinned or auto-selected)
+2. Lists `Data_Extraction/.../` and selects the trend report CSV
+3. Downloads the ZIP, validates it (classifies DSS files inside)
+4. Uploads both the ZIP and trend CSV to `s3://coeqwal-model-run/staging/<shortcode>/`
+
+Use `--scenarios s0070 s0090` to download specific scenarios only. Use `--include-all` to include non-ready scenarios.
 
 ### 5. Promote to trigger extraction
 
@@ -154,7 +170,7 @@ After Batch finishes (step 4), the CSVs and manifest exist in S3 but **no statis
 
 ### Monitoring and logging
 
-Every stage produces logs in a different place. Here is where to look and what to check:
+Every stage produces logs in a different place (TODO: streamline). Here is where to look and what to check:
 
 #### Download/scan logs (Cloud9 terminal)
 
@@ -163,14 +179,14 @@ The `gdrive_bulk_download.py` script logs to stderr. To capture logs to a file w
 ```bash
 # Scan with logs to file
 python etl/scripts/gdrive_bulk_download.py scan \
-  --listing-csv "reference/coeqwal_cs3_scenario_listing_v6.xlsx - scenario_list.csv" \
-  --workers 4 2>&1 | tee etl_scan_$(date +%Y%m%d_%H%M%S).log
+  --listing-csv database/reference/model_run_file_source.csv \
+  --workers 4 2>&1 | tee scan_$(date +%Y%m%d).log
 
 # Download with logs to file
 python etl/scripts/gdrive_bulk_download.py download \
-  --listing reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  --listing-csv database/reference/model_run_file_source.csv \
   --s3-bucket coeqwal-model-run \
-  --workers 4 2>&1 | tee etl_download_$(date +%Y%m%d_%H%M%S).log
+  --workers 4 2>&1 | tee download_$(date +%Y%m%d).log
 ```
 
 **What to look for:** `MISSING_ZIP`, `MISSING_TREND`, `ALERT_MULTIPLE_ZIP`, `ALERT_MULTIPLE_TREND`, `FOLDER_MISMATCH` in the scan audit summary. All scenarios should show `OK`.
@@ -210,20 +226,39 @@ aws batch list-jobs --job-queue coeqwal-etl-queue --job-status FAILED
 - `Validation: PASS` or `Validation: FAIL` -- comparison against trend report
 - The `_manifest.json` in S3 summarizes the job result
 
-#### S3 artifacts (post-extraction verification)
+#### Extraction & validation audit (post-extraction)
+
+After Batch jobs finish, run `check_extraction_results.py` to produce a single summary across all scenarios. It auto-discovers scenario folders in S3, reads each manifest and validation summary, and outputs a console table plus a CSV audit file.
 
 ```bash
-# Check that CSVs were produced
-aws s3 ls s3://coeqwal-model-run/scenario/s0070/csv/
+# Check all scenarios (auto-discovers from S3)
+python etl/scripts/check_extraction_results.py \
+  --bucket coeqwal-model-run 2>&1 | tee extraction_audit_$(date +%Y%m%d).log
 
-# Check validation results
-aws s3 cp s3://coeqwal-model-run/scenario/s0070/validation/ ./validation_s0070/ --recursive
+# Check specific scenarios
+python etl/scripts/check_extraction_results.py \
+  --bucket coeqwal-model-run --scenarios s0021,s0022
 
-# Read the manifest
-aws s3 cp s3://coeqwal-model-run/scenario/s0070/s0070_manifest.json - | python -m json.tool
+# Include cross-scenario mismatch pattern analysis for failed validations
+python etl/scripts/check_extraction_results.py \
+  --bucket coeqwal-model-run --mismatches --mismatch-output mismatches.csv
 ```
 
-**What to look for in the manifest:** `status` should be `SUCCEEDED`, `dv_csv` and `sv_csv` paths should be populated, `validation_status` should be `PASS`.
+**What to look for in the output:**
+- `extraction_status`: `SUCCEEDED` (both SV and DV), `SUCCEEDED_PARTIAL`, or `NO_MANIFEST` (pending)
+- `validation_result`: `passed`, `failed`, or `skipped`
+- The `SCENARIOS REQUIRING ATTENTION` section lists anything that needs investigation
+- With `--mismatches`: shows which variables (C parts) and locations (B parts) fail most often
+
+**Inspecting a single scenario manually (if needed):**
+
+```bash
+# Read one manifest
+aws s3 cp s3://coeqwal-model-run/scenario/s0021/s0021_manifest.json - | python -m json.tool
+
+# Check validation reports
+aws s3 ls s3://coeqwal-model-run/scenario/s0021/validation/
+```
 
 #### Statistics ETL logs (Cloud9 terminal)
 
@@ -250,6 +285,7 @@ mkdir -p ~/logs/load_$(date +%Y%m%d)
 Key log files to keep per load:
 - `scan_audit.csv` -- pre-download validation
 - `etl_download_*.log` -- download/staging output
+- `extraction_audit.csv` -- post-extraction status and validation results
 - `statistics_*.log` -- per-scenario statistics ETL output
 - `verify_*.log` -- per-scenario verification output
 
