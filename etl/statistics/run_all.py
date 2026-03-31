@@ -129,6 +129,44 @@ ETL_MODULES = {
 
 from scenarios import SCENARIOS  # noqa: E402
 
+# Track failures in real time for the running tally
+_failure_count = 0
+_failure_log: List[str] = []
+
+
+def _alert_failure(
+    module_name: str,
+    scenario_id: str,
+    elapsed: float,
+    exception: Optional[Exception] = None,
+):
+    """Print a loud, immediate alert to stderr when a module fails.
+
+    This ensures the operator sees failures in real time rather than
+    discovering them only in the final scorecard.
+    """
+    global _failure_count
+    _failure_count += 1
+    module_label = ETL_MODULES.get(module_name, {}).get("name", module_name)
+    msg = f"{scenario_id} / {module_label}"
+    if exception:
+        msg += f" — {exception}"
+    _failure_log.append(msg)
+
+    banner = (
+        f"\n{'!' * 60}\n"
+        f"  FAILURE #{_failure_count}: {module_label}\n"
+        f"  Scenario: {scenario_id}  |  Elapsed: {elapsed:.1f}s\n"
+    )
+    if exception:
+        banner += f"  Exception: {exception}\n"
+    banner += (
+        f"  Total failures so far: {_failure_count}\n"
+        f"{'!' * 60}\n"
+    )
+    sys.stderr.write(banner)
+    sys.stderr.flush()
+
 
 def run_module(
     module_name: str,
@@ -179,6 +217,7 @@ def run_module(
             log.error(
                 f"Module {module_name} failed with return code {result.returncode}"
             )
+            _alert_failure(module_name, scenario_id, elapsed)
             return False, elapsed
 
         log.info(f"✅ {module['name']} completed successfully ({elapsed:.1f}s)")
@@ -187,6 +226,7 @@ def run_module(
     except Exception as e:
         elapsed = time.time() - t0
         log.error(f"Error running {module_name}: {e}")
+        _alert_failure(module_name, scenario_id, elapsed, exception=e)
         return False, elapsed
 
 
@@ -263,12 +303,15 @@ def run_all_modules(
 
     cleanup_temp_files(scenario_id)
 
+    scenario_failures = sum(1 for v in results.values() if v["status"] == "failed")
     log.info(f"\n{'=' * 60}")
     log.info(f"SUMMARY for {scenario_id}:")
     for module_name, info in results.items():
         icon = "✅" if info["status"] == "success" else "❌"
         log.info(f"  {icon} {ETL_MODULES[module_name]['name']}: "
                  f"{info['status']} ({info['elapsed_s']:.1f}s)")
+    if _failure_count > 0:
+        log.info(f"  ⚠️  Running failure tally: {_failure_count} total failures so far")
     log.info(f"{'=' * 60}\n")
 
     return results
