@@ -32,14 +32,16 @@ Usage:
 """
 
 import argparse
+import csv
 import logging
 import os
 import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # Logging
 logging.basicConfig(
@@ -133,28 +135,26 @@ def run_module(
     scenario_id: str,
     dry_run: bool = False,
     csv_path: Optional[str] = None,
-) -> bool:
-    """
-    Run a single ETL module for a scenario.
+) -> Tuple[bool, float]:
+    """Run a single ETL module for a scenario.
 
-    Returns True if successful, False otherwise.
+    Returns (success, elapsed_seconds).
     """
     module = ETL_MODULES.get(module_name)
     if not module:
         log.error(f"Unknown module: {module_name}")
-        return False
+        return False, 0.0
 
     script_path = module["path"]
     if not script_path.exists():
         log.error(f"Script not found: {script_path}")
-        return False
+        return False, 0.0
 
     log.info(f"{'=' * 60}")
     log.info(f"Running: {module['name']} for {scenario_id}")
     log.info(f"Tables: {', '.join(module['tables'])}")
     log.info(f"{'=' * 60}")
 
-    # Build command
     cmd = [sys.executable, str(script_path), "--scenario", scenario_id]
 
     if dry_run:
@@ -165,27 +165,29 @@ def run_module(
         csv_arg_name = module.get("csv_arg", "--csv-path")
         cmd.extend([csv_arg_name, abs_csv_path])
 
-    # Run the script
+    t0 = time.time()
     try:
         result = subprocess.run(
             cmd,
             cwd=script_path.parent,
             env=os.environ.copy(),
-            capture_output=False,  # Stream output to console
+            capture_output=False,
         )
+        elapsed = time.time() - t0
 
         if result.returncode != 0:
             log.error(
                 f"Module {module_name} failed with return code {result.returncode}"
             )
-            return False
+            return False, elapsed
 
-        log.info(f"✅ {module['name']} completed successfully")
-        return True
+        log.info(f"✅ {module['name']} completed successfully ({elapsed:.1f}s)")
+        return True, elapsed
 
     except Exception as e:
+        elapsed = time.time() - t0
         log.error(f"Error running {module_name}: {e}")
-        return False
+        return False, elapsed
 
 
 def cleanup_temp_files(scenario_id: str):
@@ -233,10 +235,9 @@ def run_all_modules(
     csv_path: Optional[str] = None,
     continue_on_error: bool = False,
 ) -> dict:
-    """
-    Run all (or specified) ETL modules for a scenario.
+    """Run all (or specified) ETL modules for a scenario.
 
-    Returns dict with results for each module.
+    Returns dict of module_name → {"status": str, "elapsed_s": float}.
     """
     if modules is None:
         modules = list(ETL_MODULES.keys())
@@ -250,22 +251,24 @@ def run_all_modules(
     log.info(f"{'#' * 60}\n")
 
     for module_name in modules:
-        success = run_module(module_name, scenario_id, dry_run, csv_path)
-        results[module_name] = "success" if success else "failed"
+        success, elapsed = run_module(module_name, scenario_id, dry_run, csv_path)
+        results[module_name] = {
+            "status": "success" if success else "failed",
+            "elapsed_s": elapsed,
+        }
 
         if not success and not continue_on_error:
             log.error(f"Stopping due to failure in {module_name}")
             break
 
-    # Clean up temp files after processing each scenario to free memory
     cleanup_temp_files(scenario_id)
 
-    # Summary
     log.info(f"\n{'=' * 60}")
     log.info(f"SUMMARY for {scenario_id}:")
-    for module_name, status in results.items():
-        icon = "✅" if status == "success" else "❌"
-        log.info(f"  {icon} {ETL_MODULES[module_name]['name']}: {status}")
+    for module_name, info in results.items():
+        icon = "✅" if info["status"] == "success" else "❌"
+        log.info(f"  {icon} {ETL_MODULES[module_name]['name']}: "
+                 f"{info['status']} ({info['elapsed_s']:.1f}s)")
     log.info(f"{'=' * 60}\n")
 
     return results
@@ -418,6 +421,13 @@ Examples:
         all_results, scenarios, effective_modules
     )
 
+    # Write structured audit CSV
+    audit_path = f"stats_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    write_audit_csv(
+        all_results, scenarios, effective_modules,
+        elapsed, args.dry_run, audit_path,
+    )
+
     # Post-processing: cross-scenario sensitivity analysis
     if args.with_sensitivity:
         log.info("\n" + "=" * 60)
@@ -437,6 +447,10 @@ Examples:
         except Exception as e:
             log.error(f"Error running sensitivity analysis: {e}")
             has_failures = True
+
+    # DB row-count verification (skip for dry runs)
+    if not args.dry_run:
+        verify_db_row_counts()
 
     if has_failures:
         sys.exit(1)
@@ -499,7 +513,8 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
         scenario_skipped = 0
 
         for mod in modules:
-            status = results.get(mod, "not_run")
+            raw = results.get(mod)
+            status = raw["status"] if isinstance(raw, dict) else (raw or "not_run")
             if status == "success":
                 row += "  ✅   │"
                 scenario_successes += 1
@@ -515,7 +530,6 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
             else:
                 row += "  ⚪   │"
 
-        # Scenario overall status
         if scenario_failures > 0:
             row += " ❌ FAILED"
             scenario_status[scenario_id] = "failed"
@@ -561,10 +575,10 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
         print("─" * 40)
         for scenario_id in scenarios:
             results = all_results.get(scenario_id, {})
-            failures = [mod for mod, status in results.items() if status == "failed"]
-            if failures:
-                for mod in failures:
-                    print(f"  • {scenario_id} / {ETL_MODULES[mod]['name']}")
+            for mod, raw in results.items():
+                st = raw["status"] if isinstance(raw, dict) else raw
+                if st == "failed":
+                    print(f"  • {scenario_id} / {ETL_MODULES.get(mod, {}).get('name', mod)}")
         print()
 
     # Final status
@@ -579,6 +593,136 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
     print()
 
     return total_failed > 0
+
+
+def write_audit_csv(
+    all_results: dict,
+    scenarios: List[str],
+    modules: List[str],
+    elapsed_total: float,
+    dry_run: bool,
+    output_path: str = "stats_audit.csv",
+):
+    """Write a structured audit CSV summarising every scenario × module."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = []
+    for scenario_id in scenarios:
+        results = all_results.get(scenario_id, {})
+        for mod in modules:
+            raw = results.get(mod)
+            if isinstance(raw, dict):
+                status = raw["status"]
+                elapsed = raw.get("elapsed_s", 0.0)
+            elif raw:
+                status = raw
+                elapsed = 0.0
+            else:
+                status = "not_run"
+                elapsed = 0.0
+            rows.append({
+                "timestamp": ts,
+                "scenario": scenario_id,
+                "module": mod,
+                "status": status,
+                "elapsed_s": f"{elapsed:.1f}",
+                "dry_run": str(dry_run),
+            })
+
+    fieldnames = ["timestamp", "scenario", "module", "status", "elapsed_s", "dry_run"]
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    total = len(rows)
+    ok = sum(1 for r in rows if r["status"] == "success")
+    fail = sum(1 for r in rows if r["status"] == "failed")
+    log.info(f"Audit CSV written to {output_path}  "
+             f"({total} tasks: {ok} ok, {fail} failed, "
+             f"{elapsed_total / 60:.1f} min total)")
+
+
+DB_ROW_COUNT_TABLES = [
+    "reservoir_storage_monthly",
+    "reservoir_period_summary",
+    "ag_du_demand_monthly",
+    "ag_du_period_summary",
+    "du_delivery_monthly",
+    "du_period_summary",
+    "mi_delivery_monthly",
+    "mi_contractor_period_summary",
+    "cws_aggregate_monthly",
+    "cws_aggregate_period_summary",
+    "refuge_du_delivery_monthly",
+    "refuge_du_period_summary",
+    "env_flow_channel_monthly",
+    "env_flow_channel_period_summary",
+    "delta_monthly",
+    "delta_period_summary",
+    "sensitivity_climate",
+    "sensitivity_operational",
+]
+
+
+def verify_db_row_counts(db_url: Optional[str] = None):
+    """Print row counts for all statistics tables as a quick sanity check."""
+    url = db_url or os.getenv("DATABASE_URL")
+    if not url:
+        log.info("Skipping DB verification (no DATABASE_URL)")
+        return
+
+    try:
+        import psycopg2
+    except ImportError:
+        log.warning("psycopg2 not installed; skipping DB verification")
+        return
+
+    try:
+        conn = psycopg2.connect(url)
+        cur = conn.cursor()
+    except Exception as e:
+        log.warning(f"Could not connect for verification: {e}")
+        return
+
+    print("\n" + "=" * 60)
+    print("  DATABASE ROW COUNTS (verification)")
+    print("=" * 60)
+    print(f"  {'Table':<45} {'Rows':>10}")
+    print("  " + "─" * 56)
+
+    for table in DB_ROW_COUNT_TABLES:
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
+            count = cur.fetchone()[0]
+            flag = "" if count > 0 else "  ⚠️ EMPTY"
+            print(f"  {table:<45} {count:>10,}{flag}")
+        except Exception:
+            conn.rollback()
+            print(f"  {table:<45} {'(missing)':>10}")
+
+    # Scenario coverage: how many distinct scenarios per key table
+    coverage_tables = [
+        ("reservoir_storage_monthly", "scenario_short_code"),
+        ("ag_du_demand_monthly", "scenario_short_code"),
+        ("delta_monthly", "scenario_short_code"),
+    ]
+    print()
+    print(f"  {'Table':<45} {'Scenarios':>10}")
+    print("  " + "─" * 56)
+    for table, col in coverage_tables:
+        try:
+            cur.execute(f"SELECT COUNT(DISTINCT {col}) FROM {table}")  # noqa: S608
+            count = cur.fetchone()[0]
+            print(f"  {table:<45} {count:>10}")
+        except Exception:
+            conn.rollback()
+            print(f"  {table:<45} {'(n/a)':>10}")
+
+    print("=" * 60)
+    print()
+
+    cur.close()
+    conn.close()
 
 
 if __name__ == "__main__":
