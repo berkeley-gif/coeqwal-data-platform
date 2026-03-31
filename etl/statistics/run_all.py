@@ -41,7 +41,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 # Logging
 logging.basicConfig(
@@ -303,7 +303,6 @@ def run_all_modules(
 
     cleanup_temp_files(scenario_id)
 
-    scenario_failures = sum(1 for v in results.values() if v["status"] == "failed")
     log.info(f"\n{'=' * 60}")
     log.info(f"SUMMARY for {scenario_id}:")
     for module_name, info in results.items():
