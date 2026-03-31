@@ -1231,6 +1231,65 @@ python run_all.py --list-modules
 | 3 | **mi** | `mi/main.py` | `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary` |
 | 4 | **cws_aggregate** | `cws_aggregate/main.py` | `cws_aggregate_monthly`, `cws_aggregate_period_summary` |
 | 5 | **ag** | `ag/main.py` | `ag_du_delivery_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary`, `ag_aggregate_monthly`, `ag_aggregate_period_summary` |
+| 6 | **refuge** | `refuge/main.py` | `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary` |
+| 7 | **env_flows** | `env_flows/main.py` | `env_flow_channel_monthly`, `env_flow_channel_seasonal`, `env_flow_channel_period_summary` |
+| 8 | **delta** | `delta/main.py` | `delta_monthly`, `delta_period_summary` |
+| *post* | **sensitivity** | `sensitivity/calculate_sensitivity.py` | `sensitivity_climate`, `sensitivity_operational` |
+
+### Cross-scenario sensitivity analysis
+
+After per-scenario statistics are computed, an optional post-processing step computes
+how sensitive each metric is to **climate change** and to **changes in operations**.
+
+```bash
+# Standalone
+cd etl/statistics
+python sensitivity/calculate_sensitivity.py
+
+# Or as part of the consolidated runner
+python run_all.py --all-scenarios --with-sensitivity
+
+# Dry run
+python sensitivity/calculate_sensitivity.py --dry-run
+
+# Only specific modules
+python sensitivity/calculate_sensitivity.py --only reservoir,ag
+```
+
+**Climate sensitivity** (`sensitivity_climate` table): For each hydroclimate sibling
+group (scenarios with identical operations but different climate — historical, cc50, cc95),
+measures how each metric changes. Stored per (sibling_group, entity, metric, water_month):
+- `hist_value`, `cc50_value`, `cc95_value`
+- `cc50_abs_change`, `cc95_abs_change` (absolute difference from historical)
+- `cc50_pct_change`, `cc95_pct_change` (percent change from historical)
+
+**Operational sensitivity** (`sensitivity_operational` table): For each hydroclimate
+level (e.g. all historical-hydrology scenarios), measures how each metric varies across
+different operational configurations. Stored per (hydroclimate_id, entity, metric, water_month):
+- `scenario_count`, `min_value`, `max_value`, `mean_value`, `std_value`
+- `range_value` (max − min), `pct_range` ((max − min) / |mean| × 100)
+
+Both tables include `water_month` 1–12 (monthly resolution) and 0 (annual/period-of-record),
+covering reservoirs, AG, urban DU, MI, CWS, refuge, env flows, and delta metrics.
+
+**Querying examples:**
+```sql
+-- Top 20 metrics most sensitive to climate (cc95 vs historical)
+SELECT module, entity_id, metric_name, water_month,
+       cc95_pct_change, unit
+FROM sensitivity_climate
+WHERE cc95_pct_change IS NOT NULL AND water_month > 0
+ORDER BY ABS(cc95_pct_change) DESC
+LIMIT 20;
+
+-- Top 20 metrics most sensitive to operations (historical climate)
+SELECT module, entity_id, metric_name, water_month,
+       pct_range, scenario_count, unit
+FROM sensitivity_operational
+WHERE hydroclimate_id = 2 AND pct_range IS NOT NULL AND water_month > 0
+ORDER BY pct_range DESC
+LIMIT 20;
+```
 
 ### Individual module usage
 

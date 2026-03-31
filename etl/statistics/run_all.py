@@ -24,6 +24,9 @@ Usage:
     # Run all scenarios
     python run_all.py --all-scenarios
 
+    # Run all scenarios + sensitivity analysis as a post-processing step
+    python run_all.py --all-scenarios --with-sensitivity
+
     # Use local CSV instead of S3
     python run_all.py --scenario s0029 --csv-path /path/to/csv
 """
@@ -312,6 +315,12 @@ Examples:
         "Recommended: 4 for 8GB+ RAM.",
     )
     parser.add_argument(
+        "--with-sensitivity",
+        action="store_true",
+        help="Run cross-scenario sensitivity analysis after per-scenario modules. "
+        "Requires all (or most) per-scenario statistics to be in the DB already.",
+    )
+    parser.add_argument(
         "--list-modules", action="store_true", help="List available modules and exit"
     )
 
@@ -408,6 +417,27 @@ Examples:
     has_failures = print_scorecard(
         all_results, scenarios, effective_modules
     )
+
+    # Post-processing: cross-scenario sensitivity analysis
+    if args.with_sensitivity:
+        log.info("\n" + "=" * 60)
+        log.info("Running cross-scenario sensitivity analysis ...")
+        log.info("=" * 60)
+        sensitivity_script = SCRIPT_DIR / "sensitivity" / "calculate_sensitivity.py"
+        sens_cmd = [sys.executable, str(sensitivity_script)]
+        if args.dry_run:
+            sens_cmd.append("--dry-run")
+        try:
+            result = subprocess.run(sens_cmd, env=os.environ.copy())
+            if result.returncode != 0:
+                log.error("Sensitivity analysis failed")
+                has_failures = True
+            else:
+                log.info("Sensitivity analysis completed successfully")
+        except Exception as e:
+            log.error(f"Error running sensitivity analysis: {e}")
+            has_failures = True
+
     if has_failures:
         sys.exit(1)
 
@@ -438,6 +468,7 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
         "refuge": "REF",
         "env_flows": "EF",
         "delta": "DLT",
+        "sensitivity": "SENS",
     }
 
     # Legend
