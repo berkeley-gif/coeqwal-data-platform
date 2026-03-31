@@ -1206,21 +1206,38 @@ Use `run_all.py` to run all statistics modules for a scenario:
 ```bash
 cd etl/statistics
 
-# Run all statistics for a scenario
-python run_all.py --scenario s0029
+# Run all statistics for a single scenario
+python run_all.py --scenario s0020
 
 # Dry run (calculate but don't write to DB)
-python run_all.py --scenario s0029 --dry-run
+python run_all.py --scenario s0020 --dry-run --continue-on-error
 
 # Run only specific modules
-python run_all.py --scenario s0029 --only reservoirs,du_urban
+python run_all.py --scenario s0020 --only reservoirs,du_urban
 
-# Run all scenarios
-python run_all.py --all-scenarios
+# Run all 76 scenarios with 4 parallel workers + sensitivity analysis
+python run_all.py --all-scenarios --workers 4 --continue-on-error --with-sensitivity
+
+# Full production run with logging (recommended)
+screen -S etl
+python run_all.py \
+  --all-scenarios --workers 4 --continue-on-error --with-sensitivity \
+  2>&1 | tee stats_run_$(date +%Y%m%d).log
 
 # List available modules
 python run_all.py --list-modules
 ```
+
+**After a run completes**, `run_all.py` automatically:
+- Writes a structured **audit CSV** (`stats_audit_YYYYMMDD_HHMMSS.csv`) with one row per (scenario, module) including status and timing
+- Prints a **scorecard** showing success/failure per scenario × module
+- Runs **DB row-count verification** across all 18 statistics tables (non-dry-run only)
+
+**EC2 sizing:** Each worker loads a ~300 MB CSV into memory. Recommended:
+- `--workers 1`: t3.medium (4 GB) — ~8 hours for 76 scenarios
+- `--workers 4`: t3.xlarge (16 GB) — ~2–3 hours for 76 scenarios
+
+**Cloud9 timeout:** Set "Stop my environment" to 4+ hours in Cloud9 Preferences before a full run. Use `screen` so browser disconnects don't kill the process.
 
 ### Modules (run in order)
 
@@ -1297,26 +1314,37 @@ Each module can also be run standalone:
 
 ```bash
 # Reservoir statistics
-python main.py --scenario s0029
+cd etl/statistics && python main.py --scenario s0020
 
 # Urban demand unit statistics
-cd du_urban && python main.py --scenario s0029
+cd etl/statistics/du_urban && python main.py --scenario s0020
 
 # M&I contractor statistics  
-cd mi && python main.py --scenario s0029
+cd etl/statistics/mi && python main.py --scenario s0020
 
 # CWS aggregate statistics
-cd cws_aggregate && python main.py --scenario s0029
+cd etl/statistics/cws_aggregate && python main.py --scenario s0020
 
-# Agricultural statistics
-cd ag && python main.py --scenario s0029
+# Agricultural statistics (loads SV + DV)
+cd etl/statistics/ag && python main.py --scenario s0020
+
+# Wildlife refuge statistics (loads SV + DV)
+cd etl/statistics/refuge && python main.py --scenario s0020
+
+# Environmental river flow statistics (loads SV + DV)
+cd etl/statistics/env_flows && python main.py --scenario s0020
+
+# Delta statistics (outflow, X2, salinity)
+cd etl/statistics/delta && python main.py --scenario s0020
+
+# Cross-scenario sensitivity (runs after all per-scenario stats)
+cd etl/statistics && python sensitivity/calculate_sensitivity.py
 ```
 
 ### Available scenarios
 
-```
-s0011, s0020, s0021, s0023, s0024, s0025, s0027, s0029
-```
+76 scenarios are defined in `etl/statistics/scenarios.py`. These match the scenarios
+extracted to S3 (see `check_extraction_results.py` for the full verified list).
 
 ### Reliability calculation
 
