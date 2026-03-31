@@ -2,24 +2,33 @@
 """
 Calculate demand, delivery, and shortage statistics for agricultural demand units.
 
+DATA SOURCES:
+  Demand:   SV input CSV (AWO_{DU_ID}, TAF, APPLIED-WATER)
+    S3: scenario/{id}/csv/{id}_coeqwal_sv_input.csv
+    AWO_* columns represent the original pre-model demand target (in TAF).
+    The staged CSV may expose these as either AWO_* or AW_*; both are handled.
+
+  Delivery / GW / Shortage / Aggregates:  DV output CSV (CFS)
+    S3: scenario/{id}/csv/{id}_coeqwal_calsim_output.csv
+    Variables: DN_{DU_ID} (SW delivery), GP_{DU_ID} (GW pumping),
+      GW_SHORT_{DU_ID} (GW restriction shortage), DEL_*, SHORT_*
+    All CFS columns are converted to TAF before analysis.
+
 CalSim Variable Semantics:
-- AW_{DU_ID} = Applied Water = DEMAND (DV output, CFS)
-- DN_{DU_ID} = Net Delivery = SURFACE WATER DELIVERY (DV output, CFS)
-- GP_{DU_ID} = Groundwater Pumping (DV output, CFS)
+- AWO_{DU_ID} = Applied Water Output = DEMAND (SV input, TAF)
+- DN_{DU_ID} = Net Delivery = SURFACE WATER DELIVERY (DV output, CFS -> TAF)
+- GP_{DU_ID} = Groundwater Pumping (DV output, CFS -> TAF)
 - Groundwater Pumping = AW - DN (calculated for DUs without GP_*)
-- GW_SHORT_{DU_ID} = Groundwater RESTRICTION Shortage (DV output, CFS)
+- GW_SHORT_{DU_ID} = Groundwater RESTRICTION Shortage (DV output, CFS -> TAF)
 
 In CalSim, agricultural demand is assumed to be fully met:
   Demand (AW) = Surface Water Delivery (DN) + Groundwater Pumping (GP)
-
-All variables are read from the single DV output CSV in CFS and converted to TAF:
-  TAF = CFS * DaysInMonth * 0.001983471
 
 Note: Sacramento region DUs (WBAs 02-26) do NOT have GW_SHORT shortage data.
 
 Usage:
     python calculate_ag_statistics.py --scenario s0020
-    python calculate_ag_statistics.py --scenario s0020 --csv-path /path/to/calsim_output.csv
+    python calculate_ag_statistics.py --scenario s0020 --dv-path /path/to/DV.csv --sv-path /path/to/SV.csv
 """
 
 import argparse
@@ -61,9 +70,14 @@ logging.basicConfig(
 )
 log = logging.getLogger("ag_statistics")
 
-# Known scenarios
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+
+SV_INPUT_S3_KEY = "scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
+DV_OUTPUT_S3_KEYS = [
+    "scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",
+    "scenario/{scenario}/csv/{scenario}_DV.csv",
+]
 
 # Paths relative to project
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -183,9 +197,108 @@ def load_ag_demand_units(csv_path: Optional[Path] = None) -> Dict[str, Dict[str,
     return demand_units
 
 
-def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+def _read_csv_header(body) -> tuple:
     """
-    Load CalSim output CSV from S3 bucket.
+    Read the 7 header rows of a CalSim DSS-export CSV.
+
+    Returns (var_names, units) where both are lists indexed by column position.
+    Row 1 (B) = variable names, Row 6 = units.
+    """
+    header_df = pd.read_csv(body, header=None, nrows=7, low_memory=False)
+    var_names = [str(v) for v in header_df.iloc[1].tolist()]
+    units_row = [str(u) for u in header_df.iloc[6].tolist()]
+    return var_names, units_row
+
+
+def _select_taf_columns(
+    data_df: pd.DataFrame,
+    var_names: List[str],
+    units_row: List[str],
+    prefix: str,
+) -> pd.DataFrame:
+    """
+    From a full data DataFrame, extract TAF-block columns for variables matching prefix.
+
+    SV input CSVs have a two-block layout: CFS columns then TAF columns.
+    We select the TAF occurrence for each variable.
+    """
+    date_col = var_names[0]
+    seen: Dict[str, List[tuple]] = {}
+    for i, (vname, unit) in enumerate(zip(var_names, units_row)):
+        if vname.startswith(prefix):
+            seen.setdefault(vname, []).append((i, unit))
+
+    series_list = [data_df.iloc[:, 0].rename(date_col)]
+    for vname, occurrences in seen.items():
+        taf_col = next(
+            (idx for idx, unit in occurrences if unit.upper() == 'TAF'),
+            occurrences[-1][0],
+        )
+        series_list.append(
+            pd.to_numeric(data_df.iloc[:, taf_col], errors='coerce').rename(vname)
+        )
+
+    return pd.concat(series_list, axis=1)
+
+
+def load_sv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+    """
+    Load AWO_{DU_ID} demand columns from SV input CSV (TAF, APPLIED-WATER).
+
+    Handles both AWO_* (raw DSS naming) and AW_* (possible staging rename).
+    Returns DataFrame with demand columns renamed to AW_* in TAF.
+    """
+    if not HAS_BOTO3:
+        raise ImportError("boto3 required. Install with: pip install boto3")
+
+    s3 = boto3.client('s3')
+    key = SV_INPUT_S3_KEY.format(scenario=scenario_id)
+
+    log.info(f"Loading SV input: s3://{S3_BUCKET}/{key}")
+    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+    var_names, units_row = _read_csv_header(response['Body'])
+
+    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+    data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
+
+    result = _select_taf_columns(data_df, var_names, units_row, prefix='AWO_')
+    if len(result.columns) <= 1:
+        log.info("No AWO_* columns found — trying AW_* (staging may rename variables)")
+        result = _select_taf_columns(data_df, var_names, units_row, prefix='AW_')
+
+    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
+    if renames:
+        result = result.rename(columns=renames)
+        log.info(f"Renamed {len(renames)} AWO_* columns to AW_* for internal consistency")
+
+    log.info(f"Loaded {len(result.columns) - 1} demand columns from SV input")
+    return result
+
+
+def load_sv_csv_from_file(file_path: str) -> pd.DataFrame:
+    """Load SV input CSV from a local file path."""
+    log.info(f"Loading SV input from file: {file_path}")
+    header_df = pd.read_csv(file_path, header=None, nrows=7, low_memory=False)
+    var_names = [str(v) for v in header_df.iloc[1].tolist()]
+    units_row = [str(u) for u in header_df.iloc[6].tolist()]
+
+    data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
+
+    result = _select_taf_columns(data_df, var_names, units_row, prefix='AWO_')
+    if len(result.columns) <= 1:
+        result = _select_taf_columns(data_df, var_names, units_row, prefix='AW_')
+
+    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
+    if renames:
+        result = result.rename(columns=renames)
+
+    log.info(f"Loaded {len(result.columns) - 1} demand columns")
+    return result
+
+
+def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+    """
+    Load CalSim DV output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
     """
@@ -193,25 +306,20 @@ def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
         raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
 
     s3 = boto3.client('s3')
+    keys = [k.format(scenario=scenario_id) for k in DV_OUTPUT_S3_KEYS]
 
-    possible_keys = [
-        f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
-        f"scenario/{scenario_id}/csv/{scenario_id}_DV.csv",
-    ]
-
-    for key in possible_keys:
+    for key in keys:
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             df = pd.read_csv(response['Body'], header=None, nrows=8)
-
             col_names = df.iloc[1].tolist()
 
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
             data_df.columns = col_names
 
-            log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
+            log.info(f"Loaded DV: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df
 
         except s3.exceptions.NoSuchKey:
@@ -223,64 +331,48 @@ def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
     raise FileNotFoundError(f"Could not find CalSim output for {scenario_id} in S3")
 
 
-def load_calsim_csv_from_file(file_path: str) -> pd.DataFrame:
-    """
-    Load CalSim output CSV from local file.
-
-    Handles the DSS export format with 7 header rows.
-    """
-    log.info(f"Loading from file: {file_path}")
-
+def load_dv_csv_from_file(file_path: str) -> pd.DataFrame:
+    """Load CalSim DV output CSV from local file."""
+    log.info(f"Loading DV from file: {file_path}")
     header_df = pd.read_csv(file_path, header=None, nrows=8)
     col_names = header_df.iloc[1].tolist()
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
     data_df.columns = col_names
 
-    log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
+    log.info(f"Loaded DV: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Add water year, water month, and days in month columns.
+    Add WaterYear, WaterMonth (1=Oct ... 12=Sep), and DaysInMonth columns.
 
-    Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
-    Water year: Oct-Dec belong to next water year
-    DaysInMonth: Number of days in each month (for CFS to TAF conversion)
+    Handles both period-ending (DV: last day of month) and period-beginning
+    (SV: first day of following month) date conventions. If day-of-month == 1,
+    subtract one day to get the actual data period before deriving calendar fields.
     """
     df = df.copy()
-
     first_col = df.columns[0]
-    date_values = df[first_col]
+    df['DateTime'] = pd.to_datetime(df[first_col], errors='coerce')
 
-    try:
-        df['DateTime'] = pd.to_datetime(date_values, errors='coerce')
+    period_date = df['DateTime'].where(
+        df['DateTime'].dt.day != 1,
+        df['DateTime'] - pd.Timedelta(days=1),
+    )
 
-        if df['DateTime'].notna().sum() > 0:
-            df['CalendarMonth'] = df['DateTime'].dt.month
-            df['CalendarYear'] = df['DateTime'].dt.year
-            df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
+    df['CalendarMonth'] = period_date.dt.month
+    df['CalendarYear'] = period_date.dt.year
+    df['DaysInMonth'] = period_date.dt.daysinmonth
+    df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
+    df['WaterYear'] = df['CalendarYear']
+    df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
 
-            df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
-
-            df['WaterYear'] = df['CalendarYear']
-            df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
-
-            log.info(f"Detected monthly data: {df['DateTime'].min()} to {df['DateTime'].max()}")
-            return df
-    except Exception as e:
-        log.debug(f"Could not parse as datetime: {e}")
-
-    date_numeric = pd.to_numeric(date_values, errors='coerce')
-    if date_numeric.notna().all() and (date_numeric >= 1900).all() and (date_numeric <= 2100).all():
-        df['WaterYear'] = date_numeric.astype(int)
-        df['WaterMonth'] = 0
-        df['DaysInMonth'] = 365  # Annual data - use full year
-        log.info(f"Detected annual data: years {df['WaterYear'].min()}-{df['WaterYear'].max()}")
-        return df
-
-    raise ValueError(f"Could not parse date column '{first_col}' as datetime or year values")
+    log.info(
+        f"Date range: {df['DateTime'].min()} to {df['DateTime'].max()} "
+        f"({df['WaterYear'].nunique()} water years)"
+    )
+    return df
 
 
 # =============================================================================
@@ -294,7 +386,8 @@ def calculate_du_demand_monthly(
     """
     Calculate monthly DEMAND statistics for an agricultural demand unit.
 
-    Uses AW_{DU_ID} (Applied Water) variable from DV output (CFS, converted to TAF).
+    Uses AW_{DU_ID} from the merged DataFrame. Demand is sourced from the SV
+    input file and is already in TAF — no CFS conversion needed.
     """
     demand_var = f"AW_{du_id}"
 
@@ -303,7 +396,7 @@ def calculate_du_demand_monthly(
         return []
 
     df_copy = df.copy()
-    df_copy['demand'] = df_copy[demand_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['demand'] = df_copy[demand_var]
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -362,8 +455,8 @@ def calculate_du_sw_delivery_monthly(
     """
     Calculate monthly SURFACE WATER DELIVERY statistics for an agricultural demand unit.
 
-    Uses DN_{DU_ID} (Net Delivery) variable from DV output (CFS, converted to TAF).
-    For groundwater-only DUs (no DN_* variable), returns empty list.
+    Uses DN_{DU_ID} from the merged DataFrame. DV columns are pre-converted
+    to TAF before the merge.
     """
     sw_delivery_var = f"DN_{du_id}"
 
@@ -372,7 +465,7 @@ def calculate_du_sw_delivery_monthly(
         return []
 
     df_copy = df.copy()
-    df_copy['sw_delivery'] = df_copy[sw_delivery_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['sw_delivery'] = df_copy[sw_delivery_var]
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -433,7 +526,7 @@ def calculate_du_gw_pumping_monthly(
 
     Uses GP_{DU_ID} if available. Otherwise calculates as AW - DN.
     For groundwater-only DUs (no DN_*), GW pumping equals demand (AW_*).
-    All variables from DV output in CFS, converted to TAF.
+    All values in the merged DataFrame are already in TAF.
     """
     demand_var = f"AW_{du_id}"
     sw_delivery_var = f"DN_{du_id}"
@@ -448,15 +541,14 @@ def calculate_du_gw_pumping_monthly(
         return []
 
     df_copy = df.copy()
-    cfs_to_taf = df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
 
     if has_explicit_gp:
-        df_copy['gw_pumping'] = df_copy[gw_pumping_var] * cfs_to_taf
+        df_copy['gw_pumping'] = df_copy[gw_pumping_var]
         is_calculated = False
     elif has_demand:
-        df_copy['demand'] = df_copy[demand_var] * cfs_to_taf
+        df_copy['demand'] = df_copy[demand_var]
         if has_sw_delivery:
-            df_copy['sw_delivery'] = df_copy[sw_delivery_var] * cfs_to_taf
+            df_copy['sw_delivery'] = df_copy[sw_delivery_var]
             df_copy['gw_pumping'] = df_copy['demand'] - df_copy['sw_delivery']
         else:
             df_copy['gw_pumping'] = df_copy['demand']
@@ -527,7 +619,8 @@ def calculate_du_shortage_monthly(
     """
     Calculate monthly groundwater restriction shortage for an agricultural demand unit.
 
-    Uses GW_SHORT_{DU_ID} from DV output (CFS, converted to TAF).
+    Uses GW_SHORT_{DU_ID} from DV (pre-converted to TAF). Demand denominator
+    for shortage % uses SV-sourced demand (already in TAF).
     Only SJR/Tulare regions have GW_SHORT data; Sacramento WBAs do not.
     """
     wba_id = du_info.get('wba_id', '')
@@ -543,11 +636,10 @@ def calculate_du_shortage_monthly(
         return []
 
     df_copy = df.copy()
-    cfs_to_taf = df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-    df_copy['shortage'] = df_copy[shortage_var] * cfs_to_taf
+    df_copy['shortage'] = df_copy[shortage_var]
 
     if demand_var in df.columns:
-        df_copy['demand'] = df_copy[demand_var] * cfs_to_taf
+        df_copy['demand'] = df_copy[demand_var]
     else:
         df_copy['demand'] = 0
 
@@ -642,7 +734,7 @@ def calculate_du_period_summary(
     """
     Calculate period-of-record summary for an agricultural demand unit.
 
-    All variables from DV output in CFS, converted to TAF.
+    All values in the merged DataFrame are already in TAF.
     """
     demand_var = f"AW_{du_id}"
     sw_delivery_var = f"DN_{du_id}"
@@ -653,19 +745,17 @@ def calculate_du_period_summary(
         return None
 
     df_copy = df.copy()
-    cfs_to_taf = df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-
-    df_copy['demand'] = df_copy[demand_var] * cfs_to_taf
+    df_copy['demand'] = df_copy[demand_var]
 
     has_sw_delivery = sw_delivery_var in df.columns
     if has_sw_delivery:
-        df_copy['sw_delivery'] = df_copy[sw_delivery_var] * cfs_to_taf
+        df_copy['sw_delivery'] = df_copy[sw_delivery_var]
     else:
         df_copy['sw_delivery'] = 0
 
     has_explicit_gp = gw_pumping_var in df.columns
     if has_explicit_gp:
-        df_copy['gw_pumping'] = df_copy[gw_pumping_var] * cfs_to_taf
+        df_copy['gw_pumping'] = df_copy[gw_pumping_var]
     else:
         df_copy['gw_pumping'] = (df_copy['demand'] - df_copy['sw_delivery']).clip(lower=0)
 
@@ -678,7 +768,7 @@ def calculate_du_period_summary(
         'total_years': len(water_years),
     }
 
-    # Annual DEMAND statistics (from AW_*)
+    # Annual DEMAND statistics (from SV AWO_*)
     annual_demand = df_copy.groupby('WaterYear')['demand'].sum()
     result['annual_demand_avg_taf'] = round(float(annual_demand.mean()), 2)
     if annual_demand.mean() > 0:
@@ -686,17 +776,19 @@ def calculate_du_period_summary(
     else:
         result['annual_demand_cv'] = 0
 
-    # Exceedance percentiles for DEMAND: exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
         result[f'demand_exc_p{p}'] = round(float(np.percentile(annual_demand, 100 - p)), 2)
 
-    # Annual SW DELIVERY statistics (from DN_*)
+    # Annual SW DELIVERY statistics (from DV DN_*)
     annual_sw_delivery = df_copy.groupby('WaterYear')['sw_delivery'].sum()
     result['annual_sw_delivery_avg_taf'] = round(float(annual_sw_delivery.mean()), 2)
     if annual_sw_delivery.mean() > 0:
         result['annual_sw_delivery_cv'] = round(float(annual_sw_delivery.std() / annual_sw_delivery.mean()), 4)
     else:
         result['annual_sw_delivery_cv'] = 0
+
+    for p in EXCEEDANCE_PERCENTILES:
+        result[f'sw_delivery_exc_p{p}'] = round(float(np.percentile(annual_sw_delivery, 100 - p)), 2)
 
     # Annual GW PUMPING statistics (from GP_* or calculated)
     annual_gw_pumping = df_copy.groupby('WaterYear')['gw_pumping'].sum()
@@ -705,6 +797,9 @@ def calculate_du_period_summary(
         result['annual_gw_pumping_cv'] = round(float(annual_gw_pumping.std() / annual_gw_pumping.mean()), 4)
     else:
         result['annual_gw_pumping_cv'] = 0
+
+    for p in EXCEEDANCE_PERCENTILES:
+        result[f'gw_pumping_exc_p{p}'] = round(float(np.percentile(annual_gw_pumping, 100 - p)), 2)
 
     # GW pumping as percentage of demand
     if result['annual_demand_avg_taf'] > 0:
@@ -719,17 +814,17 @@ def calculate_du_period_summary(
     has_shortage = shortage_var in df.columns and wba_id not in SACRAMENTO_WBAS
 
     if has_shortage:
-        # GW_SHORT_* from DV output is in CFS - convert to TAF
-        df_copy['shortage'] = df_copy[shortage_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        df_copy['shortage'] = df_copy[shortage_var]
         annual_shortage = df_copy.groupby('WaterYear')['shortage'].sum()
-        # Use threshold to filter out floating-point noise from CalSim solver
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
         result['annual_shortage_avg_taf'] = round(float(annual_shortage.mean()), 2)
         result['shortage_years_count'] = int(shortage_years)
         result['shortage_frequency_pct'] = round((shortage_years / len(water_years)) * 100, 2)
 
-        # Calculate annual shortage % of demand
+        for p in EXCEEDANCE_PERCENTILES:
+            result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
+
         shortage_pct = []
         for s, d in zip(annual_shortage.values, annual_demand.values):
             if d > 0:
@@ -738,9 +833,6 @@ def calculate_du_period_summary(
                 shortage_pct.append(0)
         result['annual_shortage_pct_of_demand'] = round(float(np.mean(shortage_pct)), 2)
 
-        # Reliability = % of demand met (considering GW restriction shortage)
-        # In CalSim, AG demand is always met (via SW + GW), but with GW restrictions
-        # there can be shortage. Reliability = (demand - shortage) / demand
         if result['annual_demand_avg_taf'] > 0:
             met = result['annual_demand_avg_taf'] - result['annual_shortage_avg_taf']
             result['reliability_pct'] = round((met / result['annual_demand_avg_taf']) * 100, 2)
@@ -753,7 +845,8 @@ def calculate_du_period_summary(
         result['shortage_years_count'] = None
         result['shortage_frequency_pct'] = None
         result['annual_shortage_pct_of_demand'] = None
-        # Without shortage data, assume 100% reliability (CalSim assumption)
+        for p in EXCEEDANCE_PERCENTILES:
+            result[f'shortage_exc_p{p}'] = None
         result['reliability_pct'] = 100.0
         result['avg_pct_demand_met'] = 100.0
 
@@ -774,22 +867,18 @@ def calculate_aggregate_monthly(
     Calculate monthly statistics for an agricultural aggregate.
 
     Uses pre-computed aggregate variables like DEL_SWP_PAG and SHORT_SWP_PAG.
-    
-    NOTE: Aggregate delivery/shortage variables from DV output are in CFS.
-    Must be converted to TAF: TAF = CFS × days_in_month × 0.001983471
+    All values are pre-converted to TAF before this function is called.
     """
     if delivery_var not in df.columns:
         log.debug(f"No aggregate delivery variable found: {delivery_var}")
         return []
 
     df_copy = df.copy()
-    # Aggregate delivery variables from DV output are in CFS - convert to TAF
-    df_copy['delivery'] = df_copy[delivery_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['delivery'] = df_copy[delivery_var]
 
     has_shortage = shortage_var and shortage_var in df.columns
     if has_shortage:
-        # Aggregate shortage variables from DV output are in CFS - convert to TAF
-        df_copy['shortage'] = df_copy[shortage_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        df_copy['shortage'] = df_copy[shortage_var]
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -867,23 +956,18 @@ def calculate_aggregate_period_summary(
 ) -> Optional[Dict[str, Any]]:
     """
     Calculate period-of-record summary for an agricultural aggregate.
-    
-    Uses SHORT_CVP_PAG_N/S and SHORT_SWP_PAG_N/S for shortage statistics.
-    
-    NOTE: Aggregate delivery/shortage variables from DV output are in CFS.
-    Must be converted to TAF: TAF = CFS × days_in_month × 0.001983471
+
+    All values are pre-converted to TAF before this function is called.
     """
     if delivery_var not in df.columns:
         return None
 
     df_copy = df.copy()
-    # Aggregate delivery variables from DV output are in CFS - convert to TAF
-    df_copy['delivery'] = df_copy[delivery_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['delivery'] = df_copy[delivery_var]
 
     has_shortage = shortage_var and shortage_var in df.columns
     if has_shortage:
-        # Aggregate shortage variables from DV output are in CFS - convert to TAF
-        df_copy['shortage'] = df_copy[shortage_var] * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        df_copy['shortage'] = df_copy[shortage_var]
 
     water_years = sorted(df_copy['WaterYear'].unique())
 
@@ -941,22 +1025,22 @@ def calculate_aggregate_period_summary(
 
 def calculate_all_ag_statistics(
     scenario_id: str,
-    csv_path: Optional[str] = None
+    dv_path: Optional[str] = None,
+    sv_path: Optional[str] = None,
 ) -> Tuple[List[Dict], List[Dict], List[Dict], List[Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Calculate all statistics for agricultural demand units for a scenario.
 
-    Data sources (multi-source loading for correct units):
-    - Main CalSim Output: GP_*, GW_SHORT_*, DEL_*, SHORT_* (in CFS, need conversion)
-    - Demands CSV: AW_* (already in TAF, no conversion needed)
-    - Deliveries CSV: DN_* (already in TAF, no conversion needed)
+    Data sources:
+    - SV input: AWO_* (Applied Water = DEMAND, already in TAF)
+    - DV output: DN_*, GP_*, GW_SHORT_*, DEL_*, SHORT_* (CFS, converted to TAF)
 
     Returns:
         Tuple of (
-            du_demand_monthly_rows,      # AW_* demand data (from Demands CSV, TAF)
-            du_sw_delivery_monthly_rows, # DN_* surface water delivery (from Deliveries CSV, TAF)
-            du_gw_pumping_monthly_rows,  # GP_* or calculated GW pumping data
-            du_shortage_monthly_rows,    # GW_SHORT_* shortage data
+            du_demand_monthly_rows,
+            du_sw_delivery_monthly_rows,
+            du_gw_pumping_monthly_rows,
+            du_shortage_monthly_rows,
             du_period_summary_rows,
             aggregate_monthly_rows,
             aggregate_period_summary_rows
@@ -966,23 +1050,57 @@ def calculate_all_ag_statistics(
 
     demand_units = load_ag_demand_units()
 
-    # All data from a single DV output CSV — everything is in CFS
-    if csv_path:
-        df = load_calsim_csv_from_file(csv_path)
+    # ── Load SV (demand: AWO_* in TAF) ──
+    if sv_path:
+        sv_df = load_sv_csv_from_file(sv_path)
     else:
-        df = load_calsim_csv_from_s3(scenario_id)
+        sv_df = load_sv_csv_from_s3(scenario_id)
 
-    df = add_water_year_month(df)
+    sv_df = add_water_year_month(sv_df)
+
+    # ── Load DV (delivery, GW, shortage, aggregates: CFS) ──
+    if dv_path:
+        dv_df = load_dv_csv_from_file(dv_path)
+    else:
+        dv_df = load_dv_csv_from_s3(scenario_id)
+
+    dv_df = add_water_year_month(dv_df)
+
+    # Convert known CFS column families to TAF before merge.
+    # The DV CSV has mixed units (CFS for flows, TAF for storage, etc.).
+    # Only convert the specific variable families used by the AG module.
+    AG_CFS_PREFIXES = ('DN_', 'GP_', 'GW_SHORT_', 'DEL_', 'SHORT_')
+    first_col = dv_df.columns[0]
+    cfs_cols = [c for c in dv_df.columns
+                if any(c.startswith(p) for p in AG_CFS_PREFIXES)]
+    for col in cfs_cols:
+        dv_df[col] = pd.to_numeric(dv_df[col], errors='coerce') * dv_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    log.info(f"Converted {len(cfs_cols)} DV CFS columns to TAF (prefixes: {AG_CFS_PREFIXES})")
+
+    # Drop DV's AW_* columns (demand will come from SV instead)
+    dv_aw_cols = [c for c in dv_df.columns if c.startswith('AW_')]
+    if dv_aw_cols:
+        dv_df = dv_df.drop(columns=dv_aw_cols)
+        log.info(f"Dropped {len(dv_aw_cols)} AW_* columns from DV (demand sourced from SV)")
+
+    # ── Merge SV + DV on WaterYear + WaterMonth ──
+    aux_cols = ['DateTime', 'CalendarMonth', 'CalendarYear', 'DaysInMonth']
+    df = pd.merge(
+        sv_df.drop(columns=aux_cols, errors='ignore'),
+        dv_df.drop(columns=aux_cols + [first_col], errors='ignore'),
+        on=['WaterYear', 'WaterMonth'],
+        how='inner',
+    )
+    log.info(f"Merged DataFrame: {len(df)} rows, {len(df.columns)} columns")
 
     available_columns = list(df.columns)
-    log.info(f"Available columns: {len(available_columns)}")
 
-    # Find all AW_* columns to get the list of DUs in this scenario (demand data)
+    # Find all AW_* columns (now from SV) to get the list of DUs
     aw_columns = [c for c in available_columns if c.startswith('AW_') and not any(
         suffix in c for suffix in ['_ANN_DV', '_WLOSS', '_ADD_DV', '_ANNDV']
     )]
     du_ids_in_data = [c.replace('AW_', '') for c in aw_columns]
-    log.info(f"Found {len(du_ids_in_data)} agricultural demand units with demand data")
+    log.info(f"Found {len(du_ids_in_data)} agricultural demand units with demand data (from SV)")
 
     # Also find DN_* columns (surface water delivery)
     dn_columns = [c for c in available_columns if c.startswith('DN_') and not c.endswith('_ANN_DV')]
@@ -1254,8 +1372,15 @@ def save_to_database(
                 'demand_exc_p5', 'demand_exc_p10', 'demand_exc_p25',
                 'demand_exc_p50', 'demand_exc_p75', 'demand_exc_p90', 'demand_exc_p95',
                 'annual_sw_delivery_avg_taf', 'annual_sw_delivery_cv',
-                'annual_gw_pumping_avg_taf', 'annual_gw_pumping_cv', 'gw_pumping_pct_of_demand',
+                'sw_delivery_exc_p5', 'sw_delivery_exc_p10', 'sw_delivery_exc_p25',
+                'sw_delivery_exc_p50', 'sw_delivery_exc_p75', 'sw_delivery_exc_p90', 'sw_delivery_exc_p95',
+                'annual_gw_pumping_avg_taf', 'annual_gw_pumping_cv',
+                'gw_pumping_exc_p5', 'gw_pumping_exc_p10', 'gw_pumping_exc_p25',
+                'gw_pumping_exc_p50', 'gw_pumping_exc_p75', 'gw_pumping_exc_p90', 'gw_pumping_exc_p95',
+                'gw_pumping_pct_of_demand',
                 'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
+                'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
+                'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
                 'annual_shortage_pct_of_demand', 'reliability_pct', 'avg_pct_demand_met'
             ]
             values = [
@@ -1331,8 +1456,17 @@ def main():
         help='Process all known scenarios'
     )
     parser.add_argument(
+        '--dv-path',
+        help='Local CalSim DV output CSV file path (instead of S3)'
+    )
+    parser.add_argument(
+        '--sv-path',
+        help='Local SV input CSV file path (instead of S3)'
+    )
+    parser.add_argument(
         '--csv-path',
-        help='Local CalSim output CSV file path (instead of S3)'
+        help='(Deprecated) Alias for --dv-path for backwards compatibility',
+        dest='csv_path_legacy',
     )
     parser.add_argument(
         '--output-json',
@@ -1346,6 +1480,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.csv_path_legacy and not args.dv_path:
+        args.dv_path = args.csv_path_legacy
 
     if not args.scenario and not args.all_scenarios:
         parser.error("Either --scenario or --all-scenarios is required")
@@ -1364,7 +1501,8 @@ def main():
         try:
             results = calculate_all_ag_statistics(
                 scenario_id,
-                csv_path=args.csv_path
+                dv_path=args.dv_path,
+                sv_path=args.sv_path,
             )
             (du_demand, du_sw_delivery, du_gw_pumping, du_shortage, 
              du_summary, agg_monthly, agg_summary) = results

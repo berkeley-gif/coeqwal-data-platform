@@ -52,7 +52,7 @@ All six statistics modules must be run for a scenario to have complete data in t
 | `cws_aggregate` | `cws_aggregate_monthly`, `cws_aggregate_period_summary` | Production |
 | `ag` | `ag_du_delivery_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary`, aggregates | Production |
 | `refuge` | `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary` | Production (added Feb 2026) |
-| `env_flows` | River flow metrics (% unimpaired, % functional flows, alteration index) | **In development** |
+| `env_flows` | River flow metrics (% unimpaired, % functional flows, alteration index) | Production |
 
 ### Backfill plan
 
@@ -66,7 +66,7 @@ populated and others are not.
 - `s0045`, `s0046`, `s0065` extraction is pending
 - `s0035`, `s0036`, `s0037` are planned but not yet extracted
 - Refuge statistics (`run_all.py --only refuge`) have been backfilled for all 19 available scenarios
-- `env_flows` ETL is in development — backfill will happen once it is production-ready
+- `env_flows` ETL is production-ready (requires `scipy` for Pearson r)
 
 **Grand backfill command (run once `env_flows` is complete):**
 
@@ -80,7 +80,7 @@ DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --all-scenarios --on
 
 ### Website intermediate state
 
-While ETL modules are in development, scenarios without data for a given section return
+While all ETL modules are now production-ready, scenarios without data for a given section return
 empty result sets from the API. The frontend renders an empty/loading state for missing
 sections rather than hiding the scenario entirely. Scenarios are only hidden by setting
 `is_active = 0` in the `scenario` table, which is reserved for scenarios that are
@@ -215,7 +215,7 @@ and short months are handled exactly.
 | **DU Urban** | DV: `DN_*`, `GP_*`, `D_*_PMI` | SV: `UD_*` (TAF) | DV: `SHRTG_*`, `SHORT_D_*_PMI` | CFS |
 | **MI Contractors** | DV: `D_*_PMI`, `DEL_SWP_MWD` | DEMANDS CSV* | DV: `SHORT_D_*_PMI` | CFS |
 | **CWS Aggregate** | DV: `DEL_SWP_PMI`, `DEL_CVP_PMI_*` | DEMANDS CSV* | DV: `SHORT_SWP_PMI`, `SHORT_CVP_PMI_*` | CFS |
-| **AG** | DV: `DN_*`, `AW_*`, `GP_*` | DV: `AW_*` | DV: `GW_SHORT_*` | CFS |
+| **AG** | DV: `DN_*`, `GP_*` | SV: `AWO_*` (TAF) | DV: `GW_SHORT_*` | CFS (delivery), TAF (demand) |
 | **Env Flows** | DV: `C_{reach}` | — | — | CFS |
 | **Refuge** | DV: `DN_*` | SV: `AWO_*` (TAF) | Computed: `max(demand − delivery, 0)` | CFS (delivery), TAF (demand) |
 

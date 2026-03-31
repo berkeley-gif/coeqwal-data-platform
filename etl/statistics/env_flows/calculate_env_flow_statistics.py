@@ -858,6 +858,27 @@ def calculate_period_summary(
             mif_met = (flow[valid_mif] >= mif[valid_mif]).sum()
             result['mif_met_pct'] = round(float(mif_met / valid_mif.sum() * 100), 2)
 
+    # ── Annual flow exceedance (CFS mean + TAF total) ──────────────────
+    flow_valid = flow.dropna()
+    if len(flow_valid) > 0 and 'DaysInMonth' in df.columns:
+        flow_taf = flow * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        annual_flow_cfs = (
+            pd.DataFrame({'WaterYear': water_years, 'flow': flow})
+            .groupby('WaterYear')['flow'].mean()
+            .dropna()
+        )
+        annual_flow_taf = (
+            pd.DataFrame({'WaterYear': water_years, 'flow_taf': flow_taf})
+            .groupby('WaterYear')['flow_taf'].sum()
+            .dropna()
+        )
+        if len(annual_flow_cfs) > 0:
+            for p in EXCEEDANCE_PERCENTILES:
+                result[f'flow_exc_p{p}_cfs'] = round(float(np.percentile(annual_flow_cfs, 100 - p)), 3)
+        if len(annual_flow_taf) > 0:
+            for p in EXCEEDANCE_PERCENTILES:
+                result[f'flow_exc_p{p}_taf'] = round(float(np.percentile(annual_flow_taf, 100 - p)), 3)
+
     return result
 
 
@@ -1034,6 +1055,10 @@ PERIOD_COLS = [
     'avg_pct_unimpaired', 'annual_cv_pct_unimpaired',
     'avg_pct_ff', 'annual_cv_pct_ff',
     'mif_met_pct',
+    'flow_exc_p5_cfs', 'flow_exc_p10_cfs', 'flow_exc_p25_cfs',
+    'flow_exc_p50_cfs', 'flow_exc_p75_cfs', 'flow_exc_p90_cfs', 'flow_exc_p95_cfs',
+    'flow_exc_p5_taf', 'flow_exc_p10_taf', 'flow_exc_p25_taf',
+    'flow_exc_p50_taf', 'flow_exc_p75_taf', 'flow_exc_p90_taf', 'flow_exc_p95_taf',
     'created_by', 'updated_by',
 ]
 

@@ -93,6 +93,7 @@ ETL_MODULES = {
             "ag_aggregate_monthly",
             "ag_aggregate_period_summary",
         ],
+        "csv_arg": "--dv-path",
     },
     "refuge": {
         "path": SCRIPT_DIR / "refuge" / "main.py",

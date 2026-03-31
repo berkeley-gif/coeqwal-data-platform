@@ -539,6 +539,8 @@ def calculate_du_statistics(
             shortage_years = (ash > SHORTAGE_THRESHOLD_TAF).sum()
             summary['shortage_years_count'] = int(shortage_years)
             summary['shortage_frequency_pct'] = round(shortage_years / len(ash) * 100, 2)
+            for p in EXCEEDANCE_PERCENTILES:
+                summary[f'shortage_exc_p{p}'] = round(float(np.percentile(ash, 100 - p)), 2)
         
         # Percent demand met (annual) — also used as reliability_pct
         if not ad.empty and not adm.empty:
@@ -661,7 +663,6 @@ def save_to_database(
     
     # Insert period summary
     if period_summary_rows:
-        # Columns matching existing schema
         summary_cols = [
             'scenario_short_code', 'du_id',
             'simulation_start_year', 'simulation_end_year', 'total_years',
@@ -669,6 +670,8 @@ def save_to_database(
             'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
             'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
             'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
+            'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
+            'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
             'reliability_pct', 'avg_pct_demand_met', 'annual_demand_avg_taf'
         ]
         
@@ -677,30 +680,13 @@ def save_to_database(
             for row in period_summary_rows
         ]
         
+        update_cols = [c for c in summary_cols if c not in ('scenario_short_code', 'du_id')]
+        update_clause = ', '.join(f'{c} = EXCLUDED.{c}' for c in update_cols)
         insert_sql = f"""
             INSERT INTO du_period_summary ({', '.join(summary_cols)})
             VALUES %s
             ON CONFLICT (scenario_short_code, du_id)
-            DO UPDATE SET
-                simulation_start_year = EXCLUDED.simulation_start_year,
-                simulation_end_year = EXCLUDED.simulation_end_year,
-                total_years = EXCLUDED.total_years,
-                annual_delivery_avg_taf = EXCLUDED.annual_delivery_avg_taf,
-                annual_delivery_cv = EXCLUDED.annual_delivery_cv,
-                delivery_exc_p5 = EXCLUDED.delivery_exc_p5,
-                delivery_exc_p10 = EXCLUDED.delivery_exc_p10,
-                delivery_exc_p25 = EXCLUDED.delivery_exc_p25,
-                delivery_exc_p50 = EXCLUDED.delivery_exc_p50,
-                delivery_exc_p75 = EXCLUDED.delivery_exc_p75,
-                delivery_exc_p90 = EXCLUDED.delivery_exc_p90,
-                delivery_exc_p95 = EXCLUDED.delivery_exc_p95,
-                annual_shortage_avg_taf = EXCLUDED.annual_shortage_avg_taf,
-                shortage_years_count = EXCLUDED.shortage_years_count,
-                shortage_frequency_pct = EXCLUDED.shortage_frequency_pct,
-                reliability_pct = EXCLUDED.reliability_pct,
-                avg_pct_demand_met = EXCLUDED.avg_pct_demand_met,
-                annual_demand_avg_taf = EXCLUDED.annual_demand_avg_taf,
-                updated_at = NOW()
+            DO UPDATE SET {update_clause}, updated_at = NOW()
         """
         execute_values(cur, insert_sql, values)
         log.info(f"Inserted {len(values)} period summary rows")

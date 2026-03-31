@@ -630,8 +630,7 @@ Files in `staging/` do not trigger the Lambda. To trigger extraction, promote to
 ```bash
 # Promote one scenario (recommended first time)
 python etl/scripts/gdrive_bulk_download.py promote \
-  --s3-bucket coeqwal-model-run \
-  --upload-single s0020
+  --s3-bucket coeqwal-model-run --scenarios s0020
 
 # Promote all staged scenarios
 python etl/scripts/gdrive_bulk_download.py promote \
@@ -1359,3 +1358,111 @@ define short_cvp_pag_s {alias X_50_PA1 + X_71_PA1 + X_71_PA2 + ...
 - `DATABASE_URL` environment variable set
 - CalSim output CSV available in S3: `s3://coeqwal-model-run/scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv`
 - Python packages: `pandas`, `numpy`, `psycopg2`, `boto3`
+
+---
+
+## AWS Cheatsheet
+
+Quick reference commands for inspecting and managing the ETL infrastructure.
+
+### Batch compute environment
+
+```bash
+# Check compute environment sizing and type
+aws batch describe-compute-environments \
+  --query 'computeEnvironments[].{name: computeEnvironmentName, type: computeResources.type, minvCpus: computeResources.minvCpus, maxvCpus: computeResources.maxvCpus, instanceTypes: computeResources.instanceTypes}' \
+  --output table
+
+# Update maxvCpus for a bulk load (scale up)
+aws batch update-compute-environment \
+  --compute-environment coeqwal-dss-ce \
+  --compute-resources maxvCpus=256
+
+# Check job definition (per-job resource allocation)
+aws batch describe-job-definitions \
+  --job-definition-name coeqwal-dss-jobdef --status ACTIVE \
+  --query 'jobDefinitions[-1].{revision: revision, containerProps: ecsProperties.taskProperties[0].containers[0].resourceRequirements}' \
+  --output json
+```
+
+### Batch job monitoring
+
+```bash
+# Job counts by status
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status RUNNABLE --query 'length(jobSummaryList)'
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status RUNNING --query 'length(jobSummaryList)'
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status SUCCEEDED --query 'length(jobSummaryList)'
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status FAILED --query 'length(jobSummaryList)'
+
+# Inspect a specific job
+aws batch describe-jobs --jobs <job-id> \
+  --query 'jobs[0].{status: status, started: startedAt, stopped: stoppedAt, reason: statusReason}' \
+  --output table
+```
+
+### Lambda
+
+```bash
+# Tail recent logs
+aws logs tail /aws/lambda/coeqwalEtlTrigger --since 30m
+
+# Follow in real time
+aws logs tail /aws/lambda/coeqwalEtlTrigger --follow
+
+# Deploy updated Lambda code (from Cloud9)
+cd ~/environment/coeqwal-backend/etl/lambda-trigger
+zip lambda.zip index.mjs
+aws lambda update-function-code --function-name coeqwalEtlTrigger --zip-file fileb://lambda.zip
+rm lambda.zip
+```
+
+### ECR (Docker image)
+
+```bash
+# Check latest image push
+aws ecr describe-images --repository-name coeqwal-etl \
+  --query 'imageDetails | sort_by(@, &imagePushedAt) | [-1].{pushed: imagePushedAt, tags: imageTags}' \
+  --output table
+```
+
+### S3
+
+```bash
+# List scenario folders
+aws s3 ls s3://coeqwal-model-run/scenario/
+
+# Check what's in staging
+aws s3 ls s3://coeqwal-model-run/staging/
+
+# Check CSVs for a scenario
+aws s3 ls s3://coeqwal-model-run/scenario/s0021/csv/
+
+# Read a manifest
+aws s3 cp s3://coeqwal-model-run/scenario/s0021/s0021_manifest.json - | python -m json.tool
+```
+
+### ETL scripts (run from Cloud9)
+
+```bash
+# Scan scenarios
+python etl/scripts/gdrive_bulk_download.py scan \
+  --listing-csv database/reference/model_run_file_source.csv --workers 4
+
+# Download from Drive to S3 staging
+python etl/scripts/gdrive_bulk_download.py download \
+  --listing-csv database/reference/model_run_file_source.csv \
+  --s3-bucket coeqwal-model-run --workers 4
+
+# Promote to trigger extraction (all, or specific)
+python etl/scripts/gdrive_bulk_download.py promote --s3-bucket coeqwal-model-run
+python etl/scripts/gdrive_bulk_download.py promote --s3-bucket coeqwal-model-run --scenarios s0021
+
+# Check extraction results
+python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run
+python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run --scenarios s0021
+python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run --mismatches
+
+# Re-extract scenarios (re-trigger Batch)
+python etl/scripts/reextract_all_scenarios.py --dry-run
+python etl/scripts/reextract_all_scenarios.py --scenarios s0021,s0022
+```

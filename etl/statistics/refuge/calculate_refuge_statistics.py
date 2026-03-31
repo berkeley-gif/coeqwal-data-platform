@@ -559,6 +559,10 @@ def calculate_period_summary(
     for p in EXCEEDANCE_PERCENTILES:
         result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
 
+    # Annual shortage exceedance curve
+    for p in EXCEEDANCE_PERCENTILES:
+        result[f'shortage_exc_p{p}'] = round(float(np.percentile(annual_shortage, 100 - p)), 2)
+
     return result
 
 
@@ -699,6 +703,8 @@ PERIOD_SUMMARY_COLS = [
     'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
     'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
     'annual_shortage_avg_taf', 'annual_shortage_cv',
+    'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
+    'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
     'annual_shortage_pct_avg', 'annual_shortage_pct_cv',
     'reliability_pct_95',
     'created_by', 'updated_by',
