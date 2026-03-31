@@ -1061,15 +1061,15 @@ def run_verify(manifest_path: Path):
     conn.close()
 
     print(f"\n{'=' * 60}")
-    print(f"VERIFICATION RESULT")
+    print("VERIFICATION RESULT")
     print(f"{'=' * 60}")
     print(f"  Rows checked : {checked}")
     print(f"  Missing      : {missing}")
     print(f"  Mismatches   : {mismatches}")
     if missing == 0 and mismatches == 0:
-        print(f"  Status       : PASS")
+        print("  Status       : PASS")
     else:
-        print(f"  Status       : FAIL")
+        print("  Status       : FAIL")
         sys.exit(1)
 
 
