@@ -2,33 +2,34 @@
 """
 Calculate demand, delivery, and shortage statistics for agricultural demand units.
 
-DATA SOURCES:
-  Demand:   SV input CSV (AWO_{DU_ID}, TAF, APPLIED-WATER)
-    S3: scenario/{id}/csv/{id}_coeqwal_sv_input.csv
-    AWO_* columns represent the original pre-model demand target (in TAF).
-    The staged CSV may expose these as either AWO_* or AW_*; both are handled.
-
-  Delivery / GW / Shortage / Aggregates:  DV output CSV (CFS)
+DATA SOURCE:
+  All data from the CalSim DV output CSV:
     S3: scenario/{id}/csv/{id}_coeqwal_calsim_output.csv
-    Variables: DN_{DU_ID} (SW delivery), GP_{DU_ID} (GW pumping),
-      GW_SHORT_{DU_ID} (GW restriction shortage), DEL_*, SHORT_*
-    All CFS columns are converted to TAF before analysis.
 
-CalSim Variable Semantics:
-- AWO_{DU_ID} = Applied Water Output = DEMAND (SV input, TAF)
-- DN_{DU_ID} = Net Delivery = SURFACE WATER DELIVERY (DV output, CFS -> TAF)
-- GP_{DU_ID} = Groundwater Pumping (DV output, CFS -> TAF)
-- Groundwater Pumping = AW - DN (calculated for DUs without GP_*)
-- GW_SHORT_{DU_ID} = Groundwater RESTRICTION Shortage (DV output, CFS -> TAF)
+  Variables (all CFS in the raw CSV, converted to TAF before analysis):
+    AW_{DU_ID}       — Applied Water = DEMAND (model's optimized water application)
+    DN_{DU_ID}       — Net Delivery  = SURFACE WATER DELIVERY
+    GP_{DU_ID}       — Groundwater Pumping
+    GW_SHORT_{DU_ID} — Groundwater RESTRICTION Shortage
+    DEL_*, SHORT_*   — Project-level aggregate delivery/shortage
 
-In CalSim, agricultural demand is assumed to be fully met:
-  Demand (AW) = Surface Water Delivery (DN) + Groundwater Pumping (GP)
+CalSim 3 Water Balance:
+  AW = DN + GP + RU   (Applied Water = Surface Delivery + GW Pumping + Reuse)
+  GP + RU = AW - DN   (shortage: demand not met by surface delivery)
+
+  The COEQWAL notebook (DataExtraction.py) uses AW_* from the DV output as
+  the demand variable for agricultural DUs.  AWO_* in the SV input is the
+  pre-model demand order/target — a different (higher) quantity.
+
+  11 GW-only DUs (sw=0 in entity table) have no native DN_* output from
+  CalSim.  Their entire supply is GP + RU.  The ETL does not synthesize a
+  delivery value for these DUs.
 
 Note: Sacramento region DUs (WBAs 02-26) do NOT have GW_SHORT shortage data.
 
 Usage:
     python calculate_ag_statistics.py --scenario s0020
-    python calculate_ag_statistics.py --scenario s0020 --dv-path /path/to/DV.csv --sv-path /path/to/SV.csv
+    python calculate_ag_statistics.py --scenario s0020 --dv-path /path/to/DV.csv
 """
 
 import argparse
@@ -44,7 +45,14 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, parse_dss_csv_header, deduplicate_columns  # noqa: E402
+from units import (  # noqa: E402
+    CFS_TO_TAF_PER_DAY,
+    parse_dss_csv_header,
+    deduplicate_columns,
+    safe_pct,
+    validate_water_balance,
+    check_post_conversion_magnitude,
+)
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
@@ -73,7 +81,6 @@ log = logging.getLogger("ag_statistics")
 # S3 bucket configuration
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 
-SV_INPUT_S3_KEY = "scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
 DV_OUTPUT_S3_KEYS = [
     "scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",
     "scenario/{scenario}/csv/{scenario}_DV.csv",
@@ -195,123 +202,6 @@ def load_ag_demand_units(csv_path: Optional[Path] = None) -> Dict[str, Dict[str,
 
     log.info(f"Loaded {len(demand_units)} agricultural demand units from {csv_path}")
     return demand_units
-
-
-def _read_csv_header(body) -> tuple:
-    """
-    Read the 7 header rows of a CalSim DSS-export CSV.
-
-    Returns (var_names, units) where both are lists indexed by column position.
-    Row 1 (B) = variable names, Row 6 = units.
-    """
-    header_df = pd.read_csv(body, header=None, nrows=7, low_memory=False)
-    var_names = [str(v) for v in header_df.iloc[1].tolist()]
-    units_row = [str(u) for u in header_df.iloc[6].tolist()]
-    return var_names, units_row
-
-
-def _select_taf_columns(
-    data_df: pd.DataFrame,
-    var_names: List[str],
-    units_row: List[str],
-    prefix: str,
-) -> pd.DataFrame:
-    """
-    From a full data DataFrame, extract TAF-block columns for variables matching prefix.
-
-    SV input CSVs have a two-block layout: CFS columns then TAF columns.
-    We select the TAF occurrence for each variable.  If only a CFS
-    occurrence exists, a warning is logged since the caller treats the
-    values as already-in-TAF.
-    """
-    date_col = var_names[0]
-    seen: Dict[str, List[tuple]] = {}
-    for i, (vname, unit) in enumerate(zip(var_names, units_row)):
-        if vname.startswith(prefix):
-            seen.setdefault(vname, []).append((i, unit))
-
-    series_list = [data_df.iloc[:, 0].rename(date_col)]
-    cfs_fallback_count = 0
-    for vname, occurrences in seen.items():
-        taf_match = next(
-            (idx for idx, unit in occurrences if unit.upper() == 'TAF'),
-            None,
-        )
-        if taf_match is not None:
-            chosen_idx = taf_match
-        else:
-            chosen_idx = occurrences[-1][0]
-            chosen_unit = occurrences[-1][1].upper()
-            if chosen_unit == 'CFS':
-                cfs_fallback_count += 1
-
-        series_list.append(
-            pd.to_numeric(data_df.iloc[:, chosen_idx], errors='coerce').rename(vname)
-        )
-
-    if cfs_fallback_count:
-        log.warning(
-            f"SV {prefix}* — {cfs_fallback_count} variable(s) have NO TAF column; "
-            f"using CFS values AS-IS. These will be treated as TAF by downstream code. "
-            f"This likely indicates a CFS/TAF mismatch that will produce wrong results."
-        )
-
-    return pd.concat(series_list, axis=1)
-
-
-def load_sv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
-    """
-    Load AWO_{DU_ID} demand columns from SV input CSV (TAF, APPLIED-WATER).
-
-    Handles both AWO_* (raw DSS naming) and AW_* (possible staging rename).
-    Returns DataFrame with demand columns renamed to AW_* in TAF.
-    """
-    if not HAS_BOTO3:
-        raise ImportError("boto3 required. Install with: pip install boto3")
-
-    s3 = boto3.client('s3')
-    key = SV_INPUT_S3_KEY.format(scenario=scenario_id)
-
-    log.info(f"Loading SV input: s3://{S3_BUCKET}/{key}")
-    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    var_names, units_row = _read_csv_header(response['Body'])
-
-    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
-
-    result = _select_taf_columns(data_df, var_names, units_row, prefix='AWO_')
-    if len(result.columns) <= 1:
-        log.info("No AWO_* columns found — trying AW_* (staging may rename variables)")
-        result = _select_taf_columns(data_df, var_names, units_row, prefix='AW_')
-
-    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
-    if renames:
-        result = result.rename(columns=renames)
-        log.info(f"Renamed {len(renames)} AWO_* columns to AW_* for internal consistency")
-
-    log.info(f"Loaded {len(result.columns) - 1} demand columns from SV input")
-    return result
-
-
-def load_sv_csv_from_file(file_path: str) -> pd.DataFrame:
-    """Load SV input CSV from a local file path."""
-    log.info(f"Loading SV input from file: {file_path}")
-    header_df = pd.read_csv(file_path, header=None, nrows=7, low_memory=False)
-    var_names = [str(v) for v in header_df.iloc[1].tolist()]
-    units_row = [str(u) for u in header_df.iloc[6].tolist()]
-
-    data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-
-    result = _select_taf_columns(data_df, var_names, units_row, prefix='AWO_')
-    if len(result.columns) <= 1:
-        result = _select_taf_columns(data_df, var_names, units_row, prefix='AW_')
-
-    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
-    if renames:
-        result = result.rename(columns=renames)
-
-    log.info(f"Loaded {len(result.columns) - 1} demand columns")
-    return result
 
 
 def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]:

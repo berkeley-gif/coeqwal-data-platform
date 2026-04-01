@@ -1,13 +1,14 @@
 """
-Shared unit-conversion constants and CSV-loading helpers for the
-COEQWAL statistics ETL.
+Shared unit-conversion constants, CSV-loading helpers, and data-integrity
+safeguard functions for the COEQWAL statistics ETL.
 
 All modules should import from here instead of defining their own copies.
 """
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,105 @@ CFS_TO_TAF_PER_DAY = 86_400 / 43_560_000  # ≈ 0.00198347107438
 
 # MWD Table A contract demand (from COEQWAL_V3 DataExtraction.py line 914)
 MWD_TABLE_A_ANNUAL_TAF = 1911.5
+
+# ─── Data integrity safeguard thresholds ────────────────────────────
+# Percentage warning threshold (does NOT clamp — only logs a warning)
+PCT_WARNING_THRESHOLD = 200.0
+
+# Maximum plausible monthly TAF value for a single DU or contractor.
+# Values above this after conversion strongly suggest a double-conversion
+# or a missed CFS→TAF step.
+MONTHLY_TAF_SANITY_LIMIT = 2000.0
+
+
+def safe_pct(
+    numerator: float,
+    denominator: float,
+    label: str = '',
+    logger: Optional[logging.Logger] = None,
+) -> float:
+    """Compute a percentage with an optional plausibility warning.
+
+    Returns ``(numerator / denominator) * 100``.  If the result exceeds
+    ``PCT_WARNING_THRESHOLD`` a warning is logged (but the value is
+    **not** clamped — it is returned as-is so the issue is visible in the
+    data for investigation).
+    """
+    if denominator <= 0:
+        return 0.0
+    pct = (numerator / denominator) * 100
+    if pct > PCT_WARNING_THRESHOLD and logger:
+        logger.warning(
+            "Suspicious percentage: %s = %.1f%% "
+            "(num=%.2f, den=%.2f). Possible unit mismatch.",
+            label, pct, numerator, denominator,
+        )
+    return pct
+
+
+def validate_water_balance(
+    df: pd.DataFrame,
+    du_ids: List[str],
+    logger: logging.Logger,
+    tolerance: float = 1.01,
+) -> int:
+    """Check that GP <= AW for every DU × month after unit conversion.
+
+    In the CalSim water balance ``AW = DN + GP + RU``, groundwater
+    pumping should never exceed applied water.  Violations beyond a
+    small tolerance (default 1%) indicate a unit mismatch (e.g. GP
+    still in CFS while AW was converted to TAF).
+
+    Returns the total number of violating rows.
+    """
+    violations = 0
+    for du_id in du_ids:
+        aw_col, gp_col = f'AW_{du_id}', f'GP_{du_id}'
+        if aw_col not in df.columns or gp_col not in df.columns:
+            continue
+        aw = pd.to_numeric(df[aw_col], errors='coerce')
+        gp = pd.to_numeric(df[gp_col], errors='coerce')
+        mask = (gp > aw * tolerance) & (aw > 0)
+        n = int(mask.sum())
+        if n > 0:
+            max_ratio = float((gp[mask] / aw[mask]).max())
+            logger.warning(
+                "Water balance violation: GP > AW for %s "
+                "in %d rows (max GP/AW = %.1fx). "
+                "Possible unit mismatch.",
+                du_id, n, max_ratio,
+            )
+            violations += n
+    if violations == 0:
+        logger.info("Water balance check passed: GP <= AW for all DU-months")
+    else:
+        logger.warning("Water balance violations: %d total rows", violations)
+    return violations
+
+
+def check_post_conversion_magnitude(
+    df: pd.DataFrame,
+    columns: List[str],
+    limit: float = MONTHLY_TAF_SANITY_LIMIT,
+    logger: Optional[logging.Logger] = None,
+) -> int:
+    """Spot-check converted TAF values for implausible magnitudes.
+
+    Returns the number of columns whose maximum exceeds *limit*.
+    """
+    flagged = 0
+    for col in columns:
+        vals = pd.to_numeric(df[col], errors='coerce')
+        max_val = float(vals.max()) if not vals.dropna().empty else 0.0
+        if max_val > limit:
+            flagged += 1
+            if logger:
+                logger.warning(
+                    "Suspicious magnitude after conversion: %s max = %.1f TAF/month "
+                    "(limit: %.0f). Possible double conversion.",
+                    col, max_val, limit,
+                )
+    return flagged
 
 
 # ─────────────────────────────────────────────────────────────────────

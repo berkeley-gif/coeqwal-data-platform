@@ -87,7 +87,7 @@ async def get_all_scenarios(
                 "short_code": row["short_code"],
                 "run_name": row["run_name"],
                 "name": row["name"] or row["short_code"],
-                "description": row["long_description"] or row["short_description"],
+                "short_description": row["short_description"],
                 "hydroclimate_id": row["hydroclimate_id"],
                 "baseline_scenario": row["baseline_group"],
                 "sibling_group": row["hydroclimate_sibling"],
