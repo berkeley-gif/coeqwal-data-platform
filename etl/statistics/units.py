@@ -6,7 +6,7 @@ All modules should import from here instead of defining their own copies.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
