@@ -107,7 +107,7 @@ CREATE TABLE ag_du_shortage_monthly (
     -- Shortage statistics (TAF)
     shortage_avg_taf NUMERIC(10,2),
     shortage_cv NUMERIC(10,4),
-    shortage_frequency_pct NUMERIC(5,2),      -- % months with shortage > 0
+    shortage_frequency_pct NUMERIC(7,2),      -- % months with shortage > 0
     shortage_pct_of_demand_avg NUMERIC(6,2),  -- Average shortage as % of demand
 
     -- Shortage percentiles (TAF)

@@ -60,7 +60,7 @@ CREATE TABLE mi_delivery_monthly (
 
     -- Demand and percent of demand (TAF, %)
     demand_avg_taf NUMERIC(10,2),               -- Average monthly demand
-    percent_of_demand_avg NUMERIC(5,2),         -- Average percent of demand met
+    percent_of_demand_avg NUMERIC(7,2),         -- Average percent of demand met
 
     sample_count INTEGER,
 
@@ -93,7 +93,7 @@ CREATE TABLE mi_shortage_monthly (
     -- Shortage statistics (TAF)
     shortage_avg_taf NUMERIC(10,2),
     shortage_cv NUMERIC(6,4),
-    shortage_frequency_pct NUMERIC(5,2),        -- % months with shortage > 0
+    shortage_frequency_pct NUMERIC(7,2),        -- % months with shortage > 0
 
     -- Shortage percentiles (TAF)
     q0 NUMERIC(10,2),
@@ -152,7 +152,7 @@ CREATE TABLE mi_contractor_period_summary (
     -- Annual shortage statistics
     annual_shortage_avg_taf NUMERIC(10,2),
     shortage_years_count INTEGER,
-    shortage_frequency_pct NUMERIC(5,2),        -- % of years with any shortage
+    shortage_frequency_pct NUMERIC(7,2),        -- % of years with any shortage
 
     -- Annual shortage exceedance percentiles
     shortage_exc_p5 NUMERIC(10,2),
@@ -164,8 +164,8 @@ CREATE TABLE mi_contractor_period_summary (
     shortage_exc_p95 NUMERIC(10,2),
 
     -- Reliability metrics
-    reliability_pct NUMERIC(5,2),               -- % of months meeting full demand
-    avg_pct_demand_met NUMERIC(5,2),            -- Average delivery/demand ratio
+    reliability_pct NUMERIC(7,2),               -- % of months meeting full demand
+    avg_pct_demand_met NUMERIC(7,2),            -- Average delivery/demand ratio
 
     -- Demand reference
     contract_amount_taf NUMERIC(10,2),          -- Table A (SWP) or contract amount

@@ -204,20 +204,32 @@ def run_module(
         cmd.extend([csv_arg_name, abs_csv_path])
 
     t0 = time.time()
+    stderr_lines: List[str] = []
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=script_path.parent,
             env=os.environ.copy(),
-            capture_output=False,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
         )
+
+        for line in proc.stderr:
+            sys.stderr.write(line)
+            sys.stderr.flush()
+            stderr_lines.append(line)
+
+        proc.wait()
         elapsed = time.time() - t0
 
-        if result.returncode != 0:
+        if proc.returncode != 0:
+            tail = "".join(stderr_lines[-15:]).strip()
             log.error(
-                f"Module {module_name} failed with return code {result.returncode}"
+                f"Module {module_name} failed (exit {proc.returncode})"
             )
-            _alert_failure(module_name, scenario_id, elapsed)
+            exc = RuntimeError(tail) if tail else None
+            _alert_failure(module_name, scenario_id, elapsed, exception=exc)
             return False, elapsed
 
         log.info(f"✅ {module['name']} completed successfully ({elapsed:.1f}s)")
@@ -326,6 +338,8 @@ Examples:
   python run_all.py --scenario s0029 --dry-run
   python run_all.py --scenario s0029 --only reservoirs,du_urban
   python run_all.py --all-scenarios
+  python run_all.py --all-scenarios --batch-size 10
+  python run_all.py --all-scenarios --batch-size 15 --continue-on-error
         """,
     )
 
@@ -348,7 +362,8 @@ Examples:
     parser.add_argument(
         "--continue-on-error",
         action="store_true",
-        help="Continue processing other modules even if one fails",
+        help="Continue processing remaining modules/scenarios even if one fails. "
+        "Default behavior is fail-fast: abort the entire run on the first error.",
     )
     parser.add_argument(
         "--workers",
@@ -364,6 +379,14 @@ Examples:
         action="store_true",
         help="Run cross-scenario sensitivity analysis after per-scenario modules. "
         "Requires all (or most) per-scenario statistics to be in the DB already.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=0,
+        help="Process scenarios in batches of this size, pausing between batches. "
+        "0 (default) = no batching (process all at once). "
+        "Recommended: 10-15 to prevent long-running AWS token issues.",
     )
     parser.add_argument(
         "--list-modules", action="store_true", help="List available modules and exit"
@@ -404,59 +427,134 @@ Examples:
     # Determine scenarios
     scenarios = SCENARIOS if args.all_scenarios else [args.scenario]
     workers = max(1, args.workers)
+    batch_size = max(0, args.batch_size)
+
+    # Split scenarios into batches (0 = single batch of all)
+    if batch_size > 0:
+        batches = [
+            scenarios[i : i + batch_size]
+            for i in range(0, len(scenarios), batch_size)
+        ]
+        log.info(f"Processing {len(scenarios)} scenarios in "
+                 f"{len(batches)} batch(es) of up to {batch_size}")
+    else:
+        batches = [scenarios]
 
     # Process scenarios
     all_results = {}
     effective_modules = modules or list(ETL_MODULES.keys())
     start_time = time.time()
 
-    if workers == 1 or len(scenarios) == 1:
-        for scenario_id in scenarios:
-            results = run_all_modules(
-                scenario_id,
-                modules=modules,
-                dry_run=args.dry_run,
-                csv_path=args.csv_path,
-                continue_on_error=args.continue_on_error,
-            )
-            all_results[scenario_id] = results
-    else:
-        log.info(
-            f"Running {len(scenarios)} scenarios with {workers} parallel workers"
-        )
+    aborted = False
+    global_idx = 0
 
-        def _process_scenario(scenario_id: str) -> tuple:
-            results = run_all_modules(
-                scenario_id,
-                modules=modules,
-                dry_run=args.dry_run,
-                csv_path=args.csv_path,
-                continue_on_error=True,
-            )
-            return scenario_id, results
+    for batch_num, batch in enumerate(batches, 1):
+        if aborted:
+            break
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(_process_scenario, sid): sid
-                for sid in scenarios
-            }
-            for future in as_completed(futures):
-                sid = futures[future]
-                try:
-                    scenario_id, results = future.result()
-                    all_results[scenario_id] = results
-                    done_count = len(all_results)
-                    log.info(
-                        f"[{done_count}/{len(scenarios)}] {scenario_id} finished"
+        if len(batches) > 1:
+            log.info(f"\n{'*' * 60}")
+            log.info(f"  BATCH {batch_num}/{len(batches)}: "
+                     f"{batch[0]} .. {batch[-1]}  ({len(batch)} scenarios)")
+            log.info(f"{'*' * 60}\n")
+
+        if workers == 1 or len(batch) == 1:
+            for scenario_id in batch:
+                global_idx += 1
+                results = run_all_modules(
+                    scenario_id,
+                    modules=modules,
+                    dry_run=args.dry_run,
+                    csv_path=args.csv_path,
+                    continue_on_error=args.continue_on_error,
+                )
+                all_results[scenario_id] = results
+                log.info(f"[{global_idx}/{len(scenarios)}] {scenario_id} finished")
+
+                scenario_had_failure = any(
+                    (r["status"] if isinstance(r, dict) else r) == "failed"
+                    for r in results.values()
+                )
+                if scenario_had_failure and not args.continue_on_error:
+                    remaining = len(scenarios) - global_idx
+                    log.error(
+                        f"ABORTING: {scenario_id} had failures and "
+                        f"--continue-on-error was not set. "
+                        f"{remaining} scenario(s) skipped."
                     )
-                except Exception as e:
-                    log.error(f"{sid} raised an exception: {e}")
-                    all_results[sid] = {
-                        m: "failed" for m in effective_modules
-                    }
+                    aborted = True
+                    break
+        else:
+            log.info(
+                f"Running batch of {len(batch)} scenarios with {workers} parallel workers"
+            )
+
+            def _process_scenario(scenario_id: str) -> tuple:
+                results = run_all_modules(
+                    scenario_id,
+                    modules=modules,
+                    dry_run=args.dry_run,
+                    csv_path=args.csv_path,
+                    continue_on_error=args.continue_on_error,
+                )
+                return scenario_id, results
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(_process_scenario, sid): sid
+                    for sid in batch
+                }
+                for future in as_completed(futures):
+                    sid = futures[future]
+                    try:
+                        scenario_id, results = future.result()
+                        all_results[scenario_id] = results
+                        global_idx += 1
+                        log.info(
+                            f"[{global_idx}/{len(scenarios)}] {scenario_id} finished"
+                        )
+
+                        scenario_had_failure = any(
+                            (r["status"] if isinstance(r, dict) else r) == "failed"
+                            for r in results.values()
+                        )
+                        if scenario_had_failure and not args.continue_on_error:
+                            log.error(
+                                f"ABORTING: {scenario_id} had failures. "
+                                f"Cancelling remaining scenarios."
+                            )
+                            for f in futures:
+                                f.cancel()
+                            aborted = True
+                            break
+                    except Exception as e:
+                        log.error(f"{sid} raised an exception: {e}")
+                        all_results[sid] = {
+                            m: {"status": "failed", "elapsed_s": 0.0}
+                            for m in effective_modules
+                        }
+                        global_idx += 1
+                        if not args.continue_on_error:
+                            log.error("ABORTING due to unhandled exception.")
+                            for f in futures:
+                                f.cancel()
+                            aborted = True
+                            break
+
+        if len(batches) > 1 and not aborted and batch_num < len(batches):
+            batch_elapsed = time.time() - start_time
+            log.info(f"Batch {batch_num} complete. "
+                     f"Elapsed so far: {batch_elapsed / 60:.1f} min. "
+                     f"{len(scenarios) - global_idx} scenario(s) remaining.")
 
     elapsed = time.time() - start_time
     log.info(f"Total wall-clock time: {elapsed / 60:.1f} minutes")
+
+    if aborted:
+        log.error(
+            "Run was ABORTED due to errors. Use --continue-on-error to "
+            "force processing all scenarios despite failures."
+        )
 
     # Print comprehensive scorecard at the end
     has_failures = print_scorecard(

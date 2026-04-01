@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF, parse_dss_csv_header, deduplicate_columns  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
@@ -283,19 +283,20 @@ def load_mi_contractors(csv_path: Optional[Path] = None) -> Dict[str, Dict[str, 
     return contractors
 
 
-def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> pd.DataFrame:
+def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Load CalSim output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
-    Variable names are in row 1 (0-indexed).
+    Deduplicates columns when both CFS and TAF versions exist.
+
+    Returns (data_df, units_map).
     """
     if not HAS_BOTO3:
         raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
 
     s3 = boto3.client('s3')
 
-    # Try different possible CSV locations
     possible_keys = [
         f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
         f"scenario/{scenario_id}/csv/{scenario_id}_DV.csv",
@@ -305,18 +306,22 @@ def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> pd.DataFr
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            df = pd.read_csv(response['Body'], header=None, nrows=8)
+            var_names, units_row = parse_dss_csv_header(response['Body'])
 
-            # Get variable names from row 1
-            col_names = df.iloc[1].tolist()
+            keep_indices, units_map = deduplicate_columns(
+                var_names, units_row, prefer_cfs=True,
+            )
 
-            # Re-fetch and read data portion (skip 7 header rows)
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
-            data_df.columns = col_names
+            data_df = data_df.iloc[:, keep_indices]
+            data_df.columns = [var_names[i] for i in keep_indices]
 
+            n_dupes = len(var_names) - len(keep_indices)
+            if n_dupes:
+                log.info(f"Deduplicated {n_dupes} duplicate columns")
             log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-            return data_df
+            return data_df, units_map
 
         except s3.exceptions.NoSuchKey:
             continue
@@ -327,51 +332,32 @@ def load_calsim_csv_from_s3(scenario_id: str, variables: List[str]) -> pd.DataFr
     raise FileNotFoundError(f"Could not find CalSim output for {scenario_id} in S3")
 
 
-def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> pd.DataFrame:
+def load_calsim_csv_from_file(file_path: str, dedupe_columns: bool = False) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Load CalSim output CSV from local file.
 
     Handles the DSS export format with 7 header rows.
-    
-    Args:
-        file_path: Path to the CSV file
-        dedupe_columns: If True, remove duplicate column names (keeping first occurrence).
-                       Useful for DEMANDS CSV files which may have duplicates.
+    Always deduplicates using the units-aware helper (prefers CFS).
+
+    Returns (data_df, units_map).
     """
     log.info(f"Loading from file: {file_path}")
 
-    # Read header to get column names
-    header_df = pd.read_csv(file_path, header=None, nrows=8)
-    col_names = header_df.iloc[1].tolist()
+    var_names, units_row = parse_dss_csv_header(file_path)
 
-    # Handle duplicate column names if requested
-    unique_col_names = col_names
-    duplicate_indices = []
+    keep_indices, units_map = deduplicate_columns(
+        var_names, units_row, prefer_cfs=True,
+    )
 
-    if dedupe_columns:
-        seen = set()
-        unique_col_names = []
-        for i, name in enumerate(col_names):
-            if name in seen:
-                duplicate_indices.append(i)
-            else:
-                seen.add(name)
-                unique_col_names.append(name)
-
-        if duplicate_indices:
-            log.info(f"Found {len(duplicate_indices)} duplicate columns, keeping first occurrence")
-
-    # Read data portion (skip 7 header rows)
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
+    data_df = data_df.iloc[:, keep_indices]
+    data_df.columns = [var_names[i] for i in keep_indices]
 
-    # Drop duplicate columns if needed
-    if duplicate_indices:
-        data_df = data_df.drop(columns=data_df.columns[duplicate_indices])
-
-    data_df.columns = unique_col_names
-
+    n_dupes = len(var_names) - len(keep_indices)
+    if n_dupes:
+        log.info(f"Deduplicated {n_dupes} duplicate columns")
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-    return data_df
+    return data_df, units_map
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
@@ -442,10 +428,10 @@ def calculate_contractor_delivery_monthly(
         log.debug(f"No delivery variables found for {contractor_code}")
         return []
 
-    # Sum all delivery points for this contractor (CFS) and convert to TAF
+    # Sum all delivery points for this contractor (pre-converted to TAF)
     df_copy = df.copy()
-    total_delivery_cfs = df_copy[available_vars].sum(axis=1)
-    df_copy['total_delivery'] = total_delivery_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['total_delivery'] = df_copy[available_vars].apply(
+        pd.to_numeric, errors='coerce').sum(axis=1)
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -551,8 +537,8 @@ def calculate_contractor_shortage_monthly(
         return []
 
     df_copy = df.copy()
-    total_shortage_cfs = df_copy[available_vars].sum(axis=1)
-    df_copy['total_shortage'] = total_shortage_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['total_shortage'] = df_copy[available_vars].apply(
+        pd.to_numeric, errors='coerce').sum(axis=1)
 
     results = []
     is_annual = (df_copy['WaterMonth'] == 0).all()
@@ -623,9 +609,11 @@ def _compute_perdv_demand_taf(
     For multi-arc contractors (e.g., ACFC, VNTRA), each arc has its own PERDV.
     demand = sum_i( (D_i + SHORT_i) / PERDV_i )
 
-    Returns monthly demand in TAF. Months with PERDV=0 (0/0 case) become NaN.
+    Delivery and shortage columns are expected to be pre-converted to TAF.
+    PERDV values are dimensionless fractions (0–1) and are NOT converted.
+    Returns monthly demand in TAF.  Months with PERDV=0 become NaN.
     """
-    demand_cfs = pd.Series(0.0, index=df.index)
+    demand_taf = pd.Series(0.0, index=df.index)
 
     for i, (d_var, s_var) in enumerate(zip(delivery_vars, shortage_vars)):
         if d_var not in df.columns:
@@ -637,11 +625,11 @@ def _compute_perdv_demand_taf(
         if pv_var in df.columns:
             pv = pd.to_numeric(df[pv_var], errors='coerce')
             pv_safe = pv.replace(0, np.nan)
-            demand_cfs = demand_cfs + (d + s) / pv_safe
+            demand_taf = demand_taf + (d + s) / pv_safe
         else:
-            demand_cfs = demand_cfs + d + s
+            demand_taf = demand_taf + d + s
 
-    return demand_cfs * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    return demand_taf
 
 
 def calculate_contractor_period_summary(
@@ -666,8 +654,8 @@ def calculate_contractor_period_summary(
         return None
 
     df_copy = df.copy()
-    total_delivery_cfs = df_copy[available_delivery].sum(axis=1)
-    df_copy['total_delivery'] = total_delivery_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    df_copy['total_delivery'] = df_copy[available_delivery].apply(
+        pd.to_numeric, errors='coerce').sum(axis=1)
 
     water_years = sorted(df_copy['WaterYear'].unique())
 
@@ -690,8 +678,8 @@ def calculate_contractor_period_summary(
 
     # Shortage
     if available_shortage:
-        total_shortage_cfs = df_copy[available_shortage].sum(axis=1)
-        df_copy['total_shortage'] = total_shortage_cfs * df_copy['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        df_copy['total_shortage'] = df_copy[available_shortage].apply(
+            pd.to_numeric, errors='coerce').sum(axis=1)
         annual_shortage = df_copy.groupby('WaterYear')['total_shortage'].sum()
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
@@ -755,11 +743,35 @@ def calculate_all_mi_statistics(
         contractors = MI_CONTRACTOR_VARIABLES
 
     if csv_path:
-        df = load_calsim_csv_from_file(csv_path)
+        df, units_map = load_calsim_csv_from_file(csv_path)
     else:
-        df = load_calsim_csv_from_s3(scenario_id, [])
+        df, units_map = load_calsim_csv_from_s3(scenario_id, [])
 
     df = add_water_year_month(df)
+
+    # Pre-convert CFS columns to TAF using the header-declared units.
+    # Collect all variable names referenced by any contractor mapping.
+    all_mi_vars: set = set()
+    for info in contractors.values():
+        all_mi_vars.update(info.get('delivery_vars', []))
+        all_mi_vars.update(info.get('shortage_vars', []))
+        all_mi_vars.update(info.get('perdv_vars') or [])
+
+    cfs_converted = 0
+    taf_kept = 0
+    for col in list(df.columns):
+        if col not in all_mi_vars:
+            continue
+        unit = units_map.get(col, '').upper()
+        if unit == 'CFS':
+            df[col] = pd.to_numeric(df[col], errors='coerce') * df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+            cfs_converted += 1
+        elif unit == 'TAF':
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            taf_kept += 1
+
+    log.info(f"Pre-converted {cfs_converted} MI CFS→TAF columns; "
+             f"{taf_kept} already in TAF")
 
     available_columns = list(df.columns)
     log.info(f"Available columns: {len(available_columns)}")

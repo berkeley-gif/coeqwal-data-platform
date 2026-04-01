@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS cws_aggregate_monthly (
     -- Shortage statistics (TAF)
     shortage_avg_taf NUMERIC(12,2),
     shortage_cv NUMERIC(6,4),
-    shortage_frequency_pct NUMERIC(5,2),        -- % of months/years with shortage > 0
+    shortage_frequency_pct NUMERIC(7,2),        -- % of months/years with shortage > 0
 
     -- Shortage percentiles (TAF)
     shortage_q0 NUMERIC(12,2),
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS cws_aggregate_monthly (
 
     -- Demand and percent of demand met (TAF, %)
     demand_avg_taf NUMERIC(12,2),
-    percent_of_demand_avg NUMERIC(5,2),
+    percent_of_demand_avg NUMERIC(7,2),
 
     sample_count INTEGER,
 
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS cws_aggregate_period_summary (
     -- Annual shortage statistics
     annual_shortage_avg_taf NUMERIC(12,2),
     shortage_years_count INTEGER,
-    shortage_frequency_pct NUMERIC(5,2),
+    shortage_frequency_pct NUMERIC(7,2),
 
     -- Annual shortage exceedance percentiles
     shortage_exc_p5 NUMERIC(12,2),
@@ -174,12 +174,12 @@ CREATE TABLE IF NOT EXISTS cws_aggregate_period_summary (
     shortage_exc_p95 NUMERIC(12,2),
 
     -- Reliability metrics
-    reliability_pct NUMERIC(5,2),               -- % of time meeting full allocation
-    avg_pct_allocation_met NUMERIC(5,2),        -- avg delivery/demand across period
+    reliability_pct NUMERIC(7,2),               -- % of time meeting full allocation
+    avg_pct_allocation_met NUMERIC(7,2),        -- avg delivery/demand across period
 
     -- Demand metrics
     annual_demand_avg_taf NUMERIC(12,2),        -- avg annual demand (TAF)
-    avg_pct_demand_met NUMERIC(5,2),            -- avg percent of demand met
+    avg_pct_demand_met NUMERIC(7,2),            -- avg percent of demand met
 
     -- Audit fields
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

@@ -44,7 +44,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, parse_dss_csv_header, deduplicate_columns  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
@@ -220,7 +220,9 @@ def _select_taf_columns(
     From a full data DataFrame, extract TAF-block columns for variables matching prefix.
 
     SV input CSVs have a two-block layout: CFS columns then TAF columns.
-    We select the TAF occurrence for each variable.
+    We select the TAF occurrence for each variable.  If only a CFS
+    occurrence exists, a warning is logged since the caller treats the
+    values as already-in-TAF.
     """
     date_col = var_names[0]
     seen: Dict[str, List[tuple]] = {}
@@ -229,13 +231,29 @@ def _select_taf_columns(
             seen.setdefault(vname, []).append((i, unit))
 
     series_list = [data_df.iloc[:, 0].rename(date_col)]
+    cfs_fallback_count = 0
     for vname, occurrences in seen.items():
-        taf_col = next(
+        taf_match = next(
             (idx for idx, unit in occurrences if unit.upper() == 'TAF'),
-            occurrences[-1][0],
+            None,
         )
+        if taf_match is not None:
+            chosen_idx = taf_match
+        else:
+            chosen_idx = occurrences[-1][0]
+            chosen_unit = occurrences[-1][1].upper()
+            if chosen_unit == 'CFS':
+                cfs_fallback_count += 1
+
         series_list.append(
-            pd.to_numeric(data_df.iloc[:, taf_col], errors='coerce').rename(vname)
+            pd.to_numeric(data_df.iloc[:, chosen_idx], errors='coerce').rename(vname)
+        )
+
+    if cfs_fallback_count:
+        log.warning(
+            f"SV {prefix}* — {cfs_fallback_count} variable(s) have NO TAF column; "
+            f"using CFS values AS-IS. These will be treated as TAF by downstream code. "
+            f"This likely indicates a CFS/TAF mismatch that will produce wrong results."
         )
 
     return pd.concat(series_list, axis=1)
@@ -296,11 +314,16 @@ def load_sv_csv_from_file(file_path: str) -> pd.DataFrame:
     return result
 
 
-def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Load CalSim DV output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
+    Deduplicates columns when both CFS and TAF versions exist
+    (V3 CSVs run through ``convert_all_cfs_to_taf``).
+
+    Returns (data_df, units_map) where *units_map* maps each column
+    name to its declared unit string (e.g. ``"CFS"``, ``"TAF"``).
     """
     if not HAS_BOTO3:
         raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
@@ -312,15 +335,22 @@ def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            df = pd.read_csv(response['Body'], header=None, nrows=8)
-            col_names = df.iloc[1].tolist()
+            var_names, units_row = parse_dss_csv_header(response['Body'])
+
+            keep_indices, units_map = deduplicate_columns(
+                var_names, units_row, prefer_cfs=True,
+            )
 
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
-            data_df.columns = col_names
+            data_df = data_df.iloc[:, keep_indices]
+            data_df.columns = [var_names[i] for i in keep_indices]
 
+            n_dupes = len(var_names) - len(keep_indices)
+            if n_dupes:
+                log.info(f"Deduplicated {n_dupes} duplicate columns in DV CSV")
             log.info(f"Loaded DV: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-            return data_df
+            return data_df, units_map
 
         except s3.exceptions.NoSuchKey:
             continue
@@ -331,17 +361,27 @@ def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
     raise FileNotFoundError(f"Could not find CalSim output for {scenario_id} in S3")
 
 
-def load_dv_csv_from_file(file_path: str) -> pd.DataFrame:
-    """Load CalSim DV output CSV from local file."""
+def load_dv_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Load CalSim DV output CSV from local file.
+
+    Returns (data_df, units_map).
+    """
     log.info(f"Loading DV from file: {file_path}")
-    header_df = pd.read_csv(file_path, header=None, nrows=8)
-    col_names = header_df.iloc[1].tolist()
+    var_names, units_row = parse_dss_csv_header(file_path)
+
+    keep_indices, units_map = deduplicate_columns(
+        var_names, units_row, prefer_cfs=True,
+    )
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df.columns = col_names
+    data_df = data_df.iloc[:, keep_indices]
+    data_df.columns = [var_names[i] for i in keep_indices]
 
+    n_dupes = len(var_names) - len(keep_indices)
+    if n_dupes:
+        log.info(f"Deduplicated {n_dupes} duplicate columns in DV CSV")
     log.info(f"Loaded DV: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-    return data_df
+    return data_df, units_map
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
@@ -1060,22 +1100,41 @@ def calculate_all_ag_statistics(
 
     # ── Load DV (delivery, GW, shortage, aggregates: CFS) ──
     if dv_path:
-        dv_df = load_dv_csv_from_file(dv_path)
+        dv_df, dv_units = load_dv_csv_from_file(dv_path)
     else:
-        dv_df = load_dv_csv_from_s3(scenario_id)
+        dv_df, dv_units = load_dv_csv_from_s3(scenario_id)
 
     dv_df = add_water_year_month(dv_df)
 
-    # Convert known CFS column families to TAF before merge.
-    # The DV CSV has mixed units (CFS for flows, TAF for storage, etc.).
-    # Only convert the specific variable families used by the AG module.
+    # Convert CFS columns to TAF, using the units declared in the header.
+    # Only convert columns whose header unit is CFS; skip those already in TAF.
     AG_CFS_PREFIXES = ('DN_', 'GP_', 'GW_SHORT_', 'DEL_', 'SHORT_')
     first_col = dv_df.columns[0]
-    cfs_cols = [c for c in dv_df.columns
-                if any(c.startswith(p) for p in AG_CFS_PREFIXES)]
+    cfs_cols = []
+    taf_already = []
+    other_unit = []
+    for c in dv_df.columns:
+        if not any(c.startswith(p) for p in AG_CFS_PREFIXES):
+            continue
+        unit = dv_units.get(c, '').upper()
+        if unit == 'CFS':
+            cfs_cols.append(c)
+        elif unit == 'TAF':
+            taf_already.append(c)
+        else:
+            other_unit.append((c, unit))
+
     for col in cfs_cols:
         dv_df[col] = pd.to_numeric(dv_df[col], errors='coerce') * dv_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-    log.info(f"Converted {len(cfs_cols)} DV CFS columns to TAF (prefixes: {AG_CFS_PREFIXES})")
+    for col in taf_already:
+        dv_df[col] = pd.to_numeric(dv_df[col], errors='coerce')
+
+    log.info(f"Converted {len(cfs_cols)} DV CFS→TAF columns (prefixes: {AG_CFS_PREFIXES})")
+    if taf_already:
+        log.info(f"Kept {len(taf_already)} DV columns already in TAF (no conversion)")
+    if other_unit:
+        log.warning(f"Unexpected units for AG columns: "
+                     f"{[(c, u) for c, u in other_unit[:5]]}")
 
     # Drop DV's AW_* columns (demand will come from SV instead)
     dv_aw_cols = [c for c in dv_df.columns if c.startswith('AW_')]

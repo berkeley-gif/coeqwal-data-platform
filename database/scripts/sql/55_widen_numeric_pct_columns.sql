@@ -77,6 +77,28 @@ ALTER TABLE cws_aggregate_period_summary
     ALTER COLUMN avg_pct_demand_met TYPE NUMERIC(7,2);
 
 -- ============================================================
+-- du_shortage_monthly
+-- ============================================================
+ALTER TABLE du_shortage_monthly
+    ALTER COLUMN shortage_frequency_pct TYPE NUMERIC(7,2);
+
+-- ============================================================
+-- reservoir_period_summary
+-- ============================================================
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'reservoir_period_summary'
+          AND column_name = 'spill_frequency_pct'
+          AND numeric_precision = 5
+    ) THEN
+        ALTER TABLE reservoir_period_summary
+            ALTER COLUMN spill_frequency_pct TYPE NUMERIC(7,2);
+    END IF;
+END $$;
+
+-- ============================================================
 -- du_delivery_monthly (check if percent_of_demand_avg exists)
 -- ============================================================
 DO $$

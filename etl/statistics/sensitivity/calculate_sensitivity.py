@@ -434,35 +434,33 @@ OPERATIONAL_INSERT = """
 def write_climate_rows(conn, rows: List[Tuple], dry_run: bool):
     if not rows:
         return
-    stamped = [r + ("NOW()",) for r in rows]
     if dry_run:
-        log.info(f"  [dry-run] Would write {len(stamped)} climate sensitivity rows")
+        log.info(f"  [dry-run] Would write {len(rows)} climate sensitivity rows")
         return
     with conn.cursor() as cur:
         execute_values(
-            cur, CLIMATE_INSERT, stamped,
+            cur, CLIMATE_INSERT, rows,
             template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
             page_size=2000,
         )
     conn.commit()
-    log.info(f"  Wrote {len(stamped)} climate sensitivity rows")
+    log.info(f"  Wrote {len(rows)} climate sensitivity rows")
 
 
 def write_operational_rows(conn, rows: List[Tuple], dry_run: bool):
     if not rows:
         return
-    stamped = [r + ("NOW()",) for r in rows]
     if dry_run:
-        log.info(f"  [dry-run] Would write {len(stamped)} operational sensitivity rows")
+        log.info(f"  [dry-run] Would write {len(rows)} operational sensitivity rows")
         return
     with conn.cursor() as cur:
         execute_values(
-            cur, OPERATIONAL_INSERT, stamped,
+            cur, OPERATIONAL_INSERT, rows,
             template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
             page_size=2000,
         )
     conn.commit()
-    log.info(f"  Wrote {len(stamped)} operational sensitivity rows")
+    log.info(f"  Wrote {len(rows)} operational sensitivity rows")
 
 
 # ────────────────────────────────────────────────────────────────────────
