@@ -14,7 +14,7 @@ Two tier types:
 - single_value: Single overall tier level (1-4)
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Dict, List, Optional, Any
 import asyncpg
 from pydantic import BaseModel, Field
@@ -541,6 +541,127 @@ async def get_all_scenario_tiers(
                 }
 
         return {"scenario": scenario_id, "tiers": tiers}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@router.get("/batch", summary="Get tiers for multiple scenarios in one request")
+async def get_batch_scenario_tiers(
+    scenarios: str = Query(
+        ...,
+        description="Comma-separated scenario IDs (e.g., 's0020,s0021,s0029')",
+    ),
+    connection: asyncpg.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Fetch all tier data for multiple scenarios in a single request.
+
+    Replaces N individual calls to `/tiers/scenarios/{id}/tiers` with one
+    batched query, dramatically reducing load times when switching
+    hydroclimates or loading the Scenario Explorer.
+
+    **Example:** `GET /api/tiers/batch?scenarios=s0020,s0021,s0029`
+
+    **Response format:**
+    ```json
+    {
+      "scenarios": {
+        "s0020": { "tiers": { "AG_REV": {...}, "CWS_DEL": {...}, ... } },
+        "s0021": { "tiers": { "AG_REV": {...}, "CWS_DEL": {...}, ... } }
+      },
+      "count": 2
+    }
+    ```
+    """
+    scenario_ids = [s.strip() for s in scenarios.split(",") if s.strip()]
+
+    if not scenario_ids:
+        raise HTTPException(status_code=400, detail="No scenario IDs provided")
+
+    try:
+        query = """
+        SELECT
+            tr.scenario_short_code,
+            tr.tier_short_code,
+            td.name,
+            td.tier_type,
+            tr.tier_1_value,
+            tr.tier_2_value,
+            tr.tier_3_value,
+            tr.tier_4_value,
+            tr.norm_tier_1,
+            tr.norm_tier_2,
+            tr.norm_tier_3,
+            tr.norm_tier_4,
+            tr.total_value,
+            tr.single_tier_level
+        FROM tier_result tr
+        JOIN tier_definition td ON tr.tier_short_code = td.short_code
+        WHERE tr.scenario_short_code = ANY($1)
+        AND tr.is_active = TRUE
+        ORDER BY tr.scenario_short_code, td.tier_type DESC, tr.tier_short_code
+        """
+
+        rows = await connection.fetch(query, scenario_ids)
+
+        result: Dict[str, Dict[str, Any]] = {}
+
+        for row in rows:
+            scenario_id = row["scenario_short_code"]
+            tier_code = row["tier_short_code"]
+
+            if scenario_id not in result:
+                result[scenario_id] = {}
+
+            if row["tier_type"] == "multi_value":
+                norm_1 = float(row["norm_tier_1"]) if row["norm_tier_1"] else 0.0
+                norm_2 = float(row["norm_tier_2"]) if row["norm_tier_2"] else 0.0
+                norm_3 = float(row["norm_tier_3"]) if row["norm_tier_3"] else 0.0
+                norm_4 = float(row["norm_tier_4"]) if row["norm_tier_4"] else 0.0
+
+                scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
+
+                result[scenario_id][tier_code] = {
+                    "name": row["name"],
+                    "type": "multi_value",
+                    "weighted_score": scores["weighted_score"],
+                    "normalized_score": scores["normalized_score"],
+                    "gini": scores["gini"],
+                    "band_upper": scores["band_upper"],
+                    "band_lower": scores["band_lower"],
+                    "data": [
+                        {"tier": "tier1", "value": row["tier_1_value"], "normalized": norm_1},
+                        {"tier": "tier2", "value": row["tier_2_value"], "normalized": norm_2},
+                        {"tier": "tier3", "value": row["tier_3_value"], "normalized": norm_3},
+                        {"tier": "tier4", "value": row["tier_4_value"], "normalized": norm_4},
+                    ],
+                    "total": row["total_value"],
+                }
+            else:
+                level = row["single_tier_level"] or 0
+                weighted = float(level) if level else 0.0
+                normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
+                result[scenario_id][tier_code] = {
+                    "name": row["name"],
+                    "type": "single_value",
+                    "weighted_score": weighted,
+                    "normalized_score": normalized,
+                    "gini": 0.0,
+                    "band_upper": normalized,
+                    "band_lower": normalized,
+                    "level": level,
+                }
+
+        return {
+            "scenarios": {
+                sid: {"scenario": sid, "tiers": tiers}
+                for sid, tiers in result.items()
+            },
+            "count": len(result),
+        }
 
     except HTTPException:
         raise

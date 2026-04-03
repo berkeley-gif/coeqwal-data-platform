@@ -8,7 +8,6 @@ All modules should import from here instead of defining their own copies.
 import logging
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
 
 log = logging.getLogger(__name__)

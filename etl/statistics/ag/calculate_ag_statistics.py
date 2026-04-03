@@ -49,9 +49,6 @@ from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
     parse_dss_csv_header,
     deduplicate_columns,
-    safe_pct,
-    validate_water_balance,
-    check_post_conversion_magnitude,
 )
 from scenarios import SCENARIOS  # noqa: E402
 
@@ -85,6 +82,7 @@ DV_OUTPUT_S3_KEYS = [
     "scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",
     "scenario/{scenario}/csv/{scenario}_DV.csv",
 ]
+SV_INPUT_S3_KEY = "scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
 
 # Paths relative to project
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -202,6 +200,91 @@ def load_ag_demand_units(csv_path: Optional[Path] = None) -> Dict[str, Dict[str,
 
     log.info(f"Loaded {len(demand_units)} agricultural demand units from {csv_path}")
     return demand_units
+
+
+def _select_taf_columns(
+    data_df: pd.DataFrame,
+    var_names: List[str],
+    units_row: List[str],
+    prefix: str,
+) -> pd.DataFrame:
+    """
+    Extract TAF-block columns for variables matching `prefix`.
+
+    CalSim CSVs may have dual CFS/TAF blocks for the same variable.
+    This selects the TAF occurrence (or falls back to the last occurrence).
+    """
+    date_col = var_names[0]
+
+    seen: Dict[str, List[Tuple[int, str]]] = {}
+    for i, (vname, unit) in enumerate(zip(var_names, units_row)):
+        if vname.startswith(prefix):
+            seen.setdefault(vname, []).append((i, unit))
+
+    series_list = [data_df.iloc[:, 0].rename(date_col)]
+    for vname, occurrences in seen.items():
+        taf_col = next(
+            (idx for idx, unit in occurrences if unit.upper() == 'TAF'),
+            occurrences[-1][0],
+        )
+        series_list.append(
+            pd.to_numeric(data_df.iloc[:, taf_col], errors='coerce').rename(vname)
+        )
+
+    return pd.concat(series_list, axis=1)
+
+
+def load_sv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+    """
+    Load AWO_{DU_ID} demand columns from SV input CSV (TAF, APPLIED-WATER).
+
+    Handles both AWO_* (raw DSS naming) and AW_* (possible staging rename).
+    Returns DataFrame with demand columns in TAF, normalized to AW_* names.
+    """
+    if not HAS_BOTO3:
+        raise ImportError("boto3 required. Install with: pip install boto3")
+
+    s3 = boto3.client('s3')
+    key = SV_INPUT_S3_KEY.format(scenario=scenario_id)
+
+    log.info(f"Loading SV input: s3://{S3_BUCKET}/{key}")
+    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+    var_names, units_row = parse_dss_csv_header(response['Body'])
+
+    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
+    data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
+
+    result = _select_taf_columns(data_df, var_names, units_row, prefix='AWO_')
+    if len(result.columns) <= 1:
+        log.info("No AWO_* columns found — trying AW_* (staging may rename variables)")
+        result = _select_taf_columns(data_df, var_names, units_row, prefix='AW_')
+
+    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
+    if renames:
+        result = result.rename(columns=renames)
+        log.info(f"Renamed {len(renames)} AWO_* columns to AW_* for internal consistency")
+
+    log.info(f"Loaded {len(result.columns) - 1} demand columns from SV input")
+    return result
+
+
+def load_sv_csv_from_file(file_path: str) -> pd.DataFrame:
+    """Load SV input CSV from a local file path."""
+    log.info(f"Loading SV input from file: {file_path}")
+    var_names, units_row = parse_dss_csv_header(file_path)
+
+    data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
+
+    result = _select_taf_columns(data_df, var_names, units_row, prefix='AWO_')
+    if len(result.columns) <= 1:
+        result = _select_taf_columns(data_df, var_names, units_row, prefix='AW_')
+
+    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
+    if renames:
+        result = result.rename(columns=renames)
+
+    log.info(f"Loaded {len(result.columns) - 1} demand columns")
+    return result
 
 
 def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
