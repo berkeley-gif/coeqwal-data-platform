@@ -213,14 +213,15 @@ and short months are handled exactly.
 |--------|----------------|---------------|-----------------|-------------|
 | **Reservoirs** | DV: `S_{code}` (storage) | — | DV: `C_{code}_FLOOD` (spill) | TAF (storage), CFS (spill) |
 | **DU Urban** | DV: `DN_*`, `GP_*`, `D_*_PMI` | SV: `UD_*` (TAF) | DV: `SHRTG_*`, `SHORT_D_*_PMI` | CFS |
-| **MI Contractors** | DV: `D_*_PMI`, `DEL_SWP_MWD` | DEMANDS CSV* | DV: `SHORT_D_*_PMI` | CFS |
-| **CWS Aggregate** | DV: `DEL_SWP_PMI`, `DEL_CVP_PMI_*` | DEMANDS CSV* | DV: `SHORT_SWP_PMI`, `SHORT_CVP_PMI_*` | CFS |
-| **AG** | DV: `DN_*`, `GP_*` | SV: `AWO_*` (TAF) | DV: `GW_SHORT_*` | CFS (delivery), TAF (demand) |
+| **MI Contractors** | DV: `D_*_PMI`, `DEL_SWP_MWD` | Computed: delivery + shortage (via PERDV) | DV: `SHORT_D_*_PMI` | CFS |
+| **CWS Aggregate** | DV: `DEL_SWP_PMI`, `DEL_CVP_PMI_*` | DEMANDS CSV | DV: `SHORT_SWP_PMI`, `SHORT_CVP_PMI_*` | CFS |
+| **AG** | DV: `DN_*`, `GP_*` | DV: `AW_*` (CFS → TAF) | DV: `GW_SHORT_*` | CFS |
 | **Env Flows** | DV: `C_{reach}` | — | — | CFS |
-| **Refuge** | DV: `DN_*` | SV: `AWO_*` (TAF) | Computed: `max(demand − delivery, 0)` | CFS (delivery), TAF (demand) |
+| **Refuge** | DV: `DN_*` | DV: `AW_*` (CFS → TAF) | Computed: `max(demand − delivery, 0)` | CFS |
 
-*Modules marked with DEMANDS CSV still load from an external demand file. Planned
-refactoring will source all demand from the DV/SV CSVs directly.
+> **Note (March 2026):** AG and Refuge demand was switched from `AWO_*` (SV input, pre-model
+> demand order) to `AW_*` (DV output, model-optimised applied water) to match the COEQWAL
+> V3 notebook (`DataExtraction.py`). See [Water Balance](#water-balance) below.
 
 ---
 
@@ -966,105 +967,57 @@ This was identified in February 2026 when MWD showed `annual_demand_avg_taf = 14
 
 ## Agricultural Demand Unit Statistics
 
-The `ag/` module calculates delivery, pumping, and shortage statistics for 144 agricultural demand units.
+The `ag/` module calculates demand, delivery, pumping, and shortage statistics for 144 agricultural demand units.
 
-### Applied Water (AW_*) Variable Audit
+### Data source: DV output only
 
-**Audit Date**: February 2026
+All AG variables come from a single file — the CalSim DV output CSV
+(`{scenario}_coeqwal_calsim_output.csv`). The SV input CSV is **not** loaded.
 
-Applied Water (`AW_*`) variables represent agricultural demand/water requirement. There are **three sources** for these variables, with important differences in naming conventions and units.
+| CalSim Variable | Description | Raw Unit | Conversion |
+|-----------------|-------------|----------|------------|
+| `AW_{DU_ID}` | Applied Water = **Demand** | CFS | `TAF = CFS × days × 0.001984` |
+| `DN_{DU_ID}` | Net Delivery = **Surface Water Delivery** | CFS | same |
+| `GP_{DU_ID}` | Groundwater Pumping | CFS | same |
+| `GW_SHORT_{DU_ID}` | GW Restriction Shortage | CFS | same |
+| `DEL_SWP_PAG`, `SHORT_CVP_PAG`, … | Project-level aggregate delivery / shortage | CFS | same |
 
-#### Source 1: SV Input (Modeler-Recommended)
+### Water balance
 
-| Attribute | Value |
-|-----------|-------|
-| **S3 Path** | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv` |
-| **Local Copy** | `etl/pipelines/s0020_coeqwal_sv_input.csv` |
-| **Variable Naming** | **AWO_*** (e.g., `AWO_02_NA`, `AWO_02_PA`) |
-| **Units** | **TAF** (Thousand Acre-Feet) |
-| **Column Count** | 153 AWO_* columns |
-| **Sample Value (Oct 1921)** | `AWO_02_NA` = 1.7665 TAF |
-| **Modeler Recommended** | ✅ YES |
+CalSim 3 enforces the identity:
 
-> ⚠️ **Note**: SV Input uses `AWO_*` naming (Applied Water Output?), NOT `AW_*`.
+```
+AW = DN + GP + RU
+```
 
-#### Source 2: Main CalSim Output (DV)
+where **AW** = Applied Water (demand), **DN** = Net Delivery (surface water),
+**GP** = Groundwater Pumping, and **RU** = Reuse. The ETL validates this after
+CFS→TAF conversion; `GP > AW` rows indicate a unit mismatch.
 
-| Attribute | Value |
-|-----------|-------|
-| **S3 Path** | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv` |
-| **Local Copy** | `etl/pipelines/s0020_coeqwal_calsim_output.csv` |
-| **Variable Naming** | **AW_*** (e.g., `AW_02_NA`, `AW_02_PA`) |
-| **Units** | **CFS** (Cubic Feet per Second) |
-| **Column Count** | 183 AW_* columns |
-| **Sample Value (Oct 1921)** | `AW_02_NA` = 9.2913 CFS (= 0.5715 TAF after conversion) |
+### AWO vs AW: demand variable choice
 
-**Conversion formula**: `TAF = CFS × days_in_month × 0.001984`
+The SV input CSV contains `AWO_*` (Applied Water Order) — the pre-model demand
+*target*. The DV output contains `AW_*` (Applied Water) — the model's optimised
+water application. `AWO > AW` in most months because the model may not fully meet
+the order.
 
-#### Source 3: Demands CSV (Processed Reference)
+The COEQWAL V3 notebook (`DataExtraction.py`) uses `AW_*` from the DV output as
+the demand variable for agricultural demand units. This ETL follows that
+convention. The switch from `AWO_*` (SV) to `AW_*` (DV) was made in March 2026.
 
-| Attribute | Value |
-|-----------|-------|
-| **S3 Path** | `s3://coeqwal-model-run/reference/s0020_demand.csv` |
-| **Local Copy** | `etl/demands/s0020_demand.csv` |
-| **Variable Naming** | **AW_*** (same as Main Output) |
-| **Contains** | **DUPLICATE columns** - both CFS and TAF versions |
-| **Column Count** | 298 total AW_* columns (149 in CFS, 149 in TAF) |
+### Groundwater-only demand units
 
-**Structure of Demands CSV**:
-| Column Range | Variable | Units | Sample Value (Oct 1921, AW_02_NA) |
-|--------------|----------|-------|-----------------------------------|
-| ~105-250 | AW_* | CFS | 9.2913 (matches Main Output) |
-| ~283-438 | AW_* | TAF | 0.5715 (pre-converted) |
+11 DUs have `sw=0` in `du_agriculture_entity.csv`. These receive their entire
+supply from groundwater pumping (GP) and reuse (RU). CalSim does not produce a
+`DN_*` column for them, so the ETL does **not** synthesise a surface water
+delivery value. `GP + RU` for these DUs is a measure of *shortage* (demand not
+met by surface delivery), not delivery.
 
-#### Key Discrepancy: AWO vs AW
+### Shortage
 
-**Critical finding**: SV Input (`AWO_*`) and Main Output (`AW_*`) contain **DIFFERENT VALUES**:
-
-| Variable | Source | Units | Oct 1921 Value | Notes |
-|----------|--------|-------|----------------|-------|
-| AWO_02_NA | SV Input | TAF | **1.7665** | Higher value |
-| AW_02_NA | Main Output | CFS | 9.2913 (= **0.5715** TAF) | Lower value |
-
-**Ratio**: AWO / AW ≈ **3:1**
-
-This significant difference suggests **AWO_*** and **AW_*** are semantically different variables:
-- **AW_*** = Applied Water as calculated/optimized by the model
-- **AWO_*** = Original Applied Water input/requirement (before optimization?)
-
-⚠️ **Action Required**: Clarify with COEQWAL modeling team which variable represents:
-1. Agricultural water **demand** (requirement)
-2. Agricultural water **delivery** (what was actually applied)
-
-### Canonical Source Recommendation
-
-| Use Case | Recommended Source | Variable | Units | Notes |
-|----------|-------------------|----------|-------|-------|
-| **Simple TAF values** | Demands CSV (cols 283+) | AW_* | TAF | Pre-converted, matches Main Output |
-| **Raw model output** | Main CalSim Output | AW_* | CFS | Requires conversion |
-| **Modeler preference** | SV Input | AWO_* | TAF | Different values - needs clarification |
-
-### Current ETL Implementation
-
-The `ag/calculate_ag_statistics.py` module currently:
-- Loads from **Main CalSim Output** (`*_coeqwal_calsim_output.csv`)
-- Uses **AW_*** variables for demand
-- Assumes AW_* is in **TAF** (from SV input pattern)
-
-**Important**: If loading from Main Output (where AW_* is in CFS), conversion is needed.
-The code now correctly handles this case.
-
-### Variable Summary for Agricultural Statistics
-
-| CalSim Variable | Description | Source | Units | Conversion Needed |
-|-----------------|-------------|--------|-------|-------------------|
-| AW_* | Applied Water (Demand) | SV Input / Demands CSV | TAF | No |
-| AW_* | Applied Water (Demand) | Main CalSim Output | CFS | Yes: × days × 0.001984 |
-| DN_* | Net Surface Water Delivery | Main CalSim Output | CFS | Yes: × days × 0.001984 |
-| GP_* | Groundwater Pumping | Main CalSim Output | CFS | Yes: × days × 0.001984 |
-| GW_SHORT_* | Groundwater Restriction Shortage | Main CalSim Output | CFS | Yes: × days × 0.001984 |
-| DEL_SWP_PAG | SWP Ag Delivery (aggregate) | Main CalSim Output | CFS | Yes: × days × 0.001984 |
-| SHORT_CVP_PAG | CVP Ag Shortage (aggregate) | Main CalSim Output | CFS | Yes: × days × 0.001984 |
+For DUs in the SJR / Tulare regions, `GW_SHORT_{DU_ID}` gives the groundwater
+restriction shortage. Sacramento region DUs (WBAs 02–26) do not have this
+variable — the Sacramento region has no GW-shortage data in CalSim 3.
 
 ### Files
 
@@ -1072,3 +1025,50 @@ The code now correctly handles this case.
 |------|---------|
 | `ag/calculate_ag_statistics.py` | Main calculation module |
 | `ag/main.py` | CLI entry point |
+
+---
+
+## Wildlife Refuge Statistics
+
+The `refuge/` module calculates delivery, shortage, and reliability statistics for 18 wildlife
+refuge demand units.
+
+### Data source: DV output only
+
+Like the AG module, all variables (`AW_*` demand + `DN_*` delivery) are loaded from the DV
+output CSV. Shortage is computed as `max(demand − delivery, 0)`.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `refuge/calculate_refuge_statistics.py` | Main calculation module |
+
+---
+
+## Data integrity safeguards
+
+Three automated checks run during every ETL execution. They **warn** (log) but do
+**not** clamp or discard data, so suspicious values remain visible for investigation.
+
+| Safeguard | Where | What it checks |
+|-----------|-------|----------------|
+| `validate_water_balance` | AG (after CFS→TAF conversion) | `GP_{DU} ≤ AW_{DU} × 1.01` for every DU-month. Violations suggest a unit mismatch (e.g. GP still CFS while AW was converted). |
+| `check_post_conversion_magnitude` | AG, MI, Refuge (after CFS→TAF conversion) | Max monthly TAF value < 2 000 per column. Values above this strongly suggest a double conversion or a missed CFS→TAF step. |
+| `safe_pct` | AG, MI period summaries | Percentage result > 200 % triggers a warning. Catches cases where numerator/denominator have different units. |
+
+These functions live in `etl/statistics/units.py` and are imported by each module.
+Thresholds are defined as constants (`PCT_WARNING_THRESHOLD`, `MONTHLY_TAF_SANITY_LIMIT`)
+and can be adjusted without changing module code.
+
+### Unit-aware CSV loading
+
+The V3 CalSim export pipeline sometimes produces CSVs with **duplicate columns** —
+the same variable name appearing once in CFS and once in a TAF block. The shared
+helpers `parse_dss_csv_header()` and `deduplicate_columns()` in `units.py`:
+
+1. Read the 7-row DSS header to extract variable names (row 1) and units (row 6).
+2. When a variable appears twice, keep the CFS version (the ETL converts it) and
+   discard the TAF duplicate.
+3. Return a `units_map` dict so the caller knows which columns are CFS vs TAF
+   *before* applying any conversion.

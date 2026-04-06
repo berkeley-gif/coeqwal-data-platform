@@ -7,7 +7,7 @@ already stored at scenario/{id}/run/ in S3. The new CSVs overwrite the old
 ones at scenario/{id}/csv/.
 
 Usage:
-    # Dry run — list what would be submitted
+    # Dry run.list what would be submitted
     python reextract_all_scenarios.py --dry-run
 
     # Re-extract all scenarios

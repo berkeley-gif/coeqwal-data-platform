@@ -3,7 +3,7 @@
 --   database/seed_tables/04_calsim_data/channel_entity.csv    (~669 rows)
 --   database/seed_tables/04_variable/channel_variable.csv     (~1352 rows)
 --
--- Seed data is loaded via \copy from the local repo — no S3 upload needed.
+-- Seed data is loaded via \copy from the local repo.no S3 upload needed.
 -- The path 'database/seed_tables/...' is relative to wherever psql is invoked.
 --
 -- Prerequisites:
@@ -32,7 +32,7 @@ TRUNCATE TABLE channel_entity  CASCADE;
 -- ============================================
 -- 1. LOAD CHANNEL_ENTITY
 -- ============================================
--- CSV has no id column — SERIAL assigns ids automatically.
+-- CSV has no id column.SERIAL assigns ids automatically.
 -- Columns: network_arc_id, short_code, name, description, subtype,
 --   entity_type_id, schematic_type_id, hydrologic_region_id,
 --   boundary_condition, from_node, to_node, length_m,
@@ -53,7 +53,7 @@ TRUNCATE TABLE channel_entity  CASCADE;
 -- The CSV has channel_entity_id values referencing old integer IDs that no
 -- longer match the SERIAL ids assigned above.  Strategy:
 --   a) Drop the FK constraint so the old IDs load without error
---   b) Load all columns from CSV (id column is ignored — SERIAL assigns new ids)
+--   b) Load all columns from CSV (id column is ignored.SERIAL assigns new ids)
 --   c) Repopulate channel_entity_id via a natural-key join on network_arc_id
 --   d) Restore the FK constraint
 --

@@ -811,7 +811,7 @@ RESERVOIR_THRESHOLDS = {
         'flood_var': 'S_PYRMDLEVEL5DV',
         'dead_var': None,
     },
-    'SVRWD': {  # Silverwood (73 TAF) — DV uses S_SVRWD_1..5, not LEVELxDV
+    'SVRWD': {  # Silverwood (73 TAF).DV uses S_SVRWD_1..5, not LEVELxDV
         'flood_var': 'S_SVRWD_5',
         'dead_var': None,
     },

@@ -11,7 +11,7 @@ Example:
     GET /api/statistics/batch?scenarios=s0020,s0021,s0022&types=storage,cws,ag,env_flow
 
 Performance note: each fetch function acquires its own connection from the pool.
-This is essential for true parallelism — if all tasks shared one connection, asyncio.gather
+This is essential for true parallelism.if all tasks shared one connection, asyncio.gather
 would not actually overlap the queries.
 """
 
@@ -339,7 +339,7 @@ async def get_batch_statistics(
             detail=f"Invalid types: {invalid_types}. Valid: {sorted(valid_types)}",
         )
 
-    # Build parallel task list — each fetch function acquires its own connection.
+    # Build parallel task list.each fetch function acquires its own connection.
     tasks = []
     task_keys: List[tuple] = []
 

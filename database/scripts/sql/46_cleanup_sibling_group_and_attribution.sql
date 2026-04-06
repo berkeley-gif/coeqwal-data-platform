@@ -3,7 +3,7 @@
 -- =============================================================================
 --
 -- 1. Replace decimal sibling_group values (e.g. '1.1') with the historical
---    hydrology scenario short_code (e.g. 's0020') — the canonical reference
+--    hydrology scenario short_code (e.g. 's0020').the canonical reference
 --    for each operational configuration family.
 --
 -- 2. Fix created_by and updated_by to 2 (jfantauzza) for all rows where

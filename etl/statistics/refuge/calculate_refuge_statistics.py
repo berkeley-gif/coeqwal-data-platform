@@ -11,22 +11,17 @@ Computes four metrics for 18 refuge demand units:
   3. Monthly delivery shortage statistics (% of demand)
   4. Period-of-record reliability (95th percentile of annual shortage %)
 
-DATA SOURCES:
-  - Demand: SV input CSV (AWO_{DU_ID}, TAF, APPLIED-WATER)
-      S3: scenario/{id}/csv/{id}_coeqwal_sv_input.csv
-      NOTE: DSS variable name is AWO_* (Applied Water Output). The staged CSV
-      may expose these as either AWO_* or AW_*. This module handles both.
+DATA SOURCE:
+  All data from the CalSim DV output CSV:
+    S3: scenario/{id}/csv/{id}_coeqwal_calsim_output.csv
 
-  - Delivery: CalSim DV output CSV (DN_{DU_ID}, CFS, SW-DELIVERY-NET)
-      S3: scenario/{id}/csv/{id}_coeqwal_calsim_output.csv
-      This file is always present for every scenario. DN_* columns are in CFS
-      and must be converted to TAF before use (see CFS_TO_TAF_PER_DAY below).
-      The script also falls back to {id}_DV.csv if the primary key is absent.
+  Variables (CFS in raw CSV, converted to TAF before analysis):
+    AW_{DU_ID}  — Applied Water = DEMAND (model's optimised water application)
+    DN_{DU_ID}  — Net Delivery  = SURFACE WATER DELIVERY
 
-UNITS:
-  - SV input:  AWO_* already in TAF — no conversion needed.
-  - DV output: DN_* in CFS — conversion applied per row:
-      TAF = CFS × CFS_TO_TAF_PER_DAY × days_in_month
+  The COEQWAL notebook (DataExtraction.py) uses AW_* from the DV output as
+  the demand variable for refuge DUs.  AWO_* in the SV input is the pre-model
+  demand order/target — a different (higher) quantity.
 
 SHORTAGE: Derived as max(demand - delivery, 0). No native CalSim shortage variable
 exists for refuge demand units.
@@ -53,7 +48,13 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from units import (  # noqa: E402
+    CFS_TO_TAF_PER_DAY,
+    parse_dss_csv_header,
+    deduplicate_columns,
+    validate_water_balance,
+    check_post_conversion_magnitude,
+)
 from scenarios import SCENARIOS  # noqa: E402
 
 try:
@@ -81,7 +82,6 @@ log = logging.getLogger("refuge_statistics")
 
 S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
 
-SV_INPUT_S3_KEY = "scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
 DV_OUTPUT_S3_KEYS = [
     "scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",
     "scenario/{scenario}/csv/{scenario}_DV.csv",
@@ -144,143 +144,51 @@ def load_refuge_demand_units(csv_path: Optional[Path] = None) -> Dict[str, Dict[
     return demand_units
 
 
-def _read_csv_header(body) -> Tuple[List[str], List[str]]:
-    """
-    Read the 7 header rows of a CalSim DSS-export CSV.
-
-    Returns (var_names, units) where both are lists indexed by column position.
-    Row 1 (B) = variable names, Row 6 = units.
-    """
-    header_df = pd.read_csv(body, header=None, nrows=7, low_memory=False)
-    var_names = [str(v) for v in header_df.iloc[1].tolist()]
-    units = [str(u) for u in header_df.iloc[6].tolist()]
-    return var_names, units
-
-
-def _select_taf_columns(
-    data_df: pd.DataFrame,
+def _load_dv_columns(
     var_names: List[str],
-    units: List[str],
-    prefix: str,
+    data_df: pd.DataFrame,
+    keep_indices: List[int],
 ) -> pd.DataFrame:
     """
-    From a full data DataFrame, extract TAF-block columns for variables matching `prefix`.
+    Extract the date column and all AW_* / DN_* refuge columns from the
+    deduplicated DV output DataFrame.
 
-    The deliveries CSV and SV input both have a two-block layout: CFS columns then TAF
-    columns. The Units row (row 6) labels each column as 'CFS' or 'TAF'. We select the
-    TAF occurrence for each variable.
-
-    Returns a DataFrame with the date column and one TAF column per matching variable.
+    CFS→TAF conversion is applied later in the orchestrator once DaysInMonth
+    is available.
     """
-    date_col = var_names[0]
+    data_df = data_df.iloc[:, keep_indices]
+    kept_names = [var_names[i] for i in keep_indices]
+    data_df.columns = kept_names
 
-    # Build a dict: variable_name -> list of (col_index, units_label)
-    seen: Dict[str, List[Tuple[int, str]]] = {}
-    for i, (vname, unit) in enumerate(zip(var_names, units)):
-        if vname.startswith(prefix):
-            seen.setdefault(vname, []).append((i, unit))
-
-    # Collect all series at once then concat — avoids fragmentation warnings
-    series_list = [data_df.iloc[:, 0].rename(date_col)]
-    for vname, occurrences in seen.items():
-        # Prefer explicit TAF label; fall back to last occurrence
-        taf_col = next(
-            (idx for idx, unit in occurrences if unit.upper() == 'TAF'),
-            occurrences[-1][0],
-        )
-        series_list.append(
-            pd.to_numeric(data_df.iloc[:, taf_col], errors='coerce').rename(vname)
-        )
-
-    return pd.concat(series_list, axis=1)
-
-
-def load_sv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
-    """
-    Load AWO_{DU_ID} demand columns from SV input CSV (TAF, APPLIED-WATER).
-
-    Handles both AWO_* (raw DSS naming) and AW_* (possible staging rename).
-    Returns DataFrame with demand columns in TAF.
-    """
-    if not HAS_BOTO3:
-        raise ImportError("boto3 required. Install with: pip install boto3")
-
-    s3 = boto3.client('s3')
-    key = SV_INPUT_S3_KEY.format(scenario=scenario_id)
-
-    log.info(f"Loading SV input: s3://{S3_BUCKET}/{key}")
-    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    var_names, units = _read_csv_header(response['Body'])
-
-    response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
-
-    # Try AWO_* first (raw DSS naming), then AW_* (possible staging rename)
-    result = _select_taf_columns(data_df, var_names, units, prefix='AWO_')
-    if len(result.columns) <= 1:
-        log.info("No AWO_* columns found — trying AW_* (staging may rename variables)")
-        result = _select_taf_columns(data_df, var_names, units, prefix='AW_')
-
-    # Normalize column names: strip AWO_ prefix to AW_ for consistent internal use
-    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
-    if renames:
-        result = result.rename(columns=renames)
-        log.info(f"Renamed {len(renames)} AWO_* columns to AW_* for internal consistency")
-
-    log.info(f"Loaded {len(result.columns) - 1} demand columns from SV input")
-    return result
-
-
-def load_sv_csv_from_file(file_path: str) -> pd.DataFrame:
-    """Load SV input CSV from a local file path."""
-    log.info(f"Loading SV input from file: {file_path}")
-    header_df = pd.read_csv(file_path, header=None, nrows=7, low_memory=False)
-    var_names = [str(v) for v in header_df.iloc[1].tolist()]
-    units = [str(u) for u in header_df.iloc[6].tolist()]
-
-    data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-
-    result = _select_taf_columns(data_df, var_names, units, prefix='AWO_')
-    if len(result.columns) <= 1:
-        result = _select_taf_columns(data_df, var_names, units, prefix='AW_')
-
-    renames = {col: col.replace('AWO_', 'AW_') for col in result.columns if col.startswith('AWO_')}
-    if renames:
-        result = result.rename(columns=renames)
-
-    log.info(f"Loaded {len(result.columns) - 1} demand columns")
-    return result
-
-
-def _load_dv_dn_columns(var_names: List[str], data_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extract the date column and all DN_* refuge delivery columns (CFS) from a
-    parsed DV output DataFrame.
-
-    The DV output is a single-block CFS file — no TAF block, no unit-row
-    selection needed.  CFS→TAF conversion is applied later in the orchestrator
-    once DaysInMonth is available.
-    """
-    date_col = var_names[0]
-    result = pd.DataFrame()
-    result[date_col] = data_df.iloc[:, 0]
-
+    date_col = kept_names[0]
     refuge_ids = set(REFUGE_DU_IDS)
-    for i, vname in enumerate(var_names[1:], start=1):
-        if vname.startswith('DN_') and vname[3:] in refuge_ids:
-            result[vname] = pd.to_numeric(data_df.iloc[:, i], errors='coerce')
+    cols_to_keep = [date_col]
+    for vname in kept_names[1:]:
+        suffix = None
+        if vname.startswith('AW_'):
+            suffix = vname[3:]
+        elif vname.startswith('DN_'):
+            suffix = vname[3:]
+        if suffix and suffix in refuge_ids:
+            cols_to_keep.append(vname)
 
-    log.info(f"Extracted {len(result.columns) - 1} DN_* columns (CFS) from DV output")
+    result = data_df[cols_to_keep].copy()
+    for c in result.columns[1:]:
+        result[c] = pd.to_numeric(result[c], errors='coerce')
+
+    aw_count = sum(1 for c in cols_to_keep if c.startswith('AW_'))
+    dn_count = sum(1 for c in cols_to_keep if c.startswith('DN_'))
+    log.info(f"Extracted {aw_count} AW_* + {dn_count} DN_* refuge columns from DV output")
     return result
 
 
-def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
-    Load DN_{DU_ID} delivery columns (CFS) from the CalSim DV output on S3.
+    Load AW_* and DN_* refuge columns from the CalSim DV output on S3.
 
-    Tries {scenario}_coeqwal_calsim_output.csv first, falls back to {scenario}_DV.csv.
-    Returns a DataFrame with the date column and DN_* columns still in CFS units.
-    CFS→TAF conversion must be applied after add_water_year_month() supplies DaysInMonth.
+    Uses shared header parsing and column deduplication from units.py.
+    Returns (data_df, units_map).  CFS→TAF conversion must be applied after
+    add_water_year_month() supplies DaysInMonth.
     """
     if not HAS_BOTO3:
         raise ImportError("boto3 required. Install with: pip install boto3")
@@ -292,13 +200,15 @@ def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
         try:
             log.info(f"Trying DV output: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            header_df = pd.read_csv(response['Body'], header=None, nrows=7, low_memory=False)
-            var_names = [str(v) for v in header_df.iloc[1].tolist()]
+            var_names, units_row = parse_dss_csv_header(response['Body'])
+            keep_indices, units_map = deduplicate_columns(var_names, units_row, prefer_cfs=True)
 
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             data_df = pd.read_csv(response['Body'], header=None, skiprows=7, low_memory=False)
+            result = _load_dv_columns(var_names, data_df, keep_indices)
 
-            return _load_dv_dn_columns(var_names, data_df)
+            kept_map = {c: units_map.get(c, '') for c in result.columns}
+            return result, kept_map
 
         except s3.exceptions.NoSuchKey:
             log.warning(f"Not found: s3://{S3_BUCKET}/{key}")
@@ -313,19 +223,22 @@ def load_dv_csv_from_s3(scenario_id: str) -> pd.DataFrame:
     )
 
 
-def load_dv_csv_from_file(file_path: str) -> pd.DataFrame:
+def load_dv_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
-    Load DN_{DU_ID} delivery columns (CFS) from a local DV output CSV.
+    Load AW_* and DN_* refuge columns from a local DV output CSV.
 
-    Returns DataFrame with DN_* columns in CFS.  CFS→TAF conversion must be
-    applied after add_water_year_month() supplies DaysInMonth.
+    Returns (data_df, units_map).  CFS→TAF conversion must be applied after
+    add_water_year_month() supplies DaysInMonth.
     """
     log.info(f"Loading DV output from file: {file_path}")
-    header_df = pd.read_csv(file_path, header=None, nrows=7, low_memory=False)
-    var_names = [str(v) for v in header_df.iloc[1].tolist()]
+    var_names, units_row = parse_dss_csv_header(file_path)
+    keep_indices, units_map = deduplicate_columns(var_names, units_row, prefer_cfs=True)
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    return _load_dv_dn_columns(var_names, data_df)
+    result = _load_dv_columns(var_names, data_df, keep_indices)
+
+    kept_map = {c: units_map.get(c, '') for c in result.columns}
+    return result, kept_map
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
@@ -467,6 +380,9 @@ def calculate_shortage_monthly(
         (df_work['shortage_taf'] / df_work['demand']) * 100,
         0.0,
     )
+    max_pct = float(df_work['shortage_pct'].max())
+    if max_pct > 200:
+        log.warning(f"Suspicious refuge shortage %% for {du_id}: max={max_pct:.1f}%%")
 
     results = []
     for wm in range(1, 13):
@@ -572,58 +488,55 @@ def calculate_period_summary(
 
 def calculate_all_refuge_statistics(
     scenario_id: str,
-    sv_path: Optional[str] = None,
     dv_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Load source files and calculate all refuge statistics for one scenario.
+    Load DV output and calculate all refuge statistics for one scenario.
+
+    All data (AW_* demand and DN_* delivery) comes from the DV output CSV.
+    CFS columns are converted to TAF using per-row DaysInMonth.
 
     Returns dict with keys: delivery_monthly, shortage_monthly, period_summary.
-
-    sv_path:  optional local path to the SV input CSV (overrides S3).
-    dv_path:  optional local path to the CalSim DV output CSV (overrides S3).
-              DN_* columns in the DV file are in CFS; conversion to TAF is
-              applied here using DaysInMonth derived from the date column.
     """
     log.info(f"=== Processing scenario: {scenario_id} ===")
 
-    # Load source data
-    if sv_path:
-        sv_df = load_sv_csv_from_file(sv_path)
-    else:
-        sv_df = load_sv_csv_from_s3(scenario_id)
-
     if dv_path:
-        dv_df = load_dv_csv_from_file(dv_path)
+        dv_df, dv_units = load_dv_csv_from_file(dv_path)
     else:
-        dv_df = load_dv_csv_from_s3(scenario_id)
+        dv_df, dv_units = load_dv_csv_from_s3(scenario_id)
 
-    # Add time columns to both DataFrames
-    sv_df = add_water_year_month(sv_df)
     dv_df = add_water_year_month(dv_df)
 
-    # Convert DN_* columns from CFS to TAF using per-row DaysInMonth
-    dn_cols = [c for c in dv_df.columns if c.startswith('DN_')]
-    if not dn_cols:
-        log.warning(f"No DN_* columns found in DV output for scenario {scenario_id}")
-    else:
-        dv_df[dn_cols] = dv_df[dn_cols].multiply(
-            dv_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY, axis=0
-        )
-        log.info(f"Converted {len(dn_cols)} DN_* columns from CFS to TAF")
+    # Convert CFS columns (AW_* and DN_*) to TAF using per-row DaysInMonth
+    REFUGE_CFS_PREFIXES = ('AW_', 'DN_')
+    cfs_cols = []
+    taf_already = []
+    for c in dv_df.columns:
+        if not any(c.startswith(p) for p in REFUGE_CFS_PREFIXES):
+            continue
+        unit = dv_units.get(c, '').upper()
+        if unit == 'CFS':
+            cfs_cols.append(c)
+        elif unit == 'TAF':
+            taf_already.append(c)
 
-    # Merge SV (demand) and DV (delivery) on WaterYear + WaterMonth.
-    # The SV file uses start-of-month dates and the DV file uses end-of-month
-    # dates, so joining on the raw date string produces 0 rows. Joining on the
-    # derived water-year calendar (WaterYear, WaterMonth) is date-format agnostic.
-    aux_cols = ['DateTime', 'CalendarMonth', 'CalendarYear', 'DaysInMonth']
-    merged = pd.merge(
-        sv_df.drop(columns=aux_cols, errors='ignore'),
-        dv_df.drop(columns=aux_cols + [dv_df.columns[0]], errors='ignore'),
-        on=['WaterYear', 'WaterMonth'],
-        how='inner',
-    )
-    log.info(f"Merged DataFrame: {len(merged)} rows, {len(merged.columns)} columns")
+    for col in cfs_cols:
+        dv_df[col] = pd.to_numeric(dv_df[col], errors='coerce') * dv_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    for col in taf_already:
+        dv_df[col] = pd.to_numeric(dv_df[col], errors='coerce')
+
+    log.info(f"Converted {len(cfs_cols)} CFS→TAF columns; {len(taf_already)} already TAF")
+
+    merged = dv_df
+    log.info(f"DV DataFrame: {len(merged)} rows, {len(merged.columns)} columns")
+
+    # Safeguards
+    refuge_du_ids_in_data = [
+        c[3:] for c in merged.columns if c.startswith('AW_') and c[3:] in set(REFUGE_DU_IDS)
+    ]
+    validate_water_balance(merged, refuge_du_ids_in_data, log)
+    if cfs_cols:
+        check_post_conversion_magnitude(merged, cfs_cols, logger=log)
 
     demand_units = load_refuge_demand_units()
 
@@ -790,7 +703,6 @@ def main() -> None:
     parser.add_argument('--scenario', help='Single scenario ID (e.g. s0020)')
     parser.add_argument('--all-scenarios', action='store_true',
                         help=f'Process all known scenarios: {SCENARIOS}')
-    parser.add_argument('--sv-path', help='Local path to SV input CSV (overrides S3)')
     parser.add_argument('--dv-path', help='Local path to CalSim DV output CSV (overrides S3)')
     parser.add_argument('--dry-run', action='store_true',
                         help='Calculate statistics without writing to database')
@@ -813,7 +725,6 @@ def main() -> None:
         try:
             stats = calculate_all_refuge_statistics(
                 scenario_id,
-                sv_path=args.sv_path,
                 dv_path=args.dv_path,
             )
 

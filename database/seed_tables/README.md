@@ -15,7 +15,7 @@ seed_tables/
 ├── 04_variable/             CalSim variable definitions + type classifications
 │                            calsim_model_variable_type, derived_variable_type, variable_type
 │                            channel_variable, reservoir_variable, inflow_variable, derived_variable
-├── 04_calsim_data/          legacy — entity and network seed CSVs (to be reorganized into 02/03)
+├── 04_calsim_data/          legacy.entity and network seed CSVs (to be reorganized into 02/03)
 ├── 05_assumptions_operations/  assumption and operation definitions + category tables
 ├── 06_scenario/             scenario definitions, authors, source links, key assumption/op links
 ├── 07_hydroclimate/         hydroclimate definitions, sea level rise (slr) table
@@ -25,7 +25,7 @@ seed_tables/
 
 ## Loading seed data into the database
 
-Seed data is loaded from these repo files directly — no S3 upload is required.
+Seed data is loaded from these repo files directly.no S3 upload is required.
 Migrations use the psql `\copy` meta-command, which reads from the local filesystem
 of the machine running the command. **Always run migrations from the repo root** so
 relative paths resolve correctly:
@@ -39,8 +39,8 @@ psql $SUPERUSER_URL -f database/scripts/sql/upsert_scenario_data.sql
 ```
 
 `\copy` vs `COPY`:
-- `\copy` (lowercase, client-side) — reads from the **client machine**. Works for Cloud9 and local dev.
-- `COPY` (uppercase, server-side) — reads from the **RDS server filesystem**. Not available on RDS.
+- `\copy` (lowercase, client-side).reads from the **client machine**. Works for Cloud9 and local dev.
+- `COPY` (uppercase, server-side).reads from the **RDS server filesystem**. Not available on RDS.
 
 Always use `\copy`.
 

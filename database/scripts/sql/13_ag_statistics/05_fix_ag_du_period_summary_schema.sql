@@ -31,7 +31,7 @@ BEGIN
         SELECT 1 FROM information_schema.columns
         WHERE table_name = 'ag_du_period_summary' AND column_name = 'annual_demand_avg_taf'
     ) THEN
-        RAISE NOTICE 'Both columns exist — dropping old annual_demand_avg_taf to allow rename';
+        RAISE NOTICE 'Both columns exist.dropping old annual_demand_avg_taf to allow rename';
         ALTER TABLE ag_du_period_summary DROP COLUMN annual_demand_avg_taf;
     END IF;
 

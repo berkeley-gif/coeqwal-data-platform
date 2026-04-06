@@ -3,13 +3,13 @@ Delta Statistics API Endpoints.
 
 Serves monthly percentile distributions and period summaries for Delta variables:
   - X2 position (2 ppt isohaline, KM)
-  - Salinity at compliance points (Emmaton, Jersey Point, Rock Slough, Collinsville — UMHOS/CM)
-  - Salinity at pumping plants (Banks, Tracy/Jones — UMHOS/CM)
-  - Net Delta Outflow (NDO — TAF)
+  - Salinity at compliance points (Emmaton, Jersey Point, Rock Slough, Collinsville.UMHOS/CM)
+  - Salinity at pumping plants (Banks, Tracy/Jones.UMHOS/CM)
+  - Net Delta Outflow (NDO.TAF)
 
 Endpoints:
   GET /api/statistics/scenarios/{id}/delta/monthly
-      — Monthly percentile bands for all 8 Delta variables
+     .Monthly percentile bands for all 8 Delta variables
 
 Performance: 30-minute in-process TTL cache + 15-minute browser Cache-Control.
 Water months: 1=October ... 12=September

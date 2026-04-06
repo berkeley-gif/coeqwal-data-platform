@@ -1,4 +1,4 @@
-# ETL statistics — Environmental river flows
+# ETL statistics.Environmental river flows
 
 > **Status: IMPLEMENTED**
 >
@@ -15,8 +15,8 @@ covering streams, reservoir releases, and conveyance canals across California:
 
 | # | Metric | Unit | Temporal | Statistics |
 |---|--------|------|----------|------------|
-| 1 | River flows — % unimpaired | % | Monthly | Monthly avg, monthly CV per reach per scenario |
-| 2 | River flows — % functional flows | % | Seasonal (5 CEFF seasons) | Seasonal avg deviation from FF target, annual CV |
+| 1 | River flows.% unimpaired | % | Monthly | Monthly avg, monthly CV per reach per scenario |
+| 2 | River flows.% functional flows | % | Seasonal (5 CEFF seasons) | Seasonal avg deviation from FF target, annual CV |
 | 3 | River flow alteration index | Pearson r | Period of record | Correlation between simulated and unimpaired monthly flow |
 
 These metrics characterize how much CalSim-modeled water management alters natural river
@@ -29,7 +29,7 @@ hydrology, and how well environmental flow requirements are being met.
 All required variables are in the **standard per-scenario DV and SV CSV files** already staged
 in S3. No additional data pipeline work is required before building this ETL module.
 
-### 1. CalSim DV output CSV — simulated channel flows and MIF
+### 1. CalSim DV output CSV.simulated channel flows and MIF
 
 | Attribute | Value |
 |-----------|-------|
@@ -48,11 +48,11 @@ in S3. No additional data pipeline work is required before building this ETL mod
 
 **Data quality notes:**
 - `C_SAC122` appears **twice** in the DV (both `CHANNEL`). Use the **first occurrence** only.
-- `C_SAC000_MIF` is **absent** from the DV — SAC000 has no MIF companion variable.
+- `C_SAC000_MIF` is **absent** from the DV.SAC000 has no MIF companion variable.
 - The "Trend Report" CSV (`_DV_v*.csv`) is a reference artifact only. Read variables directly
   from the standard `_coeqwal_calsim_output.csv` using Part B and Part C filters.
 
-### 2. CalSim SV input CSV — functional flow targets and unimpaired flows
+### 2. CalSim SV input CSV.functional flow targets and unimpaired flows
 
 | Attribute | Value |
 |-----------|-------|
@@ -64,23 +64,23 @@ in S3. No additional data pipeline work is required before building this ETL mod
 
 | Variable pattern | Part C | Description |
 |---|---|---|
-| `EFLOWS_{reach_code}` | `FLOW-MIN-EFLOW` | Functional flow target input — confirmed for 17 env-flow reaches |
-| `UNIMP_{watershed}` | `FLOW-UNIMPAIRED` | Natural unimpaired flow at watershed gauge — 11 variants |
+| `EFLOWS_{reach_code}` | `FLOW-MIN-EFLOW` | Functional flow target input.confirmed for 17 env-flow reaches |
+| `UNIMP_{watershed}` | `FLOW-UNIMPAIRED` | Natural unimpaired flow at watershed gauge.11 variants |
 
 > **Do not use `UNIMP_*_UHH` variants.** The `_UHH` suffix indicates "upper-half hydrology,"
 > a different hydrological baseline. Always use base `UNIMP_*` names.
 
 ---
 
-## `C_*_MIF` vs `EFLOWS_*` — important distinction
+## `C_*_MIF` vs `EFLOWS_*`.important distinction
 
 | | `C_{reach}_MIF` | `EFLOWS_{reach}` |
 |---|---|---|
 | Source | DV output (CalSim computes it) | SV input (prescribed as model constraint) |
 | Part C | `FLOW-MIN-INSTREAM` | `FLOW-MIN-EFLOW` |
-| Meaning | **Total binding MIF** — combines D-1641, VAMP, biological opinions, EFLOWS, and all other regulatory minimums into a single enforced floor | **Functional flow target only** — the prescribed FF target for e-flow scenarios (s0029, s0031, s0032, s0033) |
-| Scenario dependence | Changes across scenarios as regulatory frameworks vary | Fixed per SV version — same across all scenarios sharing the same SV |
-| `SAC000` available? | **No** — absent from DV | **Yes** — `EFLOWS_SAC000` confirmed in SV |
+| Meaning | **Total binding MIF**.combines D-1641, VAMP, biological opinions, EFLOWS, and all other regulatory minimums into a single enforced floor | **Functional flow target only**.the prescribed FF target for e-flow scenarios (s0029, s0031, s0032, s0033) |
+| Scenario dependence | Changes across scenarios as regulatory frameworks vary | Fixed per SV version.same across all scenarios sharing the same SV |
+| `SAC000` available? | **No**.absent from DV | **Yes**.`EFLOWS_SAC000` confirmed in SV |
 
 - **Metric 1 and 3** use `UNIMP_{watershed}` from SV as the natural-flow reference.
 - **Metric 2** uses `EFLOWS_{reach}` from SV as the functional flow target denominator.
@@ -127,11 +127,11 @@ meaningful analytical subset. The `channel_entity` table flags drives these filt
 | Filter | Column flag | Count | Description |
 |--------|------------|-------|-------------|
 | **Stream reaches** | `channel_class = 'stream'` | 47 | All natural river channels; excludes reservoir releases (below-dam flows) and conveyance canals |
-| **EFLOWS streams** | `has_eflows = true` | 17 | Streams with a prescribed functional flow (`EFLOWS_{reach}`) target in the SV input — the reach set used for tier results and CEFF analysis (Metric 2) |
-| **MIF streams** | `has_mif = true` | 20 | Streams with a binding minimum instream flow companion variable (`C_{reach}_MIF`) in the DV output — the primary regulatory monitoring locations |
+| **EFLOWS streams** | `has_eflows = true` | 17 | Streams with a prescribed functional flow (`EFLOWS_{reach}`) target in the SV input.the reach set used for tier results and CEFF analysis (Metric 2) |
+| **MIF streams** | `has_mif = true` | 20 | Streams with a binding minimum instream flow companion variable (`C_{reach}_MIF`) in the DV output.the primary regulatory monitoring locations |
 | **All channels** | (no filter) | 59 | Complete CalSim reach set including reservoir releases (e.g. below Shasta, Oroville, Folsom) and conveyance canals (e.g. Delta Cross Channel, Clifton Court Forebay) |
 
-### EFLOWS streams (17) — tier analysis reaches
+### EFLOWS streams (17).tier analysis reaches
 
 These 17 reaches have `has_eflows = true` in `channel_entity` and represent the CEFF
 functional-flow monitoring network. They are used as the denominator set for tier scoring
@@ -143,8 +143,8 @@ and the basis for Metric 2 (% functional flows) and Metric 3 (flow alteration in
 | `FTR003` | Feather River | UPPER_FEATHER | `UNIMP_OROV` | ✓ |
 | `FTR029` | Feather River at Yuba City | UPPER_FEATHER | `UNIMP_OROV` | ✓ |
 | `MCD005` | Merced River at Stevinson | UPPER_MERCED | `UNIMP_ME` | ✓ |
-| `MOK028` | Mokelumne River at Woodbridge | UPPER_MOKELUMNE | — | ✓ |
-| `SAC000` | Sacramento River at Chipps Island | SAC_LOWER | `UNIMP_SRBB` | — |
+| `MOK028` | Mokelumne River at Woodbridge | UPPER_MOKELUMNE |.| ✓ |
+| `SAC000` | Sacramento River at Chipps Island | SAC_LOWER | `UNIMP_SRBB` |.|
 | `SAC049` | Sacramento River at Freeport | SAC_LOWER | `UNIMP_SRBB` | ✓ |
 | `SAC122` | Sacramento River at Tisdale Weir | SAC_LOWER | `UNIMP_SRBB` | ✓ |
 | `SAC148` | Sacramento River at Colusa Weir | SAC_LOWER | `UNIMP_SRBB` | ✓ |
@@ -174,11 +174,11 @@ locations. They are candidates for all three metrics.
 | `AMR004` | American River at I-80 Bridge | UPPER_AMERICAN | `UNIMP_FOLS` | ✓ |
 | `FTR003` | Feather River | UPPER_FEATHER | `UNIMP_OROV` | ✓ |
 | `FTR029` | Feather River at Yuba City | UPPER_FEATHER | `UNIMP_OROV` | ✓ |
-| `FTR059` | Feather River at Thermalito Afterbay | UPPER_FEATHER | `UNIMP_OROV` | — |
-| `KSWCK` | Keswick Dam (Sacramento below Shasta) | SAC_UPPER | `UNIMP_SHAS` | — |
+| `FTR059` | Feather River at Thermalito Afterbay | UPPER_FEATHER | `UNIMP_OROV` |.|
+| `KSWCK` | Keswick Dam (Sacramento below Shasta) | SAC_UPPER | `UNIMP_SHAS` |.|
 | `MCD005` | Merced River at Stevinson | UPPER_MERCED | `UNIMP_ME` | ✓ |
-| `MOK028` | Mokelumne River | UPPER_MOKELUMNE | — (see note) | ✓ |
-| `NTOMA` | American River at Lake Natoma | UPPER_AMERICAN | `UNIMP_FOLS` | — |
+| `MOK028` | Mokelumne River | UPPER_MOKELUMNE |.(see note) | ✓ |
+| `NTOMA` | American River at Lake Natoma | UPPER_AMERICAN | `UNIMP_FOLS` |.|
 | `SAC049` | Sacramento River at Freeport | SAC_LOWER | `UNIMP_SRBB` | ✓ |
 | `SAC122` | Sacramento River at Tisdale Weir | SAC_LOWER | `UNIMP_SRBB` | ✓ |
 | `SAC148` | Sacramento River at Colusa Weir | SAC_LOWER | `UNIMP_SRBB` | ✓ |
@@ -187,7 +187,7 @@ locations. They are candidates for all three metrics.
 | `SJR070` | San Joaquin near Vernalis | SAN_JOAQUIN | `UNIMP_SJ` | ✓ |
 | `SJR127` | San Joaquin at Salt Slough | SAN_JOAQUIN | `UNIMP_SJ` | ✓ |
 | `STS011` | Stanislaus River | UPPER_STANISLAUS | `UNIMP_ST` | ✓ |
-| `STS059` | Stanislaus River (upper) | UPPER_STANISLAUS | `UNIMP_ST` | — |
+| `STS059` | Stanislaus River (upper) | UPPER_STANISLAUS | `UNIMP_ST` |.|
 | `TRN111` | Trinity River at Lewiston | TRINITY_RIVER | `UNIMP_TRIN` | ✓ |
 | `TUO003` | Tuolumne River | UPPER_TUOLUMNE | `UNIMP_TU` | ✓ |
 | `YUB002` | Yuba River at Marysville | YUBA_RIVER | `UNIMP_YUBA` | ✓ |
@@ -208,13 +208,13 @@ The Sacramento River mainstem uses two different unimpaired flow references, spl
 
 | Sub-reach | River Miles | `UNIMP_*` | Channels |
 |-----------|-------------|-----------|---------|
-| `SAC_UPPER` — above Bend Bridge | rm 257–310 | `UNIMP_SHAS` | SHSTA, KSWCK, SAC289 |
-| `SAC_LOWER` — at/below Bend Bridge | rm 0–257 | `UNIMP_SRBB` | SAC257, SAC240, SAC201, SAC148, SAC122, SAC120, SAC085, SAC083, SAC049, SAC048, SAC041, SAC029B, SAC007, SAC000, SSL001, YBP020 |
+| `SAC_UPPER`.above Bend Bridge | rm 257–310 | `UNIMP_SHAS` | SHSTA, KSWCK, SAC289 |
+| `SAC_LOWER`.at/below Bend Bridge | rm 0–257 | `UNIMP_SRBB` | SAC257, SAC240, SAC201, SAC148, SAC122, SAC120, SAC085, SAC083, SAC049, SAC048, SAC041, SAC029B, SAC007, SAC000, SSL001, YBP020 |
 
-`UNIMP_SRBB` = "Sacramento River Below Bend Bridge" — captures additional inflow
+`UNIMP_SRBB` = "Sacramento River Below Bend Bridge".captures additional inflow
 (Cottonwood Creek, Stony Creek) between Shasta and Bend Bridge.
 
-### Mokelumne River — no UNIMP variable
+### Mokelumne River.no UNIMP variable
 
 No `UNIMP_MOK` variable exists in the CalSim SV. The Mokelumne is entirely regulated
 by East Bay MUD below Camanche Reservoir and does not have a standalone unimpaired flow node
@@ -249,7 +249,7 @@ These seasons are seeded in the `env_flow_season` lookup table (migration 24).
 
 ## Planned calculations
 
-### Metric 1 — River flows (% unimpaired) — monthly
+### Metric 1.River flows (% unimpaired).monthly
 
 Computed for all reaches with a `unimp_sv_variable` assigned (54 of 60 channels;
 MOK019 and MOK028 excluded).
@@ -267,7 +267,7 @@ pct_unimpaired_cv[m]  = std(pct_unimpaired[t] for t where water_month[t] == m) /
 Output: one row per (channel_entity_id, scenario_id, water_month) to
 `env_flow_channel_monthly`.
 
-### Metric 2 — River flows (% functional flows) — seasonal
+### Metric 2.River flows (% functional flows).seasonal
 
 Computed for reaches with `has_eflows = true` (17 confirmed reaches; others may be added
 if EFLOWS variable is discovered in SV).
@@ -291,7 +291,7 @@ annual_cv = std(annual_mean[y] across all y) / mean(annual_mean[y] across all y)
 Output: one row per (channel_entity_id, scenario_id, season_id, water_year) to
 `env_flow_channel_seasonal`.
 
-### Metric 3 — Flow alteration index — period of record
+### Metric 3.Flow alteration index.period of record
 
 Computed for all reaches with `unimp_sv_variable` assigned (same 54 channels as Metric 1).
 
@@ -332,20 +332,20 @@ network_arc_id     VARCHAR(30)      -- References channel_entity.network_arc_id
 scenario_short_code VARCHAR(20)
 season_id          INTEGER FK to env_flow_season
 
--- Raw flow volume (CFS) — all 60 channels
+-- Raw flow volume (CFS).all 60 channels
 flow_avg_cfs       NUMERIC(12,3)   -- mean of per-year seasonal mean flows
 flow_cv            NUMERIC(8,4)
 flow_q0 … flow_q100               -- percentile distribution across years
 flow_exc_p5 … flow_exc_p95
 
--- Natural flow reference + % unimpaired (Metric 1, seasonal) — 58 channels
+-- Natural flow reference + % unimpaired (Metric 1, seasonal).58 channels
 unimp_avg_cfs      NUMERIC(12,3)   -- mean of UNIMP seasonal averages (natural reference)
 pct_unimpaired_avg NUMERIC(8,3)    -- mean (C/UNIMP × 100) across years
 pct_unimpaired_cv  NUMERIC(8,4)
 unimp_q0 … unimp_q100             -- percentile distribution of pct_unimpaired
 unimp_exc_p5 … unimp_exc_p95
 
--- % Functional flows (Metric 2) — ~17 EFLOWS channels
+-- % Functional flows (Metric 2).~17 EFLOWS channels
 pct_ff_avg         NUMERIC(8,3)    -- mean C/EFLOWS × 100 within season-year, across years
 pct_ff_cv          NUMERIC(8,4)
 deviation_avg      NUMERIC(8,3)    -- pct_ff_avg − 100.0 (negative = below target)
@@ -384,12 +384,12 @@ sort_order  SMALLINT
 
 ## Implementation sequence
 
-1. **Migration 24** — create `env_flow_season`, `env_flow_channel_monthly`,
+1. **Migration 24**.create `env_flow_season`, `env_flow_channel_monthly`,
    `env_flow_channel_seasonal`, `env_flow_channel_period_summary`
-2. **Seed data** — populate `env_flow_season` (5 rows)
-3. **ETL script** — `calculate_env_flow_statistics.py` (following the refuge ETL pattern)
+2. **Seed data**.populate `env_flow_season` (5 rows)
+3. **ETL script**.`calculate_env_flow_statistics.py` (following the refuge ETL pattern)
 4. **Register** in `etl/statistics/run_all.py`
-5. **API endpoints** — expose monthly, seasonal, and period-summary data
+5. **API endpoints**.expose monthly, seasonal, and period-summary data
 
 ---
 
@@ -411,17 +411,17 @@ All rows inserted successfully into the three statistics tables.
 ### MIF variable availability (20 expected)
 
 Not all scenarios model the same minimum instream flow (MIF) constraints. The following
-MIF variables are absent from some scenarios' DV output — this is expected and reflects
+MIF variables are absent from some scenarios' DV output.this is expected and reflects
 different regulatory frameworks being tested, not a data pipeline error.
 
 | Scenario(s) | MIF present / 20 | Missing variables |
 |------------|-----------------|-------------------|
-| s0020, s0021, s0025–s0028, s0029, s0030, s0031–s0033, s0044 | **20 / 20** | — |
+| s0020, s0021, s0025–s0028, s0029, s0030, s0031–s0033, s0044 | **20 / 20** |.|
 | s0039–s0042 | **7 / 20** | `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_STS011_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
 | s0011 | **8 / 20** | Same 13 as s0039–s0042 except `C_STS011_MIF` is present; missing: `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
 | s0023, s0024 | **6 / 20** | Same 12 as s0011, plus `C_SAC257_MIF` and `C_STS011_MIF` |
 
-All 59 channel flow variables (`C_{reach}`) are present in every scenario — **no channel
+All 59 channel flow variables (`C_{reach}`) are present in every scenario.**no channel
 flow data is missing from any scenario.**
 
 The ETL handles absent MIF variables gracefully: `pct_mif_*` columns are NULL for those
@@ -429,13 +429,13 @@ reaches in those scenarios.
 
 ### EFLOWS (functional flow targets) variable availability (17 expected)
 
-EFLOWS targets are SV inputs — they are prescribed constraints, not DV outputs.
+EFLOWS targets are SV inputs.they are prescribed constraints, not DV outputs.
 
 | Scenario(s) | SV columns | EFLOWS present | Notes |
 |------------|------------|----------------|-------|
 | s0020, s0021, s0023–s0028, s0031–s0033, s0039–s0042, s0044 | 28 | All 17 | Full EFLOWS suite |
-| s0011 | 12 | **None** | Pre-EFLOWS baseline — no functional flow targets prescribed |
-| **s0029, s0030** | **12** | **1 of 17 — only `EFLOWS_STS011`** | Unexpected — see open question below |
+| s0011 | 12 | **None** | Pre-EFLOWS baseline.no functional flow targets prescribed |
+| **s0029, s0030** | **12** | **1 of 17.only `EFLOWS_STS011`** | Unexpected.see open question below |
 
 **s0029/s0030 detail (confirmed via `diagnose_dv_columns.py`):** Both scenarios have all 79 DV
 channel-flow variables (including all 20 MIF), so their channel flow data is complete. However,
@@ -464,7 +464,7 @@ to `NUMERIC(12,3)` to accommodate these.
 | 3 | Season definitions | **CEFF 5-season calendar** confirmed. Seed data in `env_flow_season`. |
 | 4 | TR CSV staging | Not required. All variables are in the standard `_coeqwal_calsim_output.csv` and `_coeqwal_sv_input.csv` files already staged in S3. |
 | 5 | `UNIMP_*_UHH` variants | Excluded. `_UHH` suffix = "upper-half hydrology" alternative baseline. Always use base `UNIMP_*` names. |
-| 6 | Channel count discrepancy | Planning estimate was "60 channels." `channel_entity.csv` has 59 rows with `channel_class` set. Whether the DV truly contains 60 or 59 distinct `CHANNEL` variables has **not been independently verified** — see open question 2. |
+| 6 | Channel count discrepancy | Planning estimate was "60 channels." `channel_entity.csv` has 59 rows with `channel_class` set. Whether the DV truly contains 60 or 59 distinct `CHANNEL` variables has **not been independently verified**.see open question 2. |
 | 7 | `C_SAC000_MIF` absence | SAC000 has no MIF in the DV (`has_mif = false`). Metric 1 computed normally using `UNIMP_SRBB`. Metric 2 uses `EFLOWS_SAC000` from SV. No action required unless modeling team adds this variable in a future SV version. |
 | 8 | MIF variable absence in some scenarios | Confirmed expected: different scenarios model different regulatory frameworks. The absent variables reflect a policy choice in those scenario configs, not a data pipeline error (verified via `diagnose_dv_columns.py`). |
 
@@ -473,4 +473,4 @@ to `NUMERIC(12,3)` to accommodate these.
 | # | Question | Priority |
 |---|----------|----------|
 | 1 | **s0029/s0030 missing 16 of 17 EFLOWS targets.** Both scenarios have complete DV (all 59 channel flows + 20 MIF) but their SV contains only `EFLOWS_STS011` and no other functional flow targets. If these scenarios were intended to include an EFLOWS regulatory framework, the `pct_ff_*` columns in the database are NULL for 16 of 17 EFLOWS reaches in those scenarios. **Verify with the modeling team** whether this is intentional (e.g., s0029/s0030 test Stanislaus-only EFLOWS) or a missing SV file. | High |
-| 2 | **59 vs 60 channels.** The diagnose script confirms all 79 expected DV variables are present (59 channels + 20 MIF), but its target list is built from `channel_entity.csv` — it cannot detect a channel that was never attributed. **Verify the true count** by reading the raw DV header and counting `CHANNEL` occurrences in the Part C row (see script in "Reach inventory" above). If the count is 60, identify the missing channel and add it to `channel_entity.csv`. | Medium |
+| 2 | **59 vs 60 channels.** The diagnose script confirms all 79 expected DV variables are present (59 channels + 20 MIF), but its target list is built from `channel_entity.csv`.it cannot detect a channel that was never attributed. **Verify the true count** by reading the raw DV header and counting `CHANNEL` occurrences in the Part C row (see script in "Reach inventory" above). If the count is 60, identify the missing channel and add it to `channel_entity.csv`. | Medium |

@@ -305,7 +305,7 @@ def get_trigger_details(cursor) -> List[Dict[str, Any]]:
 def get_functions(cursor) -> List[Dict[str, Any]]:
     """
     Inventory all user-defined functions (excludes built-ins and aggregates).
-    Captures security_definer flag — a SECURITY DEFINER function runs as its
+    Captures security_definer flag.a SECURITY DEFINER function runs as its
     owner, not the caller, which affects session_user vs current_user behaviour
     (see coeqwal_current_operator).
     """
@@ -593,7 +593,7 @@ def upload_to_s3(content: str, key: str, bucket: str, content_type: str = 'appli
 # ---------------------------------------------------------------------------
 
 def lambda_handler(event, context):
-    """Main Lambda handler — runs audit and writes JSON + CSV summary to S3."""
+    """Main Lambda handler.runs audit and writes JSON + CSV summary to S3."""
     try:
         bucket = event.get('bucket', os.environ.get('S3_BUCKET'))
         if not bucket:

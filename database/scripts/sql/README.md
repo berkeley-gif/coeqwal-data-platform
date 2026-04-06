@@ -12,7 +12,7 @@ Scripts are numbered to match the database layer architecture:
 | `11_reservoir_statistics/` | 11 | Reservoir storage & spill statistics |
 | `12_mi_statistics/` | 12 | Municipal & Industrial delivery statistics |
 | `13_ag_statistics/` | 13 | Agricultural delivery statistics |
-| `.archive/` | — | Deprecated/historical scripts |
+| `.archive/` |.| Deprecated/historical scripts |
 
 See [../README.md](../README.md) for the full layer architecture.
 

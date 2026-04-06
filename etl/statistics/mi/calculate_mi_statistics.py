@@ -29,7 +29,14 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF, parse_dss_csv_header, deduplicate_columns  # noqa: E402
+from units import (  # noqa: E402
+    CFS_TO_TAF_PER_DAY,
+    MWD_TABLE_A_ANNUAL_TAF,
+    parse_dss_csv_header,
+    deduplicate_columns,
+    safe_pct,
+    check_post_conversion_magnitude,
+)
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
@@ -709,15 +716,17 @@ def calculate_contractor_period_summary(
         avg_demand = float(annual_demand.mean())
         if avg_demand > 0:
             result['annual_demand_avg_taf'] = round(avg_demand, 2)
-            result['avg_pct_demand_met'] = round(
-                (result['annual_delivery_avg_taf'] / avg_demand) * 100, 2
-            )
+            result['avg_pct_demand_met'] = round(safe_pct(
+                result['annual_delivery_avg_taf'], avg_demand,
+                label=f'{contractor_code} pct_demand_met', logger=log,
+            ), 2)
     elif demand_mode == 'table_a':
         result['annual_demand_avg_taf'] = MWD_TABLE_A_ANNUAL_TAF
         if MWD_TABLE_A_ANNUAL_TAF > 0:
-            result['avg_pct_demand_met'] = round(
-                (result['annual_delivery_avg_taf'] / MWD_TABLE_A_ANNUAL_TAF) * 100, 2
-            )
+            result['avg_pct_demand_met'] = round(safe_pct(
+                result['annual_delivery_avg_taf'], MWD_TABLE_A_ANNUAL_TAF,
+                label=f'{contractor_code} pct_demand_met (Table A)', logger=log,
+            ), 2)
 
     if result['avg_pct_demand_met'] is not None:
         result['reliability_pct'] = result['avg_pct_demand_met']
@@ -772,6 +781,13 @@ def calculate_all_mi_statistics(
 
     log.info(f"Pre-converted {cfs_converted} MI CFS→TAF columns; "
              f"{taf_kept} already in TAF")
+
+    # Safeguard: check for implausible magnitudes after conversion
+    converted_cols = [c for c in df.columns if c in all_mi_vars and units_map.get(c, '').upper() == 'CFS']
+    if converted_cols:
+        flagged = check_post_conversion_magnitude(df, converted_cols, logger=log)
+        if flagged:
+            log.warning(f"{flagged} MI columns exceed monthly TAF sanity limit after conversion")
 
     available_columns = list(df.columns)
     log.info(f"Available columns: {len(available_columns)}")

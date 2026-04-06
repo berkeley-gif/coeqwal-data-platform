@@ -2,21 +2,21 @@
 Environmental River Flows Statistics API Endpoints.
 
 Three metrics for 59 CalSim channel reaches:
-  Metric 1 — River flows as % of natural unimpaired flow (monthly and seasonal)
-  Metric 2 — River flows as % of functional flow targets vs EFLOWS (seasonal, ~17 reaches)
-  Metric 3 — Flow alteration index: Pearson r between simulated and unimpaired flow
+  Metric 1.River flows as % of natural unimpaired flow (monthly and seasonal)
+  Metric 2.River flows as % of functional flow targets vs EFLOWS (seasonal, ~17 reaches)
+  Metric 3.Flow alteration index: Pearson r between simulated and unimpaired flow
 
 Endpoints:
   GET /api/statistics/channels
-      — list all 59 channel reaches with watershed attributes
+     .list all 59 channel reaches with watershed attributes
   GET /api/statistics/env-flow-seasons
-      — list the 5 CEFF seasonal definitions (static lookup)
+     .list the 5 CEFF seasonal definitions (static lookup)
   GET /api/statistics/scenarios/{id}/channels/monthly
-      — Metric 1 monthly: % unimpaired distribution for all channels
+     .Metric 1 monthly: % unimpaired distribution for all channels
   GET /api/statistics/scenarios/{id}/channels/seasonal
-      — Metric 1+2 seasonal: flow volumes, % unimpaired, % functional flow by CEFF season
+     .Metric 1+2 seasonal: flow volumes, % unimpaired, % functional flow by CEFF season
   GET /api/statistics/scenarios/{id}/channels/period-summary
-      — Metric 3: Pearson r flow alteration index + full-period aggregate stats
+     .Metric 3: Pearson r flow alteration index + full-period aggregate stats
 
 Performance strategy:
   - Responses are cached in-process with a 30-minute TTL (cachetools.TTLCache).
@@ -55,12 +55,12 @@ _db_pool = None
 #   19 scenarios × 59 channels × 3 stat endpoints = ~3,363 entries
 #   + channel list, seasons = a handful
 _stats_cache: TTLCache = TTLCache(maxsize=6000, ttl=1800)
-# Static lookups (channel list, seasons) — much longer TTL; effectively permanent.
+# Static lookups (channel list, seasons).much longer TTL; effectively permanent.
 _static_cache: TTLCache = TTLCache(maxsize=10, ttl=86400)  # 24 hours
 
 # HTTP max-age values (seconds) sent on successful GET responses.
-_CACHE_MAX_AGE_STATIC = 86400   # 24 h for channels / seasons — static data
-_CACHE_MAX_AGE_STATS = 900      # 15 min for statistics — safe refresh interval
+_CACHE_MAX_AGE_STATIC = 86400   # 24 h for channels / seasons.static data
+_CACHE_MAX_AGE_STATS = 900      # 15 min for statistics.safe refresh interval
 
 
 def set_db_pool(pool) -> None:
@@ -85,7 +85,7 @@ def _json_response(data: Dict[str, Any], max_age: int) -> JSONResponse:
 
 
 # =============================================================================
-# LIST CHANNELS  (static — cached 24 h)
+# LIST CHANNELS  (static.cached 24 h)
 # =============================================================================
 
 
@@ -187,7 +187,7 @@ async def list_channels(
 
 
 # =============================================================================
-# LIST CEFF SEASONS  (static — cached 24 h)
+# LIST CEFF SEASONS  (static.cached 24 h)
 # =============================================================================
 
 
@@ -196,7 +196,7 @@ async def list_channels(
     summary="List CEFF seasonal definitions",
     description=(
         "Returns the 5 California Environmental Flows Framework (CEFF) seasons "
-        "used to group functional flow statistics. Static lookup — rarely changes."
+        "used to group functional flow statistics. Static lookup.rarely changes."
     ),
 )
 async def list_seasons():
@@ -254,7 +254,7 @@ async def _fetch_channels_monthly(pool, scenario_id: str, channel_id: Optional[s
     """
     Fetch monthly flow-volume and % unimpaired stats from env_flow_channel_monthly.
     Each element covers one (network_arc_id × water_month) combination.
-    Acquires its own connection — safe to call concurrently via asyncio.gather.
+    Acquires its own connection.safe to call concurrently via asyncio.gather.
 
     Columns added by migration 28: flow_avg_taf, flow_q*_cfs, flow_q*_taf,
     flow_exc_p*_cfs, flow_exc_p*_taf.
@@ -274,12 +274,12 @@ async def _fetch_channels_monthly(pool, scenario_id: str, channel_id: Optional[s
                 flow_cv,
                 -- Raw flow mean TAF/month (migration 28)
                 flow_avg_taf,
-                -- Raw flow percentile bands — CFS (migration 28)
+                -- Raw flow percentile bands.CFS (migration 28)
                 flow_q0_cfs,   flow_q10_cfs,  flow_q30_cfs,  flow_q50_cfs,
                 flow_q70_cfs,  flow_q90_cfs,  flow_q100_cfs,
                 flow_exc_p5_cfs,  flow_exc_p10_cfs, flow_exc_p25_cfs,
                 flow_exc_p50_cfs, flow_exc_p75_cfs, flow_exc_p90_cfs, flow_exc_p95_cfs,
-                -- Raw flow percentile bands — TAF/month (migration 28)
+                -- Raw flow percentile bands.TAF/month (migration 28)
                 flow_q0_taf,   flow_q10_taf,  flow_q30_taf,  flow_q50_taf,
                 flow_q70_taf,  flow_q90_taf,  flow_q100_taf,
                 flow_exc_p5_taf,  flow_exc_p10_taf, flow_exc_p25_taf,
@@ -397,7 +397,7 @@ async def get_channels_monthly(
     ),
 ):
     """
-    Metric 1 — Monthly % of natural unimpaired flow.
+    Metric 1.Monthly % of natural unimpaired flow.
 
     Response: flat array of {network_arc_id, water_month, flow_avg_cfs, unimp_avg_cfs,
     pct_unimpaired_avg, pct_unimpaired_cv, q0–q100, exc_p5–exc_p95, sample_count}.
@@ -427,7 +427,7 @@ async def get_channels_monthly(
 async def _fetch_channels_seasonal(pool, scenario_id: str, channel_id: Optional[str]) -> Dict[str, Any]:
     """
     Fetch seasonal flow and % unimpaired / % functional flow stats.
-    Acquires its own connection — safe to call concurrently via asyncio.gather.
+    Acquires its own connection.safe to call concurrently via asyncio.gather.
     """
     cache_key = f"seasonal:{scenario_id}:{channel_id or ''}"
     if cache_key in _stats_cache:
@@ -442,7 +442,7 @@ async def _fetch_channels_seasonal(pool, scenario_id: str, channel_id: Optional[
                 fs.name           AS season_name,
                 fs.sort_order     AS season_sort_order,
 
-                -- Raw flow volume (CFS) — all 59 channels
+                -- Raw flow volume (CFS).all 59 channels
                 s.flow_avg_cfs,
                 s.flow_cv,
                 s.flow_q0,  s.flow_q10, s.flow_q30, s.flow_q50,
@@ -450,7 +450,7 @@ async def _fetch_channels_seasonal(pool, scenario_id: str, channel_id: Optional[
                 s.flow_exc_p5,  s.flow_exc_p10, s.flow_exc_p25,
                 s.flow_exc_p50, s.flow_exc_p75, s.flow_exc_p90, s.flow_exc_p95,
 
-                -- Natural flow reference + % unimpaired (Metric 1 seasonal) — 57 channels
+                -- Natural flow reference + % unimpaired (Metric 1 seasonal).57 channels
                 s.unimp_avg_cfs,
                 s.pct_unimpaired_avg,
                 s.pct_unimpaired_cv,
@@ -459,7 +459,7 @@ async def _fetch_channels_seasonal(pool, scenario_id: str, channel_id: Optional[
                 s.unimp_exc_p5,  s.unimp_exc_p10, s.unimp_exc_p25,
                 s.unimp_exc_p50, s.unimp_exc_p75, s.unimp_exc_p90, s.unimp_exc_p95,
 
-                -- % Functional flows (Metric 2) — ~17 EFLOWS channels (NULL otherwise)
+                -- % Functional flows (Metric 2).~17 EFLOWS channels (NULL otherwise)
                 s.pct_ff_avg,
                 s.pct_ff_cv,
                 s.deviation_avg,
@@ -530,7 +530,7 @@ async def _fetch_channels_seasonal(pool, scenario_id: str, channel_id: Optional[
             "unimp_exc_p75": safe_float(row["unimp_exc_p75"]),
             "unimp_exc_p90": safe_float(row["unimp_exc_p90"]),
             "unimp_exc_p95": safe_float(row["unimp_exc_p95"]),
-            # % functional flows (Metric 2 — NULL if no EFLOWS target)
+            # % functional flows (Metric 2.NULL if no EFLOWS target)
             "pct_ff_avg": safe_float(row["pct_ff_avg"]),
             "pct_ff_cv": safe_float(row["pct_ff_cv"]),
             "deviation_avg": safe_float(row["deviation_avg"]),
@@ -579,7 +579,7 @@ async def get_channels_seasonal(
     ),
 ):
     """
-    Metrics 1+2 — Seasonal flow volume, % unimpaired, and % functional flow.
+    Metrics 1+2.Seasonal flow volume, % unimpaired, and % functional flow.
 
     season_short_code maps to the CEFF calendar: wet_peak, wet_base,
     spring_recession, dry, fall_pulse. See /api/statistics/env-flow-seasons
@@ -610,7 +610,7 @@ async def get_channels_seasonal(
 async def _fetch_channels_period_summary(pool, scenario_id: str, channel_id: Optional[str]) -> Dict[str, Any]:
     """
     Fetch period-of-record statistics from env_flow_channel_period_summary.
-    Acquires its own connection — safe to call concurrently via asyncio.gather.
+    Acquires its own connection.safe to call concurrently via asyncio.gather.
     """
     cache_key = f"period:{scenario_id}:{channel_id or ''}"
     if cache_key in _stats_cache:
@@ -624,7 +624,7 @@ async def _fetch_channels_period_summary(pool, scenario_id: str, channel_id: Opt
                 ps.simulation_end_year,
                 ps.total_months,
 
-                -- Metric 3 — flow alteration index
+                -- Metric 3.flow alteration index
                 ps.pearson_r,
                 ps.p_value,
 
@@ -705,7 +705,7 @@ async def get_channels_period_summary(
     ),
 ):
     """
-    Metric 3 — Flow alteration index (Pearson r) + full-period aggregates.
+    Metric 3.Flow alteration index (Pearson r) + full-period aggregates.
 
     pearson_r: Pearson correlation between monthly C_{reach} and UNIMP_{watershed}
     across the full 1,200-month period of record (WY 1922–2021).

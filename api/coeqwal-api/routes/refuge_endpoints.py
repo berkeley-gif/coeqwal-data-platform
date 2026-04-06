@@ -4,10 +4,10 @@ Wildlife Refuge Demand Unit Statistics API Endpoints.
 CalSim variable semantics:
   AWO_{DU_ID} = Applied Water Output = DEMAND (from SV input, TAF)
   DN_{DU_ID}  = Net Surface Water Delivery (from deliveries CSV, TAF)
-  Shortage    = max(demand - delivery, 0)  — derived, no native CalSim variable
+  Shortage    = max(demand - delivery, 0) .derived, no native CalSim variable
 
 Provides statistics for 18 wildlife refuge demand units:
-  - GET /api/statistics/refuge-demand-units           — list DUs + metadata
+  - GET /api/statistics/refuge-demand-units          .list DUs + metadata
   - GET /api/statistics/scenarios/{id}/refuge-demand-units/delivery-monthly
   - GET /api/statistics/scenarios/{id}/refuge-demand-units/shortage-monthly
   - GET /api/statistics/scenarios/{id}/refuge-demand-units/period-summary
@@ -68,7 +68,7 @@ async def list_refuge_demand_units(
     List wildlife refuge demand units.
 
     **Regions:** SAC (Sacramento), SJR (San Joaquin), TULARE
-    **CS3 types:** PR (Priority Refuge — CVP contract), NR (Non-priority Refuge — water rights)
+    **CS3 types:** PR (Priority Refuge.CVP contract), NR (Non-priority Refuge.water rights)
 
     Response:
     ```json

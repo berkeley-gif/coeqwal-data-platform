@@ -1,4 +1,4 @@
-# ETL statistics — Wildlife refuge delivery
+# ETL statistics.Wildlife refuge delivery
 
 Calculate delivery, shortage, and reliability statistics for the 18 wildlife refuge demand units
 defined in CalSim 3.
@@ -31,14 +31,14 @@ simulated years, the demand unit's shortage is at or below this value. A value o
 
 ## Data sources
 
-### 1. SV input CSV — demand (`AWO_{DU_ID}`)
+### 1. SV input CSV.demand (`AWO_{DU_ID}`)
 
 
 | Attribute         | Value                                                                            |
 | ----------------- | -------------------------------------------------------------------------------- |
 | S3 path           | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv` |
-| DSS variable name | `AWO_{DU_ID}` (Applied Water Output) — Part C = `APPLIED-WATER`                  |
-| Units             | TAF — **no conversion needed**                                                   |
+| DSS variable name | `AWO_{DU_ID}` (Applied Water Output).Part C = `APPLIED-WATER`                  |
+| Units             | TAF.**no conversion needed**                                                   |
 | Staging           | Extracted per scenario alongside the main CalSim output                          |
 
 
@@ -47,17 +47,17 @@ simulated years, the demand unit's shortage is at or below this value. A value o
 > in the staged SV CSV before running the ETL. See open questions below.
 
 The SV input is the **canonical demand source** because it represents the original applied water
-requirement fed into the model — prior to any optimization or delivery logic.
+requirement fed into the model.prior to any optimization or delivery logic.
 
-### 2. DV output — delivery (`DN_{DU_ID}`)
+### 2. DV output.delivery (`DN_{DU_ID}`)
 
 
 | Attribute         | Value                                                                                   |
 | ----------------- | --------------------------------------------------------------------------------------- |
 | S3 path           | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv`   |
-| DSS variable name | `DN_{DU_ID}` — Part C = `SW-DELIVERY-NET` (SAC) or `SW_DELIVERY-NET` (SJR/Tulare)       |
-| Units             | **CFS — conversion to TAF required** (see unit conversion section below)                |
-| Staging           | Extracted per scenario as part of the standard ETL trigger — no additional steps needed |
+| DSS variable name | `DN_{DU_ID}`.Part C = `SW-DELIVERY-NET` (SAC) or `SW_DELIVERY-NET` (SJR/Tulare)       |
+| Units             | **CFS.conversion to TAF required** (see unit conversion section below)                |
+| Staging           | Extracted per scenario as part of the standard ETL trigger.no additional steps needed |
 
 
 #### What is `coeqwal_calsim_output.csv`?
@@ -89,7 +89,7 @@ All 18 refuge `DN_{DU_ID}` delivery variables are **confirmed present** in the D
 #### How the ETL loader reads column names
 
 The CSV produced by `dss_to_csv.py` has **7 header rows** followed by data rows. No pandas
-column header is written — instead, DSS path parts are stored as data in the first 7 rows:
+column header is written.instead, DSS path parts are stored as data in the first 7 rows:
 
 ```
 Row 0  Part A:    CALSIM, CALSIM, ...
@@ -113,7 +113,7 @@ data_df = pd.read_csv(body, header=None, skiprows=7, low_memory=False)
 data_df.columns = col_names                       # columns are now just the variable names
 ```
 
-Column selection therefore uses **Part B only** — `DN_08N_PR1` — not a compound key.
+Column selection therefore uses **Part B only**.`DN_08N_PR1`.not a compound key.
 
 **Note on Part-C naming difference:** The DV DSC shows SAC units use `SW-DELIVERY-NET` (hyphen)
 and SJR/Tulare units use `SW_DELIVERY-NET` (underscore). This is a CalSim 3 naming inconsistency
@@ -124,7 +124,7 @@ but it does **not** affect column selection since the loader uses Part B names, 
 > for all scenarios** and is not used as the primary delivery source. It is useful only as a
 > reference for verifying unit conversion accuracy against pre-computed TAF values.
 
-### DSS date convention — period-beginning vs period-ending
+### DSS date convention.period-beginning vs period-ending
 
 CalSim DSS files use two different month-labelling conventions depending on the file type.
 Both must map to the same calendar month before any merge or calculation can occur.
@@ -148,7 +148,7 @@ those dates back by one day (`1920-11-01 to 1920-10-31`). End-of-month DV dates 
 After normalisation, both files yield October to WM=1 for the same model month, and the
 `WaterYear + WaterMonth` merge produces the expected row count (one row per month of record).
 
-> The raw date values in the CSV files are left unchanged — this normalisation is applied only
+> The raw date values in the CSV files are left unchanged.this normalisation is applied only
 > within the ETL at the point of water-year calendar derivation, never during DSStoCSV extraction.
 
 ---
@@ -182,7 +182,7 @@ The constant `0.001984` = `(1 ft³/s × 1 ac·ft / 43,560 ft³ × 86,400 s/day) 
 
 Water month 1 = October, water month 12 = September. Annual totals span October–September.
 
-### Metric 1 — Monthly delivery statistics
+### Metric 1.Monthly delivery statistics
 
 For each DU and each water month (1–12), across all simulated water years:
 
@@ -195,7 +195,7 @@ exc_p5 ... exc_p95                 = percentile(monthly_values, [95,90,75,50,25,
 sample_count                       = len(monthly_values)
 ```
 
-### Metric 2 — Monthly shortage statistics (TAF and %)
+### Metric 2.Monthly shortage statistics (TAF and %)
 
 Shortage is computed first, then bands are applied:
 
@@ -215,7 +215,7 @@ exc_p5..exc_p95        = percentile(monthly_shortage_taf, [95,90,75,50,25,10,5])
 
 `SHORTAGE_THRESHOLD_TAF = 0.1` (100 acre-feet) filters out floating-point precision artifacts.
 
-### Metric 3 — Period-of-record summary
+### Metric 3.Period-of-record summary
 
 ```python
 # Annual totals
@@ -232,7 +232,7 @@ annual_shortage_cv      = std(annual_shortage_taf) / mean(annual_shortage_taf)
 annual_shortage_pct_avg = mean(annual_shortage_pct)
 annual_shortage_pct_cv  = std(annual_shortage_pct) / mean(annual_shortage_pct)
 
-# Reliability — see open question #5 below
+# Reliability.see open question #5 below
 reliability_pct_95 = np.percentile(annual_shortage_pct, 95)
 
 # Exceedance percentiles for annual delivery
@@ -247,12 +247,12 @@ Two sets of summary statistics are stored for each distribution:
 
 ### Standard percentile bands (q columns)
 
-`q0, q10, q30, q50, q70, q90, q100` — cumulative distribution percentiles, ascending.
+`q0, q10, q30, q50, q70, q90, q100`.cumulative distribution percentiles, ascending.
 `q50` is the median; `q0` is the minimum; `q100` is the maximum.
 
 ### Exceedance percentiles (exc_p columns)
 
-`exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95` — **exceedance probabilities**.
+`exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95`.**exceedance probabilities**.
 
 > **Exceedance convention:** `exc_pX` is the value exceeded X% of the time, which equals the
 > `(100 − X)`th cumulative percentile. For example:
@@ -278,7 +278,7 @@ Monthly percentile bands for delivery. One row per `(scenario, du_id, water_mont
 | Column                | Type          | Description                                           |
 | --------------------- | ------------- | ----------------------------------------------------- |
 | `scenario_short_code` | VARCHAR(20)   | e.g., `s0020`                                         |
-| `du_id`               | VARCHAR(20)   | e.g., `08N_PR1` — references `du_refuge_entity.du_id` |
+| `du_id`               | VARCHAR(20)   | e.g., `08N_PR1`.references `du_refuge_entity.du_id` |
 | `water_month`         | INTEGER       | 1–12 (Oct=1, Sep=12)                                  |
 | `delivery_avg_taf`    | NUMERIC(10,2) | Mean delivery for this month across all years         |
 | `delivery_cv`         | NUMERIC(10,4) | CV of monthly delivery                                |
@@ -350,7 +350,7 @@ a separate lookup table should be created to support frontend display.
 **GW / SW flags:** The `gw` and `sw` boolean columns indicate whether each demand unit has access
 to groundwater and surface water respectively, as documented in CalSim 3 Main Report Tables 3-9
 and 3-10. These attributes should be surfaced in the frontend (tooltip or attribute panel) since
-they affect how delivery shortages should be interpreted — a GW-capable unit has a fallback supply
+they affect how delivery shortages should be interpreted.a GW-capable unit has a fallback supply
 that a SW-only unit does not.
 
 ### Sacramento River hydrologic region (Table 3-9)
@@ -385,7 +385,7 @@ that a SW-only unit does not.
 | `91_PR`  | Mendota WA                                                                | CDFW       | Reclamation water rights | -   | •   | Mendota Pool via Fresno Slough                                                                             |
 
 
-### Full CSV — `du_refuge_entity.csv`
+### Full CSV.`du_refuge_entity.csv`
 
 ```csv
 "DU_ID","WBA_ID","hydrologic_region","Dups","Class","CS3_Type","total_acres","polygon_count","refuge_or_wildlife_area","managed_by","provider","gw","sw","point_of_diversion_conveyance","source","model_source","has_gis_data"
@@ -411,7 +411,7 @@ that a SW-only unit does not.
 
 **Notes from CalSim 3 Main Report:**
 
-- `09_PR` encompasses Llano Seco Unit (CDFW) and Sacramento River NWR (USFWS) — two managing agencies
+- `09_PR` encompasses Llano Seco Unit (CDFW) and Sacramento River NWR (USFWS).two managing agencies
 - `17N_NR` is the only NR (non-priority) unit; represents private Butte Sink Duck Clubs (see open question #2)
 - `72_PR2` aggregates Kesterson NWR + Freitas Unit + Blue Goose Unit of San Luis NWR into a single DU
 - `72_PR3` aggregates San Luis Unit + West Bear Creek Unit of San Luis NWR
@@ -425,7 +425,7 @@ that a SW-only unit does not.
 ## Uploading entity data to the database
 
 The `du_refuge_entity` table must be created and seeded before the statistics ETL can run.
-Seed data is loaded directly from the repo via `\copy` — no S3 upload is required.
+Seed data is loaded directly from the repo via `\copy`.no S3 upload is required.
 Run from the repo root (Cloud9 or local with VPN):
 
 ```bash
@@ -472,7 +472,7 @@ All statistics in this module are derived from CalSim 3 model outputs for COEQWA
 | --------------- | ---------------------------------------------- | ----------------- | -------------------------------------------------- |
 | Demand (AWO_*)  | SV input (`*_coeqwal_sv_input.csv`)            | `APPLIED-WATER`   | Applied water requirement, TAF                     |
 | Delivery (DN_*) | Main DV output (`*_coeqwal_calsim_output.csv`) | `SW-DELIVERY-NET` | Net surface water delivery, CFS to converted to TAF |
-| Shortage        | Derived: `demand − delivery`                   | —                 | No native CalSim shortage variable for refuge DUs  |
+| Shortage        | Derived: `demand − delivery`                   |.                | No native CalSim shortage variable for refuge DUs  |
 
 
 The `created_by` field on all inserted rows is set to `2` (jfantauzza) to correctly attribute ETL-generated
@@ -507,7 +507,7 @@ data. See `database/scripts/sql/00_versioning/01_create_audit_trigger_function.s
   escriptive label or tooltip for these types (e.g., in a paragraph description or attribute
   anel), consider adding a `du_refuge_type` lookup table in the Layer 01 (lookup) schema. Would
   lso consolidate with any other `cs3_type` categorizations used in the model.
-7. **DV output variable availability — resolved**: All 18 `DN_{DU_ID}` variables are confirmed
+7. **DV output variable availability.resolved**: All 18 `DN_{DU_ID}` variables are confirmed
   present in the DV DSS for scenario s0020 and will be present in `*_coeqwal_calsim_output.csv`
    for all scenarios using the same CalSim 3 variable structure. No additional staging is needed.
 

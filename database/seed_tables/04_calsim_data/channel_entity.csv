@@ -638,7 +638,7 @@ C_YUB013,Yuba River,,Stream,2,1,1,,YUB013,YUB011,2724.39253730441,,,1,1,1,"{1,3,
 C_YUB022,Yuba River,,Stream,2,1,1,,YUB022,YUB014,13562.7358852987,,,1,1,1,"{1,3,4}",,,false,false,
 C_YUB024,Yuba River,,Stream,2,1,1,,YUB024,YUB023,858.66209053447,,,1,1,1,"{1,3,4}",,,false,false,
 C_YUB034,Yuba River/North Yuba River,,Stream,2,1,1,,YUB034,YUB030,5016.03052883004,,,1,1,1,"{1,3,4}",,,false,false,
-C_ISF001_OMR027,C_ISF001_OMR027,Interior SF Bay / Old-Middle River junction,Delta interior flow junction — Old River / Middle River confluence,2,1,1,DELTA,ISF001_OMR027,,,,,0,0,1,"{1,3,4}",,,false,false,stream
+C_ISF001_OMR027,C_ISF001_OMR027,Interior SF Bay / Old-Middle River junction,Delta interior flow junction.Old River / Middle River confluence,2,1,1,DELTA,ISF001_OMR027,,,,,0,0,1,"{1,3,4}",,,false,false,stream
 C_CAA003,C_CAA003,California Aqueduct at Harvey O. Banks PP,,2,1,1,SJR,CAA003,,,,,1,0,1,"{1,3,4}",,,false,false,canal
 C_CLV004,C_CLV004,Calaveras River,,2,1,1,SJR,CLV004,,,,,1,0,1,"{1,3,4}",,,false,false,canal
 C_DMC000,C_DMC000,Delta-Mendota Canal,,2,1,1,SJR,DMC000,,,,,1,0,1,"{1,3,4}",,,false,false,canal

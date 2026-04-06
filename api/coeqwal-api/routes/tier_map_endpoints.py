@@ -412,7 +412,7 @@ async def get_tier_map_data(
     try:
         # Step 1: Fetch tier locations without geometry so we know which tables to query.
         # This avoids referencing geometry tables (reservoirs, wba, compliance_stations)
-        # that may not yet be populated — PostgreSQL would fail at query planning time
+        # that may not yet be populated.PostgreSQL would fail at query planning time
         # even for CASE branches that are never executed.
         base_query = """
             SELECT

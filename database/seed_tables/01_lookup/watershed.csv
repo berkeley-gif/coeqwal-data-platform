@@ -1,8 +1,8 @@
 short_code,name,description,hydrologic_region_short_code,unimp_sv_variable,is_active
 BEAR_RIVER,Bear River Watershed,"Bear River drainage basin in the Sacramento River Basin, tributary to Feather River",SAC,,true
 CLEAR_CREEK,Clear Creek / Whiskeytown Watershed,"Clear Creek drainage above Whiskeytown Reservoir, tributary to Sacramento River below Shasta",SAC,UNIMP_WH,true
-SAC_LOWER,Sacramento River — Lower (at and below Bend Bridge),Sacramento River mainstem at and below Bend Bridge near Red Bluff,SAC,UNIMP_SRBB,true
-SAC_UPPER,Sacramento River — Upper (above Bend Bridge),Sacramento River mainstem above Bend Bridge; Shasta Reservoir inflow is the unimpaired reference,SAC,UNIMP_SHAS,true
+SAC_LOWER,Sacramento River.Lower (at and below Bend Bridge),Sacramento River mainstem at and below Bend Bridge near Red Bluff,SAC,UNIMP_SRBB,true
+SAC_UPPER,Sacramento River.Upper (above Bend Bridge),Sacramento River mainstem above Bend Bridge; Shasta Reservoir inflow is the unimpaired reference,SAC,UNIMP_SHAS,true
 SAN_JOAQUIN,San Joaquin River Hydrologic Region,"San Joaquin River mainstem and tributary drainage (Merced, Tuolumne, Stanislaus, Mokelumne excluded at sub-basin level)",SJR,UNIMP_SJ,true
 TRINITY_RIVER,Trinity River Watershed,"Trinity River drainage above Lewiston Reservoir, diversion source for the Sacramento basin",NC,UNIMP_TRIN,true
 UPPER_AMERICAN,Upper American River Watershed,Upper American River drainage above Folsom Reservoir,SAC,UNIMP_FOLS,true

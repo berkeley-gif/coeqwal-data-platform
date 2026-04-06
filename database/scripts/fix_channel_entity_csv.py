@@ -1,5 +1,5 @@
 """
-Fix channel_entity.csv — repair corrupted source_ids column.
+Fix channel_entity.csv.repair corrupted source_ids column.
 
 The CSV was generated with source_ids values like {1,3,4} written as unquoted
 multi-line quoted fields.  The effect is that csv.DictReader maps:
@@ -49,7 +49,7 @@ with open(INFILE, newline="", encoding="utf-8") as infile, \
     for row in reader:
         total += 1
 
-        # Drop ghost rows that have no network_arc_id — these are artefacts of
+        # Drop ghost rows that have no network_arc_id.these are artefacts of
         # the original multi-line source_ids CSV corruption.
         if not row.get("network_arc_id", "").strip():
             fixed += 1

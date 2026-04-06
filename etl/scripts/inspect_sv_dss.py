@@ -63,7 +63,7 @@ def main():
             except Exception as ex:
                 print(f"  ERROR reading: {ex}")
 
-        # Third: collision analysis — group by {a}_{b}_{c} and see what happens
+        # Third: collision analysis.group by {a}_{b}_{c} and see what happens
         print()
         print("=" * 80)
         print("COLLISION ANALYSIS")

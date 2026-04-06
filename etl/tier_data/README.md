@@ -1,4 +1,4 @@
-# ETL — Tier Outcome Results
+# ETL.Tier Outcome Results
 
 Loads tier outcome data for all active scenarios into the `tier_result` and
 `tier_location_result` database tables.
@@ -35,13 +35,13 @@ Each tier has a CSV file in `staging/` named by its short code. The formats diff
 | `DELTA_ECO.csv` | `Scenario` (numeric, e.g. `11` for `s0011`), `TierValue` |
 | `FW_DELTA_USES.csv` | `ScenarioID`, `Salinity_Tier` |
 | `FW_EXP.csv` | `Scenario`, `Salinity_Export_Tier` |
-| `WRC_SALMON_AB` | No CSV — hardcoded as tier 4 for all active scenarios except `s0065` |
+| `WRC_SALMON_AB` | No CSV.hardcoded as tier 4 for all active scenarios except `s0065` |
 
 NA cells in any CSV are skipped (no location row generated for that slot).
 
 ---
 
-## Workflow — loading new tier data
+## Workflow.loading new tier data
 
 ### 1. Update staging CSVs locally
 
@@ -65,7 +65,7 @@ cd ~/environment/coeqwal-backend
 git pull
 ```
 
-### 5. Dry run — verify counts
+### 5. Dry run.verify counts
 
 ```bash
 cd etl/tier_data
@@ -103,7 +103,7 @@ Check the two verification tables printed at the end:
 - `tier_result`: each tier should show `(active scenarios)` = count of non-retired
   scenarios, and `(total scenarios)` = active + any retired ones.
 - `tier_location_result`: row counts should match `location rows / scenario` × number
-  of active scenarios (plus any legacy rows from retired scenarios — these are harmless).
+  of active scenarios (plus any legacy rows from retired scenarios.these are harmless).
 
 ### 8. Update seed CSVs
 
@@ -138,7 +138,7 @@ Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back to
 ## Notes
 
 - `TIER_VERSION_ID = 8` is hardcoded throughout. Do not change without data team sign-off.
-- Both UPSERTs are safe to re-run — they use `ON CONFLICT DO UPDATE`.
+- Both UPSERTs are safe to re-run.they use `ON CONFLICT DO UPDATE`.
 - `tier_location_result` has no `is_active` column. Retired scenario rows remain in
   the table but are never surfaced because the API filters on `tier_result.is_active`.
 - `all_tiers.sql` is gitignored (generated output). Only the script and staging CSVs

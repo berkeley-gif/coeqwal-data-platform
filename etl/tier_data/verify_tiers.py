@@ -89,7 +89,7 @@ def normalize_scenario_id(raw) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CSV parsers — mirror load_all_tier_results.py logic
+# CSV parsers.mirror load_all_tier_results.py logic
 # ---------------------------------------------------------------------------
 
 
@@ -412,7 +412,7 @@ def main():
                 total_missing += 1
         print()
 
-    # WRC_SALMON_AB — hardcoded tier 4, s0065 excluded
+    # WRC_SALMON_AB.hardcoded tier 4, s0065 excluded
     if not args.tier or args.tier == "WRC_SALMON_AB":
         print(f"{'=' * 60}")
         print("TIER: WRC_SALMON_AB (single, hardcoded)")

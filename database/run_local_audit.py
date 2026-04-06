@@ -2,7 +2,7 @@
 """
 Local database audit runner
 ============================
-Wraps the Lambda audit logic for local / dev execution — no AWS infrastructure needed.
+Wraps the Lambda audit logic for local / dev execution.no AWS infrastructure needed.
 
 Connects to $DATABASE_URL, runs the full audit, and saves:
   - audits/audit_YYYYMMDD_HHMMSS.json   (complete audit report)

@@ -30,7 +30,7 @@ Parses the tree-format code blocks used in COEQWAL_SCENARIOS_DB_ERD.md:
     └── idx_other (col3)
     ```
 
-Usage — run from database/schema/:
+Usage.run from database/schema/:
 
     python ../audit/verify_erd_against_audit.py COEQWAL_SCENARIOS_DB_ERD.md ../audits/latest.json [--verbose] [--json]
 """
@@ -49,7 +49,7 @@ from pathlib import Path
 # System/extension tables never documented in the ERD
 _SYSTEM_TABLES = {'spatial_ref_sys'}
 
-# Indexes automatically created by PostgreSQL for PKs/unique constraints —
+# Indexes automatically created by PostgreSQL for PKs/unique constraints -
 # these appear in pg_indexes but don't need to be documented in the ERD.
 _AUTO_INDEX_PREFIXES = ('pg_',)
 
@@ -185,13 +185,13 @@ def load_audit_data(audit_path: Path) -> dict:
     Load actual database schema from audit JSON.
 
     Returns a namespace dict:
-      tables           — per-table detail (columns, counts, audit fields)
-      indexes          — list of {table_name, index_name, definition}
-      foreign_keys     — list of {table_name, column_name, ref_table, ref_column, …}
-      check_constraints — list of {table_name, constraint_name, check_clause}
-      unique_constraints — list of {table_name, constraint_name, columns}
-      versioning_system — versioning check output incl. validation sub-dict
-      has_structural_data — True if the enhanced Lambda was used
+      tables          .per-table detail (columns, counts, audit fields)
+      indexes         .list of {table_name, index_name, definition}
+      foreign_keys    .list of {table_name, column_name, ref_table, ref_column, …}
+      check_constraints.list of {table_name, constraint_name, check_clause}
+      unique_constraints.list of {table_name, constraint_name, columns}
+      versioning_system.versioning check output incl. validation sub-dict
+      has_structural_data.True if the enhanced Lambda was used
     """
     audit = json.loads(audit_path.read_text())
 
@@ -230,7 +230,7 @@ def _normalize_check(clause: str) -> str:
     """
     Normalize a CHECK clause for loose comparison.
 
-    PostgreSQL internally rewrites CHECK clauses — e.g. it:
+    PostgreSQL internally rewrites CHECK clauses.e.g. it:
       - Adds nested parentheses: ((col >= 1) AND (col <= 12))
       - Expands BETWEEN: col BETWEEN 1 AND 12 to col >= 1 AND col <= 12
 
