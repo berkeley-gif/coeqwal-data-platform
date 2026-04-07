@@ -63,7 +63,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
 try:
@@ -116,6 +116,8 @@ ETL_OPERATOR_ID = 2  # jfantauzza
 
 DELIVERY_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
+
+MIN_DENOM_CFS = 1.0  # floor for UNIMP/EFLOWS denominators to prevent blow-up ratios
 
 # ─── CEFF season definitions ──────────────────────────────────────────────────
 # season_id values match the sort_order seed in env_flow_season (migration 24).
@@ -452,14 +454,17 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _safe_cv(data: pd.Series) -> Optional[float]:
-    """Coefficient of variation; None when mean is zero or data is empty."""
+    """Coefficient of variation; None when mean is near-zero or data is empty."""
     arr = data.dropna().values
     if len(arr) == 0:
         return None
     mean = float(np.mean(arr))
-    if mean == 0:
+    if abs(mean) < CV_MIN_MEAN_TAF:
         return 0.0
-    return round(float(np.std(arr, ddof=1) / mean), 4)
+    cv = round(float(np.std(arr, ddof=1) / abs(mean)), 4)
+    if cv > 99.0:
+        return None
+    return cv
 
 
 def _round_or_none(value, ndigits: int = 3) -> Optional[float]:
@@ -598,10 +603,10 @@ def calculate_monthly_statistics(
 
             row["unimp_avg_cfs"] = _round_or_none(aligned_unimp.dropna().mean())
 
-            # pct_unimpaired per year; guard against zero denominator
+            # pct_unimpaired per year; guard against near-zero denominator
             with np.errstate(divide="ignore", invalid="ignore"):
                 pct_vals = np.where(
-                    aligned_unimp.values > 0,
+                    aligned_unimp.values >= MIN_DENOM_CFS,
                     (aligned_flow.values / aligned_unimp.values) * 100,
                     np.nan,
                 )
@@ -682,7 +687,7 @@ def calculate_seasonal_statistics(
         work["unimp"] = pd.to_numeric(work[unimp_sv_variable], errors="coerce")
         with np.errstate(divide="ignore", invalid="ignore"):
             work["pct_unimpaired"] = np.where(
-                work["unimp"] > 0,
+                work["unimp"] >= MIN_DENOM_CFS,
                 (work["flow"] / work["unimp"]) * 100,
                 np.nan,
             )
@@ -691,7 +696,7 @@ def calculate_seasonal_statistics(
         work["eflows"] = pd.to_numeric(work[eflows_var], errors="coerce")
         with np.errstate(divide="ignore", invalid="ignore"):
             work["pct_ff"] = np.where(
-                work["eflows"] > 0,
+                work["eflows"] >= MIN_DENOM_CFS,
                 (work["flow"] / work["eflows"]) * 100,
                 np.nan,
             )
@@ -847,7 +852,7 @@ def calculate_period_summary(
     # ── Metric 3: Pearson r ────────────────────────────────────────────────
     if has_unimp and HAS_SCIPY:
         unimp = pd.to_numeric(df[unimp_sv_variable], errors="coerce")
-        valid = (~flow.isna()) & (~unimp.isna()) & (unimp > 0)
+        valid = (~flow.isna()) & (~unimp.isna()) & (unimp >= MIN_DENOM_CFS)
         if valid.sum() >= 10:
             r, p = pearsonr(flow[valid].values, unimp[valid].values)
             result["pearson_r"] = _round_or_none(r, 4)
@@ -860,7 +865,7 @@ def calculate_period_summary(
         unimp = pd.to_numeric(df[unimp_sv_variable], errors="coerce")
         with np.errstate(divide="ignore", invalid="ignore"):
             pct = pd.Series(
-                np.where(unimp > 0, (flow / unimp) * 100, np.nan),
+                np.where(unimp >= MIN_DENOM_CFS, (flow / unimp) * 100, np.nan),
                 index=df.index,
             )
         result["avg_pct_unimpaired"] = _round_or_none(pct.dropna().mean())
@@ -876,10 +881,11 @@ def calculate_period_summary(
     # ── % Functional flows: avg and annual CV ─────────────────────────────
     if has_ef:
         eflows = pd.to_numeric(df[eflows_var], errors="coerce")
-        pct_ff = pd.Series(
-            np.where(eflows > 0, (flow / eflows) * 100, np.nan),
-            index=df.index,
-        )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            pct_ff = pd.Series(
+                np.where(eflows >= MIN_DENOM_CFS, (flow / eflows) * 100, np.nan),
+                index=df.index,
+            )
         result["avg_pct_ff"] = _round_or_none(pct_ff.dropna().mean())
 
         annual_ff = (

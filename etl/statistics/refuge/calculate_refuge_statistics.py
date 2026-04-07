@@ -44,6 +44,7 @@ Usage:
 
 import argparse
 import csv
+import io
 import json
 import logging
 import os
@@ -57,8 +58,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
+    CV_MIN_MEAN_TAF,
     parse_dss_csv_header,
-    deduplicate_columns,
     check_post_conversion_magnitude,
 )
 from scenarios import SCENARIOS  # noqa: E402
@@ -177,23 +178,20 @@ def load_refuge_demand_units(
 def _load_dv_columns(
     var_names: List[str],
     data_df: pd.DataFrame,
-    keep_indices: List[int],
 ) -> pd.DataFrame:
     """
     Extract the date column and all AW_* / DN_* refuge columns from the
-    deduplicated DV output DataFrame.
+    DV output DataFrame.
 
     CFS→TAF conversion is applied later in the orchestrator once DaysInMonth
     is available.
     """
-    data_df = data_df.iloc[:, keep_indices]
-    kept_names = [var_names[i] for i in keep_indices]
-    data_df.columns = kept_names
+    data_df.columns = var_names
 
-    date_col = kept_names[0]
+    date_col = var_names[0]
     refuge_ids = set(REFUGE_DU_IDS)
     cols_to_keep = [date_col]
-    for vname in kept_names[1:]:
+    for vname in var_names[1:]:
         suffix = None
         if vname.startswith("AW_"):
             suffix = vname[3:]
@@ -225,7 +223,7 @@ def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]
     """
     Load AW_* and DN_* refuge columns from the CalSim DV output on S3.
 
-    Uses shared header parsing and column deduplication from units.py.
+    Uses shared header parsing from units.py.
     Returns (data_df, units_map).  CFS→TAF conversion must be applied after
     add_water_year_month() supplies DaysInMonth.
     """
@@ -239,16 +237,12 @@ def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]
         try:
             log.info(f"Trying DV output: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            var_names, units_row = parse_dss_csv_header(response["Body"])
-            keep_indices, units_map = deduplicate_columns(
-                var_names, units_row, prefer_cfs=True
-            )
+            raw_bytes = response["Body"].read()
+            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            units_map = dict(zip(var_names, units_row))
 
-            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            data_df = pd.read_csv(
-                response["Body"], header=None, skiprows=7, low_memory=False
-            )
-            result = _load_dv_columns(var_names, data_df, keep_indices)
+            data_df = pd.read_csv(io.BytesIO(raw_bytes), header=None, skiprows=7, low_memory=False)
+            result = _load_dv_columns(var_names, data_df)
 
             kept_map = {c: units_map.get(c, "") for c in result.columns}
             return result, kept_map
@@ -275,10 +269,10 @@ def load_dv_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]
     """
     log.info(f"Loading DV output from file: {file_path}")
     var_names, units_row = parse_dss_csv_header(file_path)
-    keep_indices, units_map = deduplicate_columns(var_names, units_row, prefer_cfs=True)
+    units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    result = _load_dv_columns(var_names, data_df, keep_indices)
+    result = _load_dv_columns(var_names, data_df)
 
     kept_map = {c: units_map.get(c, "") for c in result.columns}
     return result, kept_map
@@ -338,11 +332,14 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _safe_cv(data: pd.Series) -> float:
-    """Coefficient of variation, returning 0 when mean is zero."""
+    """Coefficient of variation, returning 0 when mean is near-zero."""
     mean = float(data.mean())
-    if mean == 0:
+    if abs(mean) < CV_MIN_MEAN_TAF:
         return 0.0
-    return round(float(data.std() / mean), 4)
+    cv = round(float(data.std() / abs(mean)), 4)
+    if cv > 99.0:
+        return 0.0
+    return cv
 
 
 def _percentile_row(data: pd.Series, prefix: str = "") -> Dict[str, float]:

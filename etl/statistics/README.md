@@ -54,28 +54,178 @@ All six statistics modules must be run for a scenario to have complete data in t
 | `refuge` | `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary` | Production (added Feb 2026) |
 | `env_flows` | River flow metrics (% unimpaired, % functional flows, alteration index) | Production |
 
-### Backfill plan
+### Backfill status
 
-The intended approach is to build all ETL modules first, then perform one backfill pass
-across all scenarios rather than running partial passes as each module is completed.
-This avoids an extended intermediate state on the website where some data sections are
-populated and others are not.
+**Current state (April 2026):**
+- 76 scenarios have CSVs extracted in S3 (see `SCENARIOS` list in `scenarios.py`)
+- All 8 ETL modules are production-ready
+- Grand backfill is in progress (see "Running the ETL" below)
 
-**Current state (March 2026):**
-- 19 scenarios have CSVs extracted in S3 (see `SCENARIOS` list in `run_all.py`)
-- `s0045`, `s0046`, `s0065` extraction is pending
-- `s0035`, `s0036`, `s0037` are planned but not yet extracted
-- Refuge statistics (`run_all.py --only refuge`) have been backfilled for all 19 available scenarios
-- `env_flows` ETL is production-ready (requires `scipy` for Pearson r)
+### Running the ETL
 
-**Grand backfill command (run once `env_flows` is complete):**
+#### Prerequisites
+
+1. **Cloud9 environment** on EC2 (t3a.2xlarge recommended for 4 parallel workers)
+2. **IAM instance role** with S3 read access (see "AWS credentials" below)
+3. **DATABASE_URL** environment variable set to the PostgreSQL connection string
+4. **Python venv** activated: `source ~/environment/coeqwal-backend/venv/bin/activate`
+
+#### Single scenario
 
 ```bash
-# All modules, all available scenarios
-DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --all-scenarios
+cd ~/environment/coeqwal-backend/etl/statistics
+python run_all.py --scenario s0029
+```
 
-# Or selectively, e.g. only the new module for all scenarios:
-DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --all-scenarios --only env_flows
+#### Full batch run (all scenarios)
+
+```bash
+python run_all.py --all-scenarios --workers 4 --batch-size 20
+```
+
+#### Resuming after interruption
+
+The ETL uses DELETE+INSERT per module per scenario, so re-running a scenario is
+idempotent (safe to repeat). Use `--start-from` to skip already-completed scenarios:
+
+```bash
+python run_all.py --all-scenarios --workers 4 --batch-size 20 --start-from s0027
+```
+
+#### Key flags
+
+| Flag | Purpose |
+|------|---------|
+| `--workers N` | Parallel scenario processing. 4 recommended for t3a.2xlarge (32GB). |
+| `--batch-size N` | Process N scenarios per batch (for cleaner log output). |
+| `--start-from sXXXX` | Skip scenarios before this one (inclusive). For resuming partial runs. |
+| `--continue-on-error` | Don't stop on failure. Default is fail-fast. |
+| `--only module1,module2` | Run only specific modules (e.g. `--only reservoirs,ag`). |
+| `--dry-run` | Calculate but don't write to the database. |
+
+#### Using tmux for long runs
+
+Always run inside tmux so the process survives if your browser disconnects:
+
+```bash
+tmux new -s etl
+```
+
+If you get `server version is too old for client`, kill the stale server first:
+
+```bash
+tmux kill-server && tmux new -s etl
+```
+
+If tmux is not installed:
+
+```bash
+sudo yum install -y tmux
+```
+
+**Inside tmux**, activate the venv and run the ETL. Pipe to `tee` so output goes to
+both screen and a timestamped log file:
+
+```bash
+source ~/environment/coeqwal-backend/venv/bin/activate && cd ~/environment/coeqwal-backend/etl/statistics && python run_all.py --all-scenarios --workers 4 --batch-size 20 --start-from s0027 2>&1 | tee ~/environment/coeqwal-backend/etl_run_$(date +%Y%m%d_%H%M%S).log
+```
+
+**Detach** (walk away): press `Ctrl+B` then `D`. The process keeps running.
+
+**Reattach** (check back later): `tmux attach -t etl`
+
+#### Monitoring progress
+
+Reattach to tmux to see live output, or tail the log from a separate terminal:
+
+```bash
+tail -f ~/environment/coeqwal-backend/etl_run_*.log
+```
+
+Quick count of completed scenarios:
+
+```bash
+grep -c 'finished' ~/environment/coeqwal-backend/etl_run_*.log
+```
+
+**What to look for in the log:**
+
+| Log pattern | Meaning |
+|-------------|---------|
+| `[N/68] sXXXX finished` | Scenario completed all 8 modules |
+| `BATCH N/M: sXXXX .. sYYYY` | Starting a new batch |
+| `✅ Module Name completed successfully` | Individual module success |
+| `ABORTING` | ETL stopped due to an error (fail-fast mode) |
+| `FAILURE` | A specific module failed for a scenario |
+| `Traceback` | Python exception |
+| `Total wall-clock time: X.X minutes` | Run finished (success or partial) |
+
+#### Checking for errors
+
+```bash
+grep -E 'ABORTING|FAILURE|ERROR|Traceback' ~/environment/coeqwal-backend/etl_run_*.log
+```
+
+If this returns nothing, the run is either still going or completed cleanly.
+
+#### Confirming completion from the database
+
+Query the last module (delta) to see which scenarios have been processed:
+
+```bash
+psql $DATABASE_URL -c "SELECT DISTINCT scenario_short_code FROM delta_period_summary WHERE created_at >= '2026-04-07' ORDER BY 1;"
+```
+
+#### After completion
+
+The log ends with a **scorecard** showing pass/fail for every scenario × module, plus
+a CSV audit file (`stats_audit_*.csv`) written to the working directory.
+
+#### Resuming after a failure
+
+1. Check the log for the last `sXXXX finished` line to find the last completed scenario
+2. Look at `scenarios.py` to find the next scenario in order
+3. Re-run with `--start-from` set to the next scenario:
+
+```bash
+python run_all.py --all-scenarios --workers 4 --batch-size 20 --start-from sXXXX 2>&1 | tee ~/environment/coeqwal-backend/etl_resume_$(date +%Y%m%d_%H%M%S).log
+```
+
+### AWS credentials for S3 access
+
+The ETL reads CalSim CSVs from the `coeqwal-model-run` S3 bucket. Cloud9's default
+"AWS managed temporary credentials" expire with the user's SSO session, which can
+interrupt multi-hour ETL runs.
+
+**Solution: IAM instance role** (set up April 2026)
+
+The Cloud9 EC2 instance uses `AWSCloud9SSMAccessRole` with the `coeqwal-etl-s3-readonly`
+policy attached, granting `s3:GetObject` and `s3:ListBucket` on the `coeqwal-model-run`
+bucket. To use the instance role instead of SSO credentials:
+
+```bash
+# Disable Cloud9 managed credentials (one-time)
+aws cloud9 update-environment \
+  --environment-id 48dc921ad0fd48ea93c2a2e218bd8ace \
+  --managed-credentials-action DISABLE
+
+# Remove stale SSO credential file
+rm -f ~/.aws/credentials
+
+# Verify instance role is active
+aws sts get-caller-identity
+# Should show: assumed-role/AWSCloud9SSMAccessRole/...
+```
+
+If you re-authenticate your SSO session and Cloud9 re-enables managed credentials,
+repeat the commands above before starting the ETL.
+
+**To restore SSO credentials** for day-to-day work after the ETL:
+
+```bash
+aws cloud9 update-environment \
+  --environment-id 48dc921ad0fd48ea93c2a2e218bd8ace \
+  --managed-credentials-action ENABLE
 ```
 
 ### Website intermediate state
@@ -102,7 +252,7 @@ This has not been implemented yet. Until it is, the manual Cloud9 step is the wo
 When a new scenario ZIP is dropped in S3 and extraction completes, run:
 
 ```bash
-DATABASE_URL=$DATABASE_URL python etl/statistics/run_all.py --scenario {new_scenario_id}
+python run_all.py --scenario {new_scenario_id}
 ```
 
 ---
@@ -1189,15 +1339,14 @@ and can be adjusted without changing module code.
 
 ### Unit-aware CSV loading
 
-The V3 CalSim export pipeline sometimes produces CSVs with **duplicate columns** —
-the same variable name appearing once in CFS and once in a TAF block. The shared
-helpers `parse_dss_csv_header()` and `deduplicate_columns()` in `units.py`:
+The shared helper `parse_dss_csv_header()` in `units.py` reads the 7-row DSS
+header to extract variable names (row 1) and units (row 6).  Each loader builds
+a `units_map = dict(zip(var_names, units_row))` so the caller knows which
+columns are CFS vs TAF *before* applying any conversion.
 
-1. Read the 7-row DSS header to extract variable names (row 1) and units (row 6).
-2. When a variable appears twice, keep the CFS version (the ETL converts it) and
-   discard the TAF duplicate.
-3. Return a `units_map` dict so the caller knows which columns are CFS vs TAF
-   *before* applying any conversion.
+> **Note:** An earlier version included a `deduplicate_columns()` helper that
+> resolved duplicate CFS/TAF columns.  Diagnostics on the S3 CSVs confirmed
+> **zero duplicate columns**, so the deduplication logic was removed.
 
 ---
 
@@ -1284,14 +1433,14 @@ All implementations produce equivalent results for practical purposes.
 
 ### D. ETL Module Unit Handling Matrix
 
-| Module | Uses `parse_dss_csv_header`? | Uses `deduplicate_columns`? | Checks CSV header units? | CFS→TAF conversion? | `check_post_conversion_magnitude`? | Double-conversion risk? |
+| Module | Uses `parse_dss_csv_header`? | Builds `units_map`? | Checks CSV header units? | CFS→TAF conversion? | `check_post_conversion_magnitude`? | Double-conversion risk? |
 |--------|-------|-------|-------|-------|-------|-------|
 | **AG** | ✅ | ✅ | ✅ | ✅ CFS only | ✅ | None |
 | **Refuge** | ✅ | ✅ | ✅ | ✅ CFS only | ✅ | None |
 | **MI** | ✅ | ✅ | ✅ | ✅ CFS only (PERDV skipped) | ✅ | None |
 | **DU Urban** | ✅ | ✅ | ✅ | ✅ CFS only | ✅ | None (fixed March 2026) |
 | **Reservoir** | ❌ (own parser) | ❌ | ✅ (own check) | N/A (storage is TAF) | N/A | None |
-| **Env Flows** | ❌ (own parser) | ❌ (own dedup) | ✅ (SV only) | ✅ (volume output only) | ❌ | None |
+| **Env Flows** | ❌ (own parser) | ❌ | ✅ (SV only) | ✅ (volume output only) | ❌ | None |
 | **Delta** | ❌ (own parser) | ❌ (own dedup) | ❌ | ✅ (NDO only) | ❌ | None |
 | **CWS Aggregate** | ✅ | ✅ | ✅ | ✅ (unit-aware) | ✅ | None (fixed March 2026) |
 
@@ -1385,5 +1534,5 @@ not in the ETL. Documented here for reference.
 
 | # | Severity | Module | Issue | Status |
 |---|----------|--------|-------|--------|
-| 1 | **CRITICAL** | `du_urban/calculate_du_statistics.py` | No CFS→TAF conversion at all. All `*_taf` database columns contained CFS values. Did not import `units.py`, did not compute `DaysInMonth`, did not check CSV header units. | **FIXED** — now uses `parse_dss_csv_header`, `deduplicate_columns`, CFS→TAF conversion, and `check_post_conversion_magnitude` |
-| 2 | **HIGH** | `cws_aggregate/calculate_cws_aggregate_statistics.py` | Did not use `deduplicate_columns()`. V3 CSVs with both CFS and TAF versions of a column would pick TAF (last column wins), then the code unconditionally applied CFS→TAF conversion → double-conversion. No `check_post_conversion_magnitude` safeguard. | **FIXED** — now uses `parse_dss_csv_header`, `deduplicate_columns`, unit-aware `_to_taf()` helper, and `check_post_conversion_magnitude` |
+| 1 | **CRITICAL** | `du_urban/calculate_du_statistics.py` | No CFS→TAF conversion at all. All `*_taf` database columns contained CFS values. Did not import `units.py`, did not compute `DaysInMonth`, did not check CSV header units. | **FIXED** — now uses `parse_dss_csv_header`, unit-aware CFS→TAF conversion, and `check_post_conversion_magnitude` |
+| 2 | **HIGH** | `cws_aggregate/calculate_cws_aggregate_statistics.py` | Unconditionally applied CFS→TAF conversion without checking declared units. No `check_post_conversion_magnitude` safeguard. | **FIXED** — now uses `parse_dss_csv_header`, unit-aware `_to_taf()` helper, and `check_post_conversion_magnitude` |

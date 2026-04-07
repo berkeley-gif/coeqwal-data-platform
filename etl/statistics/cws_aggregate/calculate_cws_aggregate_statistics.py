@@ -29,9 +29,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
+    CV_MIN_MEAN_TAF,
     MWD_TABLE_A_ANNUAL_TAF,
     check_post_conversion_magnitude,
-    deduplicate_columns,
     parse_dss_csv_header,
 )
 from scenarios import SCENARIOS  # noqa: E402
@@ -132,7 +132,7 @@ CWS_AGGREGATES = {
 
 
 def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    """Load CalSim output CSV from S3 bucket with deduplication.
+    """Load CalSim output CSV from S3 bucket.
 
     Returns (DataFrame, units_map) where units_map maps column names to declared units.
     """
@@ -155,17 +155,10 @@ def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, s
             raw_bytes = response["Body"].read()
 
             var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
-            keep_indices, units_map = deduplicate_columns(
-                var_names, units_row, prefer_cfs=True
-            )
+            units_map = dict(zip(var_names, units_row))
 
             data_df = pd.read_csv(io.BytesIO(raw_bytes), header=None, skiprows=7)
-            data_df = data_df.iloc[:, keep_indices]
-            data_df.columns = [var_names[i] for i in keep_indices]
-
-            n_dupes = len(var_names) - len(keep_indices)
-            if n_dupes > 0:
-                log.info(f"Deduplicated {n_dupes} duplicate columns")
+            data_df.columns = var_names
 
             log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df, units_map
@@ -181,26 +174,19 @@ def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, s
 
 def load_calsim_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
-    Load CalSim output CSV from local file with deduplication.
+    Load CalSim output CSV from local file.
 
     Handles the 7-header-row DSS format.
-    Uses parse_dss_csv_header + deduplicate_columns to safely handle
-    V3 CSVs that may contain both CFS and TAF versions of a column.
 
     Returns (DataFrame, units_map) where units_map maps column names to declared units.
     """
     log.info(f"Loading from file: {file_path}")
 
     var_names, units_row = parse_dss_csv_header(file_path)
-    keep_indices, units_map = deduplicate_columns(var_names, units_row, prefer_cfs=True)
+    units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = data_df.iloc[:, keep_indices]
-    data_df.columns = [var_names[i] for i in keep_indices]
-
-    n_dupes = len(var_names) - len(keep_indices)
-    if n_dupes > 0:
-        log.info(f"Deduplicated {n_dupes} duplicate columns")
+    data_df.columns = var_names
 
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, units_map
@@ -299,7 +285,7 @@ def calculate_aggregate_monthly(
     if has_shortage:
         df["shortage_taf"] = _to_taf(
             df[shortage_var], shortage_var, units_map, df["DaysInMonth"]
-        )
+        ).clip(lower=0)
 
     # Safeguard: check converted TAF values for plausible magnitudes
     taf_cols_to_check = ["delivery_taf"]
@@ -320,7 +306,7 @@ def calculate_aggregate_monthly(
             "water_month": 0,
             "delivery_avg_taf": round(float(delivery_data.mean()), 2),
             "delivery_cv": round(float(delivery_data.std() / delivery_data.mean()), 4)
-            if delivery_data.mean() > 0
+            if delivery_data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "sample_count": len(delivery_data),
         }
@@ -340,7 +326,7 @@ def calculate_aggregate_monthly(
             row["shortage_avg_taf"] = round(float(shortage_data.mean()), 2)
             row["shortage_cv"] = (
                 round(float(shortage_data.std() / shortage_data.mean()), 4)
-                if shortage_data.mean() > 0
+                if shortage_data.mean() > CV_MIN_MEAN_TAF
                 else 0
             )
             row["shortage_frequency_pct"] = round(
@@ -399,7 +385,7 @@ def calculate_aggregate_monthly(
                 "delivery_cv": round(
                     float(delivery_data.std() / delivery_data.mean()), 4
                 )
-                if delivery_data.mean() > 0
+                if delivery_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "sample_count": len(delivery_data),
             }
@@ -419,7 +405,7 @@ def calculate_aggregate_monthly(
                 row["shortage_avg_taf"] = round(float(shortage_data.mean()), 2)
                 row["shortage_cv"] = (
                     round(float(shortage_data.std() / shortage_data.mean()), 4)
-                    if shortage_data.mean() > 0
+                    if shortage_data.mean() > CV_MIN_MEAN_TAF
                     else 0
                 )
                 row["shortage_frequency_pct"] = round(
@@ -523,7 +509,7 @@ def calculate_aggregate_period_summary(
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
     result["annual_delivery_cv"] = (
         round(float(annual_delivery.std() / annual_delivery.mean()), 4)
-        if annual_delivery.mean() > 0
+        if annual_delivery.mean() > CV_MIN_MEAN_TAF
         else 0
     )
     result["annual_delivery_min_taf"] = round(float(annual_delivery.min()), 2)
@@ -540,7 +526,7 @@ def calculate_aggregate_period_summary(
     if has_shortage:
         df["shortage_taf"] = _to_taf(
             df[shortage_var], shortage_var, units_map, df["DaysInMonth"]
-        )
+        ).clip(lower=0)
         annual_shortage = df.groupby("WaterYear")["shortage_taf"].sum()
         # Use threshold to filter out floating-point noise from CalSim solver
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()

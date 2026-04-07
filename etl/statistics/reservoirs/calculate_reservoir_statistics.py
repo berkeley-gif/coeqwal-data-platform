@@ -378,14 +378,13 @@ def calculate_storage_monthly(
 
         # Calculate statistics
         mean_taf = float(month_data.mean())
-        std_taf = float(month_data.std())
-        cv = std_taf / mean_taf if mean_taf > 0 else 0
+        cv = calculate_cv(month_data)
 
         row = {
             "water_month": wm,
             "storage_avg_taf": round(mean_taf, 2),
             "storage_cv": round(cv, 4),
-            "storage_pct_capacity": round((mean_taf / capacity_taf) * 100, 2),
+            "storage_pct_capacity": round((mean_taf / capacity_taf) * 100, 2) if capacity_taf > 0 else 0,
             "capacity_taf": capacity_taf,
             "sample_count": len(month_data),
         }
@@ -393,7 +392,7 @@ def calculate_storage_monthly(
         # Add percentiles in both units
         for p in STORAGE_PERCENTILES:
             taf_value = float(np.percentile(month_data, p))
-            pct_value = (taf_value / capacity_taf) * 100
+            pct_value = (taf_value / capacity_taf) * 100 if capacity_taf > 0 else 0
 
             row[f"q{p}"] = round(pct_value, 2)  # Percent of capacity
             row[f"q{p}_taf"] = round(taf_value, 2)  # TAF
@@ -402,7 +401,7 @@ def calculate_storage_monthly(
         # exc_pX = "value exceeded X% of the time" = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
             taf_value = float(np.percentile(month_data, 100 - p))
-            pct_value = (taf_value / capacity_taf) * 100
+            pct_value = (taf_value / capacity_taf) * 100 if capacity_taf > 0 else 0
 
             row[f"exc_p{p}"] = round(pct_value, 2)  # Percent of capacity
             row[f"exc_p{p}_taf"] = round(taf_value, 2)  # TAF
@@ -476,7 +475,7 @@ def calculate_spill_monthly(
             else 0,
         }
 
-        if spill_count > 0:
+        if spill_count > 0 and capacity_taf > 0:
             flood_storage = month_storage[month_at_flood]
             row["storage_at_spill_avg_pct"] = round(
                 (flood_storage.mean() / capacity_taf) * 100, 2
@@ -518,7 +517,7 @@ def calculate_period_summary(
     # ========== Storage Exceedance ==========
     storage_data = df[storage_col].dropna()
     if not storage_data.empty:
-        storage_pct = (storage_data / capacity_taf) * 100
+        storage_pct = (storage_data / capacity_taf) * 100 if capacity_taf > 0 else storage_data * 0
 
         # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
@@ -548,7 +547,11 @@ def calculate_period_summary(
         spill_years = int(annual_spill.sum())
 
         result["spill_years_count"] = spill_years
-        result["spill_frequency_pct"] = round((spill_years / len(water_years)) * 100, 2)
+        result["spill_frequency_pct"] = (
+            round((spill_years / len(water_years)) * 100, 2)
+            if len(water_years) > 0
+            else 0
+        )
 
         # Monthly frequency (overall)
         total_months = len(at_flood)
@@ -559,7 +562,7 @@ def calculate_period_summary(
 
         # Storage level when at flood control
         flood_storage = storage[at_flood]
-        if not flood_storage.empty:
+        if not flood_storage.empty and capacity_taf > 0:
             result["spill_threshold_pct"] = round(
                 (flood_storage.mean() / capacity_taf) * 100, 2
             )

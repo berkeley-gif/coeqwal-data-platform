@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional imports
@@ -148,7 +148,7 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
         Row 3 (E): Time step
         Row 4 (F): Level
         Row 5 (type): Type
-        Row 6 (units): Units
+        Row 6 (units): Units (CFS, TAF, etc.)
         Row 7+: Data
 
     Returns:
@@ -156,38 +156,15 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
     """
     log.info(f"Loading CSV: {file_path}")
 
-    # Read header rows to get variable names (row B = row 1)
     header_df = pd.read_csv(file_path, header=None, nrows=7)
-    var_names = header_df.iloc[1].tolist()  # Row B has variable names
+    var_names = [str(v) for v in header_df.iloc[1].tolist()]
 
-    # Read data portion (skip 7 header rows)
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-
-    # Set simple column names (avoid multi-index issues)
-    data_df.columns = range(len(data_df.columns))
-
-    # Create a mapping from variable name to column index
-    var_to_idx = {}
-    for idx, var in enumerate(var_names):
-        if var not in var_to_idx:  # First occurrence wins
-            var_to_idx[var] = idx
-
-    # Create column names, handling duplicates by appending index
-    col_names = []
-    seen = {}
-    for idx, var in enumerate(var_names):
-        if var in seen:
-            col_names.append(f"{var}_{seen[var]}")
-            seen[var] += 1
-        else:
-            col_names.append(var)
-            seen[var] = 1
-
-    data_df.columns = col_names
+    data_df.columns = var_names
 
     # First column is date
-    date_col = col_names[0]
-    data_df["DateTime"] = pd.to_datetime(data_df[date_col], errors="coerce")
+    first_col = data_df.columns[0]
+    data_df["DateTime"] = pd.to_datetime(data_df[first_col], errors="coerce")
 
     log.info(f"Loaded {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, var_names
@@ -402,6 +379,8 @@ def calculate_du_statistics(
     # This filters out floating-point precision artifacts from CalSim's linear programming solver.
     SHORTAGE_THRESHOLD_TAF = 0.1
 
+    # CV_MIN_MEAN_TAF imported from units.py
+
     processed = 0
     skipped = 0
 
@@ -420,12 +399,21 @@ def calculate_du_statistics(
             delivery_cfs = get_column_value(output_df, delivery_var)
 
         delivery = delivery_cfs * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        delivery = delivery.clip(lower=0)
 
         # Compute demand using the appropriate mode for this DU
         demand = compute_demand_for_du(output_df, sv_df, mapping)
 
         shortage_cfs = get_column_value(output_df, shortage_var)
         shortage = shortage_cfs * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        # Clamp: shortage is non-negative by definition; CalSim LP solver can
+        # produce tiny negative values as numerical noise.
+        n_neg = (shortage < 0).sum()
+        if n_neg > 0:
+            log.debug(
+                f"{du_id}: clamped {n_neg} negative shortage values to 0 (LP noise)"
+            )
+        shortage = shortage.clip(lower=0)
 
         if delivery.isna().all() and demand.isna().all():
             log.debug(f"Skipping {du_id}: no delivery or demand data")
@@ -461,7 +449,7 @@ def calculate_du_statistics(
                 row["delivery_avg_taf"] = round(float(del_month.mean()), 2)
                 row["delivery_cv"] = (
                     round(float(del_month.std() / del_month.mean()), 4)
-                    if del_month.mean() > 0
+                    if del_month.mean() > CV_MIN_MEAN_TAF
                     else 0
                 )
                 # Percentiles use q0, q10, etc. not delivery_q0
@@ -499,7 +487,7 @@ def calculate_du_statistics(
                 shortage_row["shortage_avg_taf"] = round(float(short_month.mean()), 2)
                 shortage_row["shortage_cv"] = (
                     round(float(short_month.std() / short_month.mean()), 4)
-                    if short_month.mean() > 0
+                    if short_month.mean() > CV_MIN_MEAN_TAF
                     else 0
                 )
                 # Frequency: percentage of months with shortage above threshold
@@ -561,7 +549,9 @@ def calculate_du_statistics(
         if not ad.empty:
             summary["annual_delivery_avg_taf"] = round(float(ad.mean()), 2)
             summary["annual_delivery_cv"] = (
-                round(float(ad.std() / ad.mean()), 4) if ad.mean() > 0 else 0
+                round(float(ad.std() / ad.mean()), 4)
+                if ad.mean() > CV_MIN_MEAN_TAF
+                else 0
             )
             # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
@@ -592,7 +582,8 @@ def calculate_du_statistics(
         if not ad.empty and not adm.empty:
             common_years = ad.index.intersection(adm.index)
             if len(common_years) > 0:
-                pct_met = (ad[common_years] / adm[common_years]) * 100
+                safe_adm = adm[common_years].replace(0, np.nan)
+                pct_met = (ad[common_years] / safe_adm) * 100
                 pct_met = np.clip(pct_met, 0, 100)
                 pct_met = pct_met.dropna()
                 if len(pct_met) > 0:

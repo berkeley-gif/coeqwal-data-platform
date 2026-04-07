@@ -5,7 +5,7 @@ Calculate delivery statistics for urban demand units (tier matrix DUs).
 Approach:
 1. Read tier matrix to get list of 71 DU_IDs
 2. Read CalSim output CSV from S3 (DSS format with 7 header rows)
-3. Deduplicate columns and parse header units (CFS/TAF)
+3. Parse header units (CFS/TAF)
 4. Map DU_IDs to column names (DN_*, D_*, GP_*)
 5. Convert CFS columns to TAF using DaysInMonth × CFS_TO_TAF_PER_DAY
 6. Calculate statistics (percentiles, averages, etc.)
@@ -37,7 +37,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
     check_post_conversion_magnitude,
-    deduplicate_columns,
     parse_dss_csv_header,
 )
 
@@ -251,8 +250,6 @@ def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, s
     Load CalSim output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
-    Deduplicates columns (preferring CFS) so that V3 CSVs with both
-    CFS and TAF versions of a column are handled correctly.
 
     Returns:
         (DataFrame, units_map) where units_map maps column names to declared units
@@ -278,17 +275,10 @@ def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, s
             raw_bytes = response["Body"].read()
 
             var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
-            keep_indices, units_map = deduplicate_columns(
-                var_names, units_row, prefer_cfs=True
-            )
+            units_map = dict(zip(var_names, units_row))
 
             data_df = pd.read_csv(io.BytesIO(raw_bytes), header=None, skiprows=7)
-            data_df = data_df.iloc[:, keep_indices]
-            data_df.columns = [var_names[i] for i in keep_indices]
-
-            n_dupes = len(var_names) - len(keep_indices)
-            if n_dupes > 0:
-                log.info(f"Deduplicated {n_dupes} duplicate columns")
+            data_df.columns = var_names
 
             log.info(
                 f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns"
@@ -309,7 +299,6 @@ def load_calsim_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, s
     Load CalSim output CSV from local file.
 
     Handles the DSS export format with 7 header rows.
-    Deduplicates columns (preferring CFS) to avoid double-conversion.
 
     Returns:
         (DataFrame, units_map) where units_map maps column names to declared units
@@ -317,15 +306,10 @@ def load_calsim_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, s
     log.info(f"Loading from file: {file_path}")
 
     var_names, units_row = parse_dss_csv_header(file_path)
-    keep_indices, units_map = deduplicate_columns(var_names, units_row, prefer_cfs=True)
+    units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = data_df.iloc[:, keep_indices]
-    data_df.columns = [var_names[i] for i in keep_indices]
-
-    n_dupes = len(var_names) - len(keep_indices)
-    if n_dupes > 0:
-        log.info(f"Deduplicated {n_dupes} duplicate columns")
+    data_df.columns = var_names
 
     log.info(
         f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns"

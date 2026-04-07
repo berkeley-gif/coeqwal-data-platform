@@ -43,6 +43,7 @@ Usage:
 
 import argparse
 import csv
+import io
 import json
 import logging
 import os
@@ -56,8 +57,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
+    CV_MIN_MEAN_TAF,
     parse_dss_csv_header,
-    deduplicate_columns,
     safe_pct,
     validate_water_balance,
     check_post_conversion_magnitude,
@@ -257,8 +258,6 @@ def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]
     Load CalSim DV output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
-    Deduplicates columns when both CFS and TAF versions exist
-    (V3 CSVs run through ``convert_all_cfs_to_taf``).
 
     Returns (data_df, units_map) where *units_map* maps each column
     name to its declared unit string (e.g. ``"CFS"``, ``"TAF"``).
@@ -275,24 +274,16 @@ def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            var_names, units_row = parse_dss_csv_header(response["Body"])
+            raw_bytes = response["Body"].read()
 
-            keep_indices, units_map = deduplicate_columns(
-                var_names,
-                units_row,
-                prefer_cfs=True,
-            )
+            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            units_map = dict(zip(var_names, units_row))
 
-            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             data_df = pd.read_csv(
-                response["Body"], header=None, skiprows=7, low_memory=False
+                io.BytesIO(raw_bytes), header=None, skiprows=7, low_memory=False
             )
-            data_df = data_df.iloc[:, keep_indices]
-            data_df.columns = [var_names[i] for i in keep_indices]
+            data_df.columns = var_names
 
-            n_dupes = len(var_names) - len(keep_indices)
-            if n_dupes:
-                log.info(f"Deduplicated {n_dupes} duplicate columns in DV CSV")
             log.info(f"Loaded DV: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df, units_map
 
@@ -312,20 +303,11 @@ def load_dv_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]
     """
     log.info(f"Loading DV from file: {file_path}")
     var_names, units_row = parse_dss_csv_header(file_path)
-
-    keep_indices, units_map = deduplicate_columns(
-        var_names,
-        units_row,
-        prefer_cfs=True,
-    )
+    units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = data_df.iloc[:, keep_indices]
-    data_df.columns = [var_names[i] for i in keep_indices]
+    data_df.columns = var_names
 
-    n_dupes = len(var_names) - len(keep_indices)
-    if n_dupes:
-        log.info(f"Deduplicated {n_dupes} duplicate columns in DV CSV")
     log.info(f"Loaded DV: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, units_map
 
@@ -399,7 +381,7 @@ def calculate_du_demand_monthly(
             "water_month": 0,
             "demand_avg_taf": round(float(data.mean()), 2),
             "demand_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "sample_count": len(data),
         }
@@ -423,7 +405,7 @@ def calculate_du_demand_monthly(
                 "water_month": wm,
                 "demand_avg_taf": round(float(month_data.mean()), 2),
                 "demand_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "sample_count": len(month_data),
             }
@@ -474,7 +456,7 @@ def calculate_du_sw_delivery_monthly(
             "water_month": 0,
             "sw_delivery_avg_taf": round(float(data.mean()), 2),
             "sw_delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "sample_count": len(data),
         }
@@ -498,7 +480,7 @@ def calculate_du_sw_delivery_monthly(
                 "water_month": wm,
                 "sw_delivery_avg_taf": round(float(month_data.mean()), 2),
                 "sw_delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "sample_count": len(month_data),
             }
@@ -570,7 +552,7 @@ def calculate_du_gw_pumping_monthly(
             "water_month": 0,
             "gw_pumping_avg_taf": round(float(data.mean()), 2),
             "gw_pumping_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "is_calculated": is_calculated,
             "sample_count": len(data),
@@ -595,7 +577,7 @@ def calculate_du_gw_pumping_monthly(
                 "water_month": wm,
                 "gw_pumping_avg_taf": round(float(month_data.mean()), 2),
                 "gw_pumping_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "is_calculated": is_calculated,
                 "sample_count": len(month_data),
@@ -653,7 +635,9 @@ def calculate_du_shortage_monthly(
         return []
 
     df_copy = df.copy()
-    df_copy["shortage"] = df_copy[shortage_var]
+    df_copy["shortage"] = pd.to_numeric(
+        df_copy[shortage_var], errors="coerce"
+    ).clip(lower=0)
 
     if demand_var in df.columns:
         df_copy["demand"] = df_copy[demand_var]
@@ -684,7 +668,7 @@ def calculate_du_shortage_monthly(
             "water_month": 0,
             "shortage_avg_taf": round(float(shortage_data.mean()), 2),
             "shortage_cv": round(float(shortage_data.std() / shortage_data.mean()), 4)
-            if shortage_data.mean() > 0
+            if shortage_data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "shortage_frequency_pct": round(
                 (shortage_count / len(shortage_data)) * 100, 2
@@ -726,7 +710,7 @@ def calculate_du_shortage_monthly(
                 "shortage_cv": round(
                     float(shortage_data.std() / shortage_data.mean()), 4
                 )
-                if shortage_data.mean() > 0
+                if shortage_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "shortage_frequency_pct": round(
                     (shortage_count / len(shortage_data)) * 100, 2
@@ -797,7 +781,7 @@ def calculate_du_period_summary(
     # Annual DEMAND statistics (from DV AW_*)
     annual_demand = df_copy.groupby("WaterYear")["demand"].sum()
     result["annual_demand_avg_taf"] = round(float(annual_demand.mean()), 2)
-    if annual_demand.mean() > 0:
+    if annual_demand.mean() > CV_MIN_MEAN_TAF:
         result["annual_demand_cv"] = round(
             float(annual_demand.std() / annual_demand.mean()), 4
         )
@@ -812,7 +796,7 @@ def calculate_du_period_summary(
     # Annual SW DELIVERY statistics (from DV DN_*)
     annual_sw_delivery = df_copy.groupby("WaterYear")["sw_delivery"].sum()
     result["annual_sw_delivery_avg_taf"] = round(float(annual_sw_delivery.mean()), 2)
-    if annual_sw_delivery.mean() > 0:
+    if annual_sw_delivery.mean() > CV_MIN_MEAN_TAF:
         result["annual_sw_delivery_cv"] = round(
             float(annual_sw_delivery.std() / annual_sw_delivery.mean()), 4
         )
@@ -827,7 +811,7 @@ def calculate_du_period_summary(
     # Annual GW PUMPING statistics (from GP_* or calculated)
     annual_gw_pumping = df_copy.groupby("WaterYear")["gw_pumping"].sum()
     result["annual_gw_pumping_avg_taf"] = round(float(annual_gw_pumping.mean()), 2)
-    if annual_gw_pumping.mean() > 0:
+    if annual_gw_pumping.mean() > CV_MIN_MEAN_TAF:
         result["annual_gw_pumping_cv"] = round(
             float(annual_gw_pumping.std() / annual_gw_pumping.mean()), 4
         )
@@ -854,7 +838,9 @@ def calculate_du_period_summary(
     has_shortage = shortage_var is not None
 
     if has_shortage:
-        df_copy["shortage"] = df_copy[shortage_var]
+        df_copy["shortage"] = pd.to_numeric(
+            df_copy[shortage_var], errors="coerce"
+        ).clip(lower=0)
         annual_shortage = df_copy.groupby("WaterYear")["shortage"].sum()
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 
@@ -925,7 +911,9 @@ def calculate_aggregate_monthly(
 
     has_shortage = shortage_var and shortage_var in df.columns
     if has_shortage:
-        df_copy["shortage"] = df_copy[shortage_var]
+        df_copy["shortage"] = pd.to_numeric(
+            df_copy[shortage_var], errors="coerce"
+        ).clip(lower=0)
 
     results = []
     is_annual = (df_copy["WaterMonth"] == 0).all()
@@ -940,7 +928,7 @@ def calculate_aggregate_monthly(
             "water_month": 0,
             "delivery_avg_taf": round(float(data.mean()), 2),
             "delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "sample_count": len(data),
         }
@@ -959,7 +947,7 @@ def calculate_aggregate_monthly(
                 row["shortage_avg_taf"] = round(float(shortage_data.mean()), 2)
                 row["shortage_cv"] = (
                     round(float(shortage_data.std() / shortage_data.mean()), 4)
-                    if shortage_data.mean() > 0
+                    if shortage_data.mean() > CV_MIN_MEAN_TAF
                     else 0
                 )
                 # Use threshold to filter floating-point noise
@@ -984,7 +972,7 @@ def calculate_aggregate_monthly(
                 "water_month": wm,
                 "delivery_avg_taf": round(float(month_data.mean()), 2),
                 "delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "sample_count": len(month_data),
             }
@@ -1005,7 +993,7 @@ def calculate_aggregate_monthly(
                     row["shortage_avg_taf"] = round(float(shortage_month.mean()), 2)
                     row["shortage_cv"] = (
                         round(float(shortage_month.std() / shortage_month.mean()), 4)
-                        if shortage_month.mean() > 0
+                        if shortage_month.mean() > CV_MIN_MEAN_TAF
                         else 0
                     )
                     # Use threshold to filter floating-point noise
@@ -1042,7 +1030,9 @@ def calculate_aggregate_period_summary(
 
     has_shortage = shortage_var and shortage_var in df.columns
     if has_shortage:
-        df_copy["shortage"] = df_copy[shortage_var]
+        df_copy["shortage"] = pd.to_numeric(
+            df_copy[shortage_var], errors="coerce"
+        ).clip(lower=0)
 
     water_years = sorted(df_copy["WaterYear"].unique())
 
@@ -1055,7 +1045,7 @@ def calculate_aggregate_period_summary(
 
     annual_delivery = df_copy.groupby("WaterYear")["delivery"].sum()
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
-    if annual_delivery.mean() > 0:
+    if annual_delivery.mean() > CV_MIN_MEAN_TAF:
         result["annual_delivery_cv"] = round(
             float(annual_delivery.std() / annual_delivery.mean()), 4
         )

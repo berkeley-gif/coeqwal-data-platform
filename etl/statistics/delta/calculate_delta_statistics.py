@@ -43,7 +43,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF  # noqa: E402
 
 try:
     import boto3
@@ -248,9 +248,12 @@ def _safe_cv(data: pd.Series) -> Optional[float]:
     if len(arr) == 0:
         return None
     mean = float(np.mean(arr))
-    if mean == 0:
+    if abs(mean) < CV_MIN_MEAN_TAF:
         return None
-    return round(float(np.std(arr, ddof=1) / mean), 4)
+    cv = round(float(np.std(arr, ddof=1) / abs(mean)), 4)
+    if cv > 99.0:
+        return None
+    return cv
 
 
 def _percentiles(
@@ -458,7 +461,11 @@ def calculate_delta_period_summary(
             ("mid", 1600),
             ("low", 900),
         ]:
-            exceed_pct = (all_data > threshold_val).sum() / len(all_data) * 100
+            exceed_pct = (
+                (all_data > threshold_val).sum() / len(all_data) * 100
+                if len(all_data) > 0
+                else 0
+            )
             result[f"exceed_{threshold_name}_pct"] = round(float(exceed_pct), 2)
 
     return result

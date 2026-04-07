@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import csv
+import io
 import json
 import logging
 import os
@@ -31,9 +32,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
+    CV_MIN_MEAN_TAF,
     MWD_TABLE_A_ANNUAL_TAF,
     parse_dss_csv_header,
-    deduplicate_columns,
     safe_pct,
     check_post_conversion_magnitude,
 )
@@ -282,7 +283,6 @@ def load_calsim_csv_from_s3(
     Load CalSim output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
-    Deduplicates columns when both CFS and TAF versions exist.
 
     Returns (data_df, units_map).
     """
@@ -302,24 +302,16 @@ def load_calsim_csv_from_s3(
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            var_names, units_row = parse_dss_csv_header(response["Body"])
+            raw_bytes = response["Body"].read()
 
-            keep_indices, units_map = deduplicate_columns(
-                var_names,
-                units_row,
-                prefer_cfs=True,
-            )
+            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            units_map = dict(zip(var_names, units_row))
 
-            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             data_df = pd.read_csv(
-                response["Body"], header=None, skiprows=7, low_memory=False
+                io.BytesIO(raw_bytes), header=None, skiprows=7, low_memory=False
             )
-            data_df = data_df.iloc[:, keep_indices]
-            data_df.columns = [var_names[i] for i in keep_indices]
+            data_df.columns = var_names
 
-            n_dupes = len(var_names) - len(keep_indices)
-            if n_dupes:
-                log.info(f"Deduplicated {n_dupes} duplicate columns")
             log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df, units_map
 
@@ -333,33 +325,23 @@ def load_calsim_csv_from_s3(
 
 
 def load_calsim_csv_from_file(
-    file_path: str, dedupe_columns: bool = False
+    file_path: str,
 ) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Load CalSim output CSV from local file.
 
     Handles the DSS export format with 7 header rows.
-    Always deduplicates using the units-aware helper (prefers CFS).
 
     Returns (data_df, units_map).
     """
     log.info(f"Loading from file: {file_path}")
 
     var_names, units_row = parse_dss_csv_header(file_path)
-
-    keep_indices, units_map = deduplicate_columns(
-        var_names,
-        units_row,
-        prefer_cfs=True,
-    )
+    units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = data_df.iloc[:, keep_indices]
-    data_df.columns = [var_names[i] for i in keep_indices]
+    data_df.columns = var_names
 
-    n_dupes = len(var_names) - len(keep_indices)
-    if n_dupes:
-        log.info(f"Deduplicated {n_dupes} duplicate columns")
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, units_map
 
@@ -461,7 +443,7 @@ def calculate_contractor_delivery_monthly(
             "water_month": 0,
             "delivery_avg_taf": round(float(data.mean()), 2),
             "delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "sample_count": len(data),
         }
@@ -506,7 +488,7 @@ def calculate_contractor_delivery_monthly(
                 "water_month": wm,
                 "delivery_avg_taf": round(float(month_data.mean()), 2),
                 "delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "sample_count": len(month_data),
             }
@@ -556,7 +538,7 @@ def calculate_contractor_shortage_monthly(
     df_copy = df.copy()
     df_copy["total_shortage"] = (
         df_copy[available_vars].apply(pd.to_numeric, errors="coerce").sum(axis=1)
-    )
+    ).clip(lower=0)
 
     results = []
     is_annual = (df_copy["WaterMonth"] == 0).all()
@@ -574,7 +556,7 @@ def calculate_contractor_shortage_monthly(
             "water_month": 0,
             "shortage_avg_taf": round(float(data.mean()), 2),
             "shortage_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "shortage_frequency_pct": round((shortage_count / len(data)) * 100, 2),
             "sample_count": len(data),
@@ -602,7 +584,7 @@ def calculate_contractor_shortage_monthly(
                 "water_month": wm,
                 "shortage_avg_taf": round(float(month_data.mean()), 2),
                 "shortage_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "shortage_frequency_pct": round(
                     (shortage_count / len(month_data)) * 100, 2
@@ -697,7 +679,7 @@ def calculate_contractor_period_summary(
 
     annual_delivery = df_copy.groupby("WaterYear")["total_delivery"].sum()
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
-    if annual_delivery.mean() > 0:
+    if annual_delivery.mean() > CV_MIN_MEAN_TAF:
         result["annual_delivery_cv"] = round(
             float(annual_delivery.std() / annual_delivery.mean()), 4
         )
@@ -715,7 +697,7 @@ def calculate_contractor_period_summary(
             df_copy[available_shortage]
             .apply(pd.to_numeric, errors="coerce")
             .sum(axis=1)
-        )
+        ).clip(lower=0)
         annual_shortage = df_copy.groupby("WaterYear")["total_shortage"].sum()
         shortage_years = (annual_shortage > SHORTAGE_THRESHOLD_TAF).sum()
 

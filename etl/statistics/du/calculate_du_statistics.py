@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CV_MIN_MEAN_TAF  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -410,7 +411,7 @@ def calculate_delivery_monthly(
             "water_month": 0,
             "delivery_avg_taf": round(float(data.mean()), 2),
             "delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "sample_count": len(data),
         }
@@ -434,7 +435,7 @@ def calculate_delivery_monthly(
                 "water_month": wm,
                 "delivery_avg_taf": round(float(month_data.mean()), 2),
                 "delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "sample_count": len(month_data),
             }
@@ -479,7 +480,7 @@ def calculate_shortage_monthly(
             "water_month": 0,
             "shortage_avg_taf": round(float(data.mean()), 2),
             "shortage_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > 0
+            if data.mean() > CV_MIN_MEAN_TAF
             else 0,
             "shortage_frequency_pct": round((shortage_count / len(data)) * 100, 2),
             "sample_count": len(data),
@@ -502,7 +503,7 @@ def calculate_shortage_monthly(
                 "water_month": wm,
                 "shortage_avg_taf": round(float(month_data.mean()), 2),
                 "shortage_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > 0
+                if month_data.mean() > CV_MIN_MEAN_TAF
                 else 0,
                 "shortage_frequency_pct": round(
                     (shortage_count / len(month_data)) * 100, 2
@@ -543,7 +544,7 @@ def calculate_period_summary(
     # Annual delivery statistics
     annual_delivery = df_work.groupby("WaterYear")["total_delivery"].sum()
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
-    if annual_delivery.mean() > 0:
+    if annual_delivery.mean() > CV_MIN_MEAN_TAF:
         result["annual_delivery_cv"] = round(
             float(annual_delivery.std() / annual_delivery.mean()), 4
         )

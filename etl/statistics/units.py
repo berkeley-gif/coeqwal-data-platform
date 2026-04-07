@@ -29,6 +29,10 @@ PCT_WARNING_THRESHOLD = 200.0
 # or a missed CFS→TAF step.
 MONTHLY_TAF_SANITY_LIMIT = 2000.0
 
+# Minimum mean (TAF) below which CV = std/mean is meaningless.
+# When the mean is in LP-noise territory, CV explodes to millions.
+CV_MIN_MEAN_TAF = 0.01
+
 
 def safe_pct(
     numerator: float,
@@ -173,71 +177,18 @@ def parse_dss_csv_header(
     return var_names, units_row
 
 
-def deduplicate_columns(
-    var_names: List[str],
-    units_row: List[str],
-    prefer_cfs: bool = True,
-) -> Tuple[List[int], Dict[str, str]]:
-    """Choose one column index per variable name.
-
-    When a variable appears in both CFS and TAF blocks (V3 CSV export),
-    this picks the preferred version so downstream code can convert
-    consistently.
-
-    Args:
-        var_names: variable names aligned by column position.
-        units_row: unit strings aligned by column position.
-        prefer_cfs: if *True* (default), keep the CFS version when both
-            exist (the caller will convert it).  If *False*, prefer the
-            TAF version (no conversion needed).
-
-    Returns:
-        (keep_indices, units_map) where ``units_map`` maps the **kept**
-        variable name to its unit string.
-    """
-    chosen: Dict[str, Tuple[int, str]] = {}  # name -> (col_idx, unit)
-
-    for idx, (name, unit) in enumerate(zip(var_names, units_row)):
-        if name not in chosen:
-            chosen[name] = (idx, unit)
-        else:
-            existing_unit = chosen[name][1]
-            if prefer_cfs:
-                if unit == "CFS" and existing_unit != "CFS":
-                    chosen[name] = (idx, unit)
-            else:
-                if unit == "TAF" and existing_unit != "TAF":
-                    chosen[name] = (idx, unit)
-
-    keep_indices = [v[0] for v in chosen.values()]
-    units_map = {name: v[1] for name, v in chosen.items()}
-    return keep_indices, units_map
-
-
 def load_dss_csv(
     file_path: str,
-    prefer_cfs: bool = True,
 ) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    """Load a DSS-export CSV, deduplicating columns by unit.
+    """Load a DSS-export CSV.
 
     Returns (data_df, units_map) where *units_map* maps each column
     name to its declared unit (e.g. ``"CFS"``, ``"TAF"``).
     """
     var_names, units_row = parse_dss_csv_header(file_path)
+    units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-
-    keep_indices, units_map = deduplicate_columns(
-        var_names,
-        units_row,
-        prefer_cfs=prefer_cfs,
-    )
-
-    n_dupes = len(var_names) - len(keep_indices)
-    if n_dupes > 0:
-        log.info(f"Deduplicated {n_dupes} duplicate columns (prefer_cfs={prefer_cfs})")
-
-    data_df = data_df.iloc[:, keep_indices]
-    data_df.columns = [var_names[i] for i in keep_indices]
+    data_df.columns = var_names
 
     return data_df, units_map

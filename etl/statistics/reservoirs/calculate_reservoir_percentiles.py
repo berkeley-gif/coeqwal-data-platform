@@ -353,14 +353,14 @@ def calculate_percentiles_for_reservoir(
         # Calculate percentiles in both TAF and percent of capacity
         for p in PERCENTILES:
             taf_value = float(np.percentile(month_data_taf, p))
-            pct_value = (taf_value / capacity_taf) * 100
+            pct_value = (taf_value / capacity_taf) * 100 if capacity_taf > 0 else 0
 
             stats[f"q{p}"] = round(pct_value, 2)  # Percent of capacity
             stats[f"q{p}_taf"] = round(taf_value, 2)  # TAF
 
         # Mean in both units
         mean_taf = float(month_data_taf.mean())
-        stats["mean"] = round((mean_taf / capacity_taf) * 100, 2)  # Percent
+        stats["mean"] = round((mean_taf / capacity_taf) * 100, 2) if capacity_taf > 0 else 0
         stats["mean_taf"] = round(mean_taf, 2)  # TAF
 
         monthly_stats[wm] = stats

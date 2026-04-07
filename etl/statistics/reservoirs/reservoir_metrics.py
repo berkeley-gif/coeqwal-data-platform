@@ -21,9 +21,14 @@ Usage:
     )
 """
 
+import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import CV_MIN_MEAN_TAF  # noqa: E402
 
 
 def calculate_flood_pool_probability(
@@ -202,11 +207,14 @@ def calculate_cv(
         return 0.0
 
     mean = float(data.mean())
-    if mean == 0:
+    if abs(mean) < CV_MIN_MEAN_TAF:
         return 0.0
 
     std = float(data.std())
-    return std / mean
+    cv = std / abs(mean)
+    if cv > 99.0:
+        return 0.0
+    return cv
 
 
 def calculate_annual_average(
