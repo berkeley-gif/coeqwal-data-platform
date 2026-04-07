@@ -336,6 +336,7 @@ Examples:
   python run_all.py --scenario s0029 --only reservoirs,du_urban
   python run_all.py --all-scenarios
   python run_all.py --all-scenarios --batch-size 10
+  python run_all.py --all-scenarios --batch-size 10 --start-from s0027
   python run_all.py --all-scenarios --batch-size 15 --continue-on-error
         """,
     )
@@ -386,6 +387,11 @@ Examples:
         "Recommended: 10-15 to prevent long-running AWS token issues.",
     )
     parser.add_argument(
+        "--start-from",
+        help="Skip scenarios before this one (inclusive). "
+        "Useful for resuming after a partial run. Example: --start-from s0027",
+    )
+    parser.add_argument(
         "--list-modules", action="store_true", help="List available modules and exit"
     )
 
@@ -423,6 +429,21 @@ Examples:
 
     # Determine scenarios
     scenarios = SCENARIOS if args.all_scenarios else [args.scenario]
+
+    if args.start_from:
+        if args.start_from not in scenarios:
+            parser.error(
+                f"--start-from {args.start_from} not found in scenario list. "
+                f"Available: {', '.join(scenarios[:5])}..."
+            )
+        idx = scenarios.index(args.start_from)
+        skipped = scenarios[:idx]
+        scenarios = scenarios[idx:]
+        log.info(
+            f"--start-from {args.start_from}: skipping {len(skipped)} scenario(s), "
+            f"{len(scenarios)} remaining"
+        )
+
     workers = max(1, args.workers)
     batch_size = max(0, args.batch_size)
 
