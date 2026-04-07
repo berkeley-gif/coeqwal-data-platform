@@ -301,6 +301,12 @@ def calculate_aggregate_monthly(
             df[shortage_var], shortage_var, units_map, df["DaysInMonth"]
         )
 
+    # Safeguard: check converted TAF values for plausible magnitudes
+    taf_cols_to_check = ["delivery_taf"]
+    if has_shortage:
+        taf_cols_to_check.append("shortage_taf")
+    check_post_conversion_magnitude(df, taf_cols_to_check, logger=log)
+
     if is_annual:
         # Annual data - single aggregated row
         delivery_data = df["delivery_taf"].dropna()
@@ -619,15 +625,6 @@ def calculate_all_cws_aggregate_statistics(
 
     available_columns = list(df.columns)
     log.info(f"Available columns: {len(available_columns)}")
-
-    # Safeguard: check delivery/shortage columns for plausible magnitudes
-    cws_cols = []
-    for info in CWS_AGGREGATES.values():
-        for vc in (info["delivery_var"], info["shortage_var"]):
-            if vc in available_columns:
-                cws_cols.append(vc)
-    if cws_cols:
-        check_post_conversion_magnitude(df, cws_cols, logger=log)
 
     monthly_rows = []
     period_summary_rows = []
