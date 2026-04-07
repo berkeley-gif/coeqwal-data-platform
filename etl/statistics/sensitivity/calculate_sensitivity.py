@@ -55,6 +55,7 @@ log = logging.getLogger("sensitivity")
 # Data-source definitions
 # ────────────────────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class MetricSource:
     table: str
@@ -68,87 +69,318 @@ class MetricSource:
 
 MONTHLY_SOURCES: List[MetricSource] = [
     # Reservoirs
-    MetricSource("reservoir_storage_monthly", "reservoir", "reservoir_entity_id",
-                 "storage_avg_taf", "storage_avg", "TAF", False),
+    MetricSource(
+        "reservoir_storage_monthly",
+        "reservoir",
+        "reservoir_entity_id",
+        "storage_avg_taf",
+        "storage_avg",
+        "TAF",
+        False,
+    ),
     # AG
-    MetricSource("ag_du_demand_monthly", "ag", "du_id",
-                 "demand_avg_taf", "demand_avg", "TAF", False),
-    MetricSource("ag_du_sw_delivery_monthly", "ag", "du_id",
-                 "sw_delivery_avg_taf", "sw_delivery_avg", "TAF", False),
-    MetricSource("ag_du_gw_pumping_monthly", "ag", "du_id",
-                 "gw_pumping_avg_taf", "gw_pumping_avg", "TAF", False),
-    MetricSource("ag_du_shortage_monthly", "ag", "du_id",
-                 "shortage_avg_taf", "shortage_avg", "TAF", False),
+    MetricSource(
+        "ag_du_demand_monthly",
+        "ag",
+        "du_id",
+        "demand_avg_taf",
+        "demand_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "ag_du_sw_delivery_monthly",
+        "ag",
+        "du_id",
+        "sw_delivery_avg_taf",
+        "sw_delivery_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "ag_du_gw_pumping_monthly",
+        "ag",
+        "du_id",
+        "gw_pumping_avg_taf",
+        "gw_pumping_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "ag_du_shortage_monthly",
+        "ag",
+        "du_id",
+        "shortage_avg_taf",
+        "shortage_avg",
+        "TAF",
+        False,
+    ),
     # DU Urban
-    MetricSource("du_delivery_monthly", "du_urban", "du_id",
-                 "delivery_avg_taf", "delivery_avg", "TAF", False),
-    MetricSource("du_shortage_monthly", "du_urban", "du_id",
-                 "shortage_avg_taf", "shortage_avg", "TAF", False),
+    MetricSource(
+        "du_delivery_monthly",
+        "du_urban",
+        "du_id",
+        "delivery_avg_taf",
+        "delivery_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "du_shortage_monthly",
+        "du_urban",
+        "du_id",
+        "shortage_avg_taf",
+        "shortage_avg",
+        "TAF",
+        False,
+    ),
     # Refuge
-    MetricSource("refuge_du_delivery_monthly", "refuge", "du_id",
-                 "delivery_avg_taf", "delivery_avg", "TAF", False),
-    MetricSource("refuge_du_shortage_monthly", "refuge", "du_id",
-                 "shortage_avg_taf", "shortage_avg", "TAF", False),
+    MetricSource(
+        "refuge_du_delivery_monthly",
+        "refuge",
+        "du_id",
+        "delivery_avg_taf",
+        "delivery_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "refuge_du_shortage_monthly",
+        "refuge",
+        "du_id",
+        "shortage_avg_taf",
+        "shortage_avg",
+        "TAF",
+        False,
+    ),
     # Env Flows
-    MetricSource("env_flow_channel_monthly", "env_flows", "network_arc_id",
-                 "flow_avg_cfs", "flow_avg_cfs", "CFS", False),
-    MetricSource("env_flow_channel_monthly", "env_flows", "network_arc_id",
-                 "flow_avg_taf", "flow_avg_taf", "TAF", False),
-    MetricSource("env_flow_channel_monthly", "env_flows", "network_arc_id",
-                 "avg_pct_unimpaired", "pct_unimpaired", "PCT", False),
+    MetricSource(
+        "env_flow_channel_monthly",
+        "env_flows",
+        "network_arc_id",
+        "flow_avg_cfs",
+        "flow_avg_cfs",
+        "CFS",
+        False,
+    ),
+    MetricSource(
+        "env_flow_channel_monthly",
+        "env_flows",
+        "network_arc_id",
+        "flow_avg_taf",
+        "flow_avg_taf",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "env_flow_channel_monthly",
+        "env_flows",
+        "network_arc_id",
+        "avg_pct_unimpaired",
+        "pct_unimpaired",
+        "PCT",
+        False,
+    ),
     # MI
-    MetricSource("mi_delivery_monthly", "mi", "mi_contractor_code",
-                 "delivery_avg_taf", "delivery_avg", "TAF", False),
-    MetricSource("mi_shortage_monthly", "mi", "mi_contractor_code",
-                 "shortage_avg_taf", "shortage_avg", "TAF", False),
+    MetricSource(
+        "mi_delivery_monthly",
+        "mi",
+        "mi_contractor_code",
+        "delivery_avg_taf",
+        "delivery_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "mi_shortage_monthly",
+        "mi",
+        "mi_contractor_code",
+        "shortage_avg_taf",
+        "shortage_avg",
+        "TAF",
+        False,
+    ),
     # CWS Aggregate
-    MetricSource("cws_aggregate_monthly", "cws_aggregate", "cws_aggregate_id",
-                 "delivery_avg_taf", "delivery_avg", "TAF", False),
-    MetricSource("cws_aggregate_monthly", "cws_aggregate", "cws_aggregate_id",
-                 "shortage_avg_taf", "shortage_avg", "TAF", False),
+    MetricSource(
+        "cws_aggregate_monthly",
+        "cws_aggregate",
+        "cws_aggregate_id",
+        "delivery_avg_taf",
+        "delivery_avg",
+        "TAF",
+        False,
+    ),
+    MetricSource(
+        "cws_aggregate_monthly",
+        "cws_aggregate",
+        "cws_aggregate_id",
+        "shortage_avg_taf",
+        "shortage_avg",
+        "TAF",
+        False,
+    ),
 ]
 
 PERIOD_SOURCES: List[MetricSource] = [
     # AG period
-    MetricSource("ag_du_period_summary", "ag", "du_id",
-                 "annual_demand_avg_taf", "annual_demand_avg", "TAF", True),
-    MetricSource("ag_du_period_summary", "ag", "du_id",
-                 "annual_sw_delivery_avg_taf", "annual_sw_delivery_avg", "TAF", True),
-    MetricSource("ag_du_period_summary", "ag", "du_id",
-                 "annual_shortage_avg_taf", "annual_shortage_avg", "TAF", True),
-    MetricSource("ag_du_period_summary", "ag", "du_id",
-                 "reliability_pct", "reliability", "PCT", True),
+    MetricSource(
+        "ag_du_period_summary",
+        "ag",
+        "du_id",
+        "annual_demand_avg_taf",
+        "annual_demand_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "ag_du_period_summary",
+        "ag",
+        "du_id",
+        "annual_sw_delivery_avg_taf",
+        "annual_sw_delivery_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "ag_du_period_summary",
+        "ag",
+        "du_id",
+        "annual_shortage_avg_taf",
+        "annual_shortage_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "ag_du_period_summary",
+        "ag",
+        "du_id",
+        "reliability_pct",
+        "reliability",
+        "PCT",
+        True,
+    ),
     # DU Urban period
-    MetricSource("du_period_summary", "du_urban", "du_id",
-                 "annual_delivery_avg_taf", "annual_delivery_avg", "TAF", True),
-    MetricSource("du_period_summary", "du_urban", "du_id",
-                 "annual_shortage_avg_taf", "annual_shortage_avg", "TAF", True),
-    MetricSource("du_period_summary", "du_urban", "du_id",
-                 "reliability_pct", "reliability", "PCT", True),
+    MetricSource(
+        "du_period_summary",
+        "du_urban",
+        "du_id",
+        "annual_delivery_avg_taf",
+        "annual_delivery_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "du_period_summary",
+        "du_urban",
+        "du_id",
+        "annual_shortage_avg_taf",
+        "annual_shortage_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "du_period_summary",
+        "du_urban",
+        "du_id",
+        "reliability_pct",
+        "reliability",
+        "PCT",
+        True,
+    ),
     # Refuge period
-    MetricSource("refuge_du_period_summary", "refuge", "du_id",
-                 "annual_delivery_avg_taf", "annual_delivery_avg", "TAF", True),
-    MetricSource("refuge_du_period_summary", "refuge", "du_id",
-                 "annual_shortage_avg_taf", "annual_shortage_avg", "TAF", True),
-    MetricSource("refuge_du_period_summary", "refuge", "du_id",
-                 "reliability_pct_95", "reliability", "PCT", True),
+    MetricSource(
+        "refuge_du_period_summary",
+        "refuge",
+        "du_id",
+        "annual_delivery_avg_taf",
+        "annual_delivery_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "refuge_du_period_summary",
+        "refuge",
+        "du_id",
+        "annual_shortage_avg_taf",
+        "annual_shortage_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "refuge_du_period_summary",
+        "refuge",
+        "du_id",
+        "reliability_pct_95",
+        "reliability",
+        "PCT",
+        True,
+    ),
     # Env Flows period
-    MetricSource("env_flow_channel_period_summary", "env_flows", "network_arc_id",
-                 "avg_pct_unimpaired", "annual_pct_unimpaired", "PCT", True),
-    MetricSource("env_flow_channel_period_summary", "env_flows", "network_arc_id",
-                 "avg_pct_ff", "annual_pct_ff", "PCT", True),
+    MetricSource(
+        "env_flow_channel_period_summary",
+        "env_flows",
+        "network_arc_id",
+        "avg_pct_unimpaired",
+        "annual_pct_unimpaired",
+        "PCT",
+        True,
+    ),
+    MetricSource(
+        "env_flow_channel_period_summary",
+        "env_flows",
+        "network_arc_id",
+        "avg_pct_ff",
+        "annual_pct_ff",
+        "PCT",
+        True,
+    ),
     # MI period
-    MetricSource("mi_contractor_period_summary", "mi", "mi_contractor_code",
-                 "annual_delivery_avg_taf", "annual_delivery_avg", "TAF", True),
-    MetricSource("mi_contractor_period_summary", "mi", "mi_contractor_code",
-                 "reliability_pct", "reliability", "PCT", True),
+    MetricSource(
+        "mi_contractor_period_summary",
+        "mi",
+        "mi_contractor_code",
+        "annual_delivery_avg_taf",
+        "annual_delivery_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "mi_contractor_period_summary",
+        "mi",
+        "mi_contractor_code",
+        "reliability_pct",
+        "reliability",
+        "PCT",
+        True,
+    ),
     # CWS Aggregate period
-    MetricSource("cws_aggregate_period_summary", "cws_aggregate", "cws_aggregate_id",
-                 "annual_delivery_avg_taf", "annual_delivery_avg", "TAF", True),
-    MetricSource("cws_aggregate_period_summary", "cws_aggregate", "cws_aggregate_id",
-                 "annual_shortage_avg_taf", "annual_shortage_avg", "TAF", True),
-    MetricSource("cws_aggregate_period_summary", "cws_aggregate", "cws_aggregate_id",
-                 "reliability_pct", "reliability", "PCT", True),
+    MetricSource(
+        "cws_aggregate_period_summary",
+        "cws_aggregate",
+        "cws_aggregate_id",
+        "annual_delivery_avg_taf",
+        "annual_delivery_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "cws_aggregate_period_summary",
+        "cws_aggregate",
+        "cws_aggregate_id",
+        "annual_shortage_avg_taf",
+        "annual_shortage_avg",
+        "TAF",
+        True,
+    ),
+    MetricSource(
+        "cws_aggregate_period_summary",
+        "cws_aggregate",
+        "cws_aggregate_id",
+        "reliability_pct",
+        "reliability",
+        "PCT",
+        True,
+    ),
 ]
 
 ALL_MODULES = sorted({s.module for s in MONTHLY_SOURCES + PERIOD_SOURCES})
@@ -156,6 +388,7 @@ ALL_MODULES = sorted({s.module for s in MONTHLY_SOURCES + PERIOD_SOURCES})
 # ────────────────────────────────────────────────────────────────────────
 # Helper: safe percent change
 # ────────────────────────────────────────────────────────────────────────
+
 
 def _pct_change(new_val, ref_val):
     """Percent change from ref_val to new_val.  Returns None when undefined."""
@@ -172,6 +405,7 @@ def _pct_change(new_val, ref_val):
 # Core: load scenario metadata
 # ────────────────────────────────────────────────────────────────────────
 
+
 def load_scenario_metadata(conn) -> pd.DataFrame:
     """Return DataFrame with scenario → hydroclimate mapping."""
     query = """
@@ -185,9 +419,11 @@ def load_scenario_metadata(conn) -> pd.DataFrame:
           AND s.hydroclimate_sibling IS NOT NULL
     """
     df = pd.read_sql(query, conn)
-    log.info(f"Loaded metadata for {len(df)} scenarios across "
-             f"{df['hydroclimate_id'].nunique()} hydroclimate levels, "
-             f"{df['hydroclimate_sibling'].nunique()} sibling groups")
+    log.info(
+        f"Loaded metadata for {len(df)} scenarios across "
+        f"{df['hydroclimate_id'].nunique()} hydroclimate levels, "
+        f"{df['hydroclimate_sibling'].nunique()} sibling groups"
+    )
     return df
 
 
@@ -210,6 +446,7 @@ def identify_reference_hydroclimate(meta: pd.DataFrame) -> int:
 # ────────────────────────────────────────────────────────────────────────
 # Core: pull metric values for all scenarios
 # ────────────────────────────────────────────────────────────────────────
+
 
 def fetch_metric_data(conn, src: MetricSource) -> Optional[pd.DataFrame]:
     """Query a single metric from a statistics table.
@@ -263,6 +500,7 @@ def fetch_delta_monthly(conn) -> Optional[pd.DataFrame]:
 # ────────────────────────────────────────────────────────────────────────
 # Core: compute climate sensitivity
 # ────────────────────────────────────────────────────────────────────────
+
 
 def compute_climate_sensitivity(
     data: pd.DataFrame,
@@ -322,16 +560,36 @@ def compute_climate_sensitivity(
             cc95_rows = grp[grp["hydroclimate_id"] == cc95_id]
             cc95_val = cc95_rows["value"].mean() if not cc95_rows.empty else None
 
-        cc50_abs = (cc50_val - hist_val) if (cc50_val is not None and hist_val is not None) else None
-        cc95_abs = (cc95_val - hist_val) if (cc95_val is not None and hist_val is not None) else None
+        cc50_abs = (
+            (cc50_val - hist_val)
+            if (cc50_val is not None and hist_val is not None)
+            else None
+        )
+        cc95_abs = (
+            (cc95_val - hist_val)
+            if (cc95_val is not None and hist_val is not None)
+            else None
+        )
         cc50_pct = _pct_change(cc50_val, hist_val)
         cc95_pct = _pct_change(cc95_val, hist_val)
 
-        rows.append((
-            sibling, module, str(entity), metric_name, int(wm), unit,
-            hist_val, cc50_val, cc95_val,
-            cc50_abs, cc95_abs, cc50_pct, cc95_pct,
-        ))
+        rows.append(
+            (
+                sibling,
+                module,
+                str(entity),
+                metric_name,
+                int(wm),
+                unit,
+                hist_val,
+                cc50_val,
+                cc95_val,
+                cc50_abs,
+                cc95_abs,
+                cc50_pct,
+                cc95_pct,
+            )
+        )
 
     return rows
 
@@ -339,6 +597,7 @@ def compute_climate_sensitivity(
 # ────────────────────────────────────────────────────────────────────────
 # Core: compute operational sensitivity
 # ────────────────────────────────────────────────────────────────────────
+
 
 def compute_operational_sensitivity(
     data: pd.DataFrame,
@@ -377,10 +636,23 @@ def compute_operational_sensitivity(
         rng = mx - mn
         pct_rng = (rng / abs(mean) * 100.0) if abs(mean) > 1e-12 else None
 
-        rows.append((
-            int(hydro_id), module, str(entity), metric_name, int(wm), unit,
-            n, mn, mx, mean, std, rng, pct_rng,
-        ))
+        rows.append(
+            (
+                int(hydro_id),
+                module,
+                str(entity),
+                metric_name,
+                int(wm),
+                unit,
+                n,
+                mn,
+                mx,
+                mean,
+                std,
+                rng,
+                pct_rng,
+            )
+        )
 
     return rows
 
@@ -438,7 +710,9 @@ def write_climate_rows(conn, rows: List[Tuple], dry_run: bool):
         return
     with conn.cursor() as cur:
         execute_values(
-            cur, CLIMATE_INSERT, rows,
+            cur,
+            CLIMATE_INSERT,
+            rows,
             template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
             page_size=2000,
         )
@@ -454,7 +728,9 @@ def write_operational_rows(conn, rows: List[Tuple], dry_run: bool):
         return
     with conn.cursor() as cur:
         execute_values(
-            cur, OPERATIONAL_INSERT, rows,
+            cur,
+            OPERATIONAL_INSERT,
+            rows,
             template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
             page_size=2000,
         )
@@ -465,6 +741,7 @@ def write_operational_rows(conn, rows: List[Tuple], dry_run: bool):
 # ────────────────────────────────────────────────────────────────────────
 # Main orchestration
 # ────────────────────────────────────────────────────────────────────────
+
 
 def process_source(
     conn,
@@ -555,8 +832,10 @@ def run_sensitivity(
             all_sources = [s for s in all_sources if s.module in modules]
 
         for src in all_sources:
-            log.info(f"Processing {src.module}/{src.metric_name} "
-                     f"({'period' if src.is_period else 'monthly'}) ...")
+            log.info(
+                f"Processing {src.module}/{src.metric_name} "
+                f"({'period' if src.is_period else 'monthly'}) ..."
+            )
             c, o = process_source(conn, src, meta, ref_hydro_id, dry_run)
             total_climate += c
             total_ops += o
@@ -585,7 +864,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Compute but do not write to database",
     )
     parser.add_argument(

@@ -215,13 +215,32 @@ and short months are handled exactly.
 | **DU Urban** | DV: `DN_*`, `GP_*`, `D_*_PMI` | SV: `UD_*` (TAF) | DV: `SHRTG_*`, `SHORT_D_*_PMI` | CFS |
 | **MI Contractors** | DV: `D_*_PMI`, `DEL_SWP_MWD` | Computed: delivery + shortage (via PERDV) | DV: `SHORT_D_*_PMI` | CFS |
 | **CWS Aggregate** | DV: `DEL_SWP_PMI`, `DEL_CVP_PMI_*` | DEMANDS CSV | DV: `SHORT_SWP_PMI`, `SHORT_CVP_PMI_*` | CFS |
-| **AG** | DV: `DN_*`, `GP_*` | DV: `AW_*` (CFS → TAF) | DV: `GW_SHORT_*` | CFS |
+| **AG** | DV: `DN_*`, `GP_*` | DV: `AW_*` (CFS → TAF) | DV: `SHRTG_*` (Sac) / `GW_SHORT_*` (SJR) | CFS |
 | **Env Flows** | DV: `C_{reach}` | — | — | CFS |
-| **Refuge** | DV: `DN_*` | DV: `AW_*` (CFS → TAF) | Computed: `max(demand − delivery, 0)` | CFS |
+| **Refuge** | DV: `DN_*` | DV: `AW_*` (CFS → TAF) | DV: `SHRTG_*` / `GW_SHORT_*` (fallback: `max(AW−DN,0)`) | CFS |
 
 > **Note (March 2026):** AG and Refuge demand was switched from `AWO_*` (SV input, pre-model
 > demand order) to `AW_*` (DV output, model-optimised applied water) to match the COEQWAL
 > V3 notebook (`DataExtraction.py`). See [Water Balance](#water-balance) below.
+
+### V3 notebook alignment (March 2026 audit)
+
+A thorough review of `COEQWAL_V3/coeqwalpackage/DataExtraction.py` and
+`coeqwal/notebooks/coeqwalpackage/DataExtraction.py` confirmed the following
+conventions that this ETL follows:
+
+| Convention | V3 Notebook Behaviour | ETL Alignment |
+|---|---|---|
+| Demand source for ag DUs | `AW_*` from DV (most), a few from SV (`AW_NIDDC_NA3`, `AW_ELDID_NA1`) | ✅ Uses `AW_*` from DV |
+| Demand source for refuge DUs | `AW_*` from DV | ✅ Uses `AW_*` from DV |
+| GP for refuge DUs | **Not used** — notebooks never reference `GP_*_PR*` | ✅ Not used |
+| GP for 11 GW-only _NA DUs | `GP + RU → DN` synthetic delivery | ✅ Does not synthesize delivery; reports GP separately |
+| Water balance check | **Not present** in notebooks | ✅ Checks GP vs AW for ag only; GP/AW up to ~1.15× is expected per WRESL (`AW + RP = DN + GP + RU + SHORTAGE`) |
+| Shortage for ag DUs | **Not computed** in notebooks | ETL uses `SHRTG_*` (Sac) and `GW_SHORT_*` (SJR/Tulare) — full coverage |
+| Shortage for refuge DUs | **Not computed** in notebooks | ETL uses model `SHRTG_*`/`GW_SHORT_*` when available, falls back to `max(AW−DN,0)` |
+| Shortage for M&I | `SHORT_*` used as intermediates for demand back-calculation, then dropped | ETL uses `SHORT_*` directly |
+| CFS→TAF constant | `0.001984` (coeqwal) / `0.0019834714` (V3) | ✅ Uses `86400/43560000 ≈ 0.001983471` |
+| DU type classification | Name-based (`UD` prefix = urban; everything else = DV list); no programmatic type filtering | ✅ Filters ag DUs via entity table |
 
 ---
 
@@ -979,20 +998,80 @@ All AG variables come from a single file — the CalSim DV output CSV
 | `AW_{DU_ID}` | Applied Water = **Demand** | CFS | `TAF = CFS × days × 0.001984` |
 | `DN_{DU_ID}` | Net Delivery = **Surface Water Delivery** | CFS | same |
 | `GP_{DU_ID}` | Groundwater Pumping | CFS | same |
-| `GW_SHORT_{DU_ID}` | GW Restriction Shortage | CFS | same |
+| `SHRTG_{DU_ID}` | Shortage (Sacramento, kind=`SHORTAGE`) | CFS | same |
+| `GW_SHORT_{DU_ID}` | GW Restriction Shortage (SJR/Tulare, kind=`GW-RESTRICT-SHORT`) | CFS | same |
 | `DEL_SWP_PAG`, `SHORT_CVP_PAG`, … | Project-level aggregate delivery / shortage | CFS | same |
 
 ### Water balance
 
-CalSim 3 enforces the identity:
+The actual CalSim 3 demand-unit water balance (from WRESL `constraints-Deliveries.wresl`)
+is:
 
 ```
-AW = DN + GP + RU
+AW + RP = DN + GP + RU + SHORTAGE
 ```
 
-where **AW** = Applied Water (demand), **DN** = Net Delivery (surface water),
-**GP** = Groundwater Pumping, and **RU** = Reuse. The ETL validates this after
-CFS→TAF conversion; `GP > AW` rows indicate a unit mismatch.
+| Variable | Meaning | WRESL definition |
+|---|---|---|
+| **AW** | Applied Water (crop demand) = AWR + AWO | timeseries input (CFS, converted from TAF) |
+| **RP** | Riparian / misc ET = AW × RPF | typically 5–15% of AW |
+| **DN** | Net Delivery = DG − DL (gross diversion minus conveyance losses) | DL = EV + DP + LF + OS |
+| **GP** | Groundwater Pumping | decision variable, bounded by GPmin/GPmax |
+| **RU** | Reuse = min(TW, RUFR×AWR + RUFO×AWO) | bounded by available tailwater |
+| **SHORTAGE** | SHRTG (Sac) or GW_SHORT (SJR/Tulare) | slack variable for unmet demand |
+
+Source: `Run/System/SystemTables_Sac/constraints-Deliveries.wresl` line 39:
+```
+goal meetAW_02_NA  {AW_02_NA + RP_02_NA = DN_02_NA + GP_02_NA + RU_02_NA + SHRTG_02_NA}
+```
+
+For GW-only DUs (no surface delivery), DN drops out:
+```
+goal meetAW_07N_NA  {AW_07N_NA + RP_07N_NA = GP_07N_NA + RU_07N_NA + SHRTG_07N_NA}
+```
+
+**GP is explicitly allowed to exceed AW.** The GP upper bound (from
+`constraints-gwpumping.wresl`) is:
+
+```
+GP <= GPmax × AW × (1 + RPF − RUF)
+```
+
+Since RPF > RUF typically, the factor `(1 + RPF − RUF)` is > 1.0. GP/AW ratios
+of 1.0–1.15× are expected and reflect that GP must also supply RP (riparian losses)
+beyond crop demand. The s0020 dry run's GP/AW ratios of 1.0–1.1× are consistent
+with this.
+
+**Note:** The WRESL water balance IS the same for refuge DUs (`AW + RP = DN + GP + RU + SHORTAGE`),
+but the V3 notebooks never use GP for refuge DUs. The AG module filters refuge DUs out
+before running water balance checks.
+
+### WRESL verification (March 2026)
+
+All ETL equations were verified against the CalSim 3 WRESL model files
+(`reference/s0020_DCRadjBL_2020LU_wTUCP/Run/`):
+
+| Variable | WRESL Declaration | Kind | Units | ETL Handling |
+|----------|------------------|------|-------|-------------|
+| `AW_{DU}` | `std` dvar, AW = AWR + AWO (+AWW) | `APPLIED-WATER` | CFS | ✅ Correct |
+| `DN_{DU}` | `std` dvar, DN = DG − DL | `SW-DELIVERY-NET` | CFS | ✅ Correct |
+| `GP_{DU}` | `std` dvar | `GW-PUMPING` | CFS | ✅ Correct |
+| `SHRTG_{DU}` | `std` dvar (Sacramento) | `SHORTAGE` | CFS | ✅ Added |
+| `GW_SHORT_{DU}` | bounded dvar (SJR/Tulare) | `GW-RESTRICT-SHORT` | CFS | ✅ Correct |
+| `RU_{DU}` | `std` dvar | `REUSE` | CFS | (not directly used) |
+| `S_{code}` | `std` dvar | `STORAGE` | **TAF** | ✅ No conversion needed |
+| `C_{code}_FLOOD` | `std` dvar | `SPILL` | CFS | ✅ Correct |
+| `D_*_PMI` | `std` dvar | `FLOW-DELIVERY` | CFS | ✅ Correct |
+| `SHORT_D_*_PMI` | `alias` (post-solve) | `delivery-shortage` | CFS | ✅ Correct |
+| `PERDV_SWP_*` | `alias` of perdel_N | `swp-output` | percent (fraction 0–1) | ✅ Not converted |
+| `DEL_*` aggregates | `alias` | `delivery-cvp/swp` | CFS | ✅ Correct |
+| `UD_{DU}` | `timeseries` (SV input) | `URBAN-DEMAND` | TAF → CFS | (used by DU Urban) |
+
+Key findings:
+- Urban water balance is simpler than AG: `UD = DN + GP + SHRTG` (no RP, no RU)
+- `nod_ag` / `sod_ag` are valid ETL-only aggregations (no WRESL equivalent)
+- MWD Table A = 1911.5 TAF/yr confirmed from V3 DataExtraction.py
+- MI demand formula `(delivery + shortage) / PERDV` is algebraically correct per WRESL
 
 ### AWO vs AW: demand variable choice
 
@@ -1007,17 +1086,33 @@ convention. The switch from `AWO_*` (SV) to `AW_*` (DV) was made in March 2026.
 
 ### Groundwater-only demand units
 
-11 DUs have `sw=0` in `du_agriculture_entity.csv`. These receive their entire
-supply from groundwater pumping (GP) and reuse (RU). CalSim does not produce a
-`DN_*` column for them, so the ETL does **not** synthesise a surface water
-delivery value. `GP + RU` for these DUs is a measure of *shortage* (demand not
-met by surface delivery), not delivery.
+18 DUs have no `DN` term in their WRESL `meetAW` constraint — their entire
+supply is GP + RU. CalSim does not produce a `DN_*` output for them, so the
+ETL does **not** synthesise a surface water delivery value.
 
-### Shortage
+| Region | GW-only DUs |
+|--------|-------------|
+| Sacramento (9) | `06_NA`, `07N_NA`, `07S_NA`, `15N_NA1`, `15S_NA1`, `16_NA1`, `17N_NA`, `20_NA2`, `26N_NA` |
+| SJR/Tulare (9) | `60S_NA1`, `60S_NA2`, `61_NA1`, `62_NA1`, `63_NA1`, `64_NA1`, `72_NA2`, `73_NA` |
 
-For DUs in the SJR / Tulare regions, `GW_SHORT_{DU_ID}` gives the groundwater
-restriction shortage. Sacramento region DUs (WBAs 02–26) do not have this
-variable — the Sacramento region has no GW-shortage data in CalSim 3.
+Note: `26S_NA` is commented out in WRESL (moved to Lower Mokelumne system).
+
+The V3 notebook lists 11 of these (without 26N_NA and the 7 SJR DUs) and gives
+them a synthetic `DN = GP + RU` column labelled `SW_DELIVERY-NET`. The V3 GP
+and RU columns are then dropped as intermediate variables.
+
+### Shortage — two variable families by region
+
+The WRESL model defines shortage as the slack variable in the `meetAW`
+water balance constraint. Two naming conventions exist by region:
+
+| Region | Variable | WRESL kind tag | Columns in DV |
+|--------|----------|---------------|---------------|
+| Sacramento (WBAs 02–26) | `SHRTG_{DU_ID}` | `SHORTAGE` | ~185 |
+| SJR/Tulare (WBAs 50–91) | `GW_SHORT_{DU_ID}` | `GW-RESTRICT-SHORT` | ~89 |
+
+Both represent the same concept — unmet demand after DN, GP, and RU.
+The ETL detects the correct variable for each DU based on its WBA.
 
 ### Files
 
@@ -1035,8 +1130,38 @@ refuge demand units.
 
 ### Data source: DV output only
 
-Like the AG module, all variables (`AW_*` demand + `DN_*` delivery) are loaded from the DV
-output CSV. Shortage is computed as `max(demand − delivery, 0)`.
+All variables are loaded from the DV output CSV:
+- `AW_*` — demand
+- `DN_*` — delivery
+- `SHRTG_*` (Sacramento _PR DUs) / `GW_SHORT_*` (SJR/Tulare _PR DUs) — shortage
+
+### Shortage: model variables preferred
+
+The WRESL model defines the same `meetAW` constraint for refuge DUs as for AG DUs:
+`AW + RP = DN + GP + RU + SHORTAGE`. Actual shortage variables exist for all 18
+refuge DUs in the DV output:
+
+| Region | Variable | DUs |
+|--------|----------|-----|
+| Sacramento | `SHRTG_{DU_ID}` | 08N_PR1, 08N_PR2, 08S_PR, 09_PR, 11_PR, 17N_NR, 17N_PR, 17S_PR |
+| SJR/Tulare | `GW_SHORT_{DU_ID}` | 63_PR1–3, 72_PR1–6, 91_PR |
+
+The ETL uses these model-computed shortage values when available. If a DU's
+shortage column is missing, it falls back to `max(AW − DN, 0)`.
+
+### Why GP is not used for refuge DUs
+
+CalSim 3 *does* output `GP_*` columns for refuge DUs, and the WRESL water
+balance is identical to AG. However, the V3 notebook (`DataExtraction.py`)
+**never uses GP or RU for any `_PR` DU**, so the refuge module follows that
+convention. The `validate_water_balance` check is skipped for refuge DUs.
+
+### DU overlap with AG module
+
+The DV output CSV contains `AW_*` columns for all demand unit types (ag, refuge, urban).
+The AG module filters its DU list against `du_agriculture_entity.csv` to avoid
+accidentally processing refuge DUs, which would produce incorrect results due to
+the different water accounting frameworks.
 
 ### Files
 
@@ -1053,9 +1178,10 @@ Three automated checks run during every ETL execution. They **warn** (log) but d
 
 | Safeguard | Where | What it checks |
 |-----------|-------|----------------|
-| `validate_water_balance` | AG (after CFS→TAF conversion) | `GP_{DU} ≤ AW_{DU} × 1.01` for every DU-month. Violations suggest a unit mismatch (e.g. GP still CFS while AW was converted). |
+| `validate_water_balance` | AG only (after CFS→TAF conversion) | `GP_{DU} ≤ AW_{DU} × 1.01` for ag DU-months. GP/AW ratios of 1.0–1.15× are expected due to riparian losses (RP) per WRESL `constraints-gwpumping.wresl`. **Not applied to refuge DUs.** |
 | `check_post_conversion_magnitude` | AG, MI, Refuge (after CFS→TAF conversion) | Max monthly TAF value < 2 000 per column. Values above this strongly suggest a double conversion or a missed CFS→TAF step. |
 | `safe_pct` | AG, MI period summaries | Percentage result > 200 % triggers a warning. Catches cases where numerator/denominator have different units. |
+| AG DU filtering | AG (before computing statistics) | DU IDs discovered from `AW_*` columns are filtered against `du_agriculture_entity.csv`. Non-ag DUs (refuges, urban) that happen to have `AW_*` columns in the DV output are excluded to prevent cross-contamination. |
 
 These functions live in `etl/statistics/units.py` and are imported by each module.
 Thresholds are defined as constants (`PCT_WARNING_THRESHOLD`, `MONTHLY_TAF_SANITY_LIMIT`)
@@ -1072,3 +1198,192 @@ helpers `parse_dss_csv_header()` and `deduplicate_columns()` in `units.py`:
    discard the TAF duplicate.
 3. Return a `units_map` dict so the caller knows which columns are CFS vs TAF
    *before* applying any conversion.
+
+---
+
+## Appendix: Complete Variable Reference (WRESL-verified, March 2026)
+
+All variable declarations verified against CalSim 3 WRESL files in
+`reference/s0020_DCRadjBL_2020LU_wTUCP/Run/`. Cross-checked against
+COEQWAL V3 `DataExtraction.py` and old `coeqwal` repo notebooks.
+
+### A. Master Variable Table — WRESL Declarations
+
+| Variable | Type | Kind | Native Unit | DSS Unit | ETL Module(s) | Notes |
+|----------|------|------|-------------|----------|---------------|-------|
+| `AW_{DU}` | std | APPLIED-WATER | CFS | CFS | AG, Refuge | AW = AWR + AWO (+AWW) |
+| `AWR_{DU}` | timeseries | APPLIED-WATER | TAF → CFS | CFS | (not used directly) | Rice applied water; auto-converted by CalSim |
+| `AWO_{DU}` | timeseries | APPLIED-WATER | TAF → CFS | CFS | (not used directly) | Other-crop applied water |
+| `AWW_{DU}` | timeseries | APPLIED-WATER | TAF → CFS | CFS | (not used directly) | Wetlands; only some DUs |
+| `DN_{DU}` | std | SW-DELIVERY-NET / SW_DELIVERY-NET | CFS | CFS | AG, Refuge, DU Urban | Sac uses hyphen; SJR uses underscore in kind |
+| `DG_{DU}` | std | SW-DELIVERY-GROSS | CFS | CFS | (not used) | DN = DG − DL |
+| `DL_{DU}` | std | DELIVERY-LOSS | CFS | CFS | (not used) | Conveyance loss |
+| `GP_{DU}` | std | GW-PUMPING | CFS | CFS | AG | Groundwater pumping |
+| `RU_{DU}` | std | REUSE | CFS | CFS | (not used directly) | Reuse (part of balance) |
+| `RP_{DU}` | std | RIPARIAN-MISC-ET | CFS | CFS | (not used directly) | RP = AW × RPF |
+| `SHRTG_{DU}` | std | SHORTAGE | CFS | CFS | AG, Refuge | Sacramento region only |
+| `GW_SHORT_{DU}` | std (bounded 0–99999) | GW-RESTRICT-SHORT | CFS | CFS | AG, Refuge | SJR/Tulare only; @COEQWAL tag |
+| `UD_{DU}` | timeseries | URBAN-DEMAND | TAF → CFS | CFS | DU Urban | Auto-converted by CalSim |
+| `S_{code}` | std | STORAGE | **TAF** | **TAF** | Reservoir | Only native-TAF variable in the solver |
+| `S_{code}level{N}` | value/timeseries | STORAGE-LEVEL | TAF | TAF | Reservoir | Flood control / dead pool levels |
+| `C_{reach}` | std | CHANNEL | CFS | CFS | Env Flows | Channel flow / reservoir release |
+| `C_{code}_Flood` | std | SPILL | CFS | CFS | Reservoir | Flood spill = C − C_NCF |
+| `C_{code}_NCF` | std (bounded) | CHANNEL | CFS | CFS | (not used) | Normal channel flow ≤ release capacity |
+| `C_{reach}_MIF` | std | FLOW-MIN-INSTREAM | CFS | CFS | Env Flows | Minimum instream flow requirement |
+| `I_{code}` | timeseries | INFLOW | TAF → CFS | CFS | (not used) | Reservoir inflow |
+| `E_{code}` | std | EVAPORATION | CFS | CFS | (not used) | Reservoir evaporation |
+| `D_{node}_{contractor}_PMI` | std | FLOW-DELIVERY | CFS | CFS | MI | M&I delivery arc |
+| `SHORT_D_{node}_{contractor}_PMI` | alias | delivery-shortage | CFS | CFS | MI | MI shortage (post-solve) |
+| `DEL_SWP_MWD` | alias | delivery-swp | CFS | CFS | MI | MWD total delivery (5 arcs) |
+| `DEL_SWP_PMI` / `_N` / `_S` | alias | delivery-swp | CFS | CFS | MI, CWS | SWP M&I aggregate |
+| `DEL_CVP_PMI_N` / `_S` | alias | delivery-cvp | CFS | CFS | MI, CWS | CVP M&I aggregate |
+| `SHORT_SWP_PMI` / `_N` / `_S` | alias | delivery-shortage-swp | CFS | CFS | MI, CWS | SWP M&I aggregate shortage |
+| `SHORT_CVP_PMI_N` / `_S` | alias | delivery-shortage-cvp | CFS | CFS | MI, CWS | CVP M&I aggregate shortage |
+| `DEL_CVP_PAG_N` / `_S` | alias | delivery-cvp | CFS | CFS | AG | CVP Project AG delivery |
+| `DEL_SWP_PAG_N` / `_S` | alias | delivery-swp | CFS | CFS | AG | SWP Project AG delivery |
+| `DEL_CVP_PSC_N` | alias | delivery-cvp | CFS | CFS | AG | CVP Settlement Contractors N |
+| `DEL_CVP_PEX_S` | alias | delivery-cvp | CFS | CFS | AG | CVP Exchange Contractors S |
+| `SHORT_CVP_PAG_N` / `_S` | alias | delivery-shortage-cvp | CFS | CFS | AG | CVP AG shortage |
+| `SHORT_SWP_PAG_N` / `_S` | alias | delivery-shortage-swp | CFS | CFS | AG | SWP AG shortage |
+| `SHORT_CVP_PSC_N` | alias | delivery-shortage-cvp | CFS | CFS | AG | Settlement shortage |
+| `SHORT_CVP_PEX_S` | alias | delivery-shortage-cvp | CFS | CFS | AG | Exchange shortage |
+| `DEL_CVP_PRF_N` / `_S` | alias | delivery-cvp | CFS | CFS | (not used) | CVP Refuge delivery aggregate |
+| `PERDV_SWP_{1–39}` | alias | swp-output | **PERCENT** | **NONE** | MI | Fraction 0–1; despite `units 'percent'` tag |
+| `NDO` | std | FLOW-NDO | CFS | CFS | Delta | Net Delta Outflow |
+| `X2_PRV_KM` | std | X2-POSITION-PREV | **KM** | **KM** | Delta | X2 salinity intrusion position |
+| `EM_EC_MONTH` | alias | SALINITY | **UMHOS/CM** | **UMHOS/CM** | Delta | Emmaton electrical conductivity |
+| `JP_EC_MONTH` | alias | SALINITY | **UMHOS/CM** | **UMHOS/CM** | Delta | Jersey Point EC |
+| `RS_EC_MONTH` | alias | SALINITY | **UMHOS/CM** | **UMHOS/CM** | Delta | Rock Slough EC |
+| `UNIMP_{watershed}` | timeseries | FLOW-UNIMPAIRED | **TAF** | TAF or CFS | Env Flows | SV input; names use abbreviations (SHAS, OROV) |
+| `EFLOWS_{reach}` | timeseries | FLOW-MIN-EFLOW | TAF → CFS | CFS | Env Flows | SV input; functional flow target |
+| `taf_cfs` / `cfs_taf` | **built-in** | — | — | — | — | WRESL system functions; not user-defined |
+
+### B. Water Balance Equations (WRESL-verified)
+
+| DU Type | WRESL Constraint | Equation | Shortage Variable |
+|---------|-----------------|----------|-------------------|
+| AG (with surface water) | `goal meetAW_{DU}` | `AW + RP = DN + GP + RU + SHORTAGE` | `SHRTG_` (Sac) / `GW_SHORT_` (SJR) |
+| AG (GW-only, 18 DUs) | `goal meetAW_{DU}` | `AW + RP = GP + RU + SHORTAGE` (no DN) | Same |
+| AG (GW-only, SJR simplified) | `goal meetAW_{DU}` | `AW = GP + SHORTAGE` (no RP, no RU) | `GW_SHORT_` |
+| Refuge (_PR) | `goal meetAW_{DU}` | `AW + RP = DN + GP + RU + SHORTAGE` | Same as AG by region |
+| Urban (_PU/_SU) | `goal setUD_{DU}` | `UD = DN + GP + SHORTAGE` (no RP, no RU) | Same as AG by region |
+| Urban (GW-only, _NU) | `goal setUD_{DU}` | `UD = GP + SHORTAGE` (no DN) | Same as AG by region |
+| MI (SWP contractors) | (implicit) | `demand × taf_cfs × perdel = delivery + shortage` | `SHORT_D_*_PMI` (alias) |
+
+### C. CFS → TAF Conversion Factors
+
+| Source | Factor | Code | Difference from exact |
+|--------|--------|------|----------------------|
+| **Exact** | `86400 / 43560 / 1000 = 0.001983471074...` | — | — |
+| **ETL (`units.py`)** | `86400 / 43560000 = 0.00198347107438` | `CFS_TO_TAF_PER_DAY` | **Exact** (integer division) |
+| **V3 `cqwlutils.py`** | `0.0019834714` | hardcoded literal | 0.000003% (negligible) |
+| **V3 `metrics.py`** | `0.001984` | hardcoded literal | 0.027% (negligible) |
+| **Old repo `AuxFunctions.py`** | `(86400/43560) * day / 1000` | computed per-row | **Exact** |
+
+All implementations produce equivalent results for practical purposes.
+
+### D. ETL Module Unit Handling Matrix
+
+| Module | Uses `parse_dss_csv_header`? | Uses `deduplicate_columns`? | Checks CSV header units? | CFS→TAF conversion? | `check_post_conversion_magnitude`? | Double-conversion risk? |
+|--------|-------|-------|-------|-------|-------|-------|
+| **AG** | ✅ | ✅ | ✅ | ✅ CFS only | ✅ | None |
+| **Refuge** | ✅ | ✅ | ✅ | ✅ CFS only | ✅ | None |
+| **MI** | ✅ | ✅ | ✅ | ✅ CFS only (PERDV skipped) | ✅ | None |
+| **DU Urban** | ✅ | ✅ | ✅ | ✅ CFS only | ✅ | None (fixed March 2026) |
+| **Reservoir** | ❌ (own parser) | ❌ | ✅ (own check) | N/A (storage is TAF) | N/A | None |
+| **Env Flows** | ❌ (own parser) | ❌ (own dedup) | ✅ (SV only) | ✅ (volume output only) | ❌ | None |
+| **Delta** | ❌ (own parser) | ❌ (own dedup) | ❌ | ✅ (NDO only) | ❌ | None |
+| **CWS Aggregate** | ✅ | ✅ | ✅ | ✅ (unit-aware) | ✅ | None (fixed March 2026) |
+
+### E. GW-Only Demand Units (no DN in WRESL, confirmed 18 total)
+
+| Region | DU IDs | WRESL Balance Form |
+|--------|--------|-------------------|
+| Sacramento (9) | `06_NA`, `07N_NA`, `07S_NA`, `15N_NA1`, `15S_NA1`, `16_NA1`, `17N_NA`, `20_NA2`, `26N_NA` | `AW + RP = GP + RU + SHRTG` |
+| SJR East (6) | `60S_NA1`, `60S_NA2`, `61_NA1`, `62_NA1`, `63_NA1`, `64_NA1` | `AW = GP + GW_SHORT` (no RP, no RU) |
+| SJR West (3) | `72_NA2`, `73_NA` | `AW = GP + GW_SHORT` |
+| Note | `26S_NA` is commented out in WRESL (moved to Lower Mokelumne) | — |
+
+V3 `DataExtraction.py` lists 11 of these (06_NA through 60S_NA2) and computes `DN = GP + RU`.
+
+### F. MI Contractor PERDV Mapping (WRESL-verified)
+
+| PERDV Variable | WRESL units tag | Actual value range | Contractor(s) |
+|----------------|----------------|--------------------|---------------|
+| `PERDV_SWP_1` | `percent` | 0–1 (fraction) | ACFC (SBA009) |
+| `PERDV_SWP_2` | `percent` | 0–1 | ACFC (SBA020) |
+| `PERDV_SWP_3` | `percent` | 0–1 | ACWD |
+| `PERDV_SWP_4` | `percent` | 0–1 | AVEK |
+| `PERDV_SWP_11` | `percent` | 0–1 | CSTLN (Castaic/SVRWD) |
+| `PERDV_SWP_15` | `percent` | 0–1 | KERN (Kern County) |
+| `PERDV_SWP_29` | `percent` | 0–1 | PLMDL (Palmdale) |
+| `PERDV_SWP_30` | `percent` | 0–1 | BRDNO (San Bernardino) |
+| `PERDV_SWP_31` | `percent` | 0–1 | GABRL (San Gabriel) |
+| `PERDV_SWP_32` | `percent` | 0–1 | GRGNO (San Gorgonio) |
+| `PERDV_SWP_34` | `percent` | 0–1 | BRBRA (Santa Barbara) |
+| `PERDV_SWP_35` | `percent` | 0–1 | OBISPO + SCVWD (shared) |
+| `PERDV_SWP_38` | `percent` | 0–1 | VNTRA (Ventura, PYRMD arc) |
+| `PERDV_SWP_39` | `percent` | 0–1 | VNTRA (Ventura, CSTIC arc) |
+
+MI demand formula: `demand_TAF_per_month = Σ (D_i + SHORT_i) / PERDV_i` (per arc).
+MWD demand: hardcoded `1911.5 TAF/yr` (Table A contract).
+
+### G. Reservoir Capacity Constants (WRESL-verified)
+
+| Reservoir | WRESL `level6` / gross | V3 Hardcoded | ETL `CAPACITY_OVERRIDES` | Entity CSV |
+|-----------|----------------------|-------------|-------------------------|------------|
+| **SHSTA** | 4552 TAF | — (from DSS) | — (from entity CSV) | 4552 |
+| **TRNTY** | 2447.65 TAF | — | — | 2448 |
+| **OROVL** | 3424.8 TAF | **3424.8** | **3424.8** ✅ | 3537 |
+| **FOLSM** | 967 TAF | **967** | **967** ✅ | 975 |
+| **MLRTN** | — (≈524) | **524** | **524** ✅ | 520 |
+| **MELON** | — (≈2420) | **2420** | **2420** ✅ | 2400 |
+
+### H. Computed Aggregates (ETL vs V3)
+
+| Aggregate | ETL Formula | V3 Formula | Match? |
+|-----------|-------------|------------|--------|
+| `nod_ag` | `DEL_CVP_PAG_N + DEL_SWP_PAG_N + DEL_CVP_PSC_N` | `DEL_CVP_PAG_N + DEL_SWP_PAG_N + DEL_CVP_PSC_N` | ✅ |
+| `sod_ag` | `DEL_CVP_PAG_S + DEL_SWP_PAG_S + DEL_CVP_PEX_S` | `DEL_CVP_PAG_S + DEL_SWP_PAG_S + DEL_CVP_PEX_S` | ✅ |
+| `NOD_STORAGE` | (not computed) | `S_TRNTY + S_SHSTA + S_OROVL + S_FOLSM + S_NBLDB` | — |
+| `SOD_STORAGE` | (not computed) | `S_SLUIS_CVP + S_SLUIS_SWP + S_MELON + S_NHGAN + S_MLRTN + S_PEDRO + S_MCLRE + S_HNSLY` | — |
+
+---
+
+## Appendix: Known Errors in COEQWAL Repositories
+
+Flagged during WRESL verification (March 2026). These are in the *notebook* codebases,
+not in the ETL. Documented here for reference.
+
+### COEQWAL_V3 / `DataExtraction.py`
+
+| # | Severity | Issue | Location |
+|---|----------|-------|----------|
+| 1 | **CRITICAL** | `UD_ANTOC` double conversion: value is pre-converted to TAF (`25 × 0.001984 × days`) but labeled `CFS`, so `convert_all_cfs_to_taf` converts it again | Line 926 |
+| 2 | **CRITICAL** | `DEL_CVPSWP_TOTAL` double-counts SOD CVP deliveries: adds `DEL_CVP_TOTAL` (which includes PAG_S + PEX_S) then separately adds `DEL_CVP_PAG_S + DEL_CVP_PEX_S` | Lines 389–399 |
+| 3 | **HIGH** | `SBA036_SCVWD` shortage variable has wrong case (`short_D_` lowercase) and wrong C-part (`FLOW-DELIVERY` instead of `DELIVERY-SHORTAGE`). Commented-out code (lines 1322–1324) has the correct version | Lines 1342–1345 |
+| 4 | **MEDIUM** | Trailing space in `S_OROVLLEVEL6DV ` and `S_MELONLEVEL5DV ` column names in `preprocess_compound_data_dss` (not in `preprocess_study_dss`) — causes column name mismatch in multi-study mode | Lines 494, 496 |
+| 5 | **LOW** | `D_AMADR_NU`, `D_AMCYN`, `D_ACFC_PMI` defined 2–3 times each (later overwrites earlier; no functional harm) | Various |
+| 6 | **LOW** | Hardcoded study name `L2020A` in all manually constructed column tuples — cannot handle other studies | Throughout |
+
+### COEQWAL (old repo) / `metrics.py`
+
+| # | Severity | Issue | Location |
+|---|----------|-------|----------|
+| 1 | **HIGH** | `var_filter` undefined in `create_subset_var` — runtime crash when WYT filter is provided | Line 195 |
+| 2 | **HIGH** | `df_copy` undefined in `create_subset_var` — runtime crash | Line 199 |
+| 3 | **LOW** | Deprecated `applymap()` call (should be `map()` in pandas ≥ 2.0) | Line 300 |
+| 4 | **LOW** | Variable named `prob_less` actually represents P(≥) | Line 884 |
+
+### COEQWAL (old repo) / `csPlots.py`
+
+| # | Severity | Issue | Location |
+|---|----------|-------|----------|
+| 1 | **MEDIUM** | `cfs_to_taf()` uses `.index.day` (day-of-month) instead of `.dt.days_in_month` — works correctly ONLY if timestamps are end-of-month | Line 1334 |
+
+### ETL Issues Found and Fixed During This Audit
+
+| # | Severity | Module | Issue | Status |
+|---|----------|--------|-------|--------|
+| 1 | **CRITICAL** | `du_urban/calculate_du_statistics.py` | No CFS→TAF conversion at all. All `*_taf` database columns contained CFS values. Did not import `units.py`, did not compute `DaysInMonth`, did not check CSV header units. | **FIXED** — now uses `parse_dss_csv_header`, `deduplicate_columns`, CFS→TAF conversion, and `check_post_conversion_magnitude` |
+| 2 | **HIGH** | `cws_aggregate/calculate_cws_aggregate_statistics.py` | Did not use `deduplicate_columns()`. V3 CSVs with both CFS and TAF versions of a column would pick TAF (last column wins), then the code unconditionally applied CFS→TAF conversion → double-conversion. No `check_post_conversion_magnitude` safeguard. | **FIXED** — now uses `parse_dss_csv_header`, `deduplicate_columns`, unit-aware `_to_taf()` helper, and `check_post_conversion_magnitude` |

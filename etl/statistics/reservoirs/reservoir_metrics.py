@@ -65,7 +65,7 @@ def calculate_flood_pool_probability(
         if date_index is None:
             raise ValueError("date_index required when months filter is specified")
         # Handle both DatetimeIndex and Series
-        if hasattr(date_index, 'dt'):
+        if hasattr(date_index, "dt"):
             month_mask = date_index.dt.month.isin(months)
         else:
             month_mask = date_index.month.isin(months)
@@ -74,7 +74,7 @@ def calculate_flood_pool_probability(
             flood_threshold = flood_threshold.loc[month_mask]
 
     if len(storage) == 0:
-        return {'probability': 0.0, 'hit_count': 0, 'total_count': 0}
+        return {"probability": 0.0, "hit_count": 0, "total_count": 0}
 
     # Calculate difference: storage - threshold
     # Flood pool hit when storage >= threshold (difference >= 0)
@@ -92,9 +92,9 @@ def calculate_flood_pool_probability(
     total_count = len(storage)
 
     return {
-        'probability': hit_count / total_count if total_count > 0 else 0.0,
-        'hit_count': hit_count,
-        'total_count': total_count,
+        "probability": hit_count / total_count if total_count > 0 else 0.0,
+        "hit_count": hit_count,
+        "total_count": total_count,
     }
 
 
@@ -133,7 +133,7 @@ def calculate_dead_pool_probability(
         if date_index is None:
             raise ValueError("date_index required when months filter is specified")
         # Handle both DatetimeIndex and Series
-        if hasattr(date_index, 'dt'):
+        if hasattr(date_index, "dt"):
             month_mask = date_index.dt.month.isin(months)
         else:
             month_mask = date_index.month.isin(months)
@@ -142,7 +142,7 @@ def calculate_dead_pool_probability(
             dead_pool_threshold = dead_pool_threshold.loc[month_mask]
 
     if len(storage) == 0:
-        return {'probability': 0.0, 'hit_count': 0, 'total_count': 0}
+        return {"probability": 0.0, "hit_count": 0, "total_count": 0}
 
     # Calculate difference: storage - threshold
     # Dead pool hit when storage <= threshold (difference <= 0)
@@ -157,9 +157,9 @@ def calculate_dead_pool_probability(
     total_count = len(storage)
 
     return {
-        'probability': hit_count / total_count if total_count > 0 else 0.0,
-        'hit_count': hit_count,
-        'total_count': total_count,
+        "probability": hit_count / total_count if total_count > 0 else 0.0,
+        "hit_count": hit_count,
+        "total_count": total_count,
     }
 
 
@@ -192,7 +192,7 @@ def calculate_cv(
         if date_index is None:
             raise ValueError("date_index required when months filter is specified")
         # Handle both DatetimeIndex and Series
-        if hasattr(date_index, 'dt'):
+        if hasattr(date_index, "dt"):
             month_mask = date_index.dt.month.isin(months)
         else:
             month_mask = date_index.month.isin(months)
@@ -238,13 +238,13 @@ def calculate_annual_average(
         ...     date_index=df['DateTime']
         ... )
     """
-    data = pd.DataFrame({'value': values, 'WaterYear': water_years}).dropna()
+    data = pd.DataFrame({"value": values, "WaterYear": water_years}).dropna()
 
     if months is not None:
         if date_index is None:
             raise ValueError("date_index required when months filter is specified")
         # Handle both DatetimeIndex and Series
-        if hasattr(date_index, 'dt'):
+        if hasattr(date_index, "dt"):
             month_mask = date_index.dt.month.isin(months)
         else:
             month_mask = date_index.month.isin(months)
@@ -254,7 +254,7 @@ def calculate_annual_average(
         return 0.0
 
     # Calculate mean for each water year
-    annual_means = data.groupby('WaterYear')['value'].mean()
+    annual_means = data.groupby("WaterYear")["value"].mean()
 
     # Return mean of annual means
     return float(annual_means.mean())
@@ -283,7 +283,7 @@ def calculate_monthly_average(
         >>> apr_avg = calculate_monthly_average(df['S_SHSTA'], df['DateTime'], month=4)
     """
     # Handle both DatetimeIndex and Series
-    if hasattr(date_index, 'dt'):
+    if hasattr(date_index, "dt"):
         month_mask = date_index.dt.month == month
     else:
         month_mask = date_index.month == month
@@ -325,22 +325,22 @@ def calculate_monthly_percentiles(
 
     for month in range(1, 13):
         # Handle both DatetimeIndex and Series
-        if hasattr(date_index, 'dt'):
+        if hasattr(date_index, "dt"):
             month_mask = date_index.dt.month == month
         else:
             month_mask = date_index.month == month
         month_data = values.loc[month_mask].dropna()
 
         if len(month_data) == 0:
-            results[month] = {f'q{p}': 0.0 for p in percentiles}
-            results[month]['mean'] = 0.0
+            results[month] = {f"q{p}": 0.0 for p in percentiles}
+            results[month]["mean"] = 0.0
             continue
 
         stats = {}
         for p in percentiles:
-            stats[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
+            stats[f"q{p}"] = round(float(np.percentile(month_data, p)), 2)
 
-        stats['mean'] = round(float(month_data.mean()), 2)
+        stats["mean"] = round(float(month_data.mean()), 2)
         results[month] = stats
 
     return results
@@ -367,22 +367,22 @@ def calculate_water_month_percentiles(
     if percentiles is None:
         percentiles = [0, 10, 30, 50, 70, 90, 100]
 
-    data = pd.DataFrame({'value': values, 'WaterMonth': water_months}).dropna()
+    data = pd.DataFrame({"value": values, "WaterMonth": water_months}).dropna()
     results = {}
 
     for wm in range(1, 13):
-        wm_data = data[data['WaterMonth'] == wm]['value']
+        wm_data = data[data["WaterMonth"] == wm]["value"]
 
         if len(wm_data) == 0:
-            results[wm] = {f'q{p}': 0.0 for p in percentiles}
-            results[wm]['mean'] = 0.0
+            results[wm] = {f"q{p}": 0.0 for p in percentiles}
+            results[wm]["mean"] = 0.0
             continue
 
         stats = {}
         for p in percentiles:
-            stats[f'q{p}'] = round(float(np.percentile(wm_data, p)), 2)
+            stats[f"q{p}"] = round(float(np.percentile(wm_data, p)), 2)
 
-        stats['mean'] = round(float(wm_data.mean()), 2)
+        stats["mean"] = round(float(wm_data.mean()), 2)
         results[wm] = stats
 
     return results
@@ -415,281 +415,281 @@ RESERVOIR_THRESHOLDS = {
     # }
     #
     # ===================== MAJOR CVP RESERVOIRS =====================
-    'SHSTA': {  # Shasta (4552 TAF) - largest CVP reservoir
-        'flood_var': 'S_SHSTALEVEL5DV',
-        'dead_var': 'S_SHSTALEVEL1DV',
+    "SHSTA": {  # Shasta (4552 TAF) - largest CVP reservoir
+        "flood_var": "S_SHSTALEVEL5DV",
+        "dead_var": "S_SHSTALEVEL1DV",
     },
-    'TRNTY': {  # Trinity (2448 TAF) - capacity at LEVEL5DV, flood at LEVEL4DV
-        'flood_var': 'S_TRNTYLEVEL4DV',
-        'dead_var': 'S_TRNTYLEVEL1DV',
+    "TRNTY": {  # Trinity (2448 TAF) - capacity at LEVEL5DV, flood at LEVEL4DV
+        "flood_var": "S_TRNTYLEVEL4DV",
+        "dead_var": "S_TRNTYLEVEL1DV",
     },
-    'FOLSM': {  # Folsom (975 TAF)
-        'flood_var': 'S_FOLSMLEVEL5DV',
-        'dead_var': 'S_FOLSMLEVEL1DV',
+    "FOLSM": {  # Folsom (975 TAF)
+        "flood_var": "S_FOLSMLEVEL5DV",
+        "dead_var": "S_FOLSMLEVEL1DV",
     },
-    'MELON': {  # New Melones (2400 TAF)
-        'flood_var': 'S_MELONLEVEL4DV',  # Uses Level 4
-        'dead_var': 80.0,
+    "MELON": {  # New Melones (2400 TAF)
+        "flood_var": "S_MELONLEVEL4DV",  # Uses Level 4
+        "dead_var": 80.0,
     },
-    'MLRTN': {  # Millerton (520 TAF)
-        'flood_var': 524.0,
-        'dead_var': 135.0,
+    "MLRTN": {  # Millerton (520 TAF)
+        "flood_var": 524.0,
+        "dead_var": 135.0,
     },
-    'SLUIS_CVP': {  # San Luis CVP share (1062 TAF)
-        'flood_var': 'S_SLUIS_CVPLEVEL5DV',
-        'dead_var': 'S_SLUIS_CVPLEVEL1DV',
+    "SLUIS_CVP": {  # San Luis CVP share (1062 TAF)
+        "flood_var": "S_SLUIS_CVPLEVEL5DV",
+        "dead_var": "S_SLUIS_CVPLEVEL1DV",
     },
     #
     # ===================== MAJOR SWP RESERVOIRS =====================
-    'OROVL': {  # Oroville (3537 TAF) - largest SWP reservoir
-        'flood_var': 'S_OROVLLEVEL5DV',
-        'dead_var': 'S_OROVLLEVEL1DV',
+    "OROVL": {  # Oroville (3537 TAF) - largest SWP reservoir
+        "flood_var": "S_OROVLLEVEL5DV",
+        "dead_var": "S_OROVLLEVEL1DV",
     },
-    'SLUIS_SWP': {  # San Luis SWP share (979 TAF)
-        'flood_var': 'S_SLUIS_SWPLEVEL5DV',
-        'dead_var': 'S_SLUIS_SWPLEVEL1DV',
+    "SLUIS_SWP": {  # San Luis SWP share (979 TAF)
+        "flood_var": "S_SLUIS_SWPLEVEL5DV",
+        "dead_var": "S_SLUIS_SWPLEVEL1DV",
     },
-    'SLUIS': {  # Combined San Luis (2041 TAF)
-        'flood_var': 'S_SLUISLEVEL5DV',
-        'dead_var': 'S_SLUISLEVEL1DV',
+    "SLUIS": {  # Combined San Luis (2041 TAF)
+        "flood_var": "S_SLUISLEVEL5DV",
+        "dead_var": "S_SLUISLEVEL1DV",
     },
     #
     # ===================== CVP/LOCAL FLOOD CONTROL =====================
-    'BLKBT': {  # Black Butte (136 TAF)
-        'flood_var': 'S_BLKBTLEVEL5DV',
-        'dead_var': None,  # Uses entity dead_pool_taf
+    "BLKBT": {  # Black Butte (136 TAF)
+        "flood_var": "S_BLKBTLEVEL5DV",
+        "dead_var": None,  # Uses entity dead_pool_taf
     },
-    'NHGAN': {  # New Hogan (317 TAF)
-        'flood_var': 'S_NHGANLEVEL5DV',
-        'dead_var': 'S_NHGANLEVEL1DV',
+    "NHGAN": {  # New Hogan (317 TAF)
+        "flood_var": "S_NHGANLEVEL5DV",
+        "dead_var": "S_NHGANLEVEL1DV",
     },
-    'ENGLB': {  # Englebright (70 TAF)
-        'flood_var': 'S_ENGLBLEVEL5DV',
-        'dead_var': None,
+    "ENGLB": {  # Englebright (70 TAF)
+        "flood_var": "S_ENGLBLEVEL5DV",
+        "dead_var": None,
     },
-    'HNSLY': {  # Hensley (90 TAF)
-        'flood_var': 'S_HNSLYLEVEL5DV',
-        'dead_var': 'S_HNSLYLEVEL1DV',
+    "HNSLY": {  # Hensley (90 TAF)
+        "flood_var": "S_HNSLYLEVEL5DV",
+        "dead_var": "S_HNSLYLEVEL1DV",
     },
-    'ESTMN': {  # Eastman (5.9 TAF)
-        'flood_var': 'S_ESTMNLEVEL5DV',
-        'dead_var': 'S_ESTMNLEVEL1DV',
+    "ESTMN": {  # Eastman (5.9 TAF)
+        "flood_var": "S_ESTMNLEVEL5DV",
+        "dead_var": "S_ESTMNLEVEL1DV",
     },
-    'LGRSV': {  # Little Grass Valley (93 TAF)
-        'flood_var': 'S_LGRSVLEVEL5DV',
-        'dead_var': None,
+    "LGRSV": {  # Little Grass Valley (93 TAF)
+        "flood_var": "S_LGRSVLEVEL5DV",
+        "dead_var": None,
     },
-    'INDVL': {  # Indian Valley (286 TAF)
-        'flood_var': 'S_INDVLLEVEL5DV',
-        'dead_var': None,
+    "INDVL": {  # Indian Valley (286 TAF)
+        "flood_var": "S_INDVLLEVEL5DV",
+        "dead_var": None,
     },
-    'SLYCK': {  # Sly Creek (65 TAF)
-        'flood_var': 'S_SLYCKLEVEL5DV',
-        'dead_var': None,
+    "SLYCK": {  # Sly Creek (65 TAF)
+        "flood_var": "S_SLYCKLEVEL5DV",
+        "dead_var": None,
     },
     #
     # ===================== YUBA/BEAR SYSTEM =====================
-    'NBLDB': {  # New Bullards Bar (966 TAF)
-        'flood_var': 'S_NBLDBLEVEL5DV',
-        'dead_var': 'S_NBLDBLEVEL1DV',
+    "NBLDB": {  # New Bullards Bar (966 TAF)
+        "flood_var": "S_NBLDBLEVEL5DV",
+        "dead_var": "S_NBLDBLEVEL1DV",
     },
-    'CMPFW': {  # Camp Far West (103 TAF)
-        'flood_var': 'S_CMPFWLEVEL5DV',
-        'dead_var': None,
+    "CMPFW": {  # Camp Far West (103 TAF)
+        "flood_var": "S_CMPFWLEVEL5DV",
+        "dead_var": None,
     },
-    'RLLNS': {  # Rollins (66 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "RLLNS": {  # Rollins (66 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'CMBIE': {  # Combie (10 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "CMBIE": {  # Combie (10 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'JKSMD': {  # Jackson Meadows (66.6 TAF)
-        'flood_var': 'S_JKSMDLEVEL5DV',
-        'dead_var': None,
+    "JKSMD": {  # Jackson Meadows (66.6 TAF)
+        "flood_var": "S_JKSMDLEVEL5DV",
+        "dead_var": None,
     },
     #
     # ===================== AMERICAN RIVER SYSTEM =====================
-    'HHOLE': {  # Hell Hole (207 TAF)
-        'flood_var': 'S_HHOLELEVEL5DV',
-        'dead_var': None,
+    "HHOLE": {  # Hell Hole (207 TAF)
+        "flood_var": "S_HHOLELEVEL5DV",
+        "dead_var": None,
     },
-    'FRMDW': {  # French Meadows (136 TAF)
-        'flood_var': 'S_FRMDWLEVEL5DV',
-        'dead_var': None,
+    "FRMDW": {  # French Meadows (136 TAF)
+        "flood_var": "S_FRMDWLEVEL5DV",
+        "dead_var": None,
     },
-    'LOONL': {  # Loon Lake (73.8 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "LOONL": {  # Loon Lake (73.8 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'UNVLY': {  # Union Valley (277 TAF)
-        'flood_var': 'S_UNVLYLEVEL5DV',
-        'dead_var': None,
+    "UNVLY": {  # Union Valley (277 TAF)
+        "flood_var": "S_UNVLYLEVEL5DV",
+        "dead_var": None,
     },
-    'ICEHS': {  # Ice House (45.8 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "ICEHS": {  # Ice House (45.8 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'NTOMA': {  # Natoma (8.9 TAF) - afterbay
-        'flood_var': None,
-        'dead_var': None,
+    "NTOMA": {  # Natoma (8.9 TAF) - afterbay
+        "flood_var": None,
+        "dead_var": None,
     },
-    'GERLE': {  # Gerle (1.3 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "GERLE": {  # Gerle (1.3 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'STMPY': {  # Stumpy Meadows (20 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "STMPY": {  # Stumpy Meadows (20 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'JNKSN': {  # Jenkinson/Sly Park (40.6 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "JNKSN": {  # Jenkinson/Sly Park (40.6 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== TRINITY SYSTEM =====================
-    'WKYTN': {  # Whiskeytown (241 TAF)
-        'flood_var': 'S_WKYTNLEVEL5DV',
-        'dead_var': 'S_WKYTNLEVEL1DV',
+    "WKYTN": {  # Whiskeytown (241 TAF)
+        "flood_var": "S_WKYTNLEVEL5DV",
+        "dead_var": "S_WKYTNLEVEL1DV",
     },
-    'LWSTN': {  # Lewiston (14.7 TAF) - regulating
-        'flood_var': None,
-        'dead_var': None,
+    "LWSTN": {  # Lewiston (14.7 TAF) - regulating
+        "flood_var": None,
+        "dead_var": None,
     },
-    'KSWCK': {  # Keswick (23.8 TAF) - regulating
-        'flood_var': None,
-        'dead_var': None,
+    "KSWCK": {  # Keswick (23.8 TAF) - regulating
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== FEATHER RIVER SYSTEM =====================
-    'ALMNR': {  # Almanor (1143 TAF)
-        'flood_var': 'S_ALMNRLEVEL5DV',
-        'dead_var': None,
+    "ALMNR": {  # Almanor (1143 TAF)
+        "flood_var": "S_ALMNRLEVEL5DV",
+        "dead_var": None,
     },
-    'BTVLY': {  # Butt Valley (49.8 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "BTVLY": {  # Butt Valley (49.8 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'BUCKS': {  # Bucks (101 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "BUCKS": {  # Bucks (101 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'ANTLP': {  # Antelope (179 TAF)
-        'flood_var': 'S_ANTLPLEVEL5DV',
-        'dead_var': None,
+    "ANTLP": {  # Antelope (179 TAF)
+        "flood_var": "S_ANTLPLEVEL5DV",
+        "dead_var": None,
     },
-    'FRMAN': {  # Frenchman (53.6 TAF)
-        'flood_var': 'S_FRMANLEVEL5DV',
-        'dead_var': None,
+    "FRMAN": {  # Frenchman (53.6 TAF)
+        "flood_var": "S_FRMANLEVEL5DV",
+        "dead_var": None,
     },
-    'DAVIS': {  # Lake Davis (1 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "DAVIS": {  # Lake Davis (1 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'RVPHB': {  # Round Valley/Philbrook (40 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "RVPHB": {  # Round Valley/Philbrook (40 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'THRMA': {  # Thermalito Afterbay (61 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "THRMA": {  # Thermalito Afterbay (61 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'THRMF': {  # Thermalito Forebay (73.5 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "THRMF": {  # Thermalito Forebay (73.5 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'MTMDW': {  # Mountain Meadows (24 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "MTMDW": {  # Mountain Meadows (24 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== MOKELUMNE SYSTEM =====================
-    'CMCHE': {  # Camanche (417 TAF)
-        'flood_var': 'S_CMCHELEVEL5DV',
-        'dead_var': None,
+    "CMCHE": {  # Camanche (417 TAF)
+        "flood_var": "S_CMCHELEVEL5DV",
+        "dead_var": None,
     },
-    'PARDE': {  # Pardee (197 TAF)
-        'flood_var': 'S_PARDELEVEL5DV',
-        'dead_var': None,
+    "PARDE": {  # Pardee (197 TAF)
+        "flood_var": "S_PARDELEVEL5DV",
+        "dead_var": None,
     },
-    'SLTSP': {  # Salt Springs (141 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "SLTSP": {  # Salt Springs (141 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'RNCHO': {  # Rancho Murieta (5 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "RNCHO": {  # Rancho Murieta (5 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== STANISLAUS SYSTEM =====================
-    'TULOC': {  # Tulloch (68.4 TAF)
-        'flood_var': 'S_TULOCLEVEL5DV',
-        'dead_var': None,
+    "TULOC": {  # Tulloch (68.4 TAF)
+        "flood_var": "S_TULOCLEVEL5DV",
+        "dead_var": None,
     },
-    'BEARD': {  # Beardsley (97.7 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "BEARD": {  # Beardsley (97.7 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'DONLL': {  # Donnell (64.4 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "DONLL": {  # Donnell (64.4 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'RELIE': {  # Relief (15.6 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "RELIE": {  # Relief (15.6 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'PCRST': {  # Pinecrest (4.3 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "PCRST": {  # Pinecrest (4.3 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'LYONS': {  # Lyons (6 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "LYONS": {  # Lyons (6 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'SPICE': {  # New Spicer Meadows (4 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "SPICE": {  # New Spicer Meadows (4 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'ALPNE': {  # Alpine (4.1 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "ALPNE": {  # Alpine (4.1 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== TUOLUMNE SYSTEM =====================
-    'PEDRO': {  # Don Pedro (2030 TAF)
-        'flood_var': 'S_PEDROLEVEL5DV',
-        'dead_var': 'S_PEDROLEVEL1DV',
+    "PEDRO": {  # Don Pedro (2030 TAF)
+        "flood_var": "S_PEDROLEVEL5DV",
+        "dead_var": "S_PEDROLEVEL1DV",
     },
-    'HTCHY': {  # Hetch Hetchy (360 TAF)
-        'flood_var': 'S_HTCHYLEVEL5DV',
-        'dead_var': None,
+    "HTCHY": {  # Hetch Hetchy (360 TAF)
+        "flood_var": "S_HTCHYLEVEL5DV",
+        "dead_var": None,
     },
-    'LLOYD': {  # Cherry/Lloyd (220 TAF)
-        'flood_var': 'S_LLOYDLEVEL5DV',
-        'dead_var': None,
+    "LLOYD": {  # Cherry/Lloyd (220 TAF)
+        "flood_var": "S_LLOYDLEVEL5DV",
+        "dead_var": None,
     },
-    'ELENR': {  # Eleanor (27 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "ELENR": {  # Eleanor (27 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'TRLCK': {  # Turlock (68.4 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "TRLCK": {  # Turlock (68.4 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'MDSTO': {  # Modesto (28 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "MDSTO": {  # Modesto (28 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'WDWRD': {  # Woodward (29.1 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "WDWRD": {  # Woodward (29.1 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== MERCED SYSTEM =====================
-    'MCLRE': {  # McClure/Exchequer (1025 TAF)
-        'flood_var': 'S_MCLRELEVEL5DV',
-        'dead_var': 'S_MCLRELEVEL1DV',
+    "MCLRE": {  # McClure/Exchequer (1025 TAF)
+        "flood_var": "S_MCLRELEVEL5DV",
+        "dead_var": "S_MCLRELEVEL1DV",
     },
     #
     # ===================== SAN JOAQUIN SYSTEM =====================
@@ -697,131 +697,131 @@ RESERVOIR_THRESHOLDS = {
     #
     # ===================== CALAVERAS SYSTEM =====================
     # Note: New Hogan (NHGAN) listed above in Flood Control
-    'AMADR': {  # Lake Amador (7 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "AMADR": {  # Lake Amador (7 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== CACHE/PUTAH CREEK =====================
-    'BRYSA': {  # Lake Berryessa (1602 TAF)
-        'flood_var': 'S_BRYSALEVEL5DV',
-        'dead_var': None,
+    "BRYSA": {  # Lake Berryessa (1602 TAF)
+        "flood_var": "S_BRYSALEVEL5DV",
+        "dead_var": None,
     },
-    'CLRLK': {  # Clear Lake (131 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "CLRLK": {  # Clear Lake (131 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'EPARK': {  # East Park (51 TAF)
-        'flood_var': 'S_EPARKLEVEL5DV',
-        'dead_var': None,
+    "EPARK": {  # East Park (51 TAF)
+        "flood_var": "S_EPARKLEVEL5DV",
+        "dead_var": None,
     },
-    'SGRGE': {  # Stony Gorge (50.1 TAF)
-        'flood_var': 'S_SGRGELEVEL5DV',
-        'dead_var': None,
+    "SGRGE": {  # Stony Gorge (50.1 TAF)
+        "flood_var": "S_SGRGELEVEL5DV",
+        "dead_var": None,
     },
     #
     # ===================== SOUTH YUBA / TAHOE FEEDER =====================
-    'SPLDG': {  # Spaulding (74.8 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "SPLDG": {  # Spaulding (74.8 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'SCOTF': {  # Scott Flat (26 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "SCOTF": {  # Scott Flat (26 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'BOWMN': {  # Bowman (68.3 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "BOWMN": {  # Bowman (68.3 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'FRDYC': {  # Fordyce (49.4 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "FRDYC": {  # Fordyce (49.4 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'FRNCH': {  # French/Faucherie/Sawmill (13.8 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "FRNCH": {  # French/Faucherie/Sawmill (13.8 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'LCBRF': {  # Lindsey/Culbertson/Blue/Rucker/Feely (11.5 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "LCBRF": {  # Lindsey/Culbertson/Blue/Rucker/Feely (11.5 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'LKVLY': {  # Lake Valley (8.9 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "LKVLY": {  # Lake Valley (8.9 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'MERLC': {  # Merle Collins (1.3 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "MERLC": {  # Merle Collins (1.3 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'SILVR': {  # Silver (31 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "SILVR": {  # Silver (31 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== COSUMNES / EL DORADO =====================
-    'CAPLS': {  # Caples (21.6 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "CAPLS": {  # Caples (21.6 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'ECHOL': {  # Echo (74.1 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "ECHOL": {  # Echo (74.1 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'ALOHA': {  # Aloha (5.1 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "ALOHA": {  # Aloha (5.1 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== BEAR RIVER (LOWER) =====================
-    'UBEAR': {  # Upper Bear (6.8 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "UBEAR": {  # Upper Bear (6.8 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'LBEAR': {  # Lower Bear (49.6 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "LBEAR": {  # Lower Bear (49.6 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== EBMUD =====================
-    'EBMUD': {  # EBMUD Terminal (200 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "EBMUD": {  # EBMUD Terminal (200 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'EBTML': {  # EBMUD Terminal alt (200 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "EBTML": {  # EBMUD Terminal alt (200 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== OTHER / MISC =====================
-    'BLUMD': {  # Blue/Twin Meadow (9 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "BLUMD": {  # Blue/Twin Meadow (9 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
-    'LOSVQ': {  # Los Vaqueros (100 TAF)
-        'flood_var': None,
-        'dead_var': None,
+    "LOSVQ": {  # Los Vaqueros (100 TAF)
+        "flood_var": None,
+        "dead_var": None,
     },
     #
     # ===================== SOUTHERN CALIFORNIA (SWP) =====================
-    'CSTIC': {  # Castaic (325 TAF)
-        'flood_var': 'S_CSTICLEVEL5DV',
-        'dead_var': None,
+    "CSTIC": {  # Castaic (325 TAF)
+        "flood_var": "S_CSTICLEVEL5DV",
+        "dead_var": None,
     },
-    'PYRMD': {  # Pyramid (173 TAF)
-        'flood_var': 'S_PYRMDLEVEL5DV',
-        'dead_var': None,
+    "PYRMD": {  # Pyramid (173 TAF)
+        "flood_var": "S_PYRMDLEVEL5DV",
+        "dead_var": None,
     },
-    'SVRWD': {  # Silverwood (73 TAF).DV uses S_SVRWD_1..5, not LEVELxDV
-        'flood_var': 'S_SVRWD_5',
-        'dead_var': None,
+    "SVRWD": {  # Silverwood (73 TAF).DV uses S_SVRWD_1..5, not LEVELxDV
+        "flood_var": "S_SVRWD_5",
+        "dead_var": None,
     },
-    'PRRIS': {  # Perris (131 TAF)
-        'flood_var': 'S_PRRISLEVEL5DV',
-        'dead_var': None,
+    "PRRIS": {  # Perris (131 TAF)
+        "flood_var": "S_PRRISLEVEL5DV",
+        "dead_var": None,
     },
-    'DELVE': {  # Del Valle (77 TAF)
-        'flood_var': 'S_DELVELEVEL5DV',
-        'dead_var': None,
+    "DELVE": {  # Del Valle (77 TAF)
+        "flood_var": "S_DELVELEVEL5DV",
+        "dead_var": None,
     },
 }
 
@@ -846,7 +846,7 @@ def get_flood_threshold(
     if reservoir_code not in RESERVOIR_THRESHOLDS:
         return None
 
-    threshold = RESERVOIR_THRESHOLDS[reservoir_code].get('flood_var')
+    threshold = RESERVOIR_THRESHOLDS[reservoir_code].get("flood_var")
 
     if threshold is None:
         return None
@@ -881,7 +881,7 @@ def get_dead_pool_threshold(
         Float constant or Series of variable thresholds, or None if not found
     """
     if reservoir_code in RESERVOIR_THRESHOLDS:
-        threshold = RESERVOIR_THRESHOLDS[reservoir_code].get('dead_var')
+        threshold = RESERVOIR_THRESHOLDS[reservoir_code].get("dead_var")
 
         if threshold is not None:
             if isinstance(threshold, (int, float)):
@@ -902,12 +902,13 @@ def get_dead_pool_threshold(
 # Convenience functions for batch processing
 # =============================================================================
 
+
 def calculate_all_reservoir_probabilities(
     df: pd.DataFrame,
     reservoir_code: str,
     capacity_taf: float,
     dead_pool_taf: float,
-    date_column: str = 'DateTime',
+    date_column: str = "DateTime",
 ) -> Dict[str, Dict[str, float]]:
     """
     Calculate all probability metrics for a single reservoir.
@@ -923,7 +924,7 @@ def calculate_all_reservoir_probabilities(
         Dict with 'flood_pool' and 'dead_pool' probability results,
         plus 'all_year', 'september', and 'april' variants.
     """
-    storage_col = f'S_{reservoir_code}'
+    storage_col = f"S_{reservoir_code}"
 
     if storage_col not in df.columns:
         return {}
@@ -939,29 +940,29 @@ def calculate_all_reservoir_probabilities(
 
     # All-year probabilities
     if flood_threshold is not None:
-        results['flood_pool_all'] = calculate_flood_pool_probability(
+        results["flood_pool_all"] = calculate_flood_pool_probability(
             storage, flood_threshold
         )
 
         # September flood probability (end of water year)
-        results['flood_pool_september'] = calculate_flood_pool_probability(
+        results["flood_pool_september"] = calculate_flood_pool_probability(
             storage, flood_threshold, months=[9], date_index=date_idx
         )
 
     if dead_threshold is not None:
-        results['dead_pool_all'] = calculate_dead_pool_probability(
+        results["dead_pool_all"] = calculate_dead_pool_probability(
             storage, dead_threshold
         )
 
         # September dead pool probability
-        results['dead_pool_september'] = calculate_dead_pool_probability(
+        results["dead_pool_september"] = calculate_dead_pool_probability(
             storage, dead_threshold, months=[9], date_index=date_idx
         )
 
     # CV calculations
-    results['cv_all'] = calculate_cv(storage)
-    results['cv_april'] = calculate_cv(storage, months=[4], date_index=date_idx)
-    results['cv_september'] = calculate_cv(storage, months=[9], date_index=date_idx)
+    results["cv_all"] = calculate_cv(storage)
+    results["cv_april"] = calculate_cv(storage, months=[4], date_index=date_idx)
+    results["cv_september"] = calculate_cv(storage, months=[9], date_index=date_idx)
 
     return results
 
@@ -969,6 +970,7 @@ def calculate_all_reservoir_probabilities(
 # =============================================================================
 # Verification and comparison utilities
 # =============================================================================
+
 
 def verify_metric(
     expected: float,
@@ -988,17 +990,17 @@ def verify_metric(
     """
     if expected == 0:
         passed = abs(actual) < tolerance
-        percent_error = 0 if passed else float('inf')
+        percent_error = 0 if passed else float("inf")
     else:
         percent_error = abs((actual - expected) / expected)
         passed = percent_error < tolerance
 
     return {
-        'expected': expected,
-        'actual': actual,
-        'difference': actual - expected,
-        'percent_error': percent_error * 100,  # Convert to percentage
-        'passed': passed,
+        "expected": expected,
+        "actual": actual,
+        "difference": actual - expected,
+        "percent_error": percent_error * 100,  # Convert to percentage
+        "passed": passed,
     }
 
 
@@ -1019,11 +1021,11 @@ def compare_monthly_percentiles(
         Dict with comparison results by month and percentile
     """
     results = {
-        'all_passed': True,
-        'total_comparisons': 0,
-        'passed_comparisons': 0,
-        'failed_comparisons': [],
-        'by_month': {},
+        "all_passed": True,
+        "total_comparisons": 0,
+        "passed_comparisons": 0,
+        "failed_comparisons": [],
+        "by_month": {},
     }
 
     for month in range(1, 13):
@@ -1031,30 +1033,26 @@ def compare_monthly_percentiles(
             continue
 
         month_results = {}
-        for key in ['q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100', 'mean']:
+        for key in ["q0", "q10", "q30", "q50", "q70", "q90", "q100", "mean"]:
             if key not in calculated[month] or key not in expected[month]:
                 continue
 
             verification = verify_metric(
-                expected[month][key],
-                calculated[month][key],
-                tolerance
+                expected[month][key], calculated[month][key], tolerance
             )
 
-            results['total_comparisons'] += 1
-            if verification['passed']:
-                results['passed_comparisons'] += 1
+            results["total_comparisons"] += 1
+            if verification["passed"]:
+                results["passed_comparisons"] += 1
             else:
-                results['all_passed'] = False
-                results['failed_comparisons'].append({
-                    'month': month,
-                    'metric': key,
-                    **verification
-                })
+                results["all_passed"] = False
+                results["failed_comparisons"].append(
+                    {"month": month, "metric": key, **verification}
+                )
 
             month_results[key] = verification
 
-        results['by_month'][month] = month_results
+        results["by_month"][month] = month_results
 
     return results
 
@@ -1085,9 +1083,9 @@ def format_verification_report(
     failed_count = 0
 
     for metric_name, result in verifications.items():
-        if isinstance(result, dict) and 'passed' in result:
-            status = "PASS" if result['passed'] else "FAIL"
-            if result['passed']:
+        if isinstance(result, dict) and "passed" in result:
+            status = "PASS" if result["passed"] else "FAIL"
+            if result["passed"]:
                 passed_count += 1
             else:
                 failed_count += 1
@@ -1095,7 +1093,9 @@ def format_verification_report(
             lines.append(f"{metric_name}:")
             lines.append(f"  Expected: {result['expected']:.4f}")
             lines.append(f"  Actual:   {result['actual']:.4f}")
-            lines.append(f"  Diff:     {result['difference']:.4f} ({result['percent_error']:.2f}%)")
+            lines.append(
+                f"  Diff:     {result['difference']:.4f} ({result['percent_error']:.2f}%)"
+            )
             lines.append(f"  Status:   {status}")
             lines.append("")
 
@@ -1108,6 +1108,7 @@ def format_verification_report(
 # =============================================================================
 # Summary statistics for reporting
 # =============================================================================
+
 
 def summarize_probability_metrics(
     period_summary: Dict[str, any],
@@ -1124,42 +1125,42 @@ def summarize_probability_metrics(
     summary = {}
 
     # Flood pool risk assessment
-    flood_prob = period_summary.get('flood_pool_prob_all')
+    flood_prob = period_summary.get("flood_pool_prob_all")
     if flood_prob is not None:
         if flood_prob < 0.01:
-            summary['flood_risk'] = f"Very low flood risk ({flood_prob:.1%})"
+            summary["flood_risk"] = f"Very low flood risk ({flood_prob:.1%})"
         elif flood_prob < 0.05:
-            summary['flood_risk'] = f"Low flood risk ({flood_prob:.1%})"
+            summary["flood_risk"] = f"Low flood risk ({flood_prob:.1%})"
         elif flood_prob < 0.10:
-            summary['flood_risk'] = f"Moderate flood risk ({flood_prob:.1%})"
+            summary["flood_risk"] = f"Moderate flood risk ({flood_prob:.1%})"
         else:
-            summary['flood_risk'] = f"Elevated flood risk ({flood_prob:.1%})"
+            summary["flood_risk"] = f"Elevated flood risk ({flood_prob:.1%})"
     else:
-        summary['flood_risk'] = "Flood risk not calculated (no threshold)"
+        summary["flood_risk"] = "Flood risk not calculated (no threshold)"
 
     # Dead pool risk assessment
-    dead_prob = period_summary.get('dead_pool_prob_all')
+    dead_prob = period_summary.get("dead_pool_prob_all")
     if dead_prob is not None:
         if dead_prob < 0.001:
-            summary['drought_risk'] = f"Very low drought risk ({dead_prob:.1%})"
+            summary["drought_risk"] = f"Very low drought risk ({dead_prob:.1%})"
         elif dead_prob < 0.01:
-            summary['drought_risk'] = f"Low drought risk ({dead_prob:.1%})"
+            summary["drought_risk"] = f"Low drought risk ({dead_prob:.1%})"
         elif dead_prob < 0.05:
-            summary['drought_risk'] = f"Moderate drought risk ({dead_prob:.1%})"
+            summary["drought_risk"] = f"Moderate drought risk ({dead_prob:.1%})"
         else:
-            summary['drought_risk'] = f"Elevated drought risk ({dead_prob:.1%})"
+            summary["drought_risk"] = f"Elevated drought risk ({dead_prob:.1%})"
     else:
-        summary['drought_risk'] = "Drought risk not calculated (no threshold)"
+        summary["drought_risk"] = "Drought risk not calculated (no threshold)"
 
     # Storage variability assessment
-    cv = period_summary.get('storage_cv_all')
+    cv = period_summary.get("storage_cv_all")
     if cv is not None:
         if cv < 0.15:
-            summary['variability'] = f"Low variability (CV={cv:.3f})"
+            summary["variability"] = f"Low variability (CV={cv:.3f})"
         elif cv < 0.30:
-            summary['variability'] = f"Moderate variability (CV={cv:.3f})"
+            summary["variability"] = f"Moderate variability (CV={cv:.3f})"
         else:
-            summary['variability'] = f"High variability (CV={cv:.3f})"
+            summary["variability"] = f"High variability (CV={cv:.3f})"
 
     return summary
 
@@ -1173,20 +1174,24 @@ def list_available_thresholds() -> Dict[str, Dict[str, str]]:
     """
     info = {}
     for code, thresholds in RESERVOIR_THRESHOLDS.items():
-        flood_var = thresholds.get('flood_var')
-        dead_var = thresholds.get('dead_var')
+        flood_var = thresholds.get("flood_var")
+        dead_var = thresholds.get("dead_var")
 
         info[code] = {
-            'flood_threshold': (
+            "flood_threshold": (
                 f"{flood_var:.1f} TAF (constant)"
                 if isinstance(flood_var, (int, float))
                 else f"{flood_var} (model output)"
-            ) if flood_var else "Not defined",
-            'dead_threshold': (
+            )
+            if flood_var
+            else "Not defined",
+            "dead_threshold": (
                 f"{dead_var:.1f} TAF (constant)"
                 if isinstance(dead_var, (int, float))
                 else f"{dead_var} (model output)"
-            ) if dead_var else "Not defined",
+            )
+            if dead_var
+            else "Not defined",
         }
 
     return info

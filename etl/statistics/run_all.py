@@ -160,10 +160,7 @@ def _alert_failure(
     )
     if exception:
         banner += f"  Exception: {exception}\n"
-    banner += (
-        f"  Total failures so far: {_failure_count}\n"
-        f"{'!' * 60}\n"
-    )
+    banner += f"  Total failures so far: {_failure_count}\n{'!' * 60}\n"
     sys.stderr.write(banner)
     sys.stderr.flush()
 
@@ -225,9 +222,7 @@ def run_module(
 
         if proc.returncode != 0:
             tail = "".join(stderr_lines[-15:]).strip()
-            log.error(
-                f"Module {module_name} failed (exit {proc.returncode})"
-            )
+            log.error(f"Module {module_name} failed (exit {proc.returncode})")
             exc = RuntimeError(tail) if tail else None
             _alert_failure(module_name, scenario_id, elapsed, exception=exc)
             return False, elapsed
@@ -319,8 +314,10 @@ def run_all_modules(
     log.info(f"SUMMARY for {scenario_id}:")
     for module_name, info in results.items():
         icon = "✅" if info["status"] == "success" else "❌"
-        log.info(f"  {icon} {ETL_MODULES[module_name]['name']}: "
-                 f"{info['status']} ({info['elapsed_s']:.1f}s)")
+        log.info(
+            f"  {icon} {ETL_MODULES[module_name]['name']}: "
+            f"{info['status']} ({info['elapsed_s']:.1f}s)"
+        )
     if _failure_count > 0:
         log.info(f"  ⚠️  Running failure tally: {_failure_count} total failures so far")
     log.info(f"{'=' * 60}\n")
@@ -432,11 +429,12 @@ Examples:
     # Split scenarios into batches (0 = single batch of all)
     if batch_size > 0:
         batches = [
-            scenarios[i : i + batch_size]
-            for i in range(0, len(scenarios), batch_size)
+            scenarios[i : i + batch_size] for i in range(0, len(scenarios), batch_size)
         ]
-        log.info(f"Processing {len(scenarios)} scenarios in "
-                 f"{len(batches)} batch(es) of up to {batch_size}")
+        log.info(
+            f"Processing {len(scenarios)} scenarios in "
+            f"{len(batches)} batch(es) of up to {batch_size}"
+        )
     else:
         batches = [scenarios]
 
@@ -454,8 +452,10 @@ Examples:
 
         if len(batches) > 1:
             log.info(f"\n{'*' * 60}")
-            log.info(f"  BATCH {batch_num}/{len(batches)}: "
-                     f"{batch[0]} .. {batch[-1]}  ({len(batch)} scenarios)")
+            log.info(
+                f"  BATCH {batch_num}/{len(batches)}: "
+                f"{batch[0]} .. {batch[-1]}  ({len(batch)} scenarios)"
+            )
             log.info(f"{'*' * 60}\n")
 
         if workers == 1 or len(batch) == 1:
@@ -501,8 +501,7 @@ Examples:
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {
-                    executor.submit(_process_scenario, sid): sid
-                    for sid in batch
+                    executor.submit(_process_scenario, sid): sid for sid in batch
                 }
                 for future in as_completed(futures):
                     sid = futures[future]
@@ -543,9 +542,11 @@ Examples:
 
         if len(batches) > 1 and not aborted and batch_num < len(batches):
             batch_elapsed = time.time() - start_time
-            log.info(f"Batch {batch_num} complete. "
-                     f"Elapsed so far: {batch_elapsed / 60:.1f} min. "
-                     f"{len(scenarios) - global_idx} scenario(s) remaining.")
+            log.info(
+                f"Batch {batch_num} complete. "
+                f"Elapsed so far: {batch_elapsed / 60:.1f} min. "
+                f"{len(scenarios) - global_idx} scenario(s) remaining."
+            )
 
     elapsed = time.time() - start_time
     log.info(f"Total wall-clock time: {elapsed / 60:.1f} minutes")
@@ -557,15 +558,17 @@ Examples:
         )
 
     # Print comprehensive scorecard at the end
-    has_failures = print_scorecard(
-        all_results, scenarios, effective_modules
-    )
+    has_failures = print_scorecard(all_results, scenarios, effective_modules)
 
     # Write structured audit CSV
     audit_path = f"stats_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     write_audit_csv(
-        all_results, scenarios, effective_modules,
-        elapsed, args.dry_run, audit_path,
+        all_results,
+        scenarios,
+        effective_modules,
+        elapsed,
+        args.dry_run,
+        audit_path,
     )
 
     # Post-processing: cross-scenario sensitivity analysis
@@ -596,7 +599,9 @@ Examples:
         sys.exit(1)
 
 
-def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str]) -> bool:
+def print_scorecard(
+    all_results: dict, scenarios: List[str], modules: List[str]
+) -> bool:
     """
     Print a comprehensive scorecard showing results for all scenarios and modules.
 
@@ -718,7 +723,9 @@ def print_scorecard(all_results: dict, scenarios: List[str], modules: List[str])
             for mod, raw in results.items():
                 st = raw["status"] if isinstance(raw, dict) else raw
                 if st == "failed":
-                    print(f"  • {scenario_id} / {ETL_MODULES.get(mod, {}).get('name', mod)}")
+                    print(
+                        f"  • {scenario_id} / {ETL_MODULES.get(mod, {}).get('name', mod)}"
+                    )
         print()
 
     # Final status
@@ -759,14 +766,16 @@ def write_audit_csv(
             else:
                 status = "not_run"
                 elapsed = 0.0
-            rows.append({
-                "timestamp": ts,
-                "scenario": scenario_id,
-                "module": mod,
-                "status": status,
-                "elapsed_s": f"{elapsed:.1f}",
-                "dry_run": str(dry_run),
-            })
+            rows.append(
+                {
+                    "timestamp": ts,
+                    "scenario": scenario_id,
+                    "module": mod,
+                    "status": status,
+                    "elapsed_s": f"{elapsed:.1f}",
+                    "dry_run": str(dry_run),
+                }
+            )
 
     fieldnames = ["timestamp", "scenario", "module", "status", "elapsed_s", "dry_run"]
     with open(output_path, "w", newline="") as f:
@@ -777,9 +786,11 @@ def write_audit_csv(
     total = len(rows)
     ok = sum(1 for r in rows if r["status"] == "success")
     fail = sum(1 for r in rows if r["status"] == "failed")
-    log.info(f"Audit CSV written to {output_path}  "
-             f"({total} tasks: {ok} ok, {fail} failed, "
-             f"{elapsed_total / 60:.1f} min total)")
+    log.info(
+        f"Audit CSV written to {output_path}  "
+        f"({total} tasks: {ok} ok, {fail} failed, "
+        f"{elapsed_total / 60:.1f} min total)"
+    )
 
 
 DB_ROW_COUNT_TABLES = [

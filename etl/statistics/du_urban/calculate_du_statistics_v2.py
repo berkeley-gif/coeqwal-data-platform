@@ -35,6 +35,7 @@ from scenarios import SCENARIOS  # noqa: E402
 # Optional imports
 try:
     import boto3
+
     HAS_BOTO3 = True
 except ImportError:
     HAS_BOTO3 = False
@@ -42,6 +43,7 @@ except ImportError:
 try:
     import psycopg2
     from psycopg2.extras import execute_values, RealDictCursor
+
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
@@ -55,7 +57,7 @@ logging.basicConfig(
 log = logging.getLogger("du_statistics_v2")
 
 # Configuration
-S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 # Local paths
@@ -67,15 +69,15 @@ PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
 
-
 # =============================================================================
 # DATABASE FUNCTIONS
 # =============================================================================
 
+
 def get_variable_mappings(conn) -> Dict[str, Dict]:
     """
     Load variable mappings from du_urban_variable table.
-    
+
     Returns:
         Dict mapping du_id to {delivery_variable, demand_variable, demand_mode, ...}
     """
@@ -88,14 +90,15 @@ def get_variable_mappings(conn) -> Dict[str, Dict]:
     """)
     rows = cur.fetchall()
     cur.close()
-    
+
     mappings = {}
     for row in rows:
         m = dict(row)
-        if m.get('demand_params') and isinstance(m['demand_params'], str):
+        if m.get("demand_params") and isinstance(m["demand_params"], str):
             import json
-            m['demand_params'] = json.loads(m['demand_params'])
-        mappings[m['du_id']] = m
+
+            m["demand_params"] = json.loads(m["demand_params"])
+        mappings[m["du_id"]] = m
 
     log.info(f"Loaded {len(mappings)} variable mappings from database")
     return mappings
@@ -104,7 +107,7 @@ def get_variable_mappings(conn) -> Dict[str, Dict]:
 def get_delivery_arcs(conn) -> Dict[str, List[str]]:
     """
     Load delivery arcs for multi-arc DUs from du_urban_delivery_arc table.
-    
+
     Returns:
         Dict mapping du_id to list of arc variable names
     """
@@ -117,14 +120,14 @@ def get_delivery_arcs(conn) -> Dict[str, List[str]]:
     """)
     rows = cur.fetchall()
     cur.close()
-    
+
     arcs = {}
     for row in rows:
-        du_id = row['du_id']
+        du_id = row["du_id"]
         if du_id not in arcs:
             arcs[du_id] = []
-        arcs[du_id].append(row['delivery_arc'])
-    
+        arcs[du_id].append(row["delivery_arc"])
+
     log.info(f"Loaded delivery arcs for {len(arcs)} multi-arc DUs")
     return arcs
 
@@ -133,10 +136,11 @@ def get_delivery_arcs(conn) -> Dict[str, List[str]]:
 # DATA LOADING
 # =============================================================================
 
+
 def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
     """
     Load CSV with DSS-style multi-row headers.
-    
+
     Row structure:
         Row 0 (A): Source (CALSIM, MANUAL-ADD, CALCULATED)
         Row 1 (B): Variable name
@@ -146,28 +150,28 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
         Row 5 (type): Type
         Row 6 (units): Units
         Row 7+: Data
-    
+
     Returns:
         Tuple of (DataFrame with data, list of variable names from row B)
     """
     log.info(f"Loading CSV: {file_path}")
-    
+
     # Read header rows to get variable names (row B = row 1)
     header_df = pd.read_csv(file_path, header=None, nrows=7)
     var_names = header_df.iloc[1].tolist()  # Row B has variable names
-    
+
     # Read data portion (skip 7 header rows)
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    
+
     # Set simple column names (avoid multi-index issues)
     data_df.columns = range(len(data_df.columns))
-    
+
     # Create a mapping from variable name to column index
     var_to_idx = {}
     for idx, var in enumerate(var_names):
         if var not in var_to_idx:  # First occurrence wins
             var_to_idx[var] = idx
-    
+
     # Create column names, handling duplicates by appending index
     col_names = []
     seen = {}
@@ -178,13 +182,13 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
         else:
             col_names.append(var)
             seen[var] = 1
-    
+
     data_df.columns = col_names
-    
+
     # First column is date
     date_col = col_names[0]
-    data_df['DateTime'] = pd.to_datetime(data_df[date_col], errors='coerce')
-    
+    data_df["DateTime"] = pd.to_datetime(data_df[date_col], errors="coerce")
+
     log.info(f"Loaded {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, var_names
 
@@ -192,24 +196,24 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     """Add water year, water month, and days in month columns."""
     df = df.copy()
-    
-    if 'DateTime' not in df.columns or df['DateTime'].isna().all():
+
+    if "DateTime" not in df.columns or df["DateTime"].isna().all():
         raise ValueError("DateTime column not found or all null")
-    
-    df['CalendarMonth'] = df['DateTime'].dt.month
-    df['CalendarYear'] = df['DateTime'].dt.year
-    df['DaysInMonth'] = df['DateTime'].dt.daysinmonth
-    
+
+    df["CalendarMonth"] = df["DateTime"].dt.month
+    df["CalendarYear"] = df["DateTime"].dt.year
+    df["DaysInMonth"] = df["DateTime"].dt.daysinmonth
+
     # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
-    df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
-    
+    df["WaterMonth"] = ((df["CalendarMonth"] - 10) % 12) + 1
+
     # Water year: Oct-Dec belong to next water year
-    df['WaterYear'] = df['CalendarYear']
-    df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
-    
+    df["WaterYear"] = df["CalendarYear"]
+    df.loc[df["CalendarMonth"] >= 10, "WaterYear"] += 1
+
     log.info(f"Date range: {df['DateTime'].min()} to {df['DateTime'].max()}")
     log.info(f"Water years: {df['WaterYear'].min()} to {df['WaterYear'].max()}")
-    
+
     return df
 
 
@@ -217,7 +221,7 @@ def load_scenario_data(
     scenario_id: str,
     use_local: bool = False,
     output_csv_path: Optional[str] = None,
-    sv_csv_path: Optional[str] = None
+    sv_csv_path: Optional[str] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load main CalSim DV output and SV input CSV for a scenario.
@@ -236,18 +240,24 @@ def load_scenario_data(
     """
     if use_local:
         if output_csv_path is None:
-            output_csv_path = str(LOCAL_OUTPUT_DIR / f"{scenario_id}_coeqwal_calsim_output.csv")
+            output_csv_path = str(
+                LOCAL_OUTPUT_DIR / f"{scenario_id}_coeqwal_calsim_output.csv"
+            )
         if sv_csv_path is None:
-            sv_csv_path = str(LOCAL_REFERENCE_DIR / f"{scenario_id}_coeqwal_sv_input.csv")
+            sv_csv_path = str(
+                LOCAL_REFERENCE_DIR / f"{scenario_id}_coeqwal_sv_input.csv"
+            )
     else:
         if not HAS_BOTO3:
             raise ImportError("boto3 required for S3 access")
 
-        s3 = boto3.client('s3')
+        s3 = boto3.client("s3")
 
         # Download main DV output
         if output_csv_path is None:
-            output_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv"
+            output_key = (
+                f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv"
+            )
             output_csv_path = f"/tmp/{scenario_id}_output.csv"
             log.info(f"Downloading s3://{S3_BUCKET}/{output_key}")
             s3.download_file(S3_BUCKET, output_key, output_csv_path)
@@ -274,6 +284,7 @@ def load_scenario_data(
 # DEMAND COMPUTATION HELPERS
 # =============================================================================
 
+
 def compute_demand_for_du(
     output_df: pd.DataFrame,
     sv_df: pd.DataFrame,
@@ -285,32 +296,34 @@ def compute_demand_for_du(
     Returns a monthly demand Series in TAF.
     Returns all-NaN Series if demand cannot be computed.
     """
-    demand_mode = mapping.get('demand_mode')
-    demand_var = mapping.get('demand_variable')
-    params = mapping.get('demand_params') or {}
-    du_id = mapping.get('du_id', '?')
+    demand_mode = mapping.get("demand_mode")
+    demand_var = mapping.get("demand_variable")
+    params = mapping.get("demand_params") or {}
+    du_id = mapping.get("du_id", "?")
 
-    if demand_mode == 'sv' and demand_var:
+    if demand_mode == "sv" and demand_var:
         sv_vals = get_column_value(sv_df, demand_var)
         if sv_vals.index.equals(output_df.index):
             return sv_vals
-        valid = sv_df['DateTime'].notna()
-        sv_dt = pd.to_datetime(sv_df.loc[valid, 'DateTime'])
+        valid = sv_df["DateTime"].notna()
+        sv_dt = pd.to_datetime(sv_df.loc[valid, "DateTime"])
         # SV uses raw DSS timestamps (start of next month), so shift back
         # 1 day to land in the correct month before converting to period.
-        sv_ym = (sv_dt - pd.Timedelta(days=1)).dt.to_period('M')
+        sv_ym = (sv_dt - pd.Timedelta(days=1)).dt.to_period("M")
         ym_to_val = dict(zip(sv_ym, sv_vals[valid]))
-        dv_dt = pd.to_datetime(output_df['DateTime'])
-        dv_ym = dv_dt.dt.to_period('M')
+        dv_dt = pd.to_datetime(output_df["DateTime"])
+        dv_ym = dv_dt.dt.to_period("M")
         return dv_ym.map(ym_to_val).astype(float)
 
-    if demand_mode == 'table_a':
-        return pd.Series(MWD_TABLE_A_ANNUAL_TAF / 12.0, index=output_df.index, dtype=float)
+    if demand_mode == "table_a":
+        return pd.Series(
+            MWD_TABLE_A_ANNUAL_TAF / 12.0, index=output_df.index, dtype=float
+        )
 
-    if demand_mode == 'perdv':
-        perdv_vars = params.get('perdv_vars', [])
-        delivery_var = mapping.get('delivery_variable')
-        shortage_var = mapping.get('shortage_variable')
+    if demand_mode == "perdv":
+        perdv_vars = params.get("perdv_vars", [])
+        delivery_var = mapping.get("delivery_variable")
+        shortage_var = mapping.get("shortage_variable")
         if not perdv_vars or not delivery_var:
             log.warning(f"PERDV mode for {du_id} missing perdv_vars or delivery_var")
             return pd.Series(np.nan, index=output_df.index, dtype=float)
@@ -321,20 +334,20 @@ def compute_demand_for_du(
         pv = get_column_value(output_df, pv_var)
         pv_safe = pv.replace(0, np.nan)
         demand_cfs = (del_cfs + short_cfs) / pv_safe
-        return demand_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        return demand_cfs * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
 
-    if demand_mode == 'constant_cfs':
-        cfs_value = params.get('cfs_value', 0)
-        return cfs_value * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+    if demand_mode == "constant_cfs":
+        cfs_value = params.get("cfs_value", 0)
+        return cfs_value * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
 
-    if demand_mode == 'dv_sum':
-        columns = params.get('columns', [])
+    if demand_mode == "dv_sum":
+        columns = params.get("columns", [])
         if not columns:
             return pd.Series(np.nan, index=output_df.index, dtype=float)
         total = pd.Series(0.0, index=output_df.index)
         for col in columns:
             total = total + get_column_value(output_df, col).fillna(0)
-        return total * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
+        return total * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
 
     if demand_mode is None:
         log.debug(f"No demand_mode for {du_id} — demand will be NULL")
@@ -346,22 +359,23 @@ def compute_demand_for_du(
 # STATISTICS CALCULATION
 # =============================================================================
 
+
 def get_column_value(df: pd.DataFrame, column_name: str) -> pd.Series:
     """Get column values, handling missing columns gracefully."""
-    if column_name is None or column_name == 'NOT_FOUND':
+    if column_name is None or column_name == "NOT_FOUND":
         return pd.Series([np.nan] * len(df), index=df.index, dtype=float)
-    
+
     if column_name not in df.columns:
         log.debug(f"Column not found: {column_name}")
         return pd.Series([np.nan] * len(df), index=df.index, dtype=float)
-    
+
     col_data = df[column_name]
-    
+
     # Handle case where column lookup returns DataFrame (duplicate columns)
     if isinstance(col_data, pd.DataFrame):
         col_data = col_data.iloc[:, 0]  # Take first column
-    
-    return pd.to_numeric(col_data, errors='coerce')
+
+    return pd.to_numeric(col_data, errors="coerce")
 
 
 def calculate_du_statistics(
@@ -369,7 +383,7 @@ def calculate_du_statistics(
     sv_df: pd.DataFrame,
     mappings: Dict[str, Dict],
     delivery_arcs: Dict[str, List[str]],
-    scenario_id: str
+    scenario_id: str,
 ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """
     Calculate delivery, shortage, and demand statistics for all DUs.
@@ -383,165 +397,197 @@ def calculate_du_statistics(
     delivery_monthly_rows = []
     period_summary_rows = []
     shortage_monthly_rows = []
-    
+
     # Minimum threshold for counting a month as having a "shortage" (in TAF)
     # This filters out floating-point precision artifacts from CalSim's linear programming solver.
     SHORTAGE_THRESHOLD_TAF = 0.1
-    
+
     processed = 0
     skipped = 0
-    
+
     for du_id, mapping in mappings.items():
-        delivery_var = mapping.get('delivery_variable')
-        shortage_var = mapping.get('shortage_variable')
-        requires_sum = mapping.get('requires_sum', False)
-        
+        delivery_var = mapping.get("delivery_variable")
+        shortage_var = mapping.get("shortage_variable")
+        requires_sum = mapping.get("requires_sum", False)
+
         # Get delivery values (in CFS)
         if requires_sum and du_id in delivery_arcs:
-            arc_series = [get_column_value(output_df, arc) for arc in delivery_arcs[du_id]]
+            arc_series = [
+                get_column_value(output_df, arc) for arc in delivery_arcs[du_id]
+            ]
             delivery_cfs = sum(arc_series)
         else:
             delivery_cfs = get_column_value(output_df, delivery_var)
-        
-        delivery = delivery_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-        
+
+        delivery = delivery_cfs * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+
         # Compute demand using the appropriate mode for this DU
         demand = compute_demand_for_du(output_df, sv_df, mapping)
-        
+
         shortage_cfs = get_column_value(output_df, shortage_var)
-        shortage = shortage_cfs * output_df['DaysInMonth'] * CFS_TO_TAF_PER_DAY
-        
+        shortage = shortage_cfs * output_df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+
         if delivery.isna().all() and demand.isna().all():
             log.debug(f"Skipping {du_id}: no delivery or demand data")
             skipped += 1
             continue
-        
+
         processed += 1
-        
+
         # Calculate monthly statistics
         for wm in range(1, 13):
-            wm_mask = output_df['WaterMonth'] == wm
-            
+            wm_mask = output_df["WaterMonth"] == wm
+
             del_month = delivery[wm_mask].dropna()
-            dem_month = demand[wm_mask].dropna() if demand.notna().any() else pd.Series(dtype=float)
-            
+            dem_month = (
+                demand[wm_mask].dropna()
+                if demand.notna().any()
+                else pd.Series(dtype=float)
+            )
+
             if del_month.empty and dem_month.empty:
                 continue
-            
+
             # Match existing table schema: scenario_short_code, not scenario_id
             row = {
-                'scenario_short_code': scenario_id,
-                'du_id': du_id,
-                'water_month': wm,
-                'sample_count': len(del_month) if not del_month.empty else 0,
+                "scenario_short_code": scenario_id,
+                "du_id": du_id,
+                "water_month": wm,
+                "sample_count": len(del_month) if not del_month.empty else 0,
             }
-            
+
             # Delivery statistics (match existing column names: delivery_avg_taf, q0, q10, etc.)
             if not del_month.empty:
-                row['delivery_avg_taf'] = round(float(del_month.mean()), 2)
-                row['delivery_cv'] = round(float(del_month.std() / del_month.mean()), 4) if del_month.mean() > 0 else 0
+                row["delivery_avg_taf"] = round(float(del_month.mean()), 2)
+                row["delivery_cv"] = (
+                    round(float(del_month.std() / del_month.mean()), 4)
+                    if del_month.mean() > 0
+                    else 0
+                )
                 # Percentiles use q0, q10, etc. not delivery_q0
                 for p in PERCENTILES:
-                    row[f'q{p}'] = round(float(np.percentile(del_month, p)), 2)
+                    row[f"q{p}"] = round(float(np.percentile(del_month, p)), 2)
                 # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
                 for p in EXCEEDANCE_PERCENTILES:
-                    row[f'exc_p{p}'] = round(float(np.percentile(del_month, 100 - p)), 2)
-            
+                    row[f"exc_p{p}"] = round(
+                        float(np.percentile(del_month, 100 - p)), 2
+                    )
+
             # Monthly demand and percent of demand
-            row['demand_avg_taf'] = None
-            row['percent_of_demand_avg'] = None
+            row["demand_avg_taf"] = None
+            row["percent_of_demand_avg"] = None
             if not dem_month.empty:
-                row['demand_avg_taf'] = round(float(dem_month.mean()), 2)
+                row["demand_avg_taf"] = round(float(dem_month.mean()), 2)
                 # Calculate percent of demand met for this month
-                if not del_month.empty and row['demand_avg_taf'] > 0:
-                    pct = (row['delivery_avg_taf'] / row['demand_avg_taf']) * 100
+                if not del_month.empty and row["demand_avg_taf"] > 0:
+                    pct = (row["delivery_avg_taf"] / row["demand_avg_taf"]) * 100
                     # Clip to 0-100 range (can exceed 100% if carryover/surplus is used)
-                    row['percent_of_demand_avg'] = round(min(100.0, max(0.0, pct)), 2)
-            
+                    row["percent_of_demand_avg"] = round(min(100.0, max(0.0, pct)), 2)
+
             delivery_monthly_rows.append(row)
-            
+
             # Calculate monthly shortage statistics
             short_month = shortage[wm_mask].dropna()
             if not short_month.empty:
                 shortage_row = {
-                    'scenario_short_code': scenario_id,
-                    'du_id': du_id,
-                    'water_month': wm,
-                    'sample_count': len(short_month),
+                    "scenario_short_code": scenario_id,
+                    "du_id": du_id,
+                    "water_month": wm,
+                    "sample_count": len(short_month),
                 }
-                
-                shortage_row['shortage_avg_taf'] = round(float(short_month.mean()), 2)
-                shortage_row['shortage_cv'] = round(float(short_month.std() / short_month.mean()), 4) if short_month.mean() > 0 else 0
+
+                shortage_row["shortage_avg_taf"] = round(float(short_month.mean()), 2)
+                shortage_row["shortage_cv"] = (
+                    round(float(short_month.std() / short_month.mean()), 4)
+                    if short_month.mean() > 0
+                    else 0
+                )
                 # Frequency: percentage of months with shortage above threshold
-                shortage_row['shortage_frequency_pct'] = round(((short_month > SHORTAGE_THRESHOLD_TAF).sum() / len(short_month)) * 100, 2)
-                
+                shortage_row["shortage_frequency_pct"] = round(
+                    ((short_month > SHORTAGE_THRESHOLD_TAF).sum() / len(short_month))
+                    * 100,
+                    2,
+                )
+
                 # Shortage percentiles
                 for p in PERCENTILES:
-                    shortage_row[f'q{p}'] = round(float(np.percentile(short_month, p)), 2)
-                
+                    shortage_row[f"q{p}"] = round(
+                        float(np.percentile(short_month, p)), 2
+                    )
+
                 # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
                 for p in EXCEEDANCE_PERCENTILES:
-                    shortage_row[f'exc_p{p}'] = round(float(np.percentile(short_month, 100 - p)), 2)
-                
+                    shortage_row[f"exc_p{p}"] = round(
+                        float(np.percentile(short_month, 100 - p)), 2
+                    )
+
                 shortage_monthly_rows.append(shortage_row)
-        
+
         # Calculate period summary
-        water_years = sorted(output_df['WaterYear'].unique())
-        
+        water_years = sorted(output_df["WaterYear"].unique())
+
         # Annual delivery (convert CFS to TAF: CFS * days * 0.001983471)
-        annual_delivery = output_df.groupby('WaterYear').apply(
+        annual_delivery = output_df.groupby("WaterYear").apply(
             lambda g: delivery[g.index].sum(), include_groups=False
         )
-        
+
         # Annual demand
         if demand.notna().any():
-            annual_demand = output_df.groupby('WaterYear').apply(
+            annual_demand = output_df.groupby("WaterYear").apply(
                 lambda g: demand[g.index].sum(), include_groups=False
             )
         else:
             annual_demand = pd.Series([np.nan] * len(water_years), index=water_years)
-        
+
         # Annual shortage
         if shortage.notna().any():
-            annual_shortage = output_df.groupby('WaterYear').apply(
+            annual_shortage = output_df.groupby("WaterYear").apply(
                 lambda g: shortage[g.index].sum(), include_groups=False
             )
         else:
             annual_shortage = pd.Series([np.nan] * len(water_years), index=water_years)
-        
+
         # Match existing table schema
         summary = {
-            'scenario_short_code': scenario_id,
-            'du_id': du_id,
-            'simulation_start_year': int(water_years[0]),
-            'simulation_end_year': int(water_years[-1]),
-            'total_years': len(water_years),
+            "scenario_short_code": scenario_id,
+            "du_id": du_id,
+            "simulation_start_year": int(water_years[0]),
+            "simulation_end_year": int(water_years[-1]),
+            "total_years": len(water_years),
         }
-        
+
         # Annual delivery stats
         ad = annual_delivery.dropna()
         if not ad.empty:
-            summary['annual_delivery_avg_taf'] = round(float(ad.mean()), 2)
-            summary['annual_delivery_cv'] = round(float(ad.std() / ad.mean()), 4) if ad.mean() > 0 else 0
+            summary["annual_delivery_avg_taf"] = round(float(ad.mean()), 2)
+            summary["annual_delivery_cv"] = (
+                round(float(ad.std() / ad.mean()), 4) if ad.mean() > 0 else 0
+            )
             # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                summary[f'delivery_exc_p{p}'] = round(float(np.percentile(ad, 100 - p)), 2)
-        
+                summary[f"delivery_exc_p{p}"] = round(
+                    float(np.percentile(ad, 100 - p)), 2
+                )
+
         # Annual demand stats
         adm = annual_demand.dropna()
         if not adm.empty:
-            summary['annual_demand_avg_taf'] = round(float(adm.mean()), 2)
-        
+            summary["annual_demand_avg_taf"] = round(float(adm.mean()), 2)
+
         # Annual shortage stats
         ash = annual_shortage.dropna()
         if not ash.empty:
-            summary['annual_shortage_avg_taf'] = round(float(ash.mean()), 2)
+            summary["annual_shortage_avg_taf"] = round(float(ash.mean()), 2)
             shortage_years = (ash > SHORTAGE_THRESHOLD_TAF).sum()
-            summary['shortage_years_count'] = int(shortage_years)
-            summary['shortage_frequency_pct'] = round(shortage_years / len(ash) * 100, 2)
+            summary["shortage_years_count"] = int(shortage_years)
+            summary["shortage_frequency_pct"] = round(
+                shortage_years / len(ash) * 100, 2
+            )
             for p in EXCEEDANCE_PERCENTILES:
-                summary[f'shortage_exc_p{p}'] = round(float(np.percentile(ash, 100 - p)), 2)
-        
+                summary[f"shortage_exc_p{p}"] = round(
+                    float(np.percentile(ash, 100 - p)), 2
+                )
+
         # Percent demand met (annual) — also used as reliability_pct
         if not ad.empty and not adm.empty:
             common_years = ad.index.intersection(adm.index)
@@ -550,14 +596,16 @@ def calculate_du_statistics(
                 pct_met = np.clip(pct_met, 0, 100)
                 pct_met = pct_met.dropna()
                 if len(pct_met) > 0:
-                    summary['avg_pct_demand_met'] = round(float(pct_met.mean()), 2)
-                    summary['reliability_pct'] = summary['avg_pct_demand_met']
-        
+                    summary["avg_pct_demand_met"] = round(float(pct_met.mean()), 2)
+                    summary["reliability_pct"] = summary["avg_pct_demand_met"]
+
         period_summary_rows.append(summary)
-    
+
     log.info(f"Processed {processed} DUs, skipped {skipped}")
-    log.info(f"Generated {len(delivery_monthly_rows)} delivery monthly, {len(shortage_monthly_rows)} shortage monthly, {len(period_summary_rows)} summary rows")
-    
+    log.info(
+        f"Generated {len(delivery_monthly_rows)} delivery monthly, {len(shortage_monthly_rows)} shortage monthly, {len(period_summary_rows)} summary rows"
+    )
+
     return delivery_monthly_rows, period_summary_rows, shortage_monthly_rows
 
 
@@ -565,22 +613,29 @@ def calculate_du_statistics(
 # DATABASE INSERT
 # =============================================================================
 
+
 def save_to_database(
     conn,
     delivery_monthly_rows: List[Dict],
     period_summary_rows: List[Dict],
     shortage_monthly_rows: List[Dict],
-    scenario_id: str
+    scenario_id: str,
 ):
     """Save results to database tables."""
     cur = conn.cursor()
-    
+
     # Delete existing data for this scenario (uses scenario_short_code)
-    cur.execute("DELETE FROM du_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,))
-    cur.execute("DELETE FROM du_shortage_monthly WHERE scenario_short_code = %s", (scenario_id,))
-    cur.execute("DELETE FROM du_period_summary WHERE scenario_short_code = %s", (scenario_id,))
+    cur.execute(
+        "DELETE FROM du_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,)
+    )
+    cur.execute(
+        "DELETE FROM du_shortage_monthly WHERE scenario_short_code = %s", (scenario_id,)
+    )
+    cur.execute(
+        "DELETE FROM du_period_summary WHERE scenario_short_code = %s", (scenario_id,)
+    )
     log.info(f"Cleared existing data for scenario {scenario_id}")
-    
+
     # Helper to convert numpy types
     def convert_val(val):
         if val is None:
@@ -590,26 +645,42 @@ def save_to_database(
         if isinstance(val, (np.floating, np.float64, np.float32)):
             return float(val)
         return val
-    
+
     # Insert delivery monthly
     if delivery_monthly_rows:
         # Columns matching existing schema + new demand columns
         monthly_cols = [
-            'scenario_short_code', 'du_id', 'water_month',
-            'delivery_avg_taf', 'delivery_cv',
-            'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
-            'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
-            'demand_avg_taf', 'percent_of_demand_avg',  # Demand metrics
-            'sample_count'
+            "scenario_short_code",
+            "du_id",
+            "water_month",
+            "delivery_avg_taf",
+            "delivery_cv",
+            "q0",
+            "q10",
+            "q30",
+            "q50",
+            "q70",
+            "q90",
+            "q100",
+            "exc_p5",
+            "exc_p10",
+            "exc_p25",
+            "exc_p50",
+            "exc_p75",
+            "exc_p90",
+            "exc_p95",
+            "demand_avg_taf",
+            "percent_of_demand_avg",  # Demand metrics
+            "sample_count",
         ]
-        
+
         values = [
             tuple(convert_val(row.get(col)) for col in monthly_cols)
             for row in delivery_monthly_rows
         ]
-        
+
         insert_sql = f"""
-            INSERT INTO du_delivery_monthly ({', '.join(monthly_cols)})
+            INSERT INTO du_delivery_monthly ({", ".join(monthly_cols)})
             VALUES %s
             ON CONFLICT (scenario_short_code, du_id, water_month) 
             DO UPDATE SET
@@ -627,24 +698,40 @@ def save_to_database(
         """
         execute_values(cur, insert_sql, values)
         log.info(f"Inserted {len(values)} delivery monthly rows")
-    
+
     # Insert shortage monthly
     if shortage_monthly_rows:
         shortage_cols = [
-            'scenario_short_code', 'du_id', 'water_month',
-            'shortage_avg_taf', 'shortage_cv', 'shortage_frequency_pct',
-            'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
-            'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
-            'sample_count'
+            "scenario_short_code",
+            "du_id",
+            "water_month",
+            "shortage_avg_taf",
+            "shortage_cv",
+            "shortage_frequency_pct",
+            "q0",
+            "q10",
+            "q30",
+            "q50",
+            "q70",
+            "q90",
+            "q100",
+            "exc_p5",
+            "exc_p10",
+            "exc_p25",
+            "exc_p50",
+            "exc_p75",
+            "exc_p90",
+            "exc_p95",
+            "sample_count",
         ]
-        
+
         values = [
             tuple(convert_val(row.get(col)) for col in shortage_cols)
             for row in shortage_monthly_rows
         ]
-        
+
         insert_sql = f"""
-            INSERT INTO du_shortage_monthly ({', '.join(shortage_cols)})
+            INSERT INTO du_shortage_monthly ({", ".join(shortage_cols)})
             VALUES %s
             ON CONFLICT (scenario_short_code, du_id, water_month) 
             DO UPDATE SET
@@ -660,37 +747,57 @@ def save_to_database(
         """
         execute_values(cur, insert_sql, values)
         log.info(f"Inserted {len(values)} shortage monthly rows")
-    
+
     # Insert period summary
     if period_summary_rows:
         summary_cols = [
-            'scenario_short_code', 'du_id',
-            'simulation_start_year', 'simulation_end_year', 'total_years',
-            'annual_delivery_avg_taf', 'annual_delivery_cv',
-            'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
-            'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
-            'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
-            'shortage_exc_p5', 'shortage_exc_p10', 'shortage_exc_p25',
-            'shortage_exc_p50', 'shortage_exc_p75', 'shortage_exc_p90', 'shortage_exc_p95',
-            'reliability_pct', 'avg_pct_demand_met', 'annual_demand_avg_taf'
+            "scenario_short_code",
+            "du_id",
+            "simulation_start_year",
+            "simulation_end_year",
+            "total_years",
+            "annual_delivery_avg_taf",
+            "annual_delivery_cv",
+            "delivery_exc_p5",
+            "delivery_exc_p10",
+            "delivery_exc_p25",
+            "delivery_exc_p50",
+            "delivery_exc_p75",
+            "delivery_exc_p90",
+            "delivery_exc_p95",
+            "annual_shortage_avg_taf",
+            "shortage_years_count",
+            "shortage_frequency_pct",
+            "shortage_exc_p5",
+            "shortage_exc_p10",
+            "shortage_exc_p25",
+            "shortage_exc_p50",
+            "shortage_exc_p75",
+            "shortage_exc_p90",
+            "shortage_exc_p95",
+            "reliability_pct",
+            "avg_pct_demand_met",
+            "annual_demand_avg_taf",
         ]
-        
+
         values = [
             tuple(convert_val(row.get(col)) for col in summary_cols)
             for row in period_summary_rows
         ]
-        
-        update_cols = [c for c in summary_cols if c not in ('scenario_short_code', 'du_id')]
-        update_clause = ', '.join(f'{c} = EXCLUDED.{c}' for c in update_cols)
+
+        update_cols = [
+            c for c in summary_cols if c not in ("scenario_short_code", "du_id")
+        ]
+        update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
         insert_sql = f"""
-            INSERT INTO du_period_summary ({', '.join(summary_cols)})
+            INSERT INTO du_period_summary ({", ".join(summary_cols)})
             VALUES %s
             ON CONFLICT (scenario_short_code, du_id)
             DO UPDATE SET {update_clause}, updated_at = NOW()
         """
         execute_values(cur, insert_sql, values)
         log.info(f"Inserted {len(values)} period summary rows")
-    
+
     conn.commit()
     cur.close()
 
@@ -699,13 +806,14 @@ def save_to_database(
 # MAIN
 # =============================================================================
 
+
 def process_scenario(
     scenario_id: str,
     conn,
     use_local: bool = False,
     output_csv_path: Optional[str] = None,
     sv_csv_path: Optional[str] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
 ) -> Tuple[List[Dict], List[Dict]]:
     """Process a single scenario."""
     log.info(f"Processing scenario: {scenario_id}")
@@ -726,10 +834,12 @@ def process_scenario(
     delivery_monthly, period_summary, shortage_monthly = calculate_du_statistics(
         output_df, sv_df, mappings, delivery_arcs, scenario_id
     )
-    
+
     if not dry_run:
-        save_to_database(conn, delivery_monthly, period_summary, shortage_monthly, scenario_id)
-    
+        save_to_database(
+            conn, delivery_monthly, period_summary, shortage_monthly, scenario_id
+        )
+
     return delivery_monthly, period_summary, shortage_monthly
 
 
@@ -737,47 +847,84 @@ def get_mock_mappings() -> Dict[str, Dict]:
     """Return mock variable mappings for testing without database."""
     # Sample mappings for testing
     return {
-        '02_PU': {'delivery_variable': 'DL_02_PU', 'demand_variable': 'UD_02_PU', 'shortage_variable': 'SHRTG_02_PU', 'requires_sum': False},
-        '26N_NU1': {'delivery_variable': 'DL_26N_NU1', 'demand_variable': 'UD_26N_NU1', 'shortage_variable': 'SHRTG_26N_NU1', 'requires_sum': False},
-        'FRFLD': {'delivery_variable': 'D_WTPNBR_FRFLD', 'demand_variable': 'UD_FRFLD', 'shortage_variable': None, 'requires_sum': True},
-        'SBA029': {'delivery_variable': 'D_SBA029_ACWD_PMI', 'demand_variable': 'DEM_D_SBA029_ACWD_PMI', 'shortage_variable': 'SHORT_D_SBA029_ACWD_PMI', 'requires_sum': False},
-        'MWD': {'delivery_variable': 'DEL_SWP_MWD', 'demand_variable': 'TABLEA_CONTRACT_MWD', 'shortage_variable': 'SHORT_SWP_MWD', 'requires_sum': False},
+        "02_PU": {
+            "delivery_variable": "DL_02_PU",
+            "demand_variable": "UD_02_PU",
+            "shortage_variable": "SHRTG_02_PU",
+            "requires_sum": False,
+        },
+        "26N_NU1": {
+            "delivery_variable": "DL_26N_NU1",
+            "demand_variable": "UD_26N_NU1",
+            "shortage_variable": "SHRTG_26N_NU1",
+            "requires_sum": False,
+        },
+        "FRFLD": {
+            "delivery_variable": "D_WTPNBR_FRFLD",
+            "demand_variable": "UD_FRFLD",
+            "shortage_variable": None,
+            "requires_sum": True,
+        },
+        "SBA029": {
+            "delivery_variable": "D_SBA029_ACWD_PMI",
+            "demand_variable": "DEM_D_SBA029_ACWD_PMI",
+            "shortage_variable": "SHORT_D_SBA029_ACWD_PMI",
+            "requires_sum": False,
+        },
+        "MWD": {
+            "delivery_variable": "DEL_SWP_MWD",
+            "demand_variable": "TABLEA_CONTRACT_MWD",
+            "shortage_variable": "SHORT_SWP_MWD",
+            "requires_sum": False,
+        },
     }
 
 
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Calculate urban demand unit statistics (v2 with demand data)'
+        description="Calculate urban demand unit statistics (v2 with demand data)"
     )
-    parser.add_argument('--scenario', '-s', help='Scenario ID (e.g., s0020)')
-    parser.add_argument('--all-scenarios', action='store_true', help='Process all scenarios')
-    parser.add_argument('--local', action='store_true', help='Use local files instead of S3')
-    parser.add_argument('--output-csv', help='Override main DV output CSV path')
-    parser.add_argument('--sv-csv', help='Override SV input CSV path')
-    parser.add_argument('--dry-run', action='store_true', help='Calculate but do not save')
-    parser.add_argument('--output-json', action='store_true', help='Output results as JSON')
-    parser.add_argument('--mock-mappings', action='store_true', help='Use mock mappings for testing (no database required)')
-    
+    parser.add_argument("--scenario", "-s", help="Scenario ID (e.g., s0020)")
+    parser.add_argument(
+        "--all-scenarios", action="store_true", help="Process all scenarios"
+    )
+    parser.add_argument(
+        "--local", action="store_true", help="Use local files instead of S3"
+    )
+    parser.add_argument("--output-csv", help="Override main DV output CSV path")
+    parser.add_argument("--sv-csv", help="Override SV input CSV path")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Calculate but do not save"
+    )
+    parser.add_argument(
+        "--output-json", action="store_true", help="Output results as JSON"
+    )
+    parser.add_argument(
+        "--mock-mappings",
+        action="store_true",
+        help="Use mock mappings for testing (no database required)",
+    )
+
     args = parser.parse_args()
-    
+
     if not args.scenario and not args.all_scenarios:
         parser.error("Either --scenario or --all-scenarios required")
-    
+
     scenarios = SCENARIOS if args.all_scenarios else [args.scenario]
-    
+
     all_monthly = []
     all_summary = []
     all_shortage = []
-    
+
     if args.mock_mappings:
         # Use mock mappings for testing
         log.info("Using mock variable mappings (no database)")
         mappings = get_mock_mappings()
         delivery_arcs = {
-            'FRFLD': ['D_WTPNBR_FRFLD', 'D_WTPWMN_FRFLD'],
+            "FRFLD": ["D_WTPNBR_FRFLD", "D_WTPWMN_FRFLD"],
         }
-        
+
         for scenario_id in scenarios:
             try:
                 # Load data
@@ -792,28 +939,33 @@ def main():
                 monthly, summary, shortage = calculate_du_statistics(
                     output_df, sv_df, mappings, delivery_arcs, scenario_id
                 )
-                
+
                 all_monthly.extend(monthly)
                 all_summary.extend(summary)
                 all_shortage.extend(shortage)
-                
+
             except Exception as e:
                 log.error(f"Error processing {scenario_id}: {e}")
                 import traceback
+
                 traceback.print_exc()
                 if not args.all_scenarios:
                     raise
     else:
         # Connect to database
-        database_url = os.getenv('DATABASE_URL')
+        database_url = os.getenv("DATABASE_URL")
         if not database_url:
-            raise ValueError("DATABASE_URL environment variable required (or use --mock-mappings for testing)")
-        
+            raise ValueError(
+                "DATABASE_URL environment variable required (or use --mock-mappings for testing)"
+            )
+
         if not HAS_PSYCOPG2:
-            raise ImportError("psycopg2 required. Install with: pip install psycopg2-binary")
-        
+            raise ImportError(
+                "psycopg2 required. Install with: pip install psycopg2-binary"
+            )
+
         conn = psycopg2.connect(database_url)
-        
+
         for scenario_id in scenarios:
             try:
                 monthly, summary, shortage = process_scenario(
@@ -822,7 +974,7 @@ def main():
                     use_local=args.local,
                     output_csv_path=args.output_csv,
                     sv_csv_path=args.sv_csv,
-                    dry_run=args.dry_run
+                    dry_run=args.dry_run,
                 )
                 all_monthly.extend(monthly)
                 all_summary.extend(summary)
@@ -831,19 +983,21 @@ def main():
                 log.error(f"Error processing {scenario_id}: {e}")
                 if not args.all_scenarios:
                     raise
-        
+
         conn.close()
-    
+
     if args.output_json:
         output = {
-            'delivery_monthly': all_monthly,
-            'shortage_monthly': all_shortage,
-            'period_summary': all_summary,
+            "delivery_monthly": all_monthly,
+            "shortage_monthly": all_shortage,
+            "period_summary": all_summary,
         }
         print(json.dumps(output, indent=2, default=str))
-    
-    log.info(f"Complete. Total: {len(all_monthly)} delivery monthly, {len(all_shortage)} shortage monthly, {len(all_summary)} summary rows")
+
+    log.info(
+        f"Complete. Total: {len(all_monthly)} delivery monthly, {len(all_shortage)} shortage monthly, {len(all_summary)} summary rows"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

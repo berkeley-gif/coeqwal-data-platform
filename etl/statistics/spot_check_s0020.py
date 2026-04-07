@@ -31,9 +31,9 @@ def load_csv(path, label):
     """
     print(f"\nLoading {label}: {path.name}")
     df = pd.read_csv(path, header=None, low_memory=False)
-    names_row = df.iloc[1]   # row 1 = variable names
-    units_row = df.iloc[6]   # row 6 = units
-    kind_row = df.iloc[2]    # row 2 = kind
+    names_row = df.iloc[1]  # row 1 = variable names
+    units_row = df.iloc[6]  # row 6 = units
+    kind_row = df.iloc[2]  # row 2 = kind
 
     data = df.iloc[7:].copy()
     raw_names = list(names_row.values)
@@ -61,7 +61,7 @@ def load_csv(path, label):
         col_units[name] = str(units_row.iloc[i]).strip()
         col_kinds[name] = str(kind_row.iloc[i]).strip()
 
-    print(f"  Loaded {len(data)} rows, {len(data.columns)-1} variables")
+    print(f"  Loaded {len(data)} rows, {len(data.columns) - 1} variables")
     return data, col_units, col_kinds
 
 
@@ -118,7 +118,9 @@ def check_ag(dv, dv_units):
     print(f"    Demand (AW):          {annual['demand'].mean():8.2f} TAF/yr")
     print(f"    SW Delivery (DN):     {annual['delivery'].mean():8.2f} TAF/yr")
     print(f"    GW Pumping:           {annual['gw_pump'].mean():8.2f} TAF/yr")
-    print(f"    Balance check (AW - DN - GP): {(annual['demand'] - annual['delivery'] - annual['gw_pump']).mean():8.4f} TAF/yr (should be ~0)")
+    print(
+        f"    Balance check (AW - DN - GP): {(annual['demand'] - annual['delivery'] - annual['gw_pump']).mean():8.4f} TAF/yr (should be ~0)"
+    )
 
     print("\n  Monthly percentiles (demand TAF) for October:")
     oct_demand = df[df["WaterMonth"] == 1]["demand_taf"]
@@ -140,7 +142,9 @@ def check_du_urban(dv, sv, dv_units, sv_units):
     shrtg_col = f"SHRTG_{du}"
 
     for col_name, src, expected_unit in [
-        (dn_col, "DV", "CFS"), (shrtg_col, "DV", "CFS"), (ud_col, "SV", "TAF")
+        (dn_col, "DV", "CFS"),
+        (shrtg_col, "DV", "CFS"),
+        (ud_col, "SV", "TAF"),
     ]:
         source = dv_units if src == "DV" else sv_units
         if col_name in source:
@@ -154,10 +158,14 @@ def check_du_urban(dv, sv, dv_units, sv_units):
     df_sv = add_water_year_month(sv)
 
     if dn_col in df_dv.columns:
-        df_dv["delivery_taf"] = df_dv[dn_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        df_dv["delivery_taf"] = (
+            df_dv[dn_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        )
 
     if shrtg_col in df_dv.columns:
-        df_dv["shortage_taf"] = df_dv[shrtg_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        df_dv["shortage_taf"] = (
+            df_dv[shrtg_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        )
 
     # UD_* is already in TAF from SV (used for demand verification below)
     if ud_col in df_sv.columns:
@@ -165,7 +173,9 @@ def check_du_urban(dv, sv, dv_units, sv_units):
 
     annual_dv = df_dv.groupby("WaterYear").agg(
         delivery=("delivery_taf", "sum"),
-        shortage=("shortage_taf", "sum") if "shortage_taf" in df_dv else ("delivery_taf", lambda x: 0),
+        shortage=("shortage_taf", "sum")
+        if "shortage_taf" in df_dv
+        else ("delivery_taf", lambda x: 0),
     )
     annual_dv = annual_dv.iloc[1:-1]
 
@@ -179,7 +189,9 @@ def check_du_urban(dv, sv, dv_units, sv_units):
     print(f"    Delivery (DN from DV):{merged['delivery'].mean():8.2f} TAF/yr")
     if "shortage" in merged:
         print(f"    Shortage (SHRTG):     {merged['shortage'].mean():8.2f} TAF/yr")
-        pct_met = (merged["delivery"] / merged["demand"].replace(0, np.nan) * 100).mean()
+        pct_met = (
+            merged["delivery"] / merged["demand"].replace(0, np.nan) * 100
+        ).mean()
         print(f"    Avg % demand met:     {pct_met:8.1f}%")
 
     return True
@@ -196,7 +208,9 @@ def check_mi(dv, sv, dv_units, sv_units):
     dem_col = "DEM_D_ESB324_AVEK_PIN"
 
     for col_name, src, expected_unit in [
-        (del_col, "DV", "CFS"), (short_col, "DV", "CFS"), (dem_col, "SV", "TAF")
+        (del_col, "DV", "CFS"),
+        (short_col, "DV", "CFS"),
+        (dem_col, "SV", "TAF"),
     ]:
         source = dv if src == "DV" else sv
         units = dv_units if src == "DV" else sv_units
@@ -211,9 +225,13 @@ def check_mi(dv, sv, dv_units, sv_units):
     df_sv = add_water_year_month(sv)
 
     if del_col in df_dv.columns:
-        df_dv["delivery_taf"] = df_dv[del_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        df_dv["delivery_taf"] = (
+            df_dv[del_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        )
     if short_col in df_dv.columns:
-        df_dv["shortage_taf"] = df_dv[short_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        df_dv["shortage_taf"] = (
+            df_dv[short_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        )
 
     annual_dv = df_dv.groupby("WaterYear").agg(
         delivery=("delivery_taf", "sum"),
@@ -235,7 +253,9 @@ def check_mi(dv, sv, dv_units, sv_units):
     print(f"    Shortage (SHORT from DV):{merged['shortage'].mean():8.2f} TAF/yr")
 
     balance = merged["demand"] - merged["delivery"] - merged["shortage"]
-    print(f"    Balance (demand - delivery - shortage): {balance.mean():8.4f} TAF/yr (should be ~0)")
+    print(
+        f"    Balance (demand - delivery - shortage): {balance.mean():8.4f} TAF/yr (should be ~0)"
+    )
 
     return True
 
@@ -286,7 +306,12 @@ def check_reservoirs(dv, dv_units):
     print("RESERVOIR MODULE: Folsom (FOLSM)")
     print("=" * 70)
 
-    CAPACITY_OVERRIDES = {"FOLSM": 967.0, "MLRTN": 524.0, "OROVL": 3424.8, "MELON": 2420.0}
+    CAPACITY_OVERRIDES = {
+        "FOLSM": 967.0,
+        "MLRTN": 524.0,
+        "OROVL": 3424.8,
+        "MELON": 2420.0,
+    }
 
     s_col = "S_FOLSM"
     flood_col = "C_FOLSM_FLOOD"
@@ -309,7 +334,7 @@ def check_reservoirs(dv, dv_units):
     print(f"    Mean:   {storage.mean():8.1f}")
     print(f"    Min:    {storage.min():8.1f}")
     print(f"    Max:    {storage.max():8.1f}")
-    print(f"    Pct of capacity (mean): {storage.mean()/cap*100:.1f}%")
+    print(f"    Pct of capacity (mean): {storage.mean() / cap * 100:.1f}%")
 
     if flood_col in df.columns:
         df["spill_taf"] = df[flood_col] * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
@@ -327,7 +352,7 @@ def check_reservoirs(dv, dv_units):
     apr = df[df["Month"] == 4][s_col]
     for p in [0, 10, 50, 90, 100]:
         val = np.percentile(apr, p)
-        print(f"    p{p:3d}: {val:8.1f} TAF ({val/cap*100:.1f}%)")
+        print(f"    p{p:3d}: {val:8.1f} TAF ({val / cap * 100:.1f}%)")
 
     return True
 
@@ -359,7 +384,20 @@ def check_env_flows(dv, dv_units):
     print("\n  Monthly means (CFS):")
     for m in range(1, 13):
         val = df[df["Month"] == m][col].mean()
-        month_name = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m-1]
+        month_name = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ][m - 1]
         print(f"    {month_name}: {val:10.1f}")
 
     return True
@@ -387,7 +425,9 @@ def check_refuge(dv, sv, dv_units, sv_units):
     df_sv = add_water_year_month(sv)
 
     if dn_col in df_dv.columns:
-        df_dv["delivery_taf"] = df_dv[dn_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        df_dv["delivery_taf"] = (
+            df_dv[dn_col] * df_dv["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+        )
 
     annual_dv = df_dv.groupby("WaterYear").agg(delivery=("delivery_taf", "sum"))
     annual_dv = annual_dv.iloc[1:-1]
@@ -423,7 +463,9 @@ def check_cross_module_consistency(dv, sv, dv_units, sv_units):
     df = add_water_year_month(dv)
     df["dn_taf"] = df[dn_col] * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
     annual = df.groupby("WaterYear")["dn_taf"].sum().iloc[1:-1]
-    print(f"  DN_02_NA avg annual delivery: {annual.mean():.2f} TAF — used by both AG and Refuge")
+    print(
+        f"  DN_02_NA avg annual delivery: {annual.mean():.2f} TAF — used by both AG and Refuge"
+    )
     print("  (This single DV column feeds both modules, so they must agree)")
 
     aw_col = "AW_02_NA"
@@ -436,7 +478,9 @@ def check_cross_module_consistency(dv, sv, dv_units, sv_units):
         awo_annual = awo_annual.groupby("WaterYear")[awo_col].sum().iloc[1:-1]
         print(f"\n  AW_02_NA (AG demand, DV→TAF):    {aw_annual.mean():.2f} TAF/yr")
         print(f"  AWO_02_NA (Refuge demand, SV TAF): {awo_annual.mean():.2f} TAF/yr")
-        print("  (These are different variables for different purposes — values can differ)")
+        print(
+            "  (These are different variables for different purposes — values can differ)"
+        )
 
 
 def main():

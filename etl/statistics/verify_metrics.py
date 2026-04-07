@@ -51,10 +51,19 @@ from reservoirs.calculate_reservoir_statistics import (
 )
 
 # Reservoirs that the notebook calculates metrics for
-NOTEBOOK_RESERVOIRS = ['SHSTA', 'OROVL', 'TRNTY', 'FOLSM', 'MELON', 'MLRTN', 'SLUIS_CVP', 'SLUIS_SWP']
+NOTEBOOK_RESERVOIRS = [
+    "SHSTA",
+    "OROVL",
+    "TRNTY",
+    "FOLSM",
+    "MELON",
+    "MLRTN",
+    "SLUIS_CVP",
+    "SLUIS_SWP",
+]
 
 # Default S3 path for notebook reference output
-DEFAULT_REFERENCE_S3 = 's3://coeqwal-model-run/reference/all_metrics_output.csv'
+DEFAULT_REFERENCE_S3 = "s3://coeqwal-model-run/reference/all_metrics_output.csv"
 
 
 def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
@@ -68,12 +77,12 @@ def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
     - Apr_S_{RES}_CV (not AprS_{RES}__CV)
     - Sep_S_{RES}_CV (not SeptS_{RES}__CV)
     """
-    storage_col = f'S_{reservoir_code}'
+    storage_col = f"S_{reservoir_code}"
     if storage_col not in df.columns:
         return {}
 
     storage = df[storage_col]
-    date_idx = df['DateTime']
+    date_idx = df["DateTime"]
 
     metrics = {}
 
@@ -85,14 +94,14 @@ def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
         threshold_info = RESERVOIR_THRESHOLDS[reservoir_code]
 
         # Flood threshold
-        flood_var = threshold_info.get('flood_var')
+        flood_var = threshold_info.get("flood_var")
         if isinstance(flood_var, str) and flood_var in df.columns:
             flood_threshold = df[flood_var]
         elif isinstance(flood_var, (int, float)):
             flood_threshold = float(flood_var)
 
         # Dead pool threshold
-        dead_var = threshold_info.get('dead_var')
+        dead_var = threshold_info.get("dead_var")
         if isinstance(dead_var, str) and dead_var in df.columns:
             dead_threshold = df[dead_var]
         elif isinstance(dead_var, (int, float)):
@@ -102,55 +111,55 @@ def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
     if flood_threshold is not None:
         # All months
         fp_all = calculate_flood_pool_probability(storage, flood_threshold)
-        metrics[f'All_Prob_S_{reservoir_code}_flood'] = fp_all['probability']
+        metrics[f"All_Prob_S_{reservoir_code}_flood"] = fp_all["probability"]
 
         # September only (notebook uses "Sep_" not "Sept_")
         fp_sep = calculate_flood_pool_probability(
             storage, flood_threshold, months=[9], date_index=date_idx
         )
-        metrics[f'Sep_Prob_S_{reservoir_code}_flood'] = fp_sep['probability']
+        metrics[f"Sep_Prob_S_{reservoir_code}_flood"] = fp_sep["probability"]
 
     # Dead pool probabilities
     if dead_threshold is not None:
         # All months
         dp_all = calculate_dead_pool_probability(storage, dead_threshold)
-        metrics[f'All_Prob_S_{reservoir_code}_dead'] = dp_all['probability']
+        metrics[f"All_Prob_S_{reservoir_code}_dead"] = dp_all["probability"]
 
         # September only (notebook uses "Sep_" not "Sept_")
         dp_sep = calculate_dead_pool_probability(
             storage, dead_threshold, months=[9], date_index=date_idx
         )
-        metrics[f'Sep_Prob_S_{reservoir_code}_dead'] = dp_sep['probability']
+        metrics[f"Sep_Prob_S_{reservoir_code}_dead"] = dp_sep["probability"]
 
     # Monthly averages (TAF)
     # Note: SLUIS_CVP and SLUIS_SWP use different naming in notebook (no underscore before TAF)
-    if reservoir_code in ['SLUIS_CVP', 'SLUIS_SWP']:
+    if reservoir_code in ["SLUIS_CVP", "SLUIS_SWP"]:
         # Notebook: Apr_Avg_S_SLUIS_SWPTAF (no underscore)
-        metrics[f'Apr_Avg_S_{reservoir_code}TAF'] = calculate_monthly_average(
+        metrics[f"Apr_Avg_S_{reservoir_code}TAF"] = calculate_monthly_average(
             storage, date_idx, month=4
         )
-        metrics[f'Sep_Avg_S_{reservoir_code}TAF'] = calculate_monthly_average(
+        metrics[f"Sep_Avg_S_{reservoir_code}TAF"] = calculate_monthly_average(
             storage, date_idx, month=9
         )
         # Notebook: Apr_S_SLUIS_SWPCV (no underscore)
-        metrics[f'Apr_S_{reservoir_code}CV'] = calculate_cv(
+        metrics[f"Apr_S_{reservoir_code}CV"] = calculate_cv(
             storage, months=[4], date_index=date_idx
         )
-        metrics[f'Sep_S_{reservoir_code}CV'] = calculate_cv(
+        metrics[f"Sep_S_{reservoir_code}CV"] = calculate_cv(
             storage, months=[9], date_index=date_idx
         )
     else:
-        metrics[f'Apr_Avg_S_{reservoir_code}_TAF'] = calculate_monthly_average(
+        metrics[f"Apr_Avg_S_{reservoir_code}_TAF"] = calculate_monthly_average(
             storage, date_idx, month=4
         )
-        metrics[f'Sep_Avg_S_{reservoir_code}_TAF'] = calculate_monthly_average(
+        metrics[f"Sep_Avg_S_{reservoir_code}_TAF"] = calculate_monthly_average(
             storage, date_idx, month=9
         )
         # Coefficient of Variation (notebook uses "Apr_S_{RES}_CV" format)
-        metrics[f'Apr_S_{reservoir_code}_CV'] = calculate_cv(
+        metrics[f"Apr_S_{reservoir_code}_CV"] = calculate_cv(
             storage, months=[4], date_index=date_idx
         )
-        metrics[f'Sep_S_{reservoir_code}_CV'] = calculate_cv(
+        metrics[f"Sep_S_{reservoir_code}_CV"] = calculate_cv(
             storage, months=[9], date_index=date_idx
         )
 
@@ -163,22 +172,24 @@ def load_notebook_output(csv_path: str) -> pd.DataFrame:
 
     Supports local file paths or S3 URIs (s3://bucket/key).
     """
-    if csv_path.startswith('s3://'):
+    if csv_path.startswith("s3://"):
         # Parse S3 URI
-        parts = csv_path.replace('s3://', '').split('/', 1)
+        parts = csv_path.replace("s3://", "").split("/", 1)
         bucket = parts[0]
-        key = parts[1] if len(parts) > 1 else ''
+        key = parts[1] if len(parts) > 1 else ""
 
         print(f"Fetching from S3: bucket={bucket}, key={key}")
-        s3 = boto3.client('s3')
+        s3 = boto3.client("s3")
         response = s3.get_object(Bucket=bucket, Key=key)
-        content = response['Body'].read().decode('utf-8')
+        content = response["Body"].read().decode("utf-8")
         return pd.read_csv(io.StringIO(content), index_col=0)
     else:
         return pd.read_csv(csv_path, index_col=0)
 
 
-def compare_metrics(calculated: dict, expected: pd.Series, tolerance: float = 0.0001) -> dict:
+def compare_metrics(
+    calculated: dict, expected: pd.Series, tolerance: float = 0.0001
+) -> dict:
     """
     Compare calculated metrics against expected values.
 
@@ -191,27 +202,29 @@ def compare_metrics(calculated: dict, expected: pd.Series, tolerance: float = 0.
         Dict with comparison results
     """
     results = {
-        'passed': 0,
-        'failed': 0,
-        'missing': 0,
-        'details': [],
+        "passed": 0,
+        "failed": 0,
+        "missing": 0,
+        "details": [],
     }
 
     for metric_name, calc_value in calculated.items():
         if metric_name not in expected.index:
-            results['missing'] += 1
-            results['details'].append({
-                'metric': metric_name,
-                'status': 'MISSING',
-                'calculated': calc_value,
-                'expected': None,
-            })
+            results["missing"] += 1
+            results["details"].append(
+                {
+                    "metric": metric_name,
+                    "status": "MISSING",
+                    "calculated": calc_value,
+                    "expected": None,
+                }
+            )
             continue
 
         exp_value = expected[metric_name]
 
         # Handle probability conversion (notebook converts to 0-100)
-        if 'Prob_' in metric_name:
+        if "Prob_" in metric_name:
             # Notebook stores as 0-100, we calculate as 0-1
             exp_value_normalized = exp_value / 100.0 if exp_value > 1 else exp_value
         else:
@@ -225,37 +238,53 @@ def compare_metrics(calculated: dict, expected: pd.Series, tolerance: float = 0.
             passed = rel_diff < tolerance
 
         if passed:
-            results['passed'] += 1
-            status = 'PASS'
+            results["passed"] += 1
+            status = "PASS"
         else:
-            results['failed'] += 1
-            status = 'FAIL'
+            results["failed"] += 1
+            status = "FAIL"
 
-        results['details'].append({
-            'metric': metric_name,
-            'status': status,
-            'calculated': calc_value,
-            'expected': exp_value_normalized,
-            'diff': calc_value - exp_value_normalized if exp_value_normalized else calc_value,
-        })
+        results["details"].append(
+            {
+                "metric": metric_name,
+                "status": status,
+                "calculated": calc_value,
+                "expected": exp_value_normalized,
+                "diff": calc_value - exp_value_normalized
+                if exp_value_normalized
+                else calc_value,
+            }
+        )
 
     return results
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Verify ETL metrics against notebook output')
-    parser.add_argument('--scenario', '-s', default='s0020', help='Scenario ID')
-    parser.add_argument('--csv-path', default=None, help='Path to scenario CSV')
-    parser.add_argument('--compare', nargs='?', const=DEFAULT_REFERENCE_S3,
-                        help=f'Path to notebook all_metrics_output.csv (default: {DEFAULT_REFERENCE_S3})')
-    parser.add_argument('--output', '-o', help='Save calculated metrics to CSV')
-    parser.add_argument('--reservoirs', nargs='+', default=NOTEBOOK_RESERVOIRS,
-                        help='Reservoirs to calculate (default: notebook reservoirs)')
+    parser = argparse.ArgumentParser(
+        description="Verify ETL metrics against notebook output"
+    )
+    parser.add_argument("--scenario", "-s", default="s0020", help="Scenario ID")
+    parser.add_argument("--csv-path", default=None, help="Path to scenario CSV")
+    parser.add_argument(
+        "--compare",
+        nargs="?",
+        const=DEFAULT_REFERENCE_S3,
+        help=f"Path to notebook all_metrics_output.csv (default: {DEFAULT_REFERENCE_S3})",
+    )
+    parser.add_argument("--output", "-o", help="Save calculated metrics to CSV")
+    parser.add_argument(
+        "--reservoirs",
+        nargs="+",
+        default=NOTEBOOK_RESERVOIRS,
+        help="Reservoirs to calculate (default: notebook reservoirs)",
+    )
     args = parser.parse_args()
 
     # Paths
     script_dir = Path(__file__).parent
-    default_csv = script_dir / '../pipelines' / f'{args.scenario}_coeqwal_calsim_output.csv'
+    default_csv = (
+        script_dir / "../pipelines" / f"{args.scenario}_coeqwal_calsim_output.csv"
+    )
 
     print("=" * 70)
     print("COEQWAL Metrics Verification")
@@ -270,7 +299,7 @@ def main():
     # Determine CSV source and load
     use_s3 = False
     if args.csv_path:
-        if args.csv_path.startswith('s3://'):
+        if args.csv_path.startswith("s3://"):
             use_s3 = True
             csv_source = args.csv_path
         else:
@@ -318,17 +347,21 @@ def main():
 
         # Display key metrics
         print(f"\n  {res_code}:")
-        flood_prob = metrics.get(f'All_Prob_S_{res_code}_flood')
-        dead_prob = metrics.get(f'All_Prob_S_{res_code}_dead')
-        apr_avg = metrics.get(f'Apr_Avg_S_{res_code}_TAF')
-        sep_avg = metrics.get(f'Sep_Avg_S_{res_code}_TAF')
-        apr_cv = metrics.get(f'AprS_{res_code}__CV')
-        sep_cv = metrics.get(f'SeptS_{res_code}__CV')
+        flood_prob = metrics.get(f"All_Prob_S_{res_code}_flood")
+        dead_prob = metrics.get(f"All_Prob_S_{res_code}_dead")
+        apr_avg = metrics.get(f"Apr_Avg_S_{res_code}_TAF")
+        sep_avg = metrics.get(f"Sep_Avg_S_{res_code}_TAF")
+        apr_cv = metrics.get(f"AprS_{res_code}__CV")
+        sep_cv = metrics.get(f"SeptS_{res_code}__CV")
 
         if flood_prob is not None:
-            print(f"    Flood Pool Prob (all): {flood_prob:.4f} ({flood_prob*100:.2f}%)")
+            print(
+                f"    Flood Pool Prob (all): {flood_prob:.4f} ({flood_prob * 100:.2f}%)"
+            )
         if dead_prob is not None:
-            print(f"    Dead Pool Prob (all):  {dead_prob:.4f} ({dead_prob*100:.2f}%)")
+            print(
+                f"    Dead Pool Prob (all):  {dead_prob:.4f} ({dead_prob * 100:.2f}%)"
+            )
         if apr_avg is not None:
             print(f"    April Avg:             {apr_avg:.2f} TAF")
         if sep_avg is not None:
@@ -367,23 +400,25 @@ def main():
             else:
                 results = compare_metrics(all_metrics, scenario_row)
                 print()
-                print(f"Results: {results['passed']} passed, {results['failed']} failed, "
-                      f"{results['missing']} missing from notebook")
+                print(
+                    f"Results: {results['passed']} passed, {results['failed']} failed, "
+                    f"{results['missing']} missing from notebook"
+                )
                 print()
 
-                if results['failed'] > 0:
+                if results["failed"] > 0:
                     print("Failed comparisons:")
-                    for detail in results['details']:
-                        if detail['status'] == 'FAIL':
+                    for detail in results["details"]:
+                        if detail["status"] == "FAIL":
                             print(f"  {detail['metric']}:")
                             print(f"    Calculated: {detail['calculated']:.6f}")
                             print(f"    Expected:   {detail['expected']:.6f}")
                             print(f"    Diff:       {detail['diff']:.6f}")
 
-                if results['missing'] > 0:
+                if results["missing"] > 0:
                     print("\nMissing from notebook (ETL calculates, notebook doesn't):")
-                    for detail in results['details']:
-                        if detail['status'] == 'MISSING':
+                    for detail in results["details"]:
+                        if detail["status"] == "MISSING":
                             print(f"  {detail['metric']}: {detail['calculated']:.6f}")
 
         except Exception as e:
@@ -403,5 +438,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

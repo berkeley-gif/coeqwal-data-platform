@@ -51,6 +51,7 @@ except ImportError:
 # Optional: boto3 for S3 access
 try:
     import boto3
+
     HAS_BOTO3 = True
 except ImportError:
     HAS_BOTO3 = False
@@ -66,12 +67,14 @@ log = logging.getLogger("reservoir_statistics")
 from scenarios import SCENARIOS  # noqa: E402
 
 # S3 bucket configuration
-S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
 
 # Path to reservoir_entity.csv (relative to project root)
 # From reservoirs/ -> statistics/ -> etl/ -> coeqwal-backend/ -> database/...
-RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent.parent / \
-    "database/seed_tables/04_calsim_data/reservoir_entity.csv"
+RESERVOIR_ENTITY_CSV = (
+    Path(__file__).parent.parent.parent.parent
+    / "database/seed_tables/04_calsim_data/reservoir_entity.csv"
+)
 
 # Percentiles for storage monthly statistics
 STORAGE_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
@@ -83,14 +86,16 @@ EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 # Capacity overrides (TAF) from V3 DataExtraction.py — the top-level storage zone
 # variable for these reservoirs is absent from the DV file, so these are hardcoded.
 CAPACITY_OVERRIDES = {
-    'FOLSM': 967.0,    # S_FOLSMLEVEL6DV (entity CSV has 975)
-    'MLRTN': 524.0,     # S_MLRTNLEVEL5DV (entity CSV has 520)
-    'OROVL': 3424.8,    # S_OROVLLEVEL6DV (entity CSV has 3537)
-    'MELON': 2420.0,    # S_MELONLEVEL5DV (entity CSV has 2400)
+    "FOLSM": 967.0,  # S_FOLSMLEVEL6DV (entity CSV has 975)
+    "MLRTN": 524.0,  # S_MLRTNLEVEL5DV (entity CSV has 520)
+    "OROVL": 3424.8,  # S_OROVLLEVEL6DV (entity CSV has 3537)
+    "MELON": 2420.0,  # S_MELONLEVEL5DV (entity CSV has 2400)
 }
 
 
-def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+def load_reservoir_entities(
+    csv_path: Optional[Path] = None,
+) -> Dict[str, Dict[str, Any]]:
     """
     Load reservoir metadata from reservoir_entity.csv.
 
@@ -104,28 +109,34 @@ def load_reservoir_entities(csv_path: Optional[Path] = None) -> Dict[str, Dict[s
         raise FileNotFoundError(f"reservoir_entity.csv not found at {csv_path}")
 
     reservoirs = {}
-    with open(csv_path, 'r') as f:
+    with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            short_code = row['short_code']
+            short_code = row["short_code"]
             reservoirs[short_code] = {
-                'id': int(row['id']),  # reservoir_entity_id for FK
-                'name': row['name'],
-                'capacity_taf': float(row['capacity_taf']) if row['capacity_taf'] else 0,
-                'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
+                "id": int(row["id"]),  # reservoir_entity_id for FK
+                "name": row["name"],
+                "capacity_taf": float(row["capacity_taf"])
+                if row["capacity_taf"]
+                else 0,
+                "dead_pool_taf": float(row["dead_pool_taf"])
+                if row["dead_pool_taf"]
+                else 0,
             }
 
     for code, override_taf in CAPACITY_OVERRIDES.items():
         if code in reservoirs:
-            old = reservoirs[code]['capacity_taf']
-            reservoirs[code]['capacity_taf'] = override_taf
+            old = reservoirs[code]["capacity_taf"]
+            reservoirs[code]["capacity_taf"] = override_taf
             log.info(f"Capacity override: {code} {old} -> {override_taf} TAF")
 
     log.info(f"Loaded {len(reservoirs)} reservoirs from {csv_path}")
     return reservoirs
 
 
-def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> pd.DataFrame:
+def load_scenario_csv_from_s3(
+    scenario_id: str, reservoir_codes: List[str]
+) -> pd.DataFrame:
     """
     Load scenario CSV from S3 bucket.
 
@@ -136,23 +147,25 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
         reservoir_codes: List of codes to load (e.g., ['SHSTA', 'FOLSM'])
     """
     if not HAS_BOTO3:
-        raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
+        raise ImportError(
+            "boto3 is required for S3 access. Install with: pip install boto3"
+        )
 
-    s3 = boto3.client('s3')
+    s3 = boto3.client("s3")
 
     # Build list of variable names to load
     # Storage: S_{code}, Thresholds: S_{code}LEVEL*DV
     vars_to_find = set()
     for code in reservoir_codes:
-        vars_to_find.add(f'S_{code}')          # storage
+        vars_to_find.add(f"S_{code}")  # storage
 
         # Add threshold variables for flood/dead pool probability calculations
         # These are model output variables used to calculate probability metrics
         # aligned with COEQWAL research notebooks (coeqwal/notebooks/coeqwalpackage/metrics.py)
         if code in RESERVOIR_THRESHOLDS:
             threshold_info = RESERVOIR_THRESHOLDS[code]
-            flood_var = threshold_info.get('flood_var')
-            dead_var = threshold_info.get('dead_var')
+            flood_var = threshold_info.get("flood_var")
+            dead_var = threshold_info.get("dead_var")
             if isinstance(flood_var, str):
                 vars_to_find.add(flood_var)
             if isinstance(dead_var, str):
@@ -173,11 +186,7 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
 
             # Read header rows to find column indices
             log.info("Reading header rows to identify column indices...")
-            header_df = pd.read_csv(
-                response['Body'],
-                header=None,
-                nrows=8
-            )
+            header_df = pd.read_csv(response["Body"], header=None, nrows=8)
 
             # Variable names are in row 1 (the 'b' row)
             col_names = header_df.iloc[1].tolist()
@@ -198,16 +207,14 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
 
             # Re-fetch and read only needed columns
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            df = pd.read_csv(
-                response['Body'],
-                header=None,
-                usecols=cols_to_load
-            )
+            df = pd.read_csv(response["Body"], header=None, usecols=cols_to_load)
 
             # Store found variables and units for later reference
-            df.attrs['found_vars'] = found_vars
-            df.attrs['col_names'] = col_names
-            df.attrs['units_row'] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
+            df.attrs["found_vars"] = found_vars
+            df.attrs["col_names"] = col_names
+            df.attrs["units_row"] = (
+                header_df.iloc[6].tolist() if len(header_df) > 6 else []
+            )
 
             log.info(f"Successfully loaded from: {key}")
             log.info(f"DataFrame shape: {df.shape}")
@@ -222,12 +229,14 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoir_codes: List[str]) -> p
     raise FileNotFoundError(f"Could not find CSV for scenario {scenario_id} in S3")
 
 
-def load_scenario_csv_from_file(file_path: str, reservoir_codes: List[str]) -> pd.DataFrame:
+def load_scenario_csv_from_file(
+    file_path: str, reservoir_codes: List[str]
+) -> pd.DataFrame:
     """Load scenario CSV from local file."""
     log.info(f"Loading from file: {file_path}")
 
     # First pass: read headers to find column indices
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         header_df = pd.read_csv(f, header=None, nrows=8)
 
     col_names = header_df.iloc[1].tolist()
@@ -235,12 +244,12 @@ def load_scenario_csv_from_file(file_path: str, reservoir_codes: List[str]) -> p
     # Build list of variable names to load
     vars_to_find = set()
     for code in reservoir_codes:
-        vars_to_find.add(f'S_{code}')
+        vars_to_find.add(f"S_{code}")
 
         if code in RESERVOIR_THRESHOLDS:
             threshold_info = RESERVOIR_THRESHOLDS[code]
-            flood_var = threshold_info.get('flood_var')
-            dead_var = threshold_info.get('dead_var')
+            flood_var = threshold_info.get("flood_var")
+            dead_var = threshold_info.get("dead_var")
             if isinstance(flood_var, str):
                 vars_to_find.add(flood_var)
             if isinstance(dead_var, str):
@@ -261,9 +270,9 @@ def load_scenario_csv_from_file(file_path: str, reservoir_codes: List[str]) -> p
 
     # Second pass: load only needed columns
     df = pd.read_csv(file_path, header=None, usecols=cols_to_load)
-    df.attrs['found_vars'] = found_vars
-    df.attrs['col_names'] = col_names
-    df.attrs['units_row'] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
+    df.attrs["found_vars"] = found_vars
+    df.attrs["col_names"] = col_names
+    df.attrs["units_row"] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
 
     return df
 
@@ -283,14 +292,14 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
     - Row 7+: DateTime + data values
     """
     header_rows = 7
-    found_vars = df.attrs.get('found_vars', {})
-    units_row = df.attrs.get('units_row', [])
+    found_vars = df.attrs.get("found_vars", {})
+    units_row = df.attrs.get("units_row", [])
 
     if units_row and found_vars:
         for var_name, col_idx in found_vars.items():
-            if var_name.startswith('S_') and col_idx < len(units_row):
+            if var_name.startswith("S_") and col_idx < len(units_row):
                 unit = str(units_row[col_idx]).strip().upper()
-                if unit in ('TAF', 'NONE', 'UNDEFINE', ''):
+                if unit in ("TAF", "NONE", "UNDEFINE", ""):
                     continue
                 log.warning(
                     f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
@@ -302,9 +311,9 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
     data_df.columns = range(len(data_df.columns))
 
     # First column is DateTime
-    data_df.rename(columns={0: 'DateTime'}, inplace=True)
-    data_df['DateTime'] = pd.to_datetime(data_df['DateTime'], errors='coerce')
-    data_df = data_df.dropna(subset=['DateTime'])
+    data_df.rename(columns={0: "DateTime"}, inplace=True)
+    data_df["DateTime"] = pd.to_datetime(data_df["DateTime"], errors="coerce")
+    data_df = data_df.dropna(subset=["DateTime"])
 
     # Rename columns to variable names
     col_idx_to_name = {}
@@ -318,7 +327,7 @@ def parse_scenario_csv(df: pd.DataFrame) -> pd.DataFrame:
     for new_idx, var_name in col_idx_to_name.items():
         if new_idx in data_df.columns:
             data_df.rename(columns={new_idx: var_name}, inplace=True)
-            data_df[var_name] = pd.to_numeric(data_df[var_name], errors='coerce')
+            data_df[var_name] = pd.to_numeric(data_df[var_name], errors="coerce")
 
     return data_df
 
@@ -331,23 +340,21 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     Water month: Oct=1, Nov=2, ..., Sep=12
     """
     df = df.copy()
-    df['CalendarMonth'] = df['DateTime'].dt.month
-    df['CalendarYear'] = df['DateTime'].dt.year
+    df["CalendarMonth"] = df["DateTime"].dt.month
+    df["CalendarYear"] = df["DateTime"].dt.year
 
     # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
-    df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
+    df["WaterMonth"] = ((df["CalendarMonth"] - 10) % 12) + 1
 
     # Water year: Oct-Dec belong to next water year
-    df['WaterYear'] = df['CalendarYear']
-    df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
+    df["WaterYear"] = df["CalendarYear"]
+    df.loc[df["CalendarMonth"] >= 10, "WaterYear"] += 1
 
     return df
 
 
 def calculate_storage_monthly(
-    df: pd.DataFrame,
-    reservoir_code: str,
-    capacity_taf: float
+    df: pd.DataFrame, reservoir_code: str, capacity_taf: float
 ) -> List[Dict[str, Any]]:
     """
     Calculate monthly storage statistics for a single reservoir.
@@ -355,7 +362,7 @@ def calculate_storage_monthly(
     Returns list of dicts (one per water month) for reservoir_storage_monthly table.
     Includes both percent-of-capacity and TAF percentile values.
     """
-    storage_col = f'S_{reservoir_code}'
+    storage_col = f"S_{reservoir_code}"
 
     if storage_col not in df.columns:
         log.debug(f"Storage column {storage_col} not found")
@@ -364,7 +371,7 @@ def calculate_storage_monthly(
     results = []
 
     for wm in range(1, 13):
-        month_data = df[df['WaterMonth'] == wm][storage_col].dropna()
+        month_data = df[df["WaterMonth"] == wm][storage_col].dropna()
 
         if month_data.empty:
             continue
@@ -375,12 +382,12 @@ def calculate_storage_monthly(
         cv = std_taf / mean_taf if mean_taf > 0 else 0
 
         row = {
-            'water_month': wm,
-            'storage_avg_taf': round(mean_taf, 2),
-            'storage_cv': round(cv, 4),
-            'storage_pct_capacity': round((mean_taf / capacity_taf) * 100, 2),
-            'capacity_taf': capacity_taf,
-            'sample_count': len(month_data),
+            "water_month": wm,
+            "storage_avg_taf": round(mean_taf, 2),
+            "storage_cv": round(cv, 4),
+            "storage_pct_capacity": round((mean_taf / capacity_taf) * 100, 2),
+            "capacity_taf": capacity_taf,
+            "sample_count": len(month_data),
         }
 
         # Add percentiles in both units
@@ -388,8 +395,8 @@ def calculate_storage_monthly(
             taf_value = float(np.percentile(month_data, p))
             pct_value = (taf_value / capacity_taf) * 100
 
-            row[f'q{p}'] = round(pct_value, 2)          # Percent of capacity
-            row[f'q{p}_taf'] = round(taf_value, 2)      # TAF
+            row[f"q{p}"] = round(pct_value, 2)  # Percent of capacity
+            row[f"q{p}_taf"] = round(taf_value, 2)  # TAF
 
         # Add exceedance percentiles in both units
         # exc_pX = "value exceeded X% of the time" = (100-X)th percentile
@@ -397,8 +404,8 @@ def calculate_storage_monthly(
             taf_value = float(np.percentile(month_data, 100 - p))
             pct_value = (taf_value / capacity_taf) * 100
 
-            row[f'exc_p{p}'] = round(pct_value, 2)      # Percent of capacity
-            row[f'exc_p{p}_taf'] = round(taf_value, 2)  # TAF
+            row[f"exc_p{p}"] = round(pct_value, 2)  # Percent of capacity
+            row[f"exc_p{p}_taf"] = round(taf_value, 2)  # TAF
 
         results.append(row)
 
@@ -414,20 +421,18 @@ def _get_flood_threshold(df: pd.DataFrame, reservoir_code: str) -> Optional[pd.S
     if reservoir_code not in RESERVOIR_THRESHOLDS:
         return None
 
-    flood_var = RESERVOIR_THRESHOLDS[reservoir_code].get('flood_var')
+    flood_var = RESERVOIR_THRESHOLDS[reservoir_code].get("flood_var")
     if flood_var is None:
         return None
     if isinstance(flood_var, str) and flood_var in df.columns:
-        return pd.to_numeric(df[flood_var], errors='coerce')
+        return pd.to_numeric(df[flood_var], errors="coerce")
     if isinstance(flood_var, (int, float)):
         return pd.Series(float(flood_var), index=df.index)
     return None
 
 
 def calculate_spill_monthly(
-    df: pd.DataFrame,
-    reservoir_code: str,
-    capacity_taf: float
+    df: pd.DataFrame, reservoir_code: str, capacity_taf: float
 ) -> List[Dict[str, Any]]:
     """Calculate monthly spill probability for a single reservoir.
 
@@ -436,7 +441,7 @@ def calculate_spill_monthly(
 
     Returns list of dicts (one per water month) for reservoir_spill_monthly table.
     """
-    storage_col = f'S_{reservoir_code}'
+    storage_col = f"S_{reservoir_code}"
 
     if storage_col not in df.columns:
         log.debug(f"Storage column {storage_col} not found")
@@ -447,12 +452,12 @@ def calculate_spill_monthly(
         log.debug(f"No flood threshold for {reservoir_code}")
         return []
 
-    storage = pd.to_numeric(df[storage_col], errors='coerce')
+    storage = pd.to_numeric(df[storage_col], errors="coerce")
     at_flood = storage >= flood_level
 
     results = []
     for wm in range(1, 13):
-        wm_mask = df['WaterMonth'] == wm
+        wm_mask = df["WaterMonth"] == wm
         month_storage = storage[wm_mask].dropna()
         month_at_flood = at_flood[wm_mask].dropna()
 
@@ -463,19 +468,21 @@ def calculate_spill_monthly(
         spill_count = int(month_at_flood.sum())
 
         row = {
-            'water_month': wm,
-            'spill_months_count': spill_count,
-            'total_months': total_months,
-            'spill_frequency_pct': round((spill_count / total_months) * 100, 2) if total_months > 0 else 0,
+            "water_month": wm,
+            "spill_months_count": spill_count,
+            "total_months": total_months,
+            "spill_frequency_pct": round((spill_count / total_months) * 100, 2)
+            if total_months > 0
+            else 0,
         }
 
         if spill_count > 0:
             flood_storage = month_storage[month_at_flood]
-            row['storage_at_spill_avg_pct'] = round(
+            row["storage_at_spill_avg_pct"] = round(
                 (flood_storage.mean() / capacity_taf) * 100, 2
             )
         else:
-            row['storage_at_spill_avg_pct'] = None
+            row["storage_at_spill_avg_pct"] = None
 
         results.append(row)
 
@@ -483,32 +490,29 @@ def calculate_spill_monthly(
 
 
 def calculate_period_summary(
-    df: pd.DataFrame,
-    reservoir_code: str,
-    capacity_taf: float,
-    dead_pool_taf: float
+    df: pd.DataFrame, reservoir_code: str, capacity_taf: float, dead_pool_taf: float
 ) -> Optional[Dict[str, Any]]:
     """
     Calculate period-of-record summary statistics for a single reservoir.
 
     Returns dict for reservoir_period_summary table.
     """
-    storage_col = f'S_{reservoir_code}'
+    storage_col = f"S_{reservoir_code}"
 
     if storage_col not in df.columns:
         log.debug(f"Storage column {storage_col} not found")
         return None
 
     # Get water years
-    water_years = sorted(df['WaterYear'].unique())
+    water_years = sorted(df["WaterYear"].unique())
     if not water_years:
         return None
 
     result = {
-        'simulation_start_year': int(water_years[0]),
-        'simulation_end_year': int(water_years[-1]),
-        'total_years': len(water_years),
-        'capacity_taf': capacity_taf,
+        "simulation_start_year": int(water_years[0]),
+        "simulation_end_year": int(water_years[-1]),
+        "total_years": len(water_years),
+        "capacity_taf": capacity_taf,
     }
 
     # ========== Storage Exceedance ==========
@@ -518,52 +522,60 @@ def calculate_period_summary(
 
         # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            result[f'storage_exc_p{p}'] = round(float(np.percentile(storage_pct, 100 - p)), 2)
+            result[f"storage_exc_p{p}"] = round(
+                float(np.percentile(storage_pct, 100 - p)), 2
+            )
     else:
         for p in EXCEEDANCE_PERCENTILES:
-            result[f'storage_exc_p{p}'] = None
+            result[f"storage_exc_p{p}"] = None
 
     # ========== Threshold Markers ==========
-    result['dead_pool_taf'] = dead_pool_taf
-    result['dead_pool_pct'] = round((dead_pool_taf / capacity_taf) * 100, 2) if capacity_taf > 0 else 0
+    result["dead_pool_taf"] = dead_pool_taf
+    result["dead_pool_pct"] = (
+        round((dead_pool_taf / capacity_taf) * 100, 2) if capacity_taf > 0 else 0
+    )
 
     # ========== Spill Statistics (storage >= flood control level) ==========
     flood_level = _get_flood_threshold(df, reservoir_code)
     if flood_level is not None:
-        storage = pd.to_numeric(df[storage_col], errors='coerce')
+        storage = pd.to_numeric(df[storage_col], errors="coerce")
         at_flood = storage >= flood_level
 
         # Annual: any month at/above flood control
-        annual_spill = df.assign(at_flood=at_flood).groupby('WaterYear')['at_flood'].any()
+        annual_spill = (
+            df.assign(at_flood=at_flood).groupby("WaterYear")["at_flood"].any()
+        )
         spill_years = int(annual_spill.sum())
 
-        result['spill_years_count'] = spill_years
-        result['spill_frequency_pct'] = round((spill_years / len(water_years)) * 100, 2)
+        result["spill_years_count"] = spill_years
+        result["spill_frequency_pct"] = round((spill_years / len(water_years)) * 100, 2)
 
         # Monthly frequency (overall)
         total_months = len(at_flood)
         spill_months = int(at_flood.sum())
-        result['spill_monthly_frequency_pct'] = round((spill_months / total_months) * 100, 2) if total_months > 0 else 0
+        result["spill_monthly_frequency_pct"] = (
+            round((spill_months / total_months) * 100, 2) if total_months > 0 else 0
+        )
 
         # Storage level when at flood control
         flood_storage = storage[at_flood]
         if not flood_storage.empty:
-            result['spill_threshold_pct'] = round(
+            result["spill_threshold_pct"] = round(
                 (flood_storage.mean() / capacity_taf) * 100, 2
             )
         else:
-            result['spill_threshold_pct'] = None
+            result["spill_threshold_pct"] = None
     else:
-        result['spill_years_count'] = 0
-        result['spill_frequency_pct'] = 0
-        result['spill_monthly_frequency_pct'] = 0
-        result['spill_threshold_pct'] = None
+        result["spill_years_count"] = 0
+        result["spill_frequency_pct"] = 0
+        result["spill_monthly_frequency_pct"] = 0
+        result["spill_threshold_pct"] = None
 
     # ========== Flood/Dead Pool Probabilities ==========
     # Aligned with COEQWAL research notebooks (coeqwal/notebooks/coeqwalpackage/metrics.py)
     # Reference functions: frequency_hitting_level(), frequency_hitting_var_const_level()
     storage = df[storage_col]
-    date_idx = df['DateTime']
+    date_idx = df["DateTime"]
 
     # Get threshold values (variable from model output or constant)
     flood_threshold = None
@@ -573,14 +585,14 @@ def calculate_period_summary(
         threshold_info = RESERVOIR_THRESHOLDS[reservoir_code]
 
         # Flood threshold
-        flood_var = threshold_info.get('flood_var')
+        flood_var = threshold_info.get("flood_var")
         if isinstance(flood_var, str) and flood_var in df.columns:
             flood_threshold = df[flood_var]
         elif isinstance(flood_var, (int, float)):
             flood_threshold = float(flood_var)
 
         # Dead pool threshold
-        dead_var = threshold_info.get('dead_var')
+        dead_var = threshold_info.get("dead_var")
         if isinstance(dead_var, str) and dead_var in df.columns:
             dead_threshold = df[dead_var]
         elif isinstance(dead_var, (int, float)):
@@ -593,52 +605,52 @@ def calculate_period_summary(
     # Calculate flood pool probabilities
     if flood_threshold is not None:
         fp_all = calculate_flood_pool_probability(storage, flood_threshold)
-        result['flood_pool_prob_all'] = round(fp_all['probability'], 4)
+        result["flood_pool_prob_all"] = round(fp_all["probability"], 4)
 
         fp_sep = calculate_flood_pool_probability(
             storage, flood_threshold, months=[9], date_index=date_idx
         )
-        result['flood_pool_prob_september'] = round(fp_sep['probability'], 4)
+        result["flood_pool_prob_september"] = round(fp_sep["probability"], 4)
 
         fp_apr = calculate_flood_pool_probability(
             storage, flood_threshold, months=[4], date_index=date_idx
         )
-        result['flood_pool_prob_april'] = round(fp_apr['probability'], 4)
+        result["flood_pool_prob_april"] = round(fp_apr["probability"], 4)
     else:
-        result['flood_pool_prob_all'] = None
-        result['flood_pool_prob_september'] = None
-        result['flood_pool_prob_april'] = None
+        result["flood_pool_prob_all"] = None
+        result["flood_pool_prob_september"] = None
+        result["flood_pool_prob_april"] = None
 
     # Calculate dead pool probabilities
     if dead_threshold is not None:
         dp_all = calculate_dead_pool_probability(storage, dead_threshold)
-        result['dead_pool_prob_all'] = round(dp_all['probability'], 4)
+        result["dead_pool_prob_all"] = round(dp_all["probability"], 4)
 
         dp_sep = calculate_dead_pool_probability(
             storage, dead_threshold, months=[9], date_index=date_idx
         )
-        result['dead_pool_prob_september'] = round(dp_sep['probability'], 4)
+        result["dead_pool_prob_september"] = round(dp_sep["probability"], 4)
     else:
-        result['dead_pool_prob_all'] = None
-        result['dead_pool_prob_september'] = None
+        result["dead_pool_prob_all"] = None
+        result["dead_pool_prob_september"] = None
 
     # CV calculations (using imported function, aligned with notebook's compute_cv)
-    result['storage_cv_all'] = round(calculate_cv(storage), 4)
-    result['storage_cv_april'] = round(
+    result["storage_cv_all"] = round(calculate_cv(storage), 4)
+    result["storage_cv_april"] = round(
         calculate_cv(storage, months=[4], date_index=date_idx), 4
     )
-    result['storage_cv_september'] = round(
+    result["storage_cv_september"] = round(
         calculate_cv(storage, months=[9], date_index=date_idx), 4
     )
 
     # Annual and monthly averages
-    result['annual_avg_taf'] = round(
-        calculate_annual_average(storage, df['WaterYear']), 2
+    result["annual_avg_taf"] = round(
+        calculate_annual_average(storage, df["WaterYear"]), 2
     )
-    result['april_avg_taf'] = round(
+    result["april_avg_taf"] = round(
         calculate_monthly_average(storage, date_idx, month=4), 2
     )
-    result['september_avg_taf'] = round(
+    result["september_avg_taf"] = round(
         calculate_monthly_average(storage, date_idx, month=9), 2
     )
 
@@ -648,7 +660,7 @@ def calculate_period_summary(
 def calculate_all_statistics(
     scenario_id: str,
     reservoirs: Dict[str, Dict[str, Any]],
-    csv_path: Optional[str] = None
+    csv_path: Optional[str] = None,
 ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """
     Calculate all statistics for all reservoirs for a scenario.
@@ -682,9 +694,9 @@ def calculate_all_statistics(
     period_summary_rows = []
 
     for code, meta in reservoirs.items():
-        entity_id = meta['id']
-        capacity_taf = meta['capacity_taf']
-        dead_pool_taf = meta['dead_pool_taf']
+        entity_id = meta["id"]
+        capacity_taf = meta["capacity_taf"]
+        dead_pool_taf = meta["dead_pool_taf"]
 
         if capacity_taf <= 0:
             log.warning(f"Skipping {code}: invalid capacity {capacity_taf}")
@@ -693,35 +705,35 @@ def calculate_all_statistics(
         # Calculate storage monthly
         storage_rows = calculate_storage_monthly(df, code, capacity_taf)
         for row in storage_rows:
-            row['scenario_short_code'] = scenario_id
-            row['reservoir_entity_id'] = entity_id
+            row["scenario_short_code"] = scenario_id
+            row["reservoir_entity_id"] = entity_id
         storage_monthly_rows.extend(storage_rows)
 
         # Calculate spill monthly
         spill_rows = calculate_spill_monthly(df, code, capacity_taf)
         for row in spill_rows:
-            row['scenario_short_code'] = scenario_id
-            row['reservoir_entity_id'] = entity_id
+            row["scenario_short_code"] = scenario_id
+            row["reservoir_entity_id"] = entity_id
         spill_monthly_rows.extend(spill_rows)
 
         # Calculate period summary
         summary = calculate_period_summary(df, code, capacity_taf, dead_pool_taf)
         if summary:
-            summary['scenario_short_code'] = scenario_id
-            summary['reservoir_entity_id'] = entity_id
+            summary["scenario_short_code"] = scenario_id
+            summary["reservoir_entity_id"] = entity_id
             period_summary_rows.append(summary)
 
-    log.info(f"Generated: {len(storage_monthly_rows)} storage monthly, "
-             f"{len(spill_monthly_rows)} spill monthly, "
-             f"{len(period_summary_rows)} period summary rows")
+    log.info(
+        f"Generated: {len(storage_monthly_rows)} storage monthly, "
+        f"{len(spill_monthly_rows)} spill monthly, "
+        f"{len(period_summary_rows)} period summary rows"
+    )
 
     return storage_monthly_rows, spill_monthly_rows, period_summary_rows
 
 
 def generate_sql_inserts(
-    storage_monthly: List[Dict],
-    spill_monthly: List[Dict],
-    period_summary: List[Dict]
+    storage_monthly: List[Dict], spill_monthly: List[Dict], period_summary: List[Dict]
 ) -> str:
     """Generate SQL INSERT statements for all three tables."""
 
@@ -745,11 +757,17 @@ def generate_sql_inserts(
         lines.append("    -- Percent of capacity values")
         lines.append("    q0, q10, q30, q50, q70, q90, q100,")
         lines.append("    -- TAF values")
-        lines.append("    q0_taf, q10_taf, q30_taf, q50_taf, q70_taf, q90_taf, q100_taf,")
+        lines.append(
+            "    q0_taf, q10_taf, q30_taf, q50_taf, q70_taf, q90_taf, q100_taf,"
+        )
         lines.append("    -- Exceedance percentiles (percent of capacity)")
-        lines.append("    exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,")
+        lines.append(
+            "    exc_p5, exc_p10, exc_p25, exc_p50, exc_p75, exc_p90, exc_p95,"
+        )
         lines.append("    -- Exceedance percentiles (TAF)")
-        lines.append("    exc_p5_taf, exc_p10_taf, exc_p25_taf, exc_p50_taf, exc_p75_taf, exc_p90_taf, exc_p95_taf,")
+        lines.append(
+            "    exc_p5_taf, exc_p10_taf, exc_p25_taf, exc_p50_taf, exc_p75_taf, exc_p90_taf, exc_p95_taf,"
+        )
         lines.append("    capacity_taf, sample_count, created_by, updated_by")
         lines.append(") VALUES")
 
@@ -778,7 +796,9 @@ def generate_sql_inserts(
             value_rows.append(value_row)
 
         lines.append(",\n".join(value_rows))
-        lines.append("ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)")
+        lines.append(
+            "ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)"
+        )
         lines.append("DO UPDATE SET")
         lines.append("    storage_avg_taf = EXCLUDED.storage_avg_taf,")
         lines.append("    storage_cv = EXCLUDED.storage_cv,")
@@ -786,14 +806,26 @@ def generate_sql_inserts(
         lines.append("    q0 = EXCLUDED.q0, q10 = EXCLUDED.q10, q30 = EXCLUDED.q30,")
         lines.append("    q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,")
         lines.append("    q100 = EXCLUDED.q100,")
-        lines.append("    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,")
-        lines.append("    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,")
+        lines.append(
+            "    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,"
+        )
+        lines.append(
+            "    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,"
+        )
         lines.append("    q100_taf = EXCLUDED.q100_taf,")
-        lines.append("    exc_p5 = EXCLUDED.exc_p5, exc_p10 = EXCLUDED.exc_p10, exc_p25 = EXCLUDED.exc_p25,")
-        lines.append("    exc_p50 = EXCLUDED.exc_p50, exc_p75 = EXCLUDED.exc_p75, exc_p90 = EXCLUDED.exc_p90,")
+        lines.append(
+            "    exc_p5 = EXCLUDED.exc_p5, exc_p10 = EXCLUDED.exc_p10, exc_p25 = EXCLUDED.exc_p25,"
+        )
+        lines.append(
+            "    exc_p50 = EXCLUDED.exc_p50, exc_p75 = EXCLUDED.exc_p75, exc_p90 = EXCLUDED.exc_p90,"
+        )
         lines.append("    exc_p95 = EXCLUDED.exc_p95,")
-        lines.append("    exc_p5_taf = EXCLUDED.exc_p5_taf, exc_p10_taf = EXCLUDED.exc_p10_taf, exc_p25_taf = EXCLUDED.exc_p25_taf,")
-        lines.append("    exc_p50_taf = EXCLUDED.exc_p50_taf, exc_p75_taf = EXCLUDED.exc_p75_taf, exc_p90_taf = EXCLUDED.exc_p90_taf,")
+        lines.append(
+            "    exc_p5_taf = EXCLUDED.exc_p5_taf, exc_p10_taf = EXCLUDED.exc_p10_taf, exc_p25_taf = EXCLUDED.exc_p25_taf,"
+        )
+        lines.append(
+            "    exc_p50_taf = EXCLUDED.exc_p50_taf, exc_p75_taf = EXCLUDED.exc_p75_taf, exc_p90_taf = EXCLUDED.exc_p90_taf,"
+        )
         lines.append("    exc_p95_taf = EXCLUDED.exc_p95_taf,")
         lines.append("    capacity_taf = EXCLUDED.capacity_taf,")
         lines.append("    sample_count = EXCLUDED.sample_count,")
@@ -813,9 +845,10 @@ def generate_sql_inserts(
 
         value_rows = []
         for row in spill_monthly:
+
             def _sv(key):
                 v = row.get(key)
-                return 'NULL' if v is None else str(v)
+                return "NULL" if v is None else str(v)
 
             value_row = (
                 f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, {row['water_month']}, "
@@ -827,7 +860,9 @@ def generate_sql_inserts(
             value_rows.append(value_row)
 
         lines.append(",\n".join(value_rows))
-        lines.append("ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)")
+        lines.append(
+            "ON CONFLICT (scenario_short_code, reservoir_entity_id, water_month)"
+        )
         lines.append("DO UPDATE SET")
         lines.append("    spill_months_count = EXCLUDED.spill_months_count,")
         lines.append("    total_months = EXCLUDED.total_months,")
@@ -837,7 +872,9 @@ def generate_sql_inserts(
         lines.append("    spill_q50 = EXCLUDED.spill_q50,")
         lines.append("    spill_q90 = EXCLUDED.spill_q90,")
         lines.append("    spill_q100 = EXCLUDED.spill_q100,")
-        lines.append("    storage_at_spill_avg_pct = EXCLUDED.storage_at_spill_avg_pct,")
+        lines.append(
+            "    storage_at_spill_avg_pct = EXCLUDED.storage_at_spill_avg_pct,"
+        )
         lines.append("    updated_at = NOW(), updated_by = 1;")
         lines.append("")
 
@@ -847,15 +884,23 @@ def generate_sql_inserts(
         lines.append("INSERT INTO reservoir_period_summary (")
         lines.append("    scenario_short_code, reservoir_entity_id,")
         lines.append("    simulation_start_year, simulation_end_year, total_years,")
-        lines.append("    storage_exc_p5, storage_exc_p10, storage_exc_p25, storage_exc_p50,")
+        lines.append(
+            "    storage_exc_p5, storage_exc_p10, storage_exc_p25, storage_exc_p50,"
+        )
         lines.append("    storage_exc_p75, storage_exc_p90, storage_exc_p95,")
         lines.append("    dead_pool_taf, dead_pool_pct, spill_threshold_pct,")
         lines.append("    spill_years_count, spill_frequency_pct,")
         lines.append("    spill_mean_cfs, spill_peak_cfs,")
         lines.append("    annual_spill_avg_taf, annual_spill_cv, annual_spill_max_taf,")
-        lines.append("    annual_max_spill_q50, annual_max_spill_q90, annual_max_spill_q100,")
-        lines.append("    -- Probability metrics (aligned with COEQWAL research notebooks)")
-        lines.append("    flood_pool_prob_all, flood_pool_prob_september, flood_pool_prob_april,")
+        lines.append(
+            "    annual_max_spill_q50, annual_max_spill_q90, annual_max_spill_q100,"
+        )
+        lines.append(
+            "    -- Probability metrics (aligned with COEQWAL research notebooks)"
+        )
+        lines.append(
+            "    flood_pool_prob_all, flood_pool_prob_september, flood_pool_prob_april,"
+        )
         lines.append("    dead_pool_prob_all, dead_pool_prob_september,")
         lines.append("    storage_cv_all, storage_cv_april, storage_cv_september,")
         lines.append("    annual_avg_taf, april_avg_taf, september_avg_taf,")
@@ -864,8 +909,9 @@ def generate_sql_inserts(
 
         value_rows = []
         for row in period_summary:
+
             def sql_val(v):
-                return 'NULL' if v is None else str(v)
+                return "NULL" if v is None else str(v)
 
             value_row = (
                 f"    ('{row['scenario_short_code']}', {row['reservoir_entity_id']}, "
@@ -919,10 +965,14 @@ def generate_sql_inserts(
         lines.append("    annual_max_spill_q100 = EXCLUDED.annual_max_spill_q100,")
         lines.append("    -- Probability metrics")
         lines.append("    flood_pool_prob_all = EXCLUDED.flood_pool_prob_all,")
-        lines.append("    flood_pool_prob_september = EXCLUDED.flood_pool_prob_september,")
+        lines.append(
+            "    flood_pool_prob_september = EXCLUDED.flood_pool_prob_september,"
+        )
         lines.append("    flood_pool_prob_april = EXCLUDED.flood_pool_prob_april,")
         lines.append("    dead_pool_prob_all = EXCLUDED.dead_pool_prob_all,")
-        lines.append("    dead_pool_prob_september = EXCLUDED.dead_pool_prob_september,")
+        lines.append(
+            "    dead_pool_prob_september = EXCLUDED.dead_pool_prob_september,"
+        )
         lines.append("    storage_cv_all = EXCLUDED.storage_cv_all,")
         lines.append("    storage_cv_april = EXCLUDED.storage_cv_april,")
         lines.append("    storage_cv_september = EXCLUDED.storage_cv_september,")
@@ -944,38 +994,26 @@ def generate_sql_inserts(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Calculate comprehensive reservoir statistics for all 92 reservoirs'
+        description="Calculate comprehensive reservoir statistics for all 92 reservoirs"
+    )
+    parser.add_argument("--scenario", "-s", help="Scenario ID (e.g., s0020)")
+    parser.add_argument(
+        "--all-scenarios", action="store_true", help="Process all known scenarios"
+    )
+    parser.add_argument("--csv-path", help="Local CSV file path (instead of S3)")
+    parser.add_argument(
+        "--reservoir-csv", help="Path to reservoir_entity.csv (default: auto-detect)"
     )
     parser.add_argument(
-        '--scenario', '-s',
-        help='Scenario ID (e.g., s0020)'
+        "--output-json", action="store_true", help="Output results as JSON"
     )
     parser.add_argument(
-        '--all-scenarios',
-        action='store_true',
-        help='Process all known scenarios'
+        "--output-sql", help="Output SQL INSERT statements to specified path"
     )
     parser.add_argument(
-        '--csv-path',
-        help='Local CSV file path (instead of S3)'
-    )
-    parser.add_argument(
-        '--reservoir-csv',
-        help='Path to reservoir_entity.csv (default: auto-detect)'
-    )
-    parser.add_argument(
-        '--output-json',
-        action='store_true',
-        help='Output results as JSON'
-    )
-    parser.add_argument(
-        '--output-sql',
-        help='Output SQL INSERT statements to specified path'
-    )
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Parse CSV and show stats without generating output'
+        "--dry-run",
+        action="store_true",
+        help="Parse CSV and show stats without generating output",
     )
 
     args = parser.parse_args()
@@ -996,9 +1034,7 @@ def main():
     for scenario_id in scenarios_to_process:
         try:
             storage_monthly, spill_monthly, period_summary = calculate_all_statistics(
-                scenario_id,
-                reservoirs,
-                csv_path=args.csv_path
+                scenario_id, reservoirs, csv_path=args.csv_path
             )
 
             all_storage_monthly.extend(storage_monthly)
@@ -1012,26 +1048,26 @@ def main():
 
     if args.dry_run:
         log.info("Dry run complete. Statistics calculated but not saved.")
-        log.info(f"Total: {len(all_storage_monthly)} storage monthly, "
-                 f"{len(all_spill_monthly)} spill monthly, "
-                 f"{len(all_period_summary)} period summary rows")
+        log.info(
+            f"Total: {len(all_storage_monthly)} storage monthly, "
+            f"{len(all_spill_monthly)} spill monthly, "
+            f"{len(all_period_summary)} period summary rows"
+        )
         return
 
     if args.output_json:
         output = {
-            'storage_monthly': all_storage_monthly,
-            'spill_monthly': all_spill_monthly,
-            'period_summary': all_period_summary,
+            "storage_monthly": all_storage_monthly,
+            "spill_monthly": all_spill_monthly,
+            "period_summary": all_period_summary,
         }
         print(json.dumps(output, indent=2))
 
     if args.output_sql:
         sql_content = generate_sql_inserts(
-            all_storage_monthly,
-            all_spill_monthly,
-            all_period_summary
+            all_storage_monthly, all_spill_monthly, all_period_summary
         )
-        with open(args.output_sql, 'w') as f:
+        with open(args.output_sql, "w") as f:
             f.write(sql_content)
         log.info(f"Saved SQL to {args.output_sql}")
 
@@ -1041,5 +1077,5 @@ def main():
     log.info(f"  Period summary: {len(all_period_summary)}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

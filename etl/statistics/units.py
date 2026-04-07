@@ -33,7 +33,7 @@ MONTHLY_TAF_SANITY_LIMIT = 2000.0
 def safe_pct(
     numerator: float,
     denominator: float,
-    label: str = '',
+    label: str = "",
     logger: Optional[logging.Logger] = None,
 ) -> float:
     """Compute a percentage with an optional plausibility warning.
@@ -50,7 +50,10 @@ def safe_pct(
         logger.warning(
             "Suspicious percentage: %s = %.1f%% "
             "(num=%.2f, den=%.2f). Possible unit mismatch.",
-            label, pct, numerator, denominator,
+            label,
+            pct,
+            numerator,
+            denominator,
         )
     return pct
 
@@ -61,37 +64,54 @@ def validate_water_balance(
     logger: logging.Logger,
     tolerance: float = 1.01,
 ) -> int:
-    """Check that GP <= AW for every DU × month after unit conversion.
+    """Check GP vs AW for agricultural DU × month after conversion.
 
-    In the CalSim water balance ``AW = DN + GP + RU``, groundwater
-    pumping should never exceed applied water.  Violations beyond a
-    small tolerance (default 1%) indicate a unit mismatch (e.g. GP
-    still in CFS while AW was converted to TAF).
+    The actual CalSim 3 water balance (from WRESL constraints-Deliveries)
+    is::
 
-    Returns the total number of violating rows.
+        AW + RP = DN + GP + RU + SHORTAGE
+
+    where RP = Riparian/misc ET = AW × RPF (typically 5–15% of AW).
+    GP is bounded by ``GPmax × AW × (1 + RPF − RUF)``, so GP > AW is
+    expected whenever the DU has non-zero riparian losses.  GP/AW ratios
+    of 1.0–1.15× are normal.
+
+    This check flags DUs where GP exceeds AW by more than *tolerance*
+    (default 1%).  Values well above ~1.15× may indicate a data issue.
+
+    **This check applies only to agricultural DUs.**  Refuge DUs have
+    different water accounting — exclude them before calling.
+
+    Returns the total number of rows exceeding the tolerance.
     """
     violations = 0
     for du_id in du_ids:
-        aw_col, gp_col = f'AW_{du_id}', f'GP_{du_id}'
+        aw_col, gp_col = f"AW_{du_id}", f"GP_{du_id}"
         if aw_col not in df.columns or gp_col not in df.columns:
             continue
-        aw = pd.to_numeric(df[aw_col], errors='coerce')
-        gp = pd.to_numeric(df[gp_col], errors='coerce')
+        aw = pd.to_numeric(df[aw_col], errors="coerce")
+        gp = pd.to_numeric(df[gp_col], errors="coerce")
         mask = (gp > aw * tolerance) & (aw > 0)
         n = int(mask.sum())
         if n > 0:
             max_ratio = float((gp[mask] / aw[mask]).max())
             logger.warning(
-                "Water balance violation: GP > AW for %s "
-                "in %d rows (max GP/AW = %.1fx). "
-                "Possible unit mismatch.",
-                du_id, n, max_ratio,
+                "GP > AW×%.2f for %s in %d rows (max GP/AW = %.1fx). "
+                "Expected range is 1.0–1.15× due to riparian losses (RP).",
+                tolerance,
+                du_id,
+                n,
+                max_ratio,
             )
             violations += n
     if violations == 0:
-        logger.info("Water balance check passed: GP <= AW for all DU-months")
+        logger.info(
+            "Water balance check passed: GP within expected range for all DU-months"
+        )
     else:
-        logger.warning("Water balance violations: %d total rows", violations)
+        logger.warning(
+            "Water balance: %d rows with GP > AW×%.2f", violations, tolerance
+        )
     return violations
 
 
@@ -107,7 +127,7 @@ def check_post_conversion_magnitude(
     """
     flagged = 0
     for col in columns:
-        vals = pd.to_numeric(df[col], errors='coerce')
+        vals = pd.to_numeric(df[col], errors="coerce")
         max_val = float(vals.max()) if not vals.dropna().empty else 0.0
         if max_val > limit:
             flagged += 1
@@ -115,7 +135,9 @@ def check_post_conversion_magnitude(
                 logger.warning(
                     "Suspicious magnitude after conversion: %s max = %.1f TAF/month "
                     "(limit: %.0f). Possible double conversion.",
-                    col, max_val, limit,
+                    col,
+                    max_val,
+                    limit,
                 )
     return flagged
 
@@ -136,6 +158,7 @@ def check_post_conversion_magnitude(
 # ``convert_all_cfs_to_taf``, meaning a single variable name can
 # appear twice (once CFS, once TAF).  The helpers below handle this.
 # ─────────────────────────────────────────────────────────────────────
+
 
 def parse_dss_csv_header(
     file_or_body,
@@ -205,13 +228,14 @@ def load_dss_csv(
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
 
     keep_indices, units_map = deduplicate_columns(
-        var_names, units_row, prefer_cfs=prefer_cfs,
+        var_names,
+        units_row,
+        prefer_cfs=prefer_cfs,
     )
 
     n_dupes = len(var_names) - len(keep_indices)
     if n_dupes > 0:
-        log.info(f"Deduplicated {n_dupes} duplicate columns "
-                 f"(prefer_cfs={prefer_cfs})")
+        log.info(f"Deduplicated {n_dupes} duplicate columns (prefer_cfs={prefer_cfs})")
 
     data_df = data_df.iloc[:, keep_indices]
     data_df.columns = [var_names[i] for i in keep_indices]

@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Optional: boto3 for S3 access
 try:
     import boto3
+
     HAS_BOTO3 = True
 except ImportError:
     HAS_BOTO3 = False
@@ -46,22 +47,23 @@ PERCENTILES = [0, 10, 30, 50, 70, 90, 100]
 
 # Path to reservoir_entity.csv (relative to project root)
 # From: etl/statistics/reservoirs/ -> need to go up 3 levels to reach database/
-RESERVOIR_ENTITY_CSV = Path(__file__).parent.parent.parent.parent / \
-    "database/seed_tables/04_calsim_data/reservoir_entity.csv"
+RESERVOIR_ENTITY_CSV = (
+    Path(__file__).parent.parent.parent.parent
+    / "database/seed_tables/04_calsim_data/reservoir_entity.csv"
+)
 
 # Capacity overrides (TAF) from V3 DataExtraction.py — the top-level storage zone
 # variable for these reservoirs is absent from the DV file, so these are hardcoded.
 CAPACITY_OVERRIDES = {
-    'FOLSM': 967.0,    # S_FOLSMLEVEL6DV (entity CSV has 975)
-    'MLRTN': 524.0,     # S_MLRTNLEVEL5DV (entity CSV has 520)
-    'OROVL': 3424.8,    # S_OROVLLEVEL6DV (entity CSV has 3537)
-    'MELON': 2420.0,    # S_MELONLEVEL5DV (entity CSV has 2400)
+    "FOLSM": 967.0,  # S_FOLSMLEVEL6DV (entity CSV has 975)
+    "MLRTN": 524.0,  # S_MLRTNLEVEL5DV (entity CSV has 520)
+    "OROVL": 3424.8,  # S_OROVLLEVEL6DV (entity CSV has 3537)
+    "MELON": 2420.0,  # S_MELONLEVEL5DV (entity CSV has 2400)
 }
 
 
 def load_reservoir_entities(
-    csv_path: Optional[Path] = None,
-    filter_codes: Optional[List[str]] = None
+    csv_path: Optional[Path] = None, filter_codes: Optional[List[str]] = None
 ) -> Dict[str, Dict[str, Any]]:
     """
     Load reservoir metadata from reservoir_entity.csv.
@@ -79,43 +81,48 @@ def load_reservoir_entities(
         raise FileNotFoundError(f"reservoir_entity.csv not found at {csv_path}")
 
     reservoirs = {}
-    with open(csv_path, 'r') as f:
+    with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            short_code = row['short_code']
+            short_code = row["short_code"]
 
             # Skip if filtering and not in filter list
             if filter_codes is not None and short_code not in filter_codes:
                 continue
 
             # Skip reservoirs with zero capacity (can't calculate percentiles)
-            capacity = float(row['capacity_taf']) if row['capacity_taf'] else 0
+            capacity = float(row["capacity_taf"]) if row["capacity_taf"] else 0
             if capacity <= 0:
                 continue
 
             reservoirs[short_code] = {
-                'id': int(row['id']),  # reservoir_entity_id for FK
-                'name': row['name'],
-                'capacity_taf': capacity,
-                'dead_pool_taf': float(row['dead_pool_taf']) if row['dead_pool_taf'] else 0,
+                "id": int(row["id"]),  # reservoir_entity_id for FK
+                "name": row["name"],
+                "capacity_taf": capacity,
+                "dead_pool_taf": float(row["dead_pool_taf"])
+                if row["dead_pool_taf"]
+                else 0,
             }
 
     for code, override_taf in CAPACITY_OVERRIDES.items():
         if code in reservoirs:
-            old = reservoirs[code]['capacity_taf']
-            reservoirs[code]['capacity_taf'] = override_taf
+            old = reservoirs[code]["capacity_taf"]
+            reservoirs[code]["capacity_taf"] = override_taf
             log.info(f"Capacity override: {code} {old} -> {override_taf} TAF")
 
     log.info(f"Loaded {len(reservoirs)} reservoirs from {csv_path}")
     return reservoirs
 
+
 from scenarios import SCENARIOS  # noqa: E402
 
 # S3 bucket configuration
-S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
 
 
-def load_scenario_csv_from_s3(scenario_id: str, reservoirs: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
+def load_scenario_csv_from_s3(
+    scenario_id: str, reservoirs: Dict[str, Dict[str, Any]]
+) -> pd.DataFrame:
     """
     Load scenario CSV from S3 bucket.
 
@@ -123,12 +130,14 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoirs: Dict[str, Dict[str, 
     instead of the entire 10,000+ column CSV.
     """
     if not HAS_BOTO3:
-        raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
+        raise ImportError(
+            "boto3 is required for S3 access. Install with: pip install boto3"
+        )
 
-    s3 = boto3.client('s3')
+    s3 = boto3.client("s3")
 
     # Build list of storage variable names (S_{short_code})
-    storage_vars = {f'S_{code}': code for code in reservoirs.keys()}
+    storage_vars = {f"S_{code}": code for code in reservoirs.keys()}
 
     # Try different possible CSV locations
     possible_keys = [
@@ -147,9 +156,9 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoirs: Dict[str, Dict[str, 
             # Read small chunk to get column names from row 1 (b row)
             log.info("Reading header rows to identify column indices...")
             header_df = pd.read_csv(
-                response['Body'],
+                response["Body"],
                 header=None,
-                nrows=8  # Just header rows
+                nrows=8,  # Just header rows
             )
 
             # Variable names are in row 1 (the 'b' row)
@@ -167,18 +176,18 @@ def load_scenario_csv_from_s3(scenario_id: str, reservoirs: Dict[str, Dict[str, 
                     reservoir_col_indices[name_str] = i
                     log.info(f"Found {name_str} at column {i}")
 
-            log.info(f"Loading only {len(cols_to_load)} columns instead of {len(col_names)}")
+            log.info(
+                f"Loading only {len(cols_to_load)} columns instead of {len(col_names)}"
+            )
 
             # Re-fetch the file and read only needed columns
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            df = pd.read_csv(
-                response['Body'],
-                header=None,
-                usecols=cols_to_load
+            df = pd.read_csv(response["Body"], header=None, usecols=cols_to_load)
+            df.attrs["storage_vars"] = storage_vars
+            df.attrs["units_row"] = (
+                header_df.iloc[6].tolist() if len(header_df) > 6 else []
             )
-            df.attrs['storage_vars'] = storage_vars
-            df.attrs['units_row'] = header_df.iloc[6].tolist() if len(header_df) > 6 else []
-            df.attrs['reservoir_col_indices'] = reservoir_col_indices
+            df.attrs["reservoir_col_indices"] = reservoir_col_indices
             log.info(f"Successfully loaded from: {key}")
             log.info(f"DataFrame shape: {df.shape}")
             return df
@@ -198,7 +207,9 @@ def load_scenario_csv_from_file(file_path: str) -> pd.DataFrame:
     return pd.read_csv(file_path, header=None)
 
 
-def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
+def parse_scenario_csv(
+    df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]
+) -> pd.DataFrame:
     """
     Parse the DSS-format CSV with header rows.
 
@@ -216,17 +227,17 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     header_rows = 7
 
     # Build mapping of storage variable names to short_codes
-    storage_vars = {f'S_{code}': code for code in reservoirs.keys()}
+    storage_vars = {f"S_{code}": code for code in reservoirs.keys()}
 
     # Verify by checking if first column of row 7 looks like a date
     if len(df) > 7:
         try:
-            test_date = pd.to_datetime(df.iloc[7, 0], errors='coerce')
+            test_date = pd.to_datetime(df.iloc[7, 0], errors="coerce")
             if pd.isna(test_date):
                 # Try to find where dates start
                 for i in range(min(15, len(df))):
                     try:
-                        test = pd.to_datetime(df.iloc[i, 0], errors='coerce')
+                        test = pd.to_datetime(df.iloc[i, 0], errors="coerce")
                         if not pd.isna(test):
                             header_rows = i
                             break
@@ -242,7 +253,7 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     log.info(f"Total columns: {len(col_names)}")
 
     # Validate units from row 6 or stored attrs
-    units_row = df.attrs.get('units_row', [])
+    units_row = df.attrs.get("units_row", [])
     if not units_row and len(df) > 6:
         units_row = df.iloc[6].tolist()
 
@@ -251,9 +262,9 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     data_df.columns = range(len(data_df.columns))
 
     # First column is DateTime
-    data_df.rename(columns={0: 'DateTime'}, inplace=True)
-    data_df['DateTime'] = pd.to_datetime(data_df['DateTime'], errors='coerce')
-    data_df = data_df.dropna(subset=['DateTime'])
+    data_df.rename(columns={0: "DateTime"}, inplace=True)
+    data_df["DateTime"] = pd.to_datetime(data_df["DateTime"], errors="coerce")
+    data_df = data_df.dropna(subset=["DateTime"])
 
     # Find storage columns - look for EXACT matches to avoid picking up variants
     storage_cols = {}
@@ -269,12 +280,12 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     log.info(f"Found storage columns: {list(storage_cols.keys())}")
 
     if units_row:
-        original_indices = df.attrs.get('reservoir_col_indices', storage_cols)
+        original_indices = df.attrs.get("reservoir_col_indices", storage_cols)
         for var_name in storage_cols:
             orig_idx = original_indices.get(var_name)
             if orig_idx is not None and orig_idx < len(units_row):
                 unit = str(units_row[orig_idx]).strip().upper()
-                if unit in ('TAF', 'NONE', 'UNDEFINE', ''):
+                if unit in ("TAF", "NONE", "UNDEFINE", ""):
                     continue
                 log.warning(
                     f"Unexpected unit for {var_name}: '{unit}' (expected TAF). "
@@ -284,7 +295,7 @@ def parse_scenario_csv(df: pd.DataFrame, reservoirs: Dict[str, Dict[str, Any]]) 
     # Rename columns to storage variable names (S_SHSTA, etc.)
     for var_name, col_idx in storage_cols.items():
         data_df.rename(columns={col_idx: var_name}, inplace=True)
-        data_df[var_name] = pd.to_numeric(data_df[var_name], errors='coerce')
+        data_df[var_name] = pd.to_numeric(data_df[var_name], errors="coerce")
 
     return data_df
 
@@ -296,19 +307,17 @@ def add_water_month(df: pd.DataFrame) -> pd.DataFrame:
     Water year runs from October 1 to September 30.
     """
     df = df.copy()
-    df['Month'] = df['DateTime'].dt.month
+    df["Month"] = df["DateTime"].dt.month
     # Convert calendar month to water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
-    df['WaterMonth'] = ((df['Month'] - 10) % 12) + 1
-    df['WaterYear'] = df['DateTime'].dt.year
+    df["WaterMonth"] = ((df["Month"] - 10) % 12) + 1
+    df["WaterYear"] = df["DateTime"].dt.year
     # Adjust water year for Oct-Dec (they belong to next water year)
-    df.loc[df['Month'] >= 10, 'WaterYear'] += 1
+    df.loc[df["Month"] >= 10, "WaterYear"] += 1
     return df
 
 
 def calculate_percentiles_for_reservoir(
-    df: pd.DataFrame,
-    short_code: str,
-    capacity_taf: float
+    df: pd.DataFrame, short_code: str, capacity_taf: float
 ) -> Dict[int, Dict[str, float]]:
     """
     Calculate percentile statistics for a single reservoir.
@@ -323,7 +332,7 @@ def calculate_percentiles_for_reservoir(
         q0_taf, q10_taf, ..., q100_taf, mean_taf: values in TAF
     }
     """
-    storage_col = f'S_{short_code}'
+    storage_col = f"S_{short_code}"
     if storage_col not in df.columns:
         log.warning(f"Storage column {storage_col} not found in data")
         return {}
@@ -333,7 +342,7 @@ def calculate_percentiles_for_reservoir(
     monthly_stats = {}
     for wm in range(1, 13):
         # Get raw TAF values for this water month
-        month_data_taf = df[df['WaterMonth'] == wm][storage_col].dropna()
+        month_data_taf = df[df["WaterMonth"] == wm][storage_col].dropna()
 
         if month_data_taf.empty:
             log.warning(f"No data for {short_code} water month {wm}")
@@ -346,13 +355,13 @@ def calculate_percentiles_for_reservoir(
             taf_value = float(np.percentile(month_data_taf, p))
             pct_value = (taf_value / capacity_taf) * 100
 
-            stats[f'q{p}'] = round(pct_value, 2)           # Percent of capacity
-            stats[f'q{p}_taf'] = round(taf_value, 2)       # TAF
+            stats[f"q{p}"] = round(pct_value, 2)  # Percent of capacity
+            stats[f"q{p}_taf"] = round(taf_value, 2)  # TAF
 
         # Mean in both units
         mean_taf = float(month_data_taf.mean())
-        stats['mean'] = round((mean_taf / capacity_taf) * 100, 2)  # Percent
-        stats['mean_taf'] = round(mean_taf, 2)                      # TAF
+        stats["mean"] = round((mean_taf / capacity_taf) * 100, 2)  # Percent
+        stats["mean_taf"] = round(mean_taf, 2)  # TAF
 
         monthly_stats[wm] = stats
 
@@ -362,7 +371,7 @@ def calculate_percentiles_for_reservoir(
 def calculate_all_reservoir_percentiles(
     scenario_id: str,
     reservoirs: Dict[str, Dict[str, Any]],
-    csv_path: Optional[str] = None
+    csv_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Calculate percentiles for all reservoirs for a scenario.
@@ -408,25 +417,22 @@ def calculate_all_reservoir_percentiles(
     log.info(f"Total rows: {len(df)}")
 
     # Calculate percentiles for each reservoir
-    results = {
-        'scenario_id': scenario_id,
-        'reservoirs': {}
-    }
+    results = {"scenario_id": scenario_id, "reservoirs": {}}
 
     for short_code, meta in reservoirs.items():
         log.info(f"Calculating percentiles for {meta['name']} ({short_code})")
 
         monthly_stats = calculate_percentiles_for_reservoir(
-            df, short_code, meta['capacity_taf']
+            df, short_code, meta["capacity_taf"]
         )
 
         if monthly_stats:
-            results['reservoirs'][short_code] = {
-                'id': meta['id'],
-                'name': meta['name'],
-                'capacity_taf': meta['capacity_taf'],
-                'dead_pool_taf': meta['dead_pool_taf'],
-                'monthly_percentiles': monthly_stats
+            results["reservoirs"][short_code] = {
+                "id": meta["id"],
+                "name": meta["name"],
+                "capacity_taf": meta["capacity_taf"],
+                "dead_pool_taf": meta["dead_pool_taf"],
+                "monthly_percentiles": monthly_stats,
             }
 
     return results
@@ -441,37 +447,37 @@ def format_for_database(results: Dict[str, Any]) -> List[Dict[str, Any]]:
     Includes both percent-of-capacity and TAF values.
     """
     rows = []
-    scenario_id = results['scenario_id']
+    scenario_id = results["scenario_id"]
 
-    for short_code, res_data in results['reservoirs'].items():
-        entity_id = res_data['id']
-        capacity_taf = res_data['capacity_taf']
+    for short_code, res_data in results["reservoirs"].items():
+        entity_id = res_data["id"]
+        capacity_taf = res_data["capacity_taf"]
 
-        for water_month, stats in res_data['monthly_percentiles'].items():
+        for water_month, stats in res_data["monthly_percentiles"].items():
             row = {
-                'scenario_short_code': scenario_id,
-                'reservoir_entity_id': entity_id,  # FK to reservoir_entity.id
-                'water_month': water_month,
+                "scenario_short_code": scenario_id,
+                "reservoir_entity_id": entity_id,  # FK to reservoir_entity.id
+                "water_month": water_month,
                 # Percent of capacity values
-                'q0': stats.get('q0'),      # minimum
-                'q10': stats.get('q10'),
-                'q30': stats.get('q30'),
-                'q50': stats.get('q50'),    # median
-                'q70': stats.get('q70'),
-                'q90': stats.get('q90'),
-                'q100': stats.get('q100'),  # maximum
-                'mean_value': stats.get('mean'),
+                "q0": stats.get("q0"),  # minimum
+                "q10": stats.get("q10"),
+                "q30": stats.get("q30"),
+                "q50": stats.get("q50"),  # median
+                "q70": stats.get("q70"),
+                "q90": stats.get("q90"),
+                "q100": stats.get("q100"),  # maximum
+                "mean_value": stats.get("mean"),
                 # TAF values
-                'q0_taf': stats.get('q0_taf'),
-                'q10_taf': stats.get('q10_taf'),
-                'q30_taf': stats.get('q30_taf'),
-                'q50_taf': stats.get('q50_taf'),
-                'q70_taf': stats.get('q70_taf'),
-                'q90_taf': stats.get('q90_taf'),
-                'q100_taf': stats.get('q100_taf'),
-                'mean_taf': stats.get('mean_taf'),
+                "q0_taf": stats.get("q0_taf"),
+                "q10_taf": stats.get("q10_taf"),
+                "q30_taf": stats.get("q30_taf"),
+                "q50_taf": stats.get("q50_taf"),
+                "q70_taf": stats.get("q70_taf"),
+                "q90_taf": stats.get("q90_taf"),
+                "q100_taf": stats.get("q100_taf"),
+                "mean_taf": stats.get("mean_taf"),
                 # Reference
-                'capacity_taf': capacity_taf,
+                "capacity_taf": capacity_taf,
             }
             rows.append(row)
 
@@ -529,8 +535,12 @@ def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
     lines.append("    q50 = EXCLUDED.q50, q70 = EXCLUDED.q70, q90 = EXCLUDED.q90,")
     lines.append("    q100 = EXCLUDED.q100, mean_value = EXCLUDED.mean_value,")
     lines.append("    -- TAF values")
-    lines.append("    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,")
-    lines.append("    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,")
+    lines.append(
+        "    q0_taf = EXCLUDED.q0_taf, q10_taf = EXCLUDED.q10_taf, q30_taf = EXCLUDED.q30_taf,"
+    )
+    lines.append(
+        "    q50_taf = EXCLUDED.q50_taf, q70_taf = EXCLUDED.q70_taf, q90_taf = EXCLUDED.q90_taf,"
+    )
     lines.append("    q100_taf = EXCLUDED.q100_taf, mean_taf = EXCLUDED.mean_taf,")
     lines.append("    capacity_taf = EXCLUDED.capacity_taf,")
     lines.append("    updated_at = NOW(), updated_by = 1;")
@@ -544,37 +554,22 @@ def generate_sql_inserts(rows: List[Dict[str, Any]]) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Calculate monthly percentile statistics for reservoir storage'
+        description="Calculate monthly percentile statistics for reservoir storage"
+    )
+    parser.add_argument("--scenario", "-s", help="Scenario ID (e.g., s0020)")
+    parser.add_argument(
+        "--all-scenarios", action="store_true", help="Process all known scenarios"
+    )
+    parser.add_argument("--csv-path", help="Local CSV file path (instead of S3)")
+    parser.add_argument(
+        "--reservoir-csv", help="Path to reservoir_entity.csv (default: auto-detect)"
     )
     parser.add_argument(
-        '--scenario', '-s',
-        help='Scenario ID (e.g., s0020)'
+        "--output-json", action="store_true", help="Output results as JSON"
     )
+    parser.add_argument("--output-csv", help="Output results as CSV to specified path")
     parser.add_argument(
-        '--all-scenarios',
-        action='store_true',
-        help='Process all known scenarios'
-    )
-    parser.add_argument(
-        '--csv-path',
-        help='Local CSV file path (instead of S3)'
-    )
-    parser.add_argument(
-        '--reservoir-csv',
-        help='Path to reservoir_entity.csv (default: auto-detect)'
-    )
-    parser.add_argument(
-        '--output-json',
-        action='store_true',
-        help='Output results as JSON'
-    )
-    parser.add_argument(
-        '--output-csv',
-        help='Output results as CSV to specified path'
-    )
-    parser.add_argument(
-        '--output-sql',
-        help='Output SQL INSERT statements to specified path'
+        "--output-sql", help="Output SQL INSERT statements to specified path"
     )
 
     args = parser.parse_args()
@@ -592,9 +587,7 @@ def main():
     for scenario_id in scenarios_to_process:
         try:
             results = calculate_all_reservoir_percentiles(
-                scenario_id,
-                reservoirs,
-                csv_path=args.csv_path
+                scenario_id, reservoirs, csv_path=args.csv_path
             )
 
             if args.output_json:
@@ -617,7 +610,7 @@ def main():
 
     if args.output_sql and all_results:
         sql_content = generate_sql_inserts(all_results)
-        with open(args.output_sql, 'w') as f:
+        with open(args.output_sql, "w") as f:
             f.write(sql_content)
         log.info(f"Saved SQL to {args.output_sql}")
 
@@ -625,5 +618,5 @@ def main():
     return all_results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

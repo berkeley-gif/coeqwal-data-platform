@@ -5,9 +5,15 @@ Calculate delivery statistics for urban demand units (tier matrix DUs).
 Approach:
 1. Read tier matrix to get list of 71 DU_IDs
 2. Read CalSim output CSV from S3 (DSS format with 7 header rows)
-3. Map DU_IDs to column names (DN_*, D_*, GP_*)
-4. Calculate statistics (percentiles, averages, etc.)
-5. Return data for database insertion
+3. Deduplicate columns and parse header units (CFS/TAF)
+4. Map DU_IDs to column names (DN_*, D_*, GP_*)
+5. Convert CFS columns to TAF using DaysInMonth × CFS_TO_TAF_PER_DAY
+6. Calculate statistics (percentiles, averages, etc.)
+7. Return data for database insertion
+
+All delivery variables (DN_*, D_*, GP_*, DEL_*) are natively CFS in the
+CalSim DV output.  This module converts them to TAF before computing
+statistics, consistent with AG, Refuge, and MI modules.
 
 Usage:
     python calculate_du_statistics.py --scenario s0020
@@ -28,10 +34,17 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from units import (  # noqa: E402
+    CFS_TO_TAF_PER_DAY,
+    check_post_conversion_magnitude,
+    deduplicate_columns,
+    parse_dss_csv_header,
+)
 
 # Optional: boto3 for S3 access
 try:
     import boto3
+
     HAS_BOTO3 = True
 except ImportError:
     HAS_BOTO3 = False
@@ -40,6 +53,7 @@ except ImportError:
 try:
     import psycopg2
     from psycopg2.extras import execute_values
+
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
@@ -55,7 +69,7 @@ log = logging.getLogger("du_statistics")
 from scenarios import SCENARIOS  # noqa: E402
 
 # S3 bucket configuration
-S3_BUCKET = os.getenv('S3_BUCKET', 'coeqwal-model-run')
+S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
 TIER_MATRIX_S3_KEY = "reference/cws/all_scenarios_tier_matrix.csv"
 
 # Paths relative to project (fallback for local development)
@@ -197,10 +211,13 @@ def load_tier_matrix_dus(csv_path: Optional[Path] = None) -> List[str]:
     if HAS_BOTO3 and csv_path is None:
         try:
             import io
-            s3 = boto3.client('s3')
-            log.info(f"Loading tier matrix from S3: s3://{S3_BUCKET}/{TIER_MATRIX_S3_KEY}")
+
+            s3 = boto3.client("s3")
+            log.info(
+                f"Loading tier matrix from S3: s3://{S3_BUCKET}/{TIER_MATRIX_S3_KEY}"
+            )
             response = s3.get_object(Bucket=S3_BUCKET, Key=TIER_MATRIX_S3_KEY)
-            content = response['Body'].read().decode('utf-8')
+            content = response["Body"].read().decode("utf-8")
             reader = csv.reader(io.StringIO(content))
             header = next(reader)
             du_ids = [col.strip().strip('"') for col in header[1:] if col.strip()]
@@ -214,9 +231,11 @@ def load_tier_matrix_dus(csv_path: Optional[Path] = None) -> List[str]:
         csv_path = TIER_MATRIX_CSV
 
     if not csv_path.exists():
-        raise FileNotFoundError(f"Tier matrix not found at {csv_path} (and S3 load failed)")
+        raise FileNotFoundError(
+            f"Tier matrix not found at {csv_path} (and S3 load failed)"
+        )
 
-    with open(csv_path, 'r') as f:
+    with open(csv_path, "r") as f:
         reader = csv.reader(f)
         header = next(reader)
 
@@ -227,20 +246,25 @@ def load_tier_matrix_dus(csv_path: Optional[Path] = None) -> List[str]:
     return du_ids
 
 
-def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
+def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Load CalSim output CSV from S3 bucket.
 
     Handles the DSS export format with 7 header rows.
-    Variable names are in row 1 (0-indexed).
+    Deduplicates columns (preferring CFS) so that V3 CSVs with both
+    CFS and TAF versions of a column are handled correctly.
 
     Returns:
-        DataFrame with date column and all CalSim variables
+        (DataFrame, units_map) where units_map maps column names to declared units
     """
     if not HAS_BOTO3:
-        raise ImportError("boto3 is required for S3 access. Install with: pip install boto3")
+        raise ImportError(
+            "boto3 is required for S3 access. Install with: pip install boto3"
+        )
 
-    s3 = boto3.client('s3')
+    import io
+
+    s3 = boto3.client("s3")
 
     possible_keys = [
         f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
@@ -251,18 +275,25 @@ def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
         try:
             log.info(f"Trying S3 key: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            df = pd.read_csv(response['Body'], header=None, nrows=8)
+            raw_bytes = response["Body"].read()
 
-            # Get variable names from row 1
-            col_names = df.iloc[1].tolist()
+            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            keep_indices, units_map = deduplicate_columns(
+                var_names, units_row, prefer_cfs=True
+            )
 
-            # Re-fetch and read data portion
-            response = s3.get_object(Bucket=S3_BUCKET, Key=key)
-            data_df = pd.read_csv(response['Body'], header=None, skiprows=7)
-            data_df.columns = col_names
+            data_df = pd.read_csv(io.BytesIO(raw_bytes), header=None, skiprows=7)
+            data_df = data_df.iloc[:, keep_indices]
+            data_df.columns = [var_names[i] for i in keep_indices]
 
-            log.info(f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-            return data_df
+            n_dupes = len(var_names) - len(keep_indices)
+            if n_dupes > 0:
+                log.info(f"Deduplicated {n_dupes} duplicate columns")
+
+            log.info(
+                f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns"
+            )
+            return data_df, units_map
 
         except s3.exceptions.NoSuchKey:
             continue
@@ -273,24 +304,33 @@ def load_calsim_csv_from_s3(scenario_id: str) -> pd.DataFrame:
     raise FileNotFoundError(f"Could not find CalSim output for {scenario_id} in S3")
 
 
-def load_calsim_csv_from_file(file_path: str) -> pd.DataFrame:
+def load_calsim_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Load CalSim output CSV from local file.
 
     Handles the DSS export format with 7 header rows.
+    Deduplicates columns (preferring CFS) to avoid double-conversion.
+
+    Returns:
+        (DataFrame, units_map) where units_map maps column names to declared units
     """
     log.info(f"Loading from file: {file_path}")
 
-    # Read header to get column names
-    header_df = pd.read_csv(file_path, header=None, nrows=8)
-    col_names = header_df.iloc[1].tolist()
+    var_names, units_row = parse_dss_csv_header(file_path)
+    keep_indices, units_map = deduplicate_columns(var_names, units_row, prefer_cfs=True)
 
-    # Read data portion
-    data_df = pd.read_csv(file_path, header=None, skiprows=7)
-    data_df.columns = col_names
+    data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
+    data_df = data_df.iloc[:, keep_indices]
+    data_df.columns = [var_names[i] for i in keep_indices]
 
-    log.info(f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
-    return data_df
+    n_dupes = len(var_names) - len(keep_indices)
+    if n_dupes > 0:
+        log.info(f"Deduplicated {n_dupes} duplicate columns")
+
+    log.info(
+        f"Loaded CalSim output: {data_df.shape[0]} rows, {data_df.shape[1]} columns"
+    )
+    return data_df, units_map
 
 
 def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
@@ -309,40 +349,49 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 
     # Try to parse as datetime (handles DSS format like "31OCT1921 2400")
     try:
-        df['DateTime'] = pd.to_datetime(date_values, errors='coerce')
+        df["DateTime"] = pd.to_datetime(date_values, errors="coerce")
 
-        if df['DateTime'].notna().sum() > 0:
+        if df["DateTime"].notna().sum() > 0:
             # Successfully parsed as datetime - monthly data
-            df['CalendarMonth'] = df['DateTime'].dt.month
-            df['CalendarYear'] = df['DateTime'].dt.year
+            df["CalendarMonth"] = df["DateTime"].dt.month
+            df["CalendarYear"] = df["DateTime"].dt.year
+            df["DaysInMonth"] = df["DateTime"].dt.daysinmonth
 
             # Water month: Oct(10)->1, Nov(11)->2, ..., Sep(9)->12
-            df['WaterMonth'] = ((df['CalendarMonth'] - 10) % 12) + 1
+            df["WaterMonth"] = ((df["CalendarMonth"] - 10) % 12) + 1
 
             # Water year: Oct-Dec belong to next water year
-            df['WaterYear'] = df['CalendarYear']
-            df.loc[df['CalendarMonth'] >= 10, 'WaterYear'] += 1
+            df["WaterYear"] = df["CalendarYear"]
+            df.loc[df["CalendarMonth"] >= 10, "WaterYear"] += 1
 
-            log.info(f"Detected monthly data: {df['DateTime'].min()} to {df['DateTime'].max()}")
+            log.info(
+                f"Detected monthly data: {df['DateTime'].min()} to {df['DateTime'].max()}"
+            )
             return df
     except Exception as e:
         log.debug(f"Could not parse as datetime: {e}")
 
     # Fallback: check if values are years (annual data)
-    date_numeric = pd.to_numeric(date_values, errors='coerce')
-    if date_numeric.notna().all() and (date_numeric >= 1900).all() and (date_numeric <= 2100).all():
-        df['WaterYear'] = date_numeric.astype(int)
-        df['WaterMonth'] = 0  # 0 indicates annual data
-        log.info(f"Detected annual data: years {df['WaterYear'].min()}-{df['WaterYear'].max()}")
+    date_numeric = pd.to_numeric(date_values, errors="coerce")
+    if (
+        date_numeric.notna().all()
+        and (date_numeric >= 1900).all()
+        and (date_numeric <= 2100).all()
+    ):
+        df["WaterYear"] = date_numeric.astype(int)
+        df["WaterMonth"] = 0  # 0 indicates annual data
+        log.info(
+            f"Detected annual data: years {df['WaterYear'].min()}-{df['WaterYear'].max()}"
+        )
         return df
 
-    raise ValueError(f"Could not parse date column '{first_col}' as datetime or year values")
+    raise ValueError(
+        f"Could not parse date column '{first_col}' as datetime or year values"
+    )
 
 
 def calculate_delivery_monthly(
-    df: pd.DataFrame,
-    du_id: str,
-    column_name: str
+    df: pd.DataFrame, du_id: str, column_name: str
 ) -> List[Dict[str, Any]]:
     """
     Calculate monthly delivery statistics for a single DU.
@@ -357,7 +406,7 @@ def calculate_delivery_monthly(
         return []
 
     results = []
-    is_annual = (df['WaterMonth'] == 0).all()
+    is_annual = (df["WaterMonth"] == 0).all()
 
     if is_annual:
         # Annual data - single aggregated row
@@ -366,45 +415,49 @@ def calculate_delivery_monthly(
             return []
 
         row = {
-            'du_id': du_id,
-            'water_month': 0,  # 0 = annual
-            'delivery_avg_taf': round(float(data.mean()), 2),
-            'delivery_cv': round(float(data.std() / data.mean()), 4) if data.mean() > 0 else 0,
-            'sample_count': len(data),
+            "du_id": du_id,
+            "water_month": 0,  # 0 = annual
+            "delivery_avg_taf": round(float(data.mean()), 2),
+            "delivery_cv": round(float(data.std() / data.mean()), 4)
+            if data.mean() > 0
+            else 0,
+            "sample_count": len(data),
         }
 
         # Add percentiles
         for p in DELIVERY_PERCENTILES:
-            row[f'q{p}'] = round(float(np.percentile(data, p)), 2)
+            row[f"q{p}"] = round(float(np.percentile(data, p)), 2)
 
         # Add exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
         for p in EXCEEDANCE_PERCENTILES:
-            row[f'exc_p{p}'] = round(float(np.percentile(data, 100 - p)), 2)
+            row[f"exc_p{p}"] = round(float(np.percentile(data, 100 - p)), 2)
 
         results.append(row)
     else:
         # Monthly data - 12 rows
         for wm in range(1, 13):
-            month_data = df[df['WaterMonth'] == wm][column_name].dropna()
+            month_data = df[df["WaterMonth"] == wm][column_name].dropna()
 
             if month_data.empty:
                 continue
 
             row = {
-                'du_id': du_id,
-                'water_month': wm,
-                'delivery_avg_taf': round(float(month_data.mean()), 2),
-                'delivery_cv': round(float(month_data.std() / month_data.mean()), 4) if month_data.mean() > 0 else 0,
-                'sample_count': len(month_data),
+                "du_id": du_id,
+                "water_month": wm,
+                "delivery_avg_taf": round(float(month_data.mean()), 2),
+                "delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
+                if month_data.mean() > 0
+                else 0,
+                "sample_count": len(month_data),
             }
 
             # Add percentiles
             for p in DELIVERY_PERCENTILES:
-                row[f'q{p}'] = round(float(np.percentile(month_data, p)), 2)
+                row[f"q{p}"] = round(float(np.percentile(month_data, p)), 2)
 
             # Add exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
-                row[f'exc_p{p}'] = round(float(np.percentile(month_data, 100 - p)), 2)
+                row[f"exc_p{p}"] = round(float(np.percentile(month_data, 100 - p)), 2)
 
             results.append(row)
 
@@ -412,9 +465,7 @@ def calculate_delivery_monthly(
 
 
 def calculate_period_summary(
-    df: pd.DataFrame,
-    du_id: str,
-    column_name: str
+    df: pd.DataFrame, du_id: str, column_name: str
 ) -> Optional[Dict[str, Any]]:
     """
     Calculate period-of-record summary statistics for a single DU.
@@ -428,43 +479,72 @@ def calculate_period_summary(
     if data.empty:
         return None
 
-    water_years = sorted(df['WaterYear'].unique())
+    water_years = sorted(df["WaterYear"].unique())
 
     result = {
-        'du_id': du_id,
-        'simulation_start_year': int(water_years[0]),
-        'simulation_end_year': int(water_years[-1]),
-        'total_years': len(water_years),
+        "du_id": du_id,
+        "simulation_start_year": int(water_years[0]),
+        "simulation_end_year": int(water_years[-1]),
+        "total_years": len(water_years),
     }
 
     # Annual delivery statistics
-    annual_delivery = df.groupby('WaterYear')[column_name].sum()
-    result['annual_delivery_avg_taf'] = round(float(annual_delivery.mean()), 2)
+    annual_delivery = df.groupby("WaterYear")[column_name].sum()
+    result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
     if annual_delivery.mean() > 0:
-        result['annual_delivery_cv'] = round(float(annual_delivery.std() / annual_delivery.mean()), 4)
+        result["annual_delivery_cv"] = round(
+            float(annual_delivery.std() / annual_delivery.mean()), 4
+        )
     else:
-        result['annual_delivery_cv'] = 0
+        result["annual_delivery_cv"] = 0
 
     # Exceedance percentiles (annual): exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:
-        result[f'delivery_exc_p{p}'] = round(float(np.percentile(annual_delivery, 100 - p)), 2)
+        result[f"delivery_exc_p{p}"] = round(
+            float(np.percentile(annual_delivery, 100 - p)), 2
+        )
 
     # Note: shortage statistics would require shortage columns (SHORT_DN_*, etc.)
     # These may be in a separate file or need to be calculated
-    result['annual_shortage_avg_taf'] = None
-    result['shortage_years_count'] = None
-    result['shortage_frequency_pct'] = None
-    result['reliability_pct'] = None
-    result['avg_pct_demand_met'] = None
-    result['annual_demand_avg_taf'] = None
+    result["annual_shortage_avg_taf"] = None
+    result["shortage_years_count"] = None
+    result["shortage_frequency_pct"] = None
+    result["reliability_pct"] = None
+    result["avg_pct_demand_met"] = None
+    result["annual_demand_avg_taf"] = None
 
     return result
 
 
+DU_CFS_PREFIXES = ("DN_", "D_", "GP_", "DEL_")
+
+
+def _convert_cfs_columns_to_taf(
+    df: pd.DataFrame,
+    units_map: Dict[str, str],
+    columns_used: List[str],
+) -> List[str]:
+    """Convert CFS delivery columns to TAF in-place.
+
+    Only converts columns whose header declares CFS (from *units_map*).
+    Returns the list of columns that were converted.
+    """
+    converted: List[str] = []
+    for col in columns_used:
+        unit = units_map.get(col, "").upper()
+        if unit == "CFS":
+            vals = pd.to_numeric(df[col], errors="coerce")
+            df[col] = vals * df["DaysInMonth"] * CFS_TO_TAF_PER_DAY
+            converted.append(col)
+        elif unit == "TAF":
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        else:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return converted
+
+
 def calculate_all_du_statistics(
-    scenario_id: str,
-    du_ids: Optional[List[str]] = None,
-    csv_path: Optional[str] = None
+    scenario_id: str, du_ids: Optional[List[str]] = None, csv_path: Optional[str] = None
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     Calculate all statistics for tier matrix DUs for a scenario.
@@ -483,13 +563,13 @@ def calculate_all_du_statistics(
     if du_ids is None:
         du_ids = load_tier_matrix_dus()
 
-    # Load CalSim output CSV
+    # Load CalSim output CSV (with deduplication and units)
     if csv_path:
-        df = load_calsim_csv_from_file(csv_path)
+        df, units_map = load_calsim_csv_from_file(csv_path)
     else:
-        df = load_calsim_csv_from_s3(scenario_id)
+        df, units_map = load_calsim_csv_from_s3(scenario_id)
 
-    # Add water year/month
+    # Add water year/month/DaysInMonth
     df = add_water_year_month(df)
 
     available_columns = list(df.columns)
@@ -502,6 +582,7 @@ def calculate_all_du_statistics(
     # Track mapping results
     mapped_count = 0
     unmapped_dus = []
+    columns_used: List[str] = []
 
     for du_id in du_ids:
         column_name = map_du_to_column(du_id, available_columns)
@@ -511,25 +592,51 @@ def calculate_all_du_statistics(
             continue
 
         mapped_count += 1
+        if column_name not in columns_used:
+            columns_used.append(column_name)
+
+    # Convert all CFS delivery columns to TAF before computing statistics
+    if "DaysInMonth" not in df.columns:
+        log.error("DaysInMonth column missing — cannot convert CFS to TAF")
+        return [], []
+
+    converted_cols = _convert_cfs_columns_to_taf(df, units_map, columns_used)
+    log.info(f"Converted {len(converted_cols)} CFS columns to TAF")
+
+    # Safeguard: check for implausible magnitudes after conversion
+    if converted_cols:
+        flagged = check_post_conversion_magnitude(df, converted_cols, logger=log)
+        if flagged:
+            log.warning(
+                f"{flagged} column(s) have suspicious magnitudes after CFS→TAF conversion"
+            )
+
+    # Now compute statistics (values are in TAF)
+    for du_id in du_ids:
+        column_name = map_du_to_column(du_id, available_columns)
+        if column_name is None:
+            continue
 
         # Calculate delivery monthly
         monthly_rows = calculate_delivery_monthly(df, du_id, column_name)
         for row in monthly_rows:
-            row['scenario_short_code'] = scenario_id
+            row["scenario_short_code"] = scenario_id
         delivery_monthly_rows.extend(monthly_rows)
 
         # Calculate period summary
         summary = calculate_period_summary(df, du_id, column_name)
         if summary:
-            summary['scenario_short_code'] = scenario_id
+            summary["scenario_short_code"] = scenario_id
             period_summary_rows.append(summary)
 
     log.info(f"Mapped {mapped_count}/{len(du_ids)} DU_IDs to columns")
     if unmapped_dus:
         log.info(f"Unmapped DUs ({len(unmapped_dus)}): {unmapped_dus[:10]}...")
 
-    log.info(f"Generated: {len(delivery_monthly_rows)} delivery monthly, "
-             f"{len(period_summary_rows)} period summary rows")
+    log.info(
+        f"Generated: {len(delivery_monthly_rows)} delivery monthly, "
+        f"{len(period_summary_rows)} period summary rows"
+    )
 
     return delivery_monthly_rows, period_summary_rows
 
@@ -537,30 +644,20 @@ def calculate_all_du_statistics(
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Calculate delivery statistics for urban demand units (tier matrix DUs)'
+        description="Calculate delivery statistics for urban demand units (tier matrix DUs)"
+    )
+    parser.add_argument("--scenario", "-s", help="Scenario ID (e.g., s0020)")
+    parser.add_argument(
+        "--all-scenarios", action="store_true", help="Process all known scenarios"
     )
     parser.add_argument(
-        '--scenario', '-s',
-        help='Scenario ID (e.g., s0020)'
+        "--csv-path", help="Local CalSim output CSV file path (instead of S3)"
     )
     parser.add_argument(
-        '--all-scenarios',
-        action='store_true',
-        help='Process all known scenarios'
+        "--output-json", action="store_true", help="Output results as JSON"
     )
     parser.add_argument(
-        '--csv-path',
-        help='Local CalSim output CSV file path (instead of S3)'
-    )
-    parser.add_argument(
-        '--output-json',
-        action='store_true',
-        help='Output results as JSON'
-    )
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Calculate but do not save output'
+        "--dry-run", action="store_true", help="Calculate but do not save output"
     )
 
     args = parser.parse_args()
@@ -576,8 +673,7 @@ def main():
     for scenario_id in scenarios_to_process:
         try:
             delivery_monthly, period_summary = calculate_all_du_statistics(
-                scenario_id,
-                csv_path=args.csv_path
+                scenario_id, csv_path=args.csv_path
             )
 
             all_delivery_monthly.extend(delivery_monthly)
@@ -590,20 +686,22 @@ def main():
 
     if args.dry_run:
         log.info("Dry run complete. Statistics calculated but not saved.")
-        log.info(f"Total: {len(all_delivery_monthly)} delivery monthly, "
-                 f"{len(all_period_summary)} period summary rows")
+        log.info(
+            f"Total: {len(all_delivery_monthly)} delivery monthly, "
+            f"{len(all_period_summary)} period summary rows"
+        )
         return
 
     if args.output_json:
         output = {
-            'delivery_monthly': all_delivery_monthly,
-            'period_summary': all_period_summary,
+            "delivery_monthly": all_delivery_monthly,
+            "period_summary": all_period_summary,
         }
         print(json.dumps(output, indent=2))
         return
 
     # Save to database
-    database_url = os.getenv('DATABASE_URL')
+    database_url = os.getenv("DATABASE_URL")
     if not database_url:
         log.error("DATABASE_URL not set. Cannot save to database.")
         log.info("Use --output-json to output results as JSON instead.")
@@ -628,27 +726,50 @@ def main():
         cur = conn.cursor()
 
         # Delete existing data for these scenarios
-        scenario_ids = list(set(row['scenario_short_code'] for row in all_delivery_monthly))
+        scenario_ids = list(
+            set(row["scenario_short_code"] for row in all_delivery_monthly)
+        )
         for scenario_id in scenario_ids:
-            cur.execute("DELETE FROM du_delivery_monthly WHERE scenario_short_code = %s", (scenario_id,))
-            cur.execute("DELETE FROM du_period_summary WHERE scenario_short_code = %s", (scenario_id,))
+            cur.execute(
+                "DELETE FROM du_delivery_monthly WHERE scenario_short_code = %s",
+                (scenario_id,),
+            )
+            cur.execute(
+                "DELETE FROM du_period_summary WHERE scenario_short_code = %s",
+                (scenario_id,),
+            )
             log.info(f"Cleared existing data for scenario {scenario_id}")
 
         # Insert delivery monthly rows
         if all_delivery_monthly:
             monthly_cols = [
-                'scenario_short_code', 'du_id', 'water_month',
-                'delivery_avg_taf', 'delivery_cv',
-                'q0', 'q10', 'q30', 'q50', 'q70', 'q90', 'q100',
-                'exc_p5', 'exc_p10', 'exc_p25', 'exc_p50', 'exc_p75', 'exc_p90', 'exc_p95',
-                'sample_count'
+                "scenario_short_code",
+                "du_id",
+                "water_month",
+                "delivery_avg_taf",
+                "delivery_cv",
+                "q0",
+                "q10",
+                "q30",
+                "q50",
+                "q70",
+                "q90",
+                "q100",
+                "exc_p5",
+                "exc_p10",
+                "exc_p25",
+                "exc_p50",
+                "exc_p75",
+                "exc_p90",
+                "exc_p95",
+                "sample_count",
             ]
             monthly_values = [
                 tuple(convert_numpy(row.get(col)) for col in monthly_cols)
                 for row in all_delivery_monthly
             ]
             insert_sql = f"""
-                INSERT INTO du_delivery_monthly ({', '.join(monthly_cols)})
+                INSERT INTO du_delivery_monthly ({", ".join(monthly_cols)})
                 VALUES %s
             """
             execute_values(cur, insert_sql, monthly_values)
@@ -657,20 +778,33 @@ def main():
         # Insert period summary rows
         if all_period_summary:
             summary_cols = [
-                'scenario_short_code', 'du_id',
-                'simulation_start_year', 'simulation_end_year', 'total_years',
-                'annual_delivery_avg_taf', 'annual_delivery_cv',
-                'delivery_exc_p5', 'delivery_exc_p10', 'delivery_exc_p25',
-                'delivery_exc_p50', 'delivery_exc_p75', 'delivery_exc_p90', 'delivery_exc_p95',
-                'annual_shortage_avg_taf', 'shortage_years_count', 'shortage_frequency_pct',
-                'reliability_pct', 'avg_pct_demand_met', 'annual_demand_avg_taf'
+                "scenario_short_code",
+                "du_id",
+                "simulation_start_year",
+                "simulation_end_year",
+                "total_years",
+                "annual_delivery_avg_taf",
+                "annual_delivery_cv",
+                "delivery_exc_p5",
+                "delivery_exc_p10",
+                "delivery_exc_p25",
+                "delivery_exc_p50",
+                "delivery_exc_p75",
+                "delivery_exc_p90",
+                "delivery_exc_p95",
+                "annual_shortage_avg_taf",
+                "shortage_years_count",
+                "shortage_frequency_pct",
+                "reliability_pct",
+                "avg_pct_demand_met",
+                "annual_demand_avg_taf",
             ]
             summary_values = [
                 tuple(convert_numpy(row.get(col)) for col in summary_cols)
                 for row in all_period_summary
             ]
             insert_sql = f"""
-                INSERT INTO du_period_summary ({', '.join(summary_cols)})
+                INSERT INTO du_period_summary ({", ".join(summary_cols)})
                 VALUES %s
             """
             execute_values(cur, insert_sql, summary_values)
@@ -690,5 +824,5 @@ def main():
     log.info(f"  Period summary: {len(all_period_summary)}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

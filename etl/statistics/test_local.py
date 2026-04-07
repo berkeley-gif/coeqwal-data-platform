@@ -36,15 +36,17 @@ from reservoirs.calculate_reservoir_percentiles import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Test local ETL calculations')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
-    parser.add_argument('--reservoir', '-r', default='SHSTA', help='Reservoir to test (default: SHSTA)')
-    parser.add_argument('--csv-path', default=None, help='Path to CSV file')
+    parser = argparse.ArgumentParser(description="Test local ETL calculations")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument(
+        "--reservoir", "-r", default="SHSTA", help="Reservoir to test (default: SHSTA)"
+    )
+    parser.add_argument("--csv-path", default=None, help="Path to CSV file")
     args = parser.parse_args()
 
     # Paths
     script_dir = Path(__file__).parent
-    default_csv = script_dir / '../pipelines/s0020_coeqwal_calsim_output.csv'
+    default_csv = script_dir / "../pipelines/s0020_coeqwal_calsim_output.csv"
     csv_path = Path(args.csv_path) if args.csv_path else default_csv
 
     print("=" * 60)
@@ -76,8 +78,10 @@ def main():
         return 1
 
     res_meta = reservoirs[args.reservoir]
-    print(f"   {args.reservoir}: capacity={res_meta['capacity_taf']} TAF, "
-          f"dead_pool={res_meta['dead_pool_taf']} TAF")
+    print(
+        f"   {args.reservoir}: capacity={res_meta['capacity_taf']} TAF, "
+        f"dead_pool={res_meta['dead_pool_taf']} TAF"
+    )
 
     # Load and parse CSV
     print("\n2. Loading CSV data...")
@@ -92,11 +96,12 @@ def main():
         print(f"   ERROR: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 
     # Check if storage column exists
-    storage_col = f'S_{args.reservoir}'
+    storage_col = f"S_{args.reservoir}"
     if storage_col not in df.columns:
         print(f"\nERROR: Storage column {storage_col} not found in data")
         print(f"Available columns: {list(df.columns)}")
@@ -106,7 +111,7 @@ def main():
     print("\n3. Testing storage monthly calculations...")
     try:
         storage_monthly = calculate_storage_monthly(
-            df, args.reservoir, res_meta['capacity_taf']
+            df, args.reservoir, res_meta["capacity_taf"]
         )
         print(f"   Generated {len(storage_monthly)} monthly records")
 
@@ -121,6 +126,7 @@ def main():
         print(f"   ERROR: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 
@@ -128,27 +134,31 @@ def main():
     print("\n4. Testing period summary calculations...")
     try:
         summary = calculate_period_summary(
-            df, args.reservoir,
-            res_meta['capacity_taf'],
-            res_meta['dead_pool_taf']
+            df, args.reservoir, res_meta["capacity_taf"], res_meta["dead_pool_taf"]
         )
         if summary:
-            print(f"   Period: WY{summary['simulation_start_year']}-{summary['simulation_end_year']}")
+            print(
+                f"   Period: WY{summary['simulation_start_year']}-{summary['simulation_end_year']}"
+            )
             print(f"   Years: {summary['total_years']}")
 
             if args.verbose:
                 print("\n   Probability Metrics:")
-                flood_prob = summary.get('flood_pool_prob_all')
-                dead_prob = summary.get('dead_pool_prob_all')
-                cv_all = summary.get('storage_cv_all')
+                flood_prob = summary.get("flood_pool_prob_all")
+                dead_prob = summary.get("dead_pool_prob_all")
+                cv_all = summary.get("storage_cv_all")
 
                 if flood_prob is not None:
-                    print(f"   Flood Pool Probability (all): {flood_prob:.4f} ({flood_prob*100:.2f}%)")
+                    print(
+                        f"   Flood Pool Probability (all): {flood_prob:.4f} ({flood_prob * 100:.2f}%)"
+                    )
                 else:
                     print("   Flood Pool Probability: Not calculated (no threshold)")
 
                 if dead_prob is not None:
-                    print(f"   Dead Pool Probability (all): {dead_prob:.4f} ({dead_prob*100:.2f}%)")
+                    print(
+                        f"   Dead Pool Probability (all): {dead_prob:.4f} ({dead_prob * 100:.2f}%)"
+                    )
                 else:
                     print("   Dead Pool Probability: Not calculated (no threshold)")
 
@@ -166,6 +176,7 @@ def main():
         print(f"   ERROR: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 
@@ -173,21 +184,22 @@ def main():
     print("\n5. Testing percentile calculations...")
     try:
         percentiles = calculate_percentiles_for_reservoir(
-            df, args.reservoir, res_meta['capacity_taf']
+            df, args.reservoir, res_meta["capacity_taf"]
         )
         print(f"   Generated percentiles for {len(percentiles)} months")
 
         if args.verbose and percentiles:
             print("\n   Water Month 1 (October) percentiles:")
             oct_pct = percentiles.get(1, {})
-            for key in ['q0', 'q10', 'q50', 'q90', 'q100', 'mean']:
-                pct_val = oct_pct.get(key, 'N/A')
-                taf_val = oct_pct.get(f'{key}_taf', 'N/A')
+            for key in ["q0", "q10", "q50", "q90", "q100", "mean"]:
+                pct_val = oct_pct.get(key, "N/A")
+                taf_val = oct_pct.get(f"{key}_taf", "N/A")
                 print(f"   {key}: {pct_val}% / {taf_val} TAF")
     except Exception as e:
         print(f"   ERROR: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 
@@ -211,5 +223,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
