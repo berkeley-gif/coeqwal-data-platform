@@ -32,8 +32,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
-    CV_MIN_MEAN_TAF,
     MWD_TABLE_A_ANNUAL_TAF,
+    compute_cv,
     parse_dss_csv_header,
     safe_pct,
     check_post_conversion_magnitude,
@@ -442,9 +442,7 @@ def calculate_contractor_delivery_monthly(
             "mi_contractor_code": contractor_code,
             "water_month": 0,
             "delivery_avg_taf": round(float(data.mean()), 2),
-            "delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "delivery_cv": compute_cv(data),
             "sample_count": len(data),
         }
 
@@ -487,9 +485,7 @@ def calculate_contractor_delivery_monthly(
                 "mi_contractor_code": contractor_code,
                 "water_month": wm,
                 "delivery_avg_taf": round(float(month_data.mean()), 2),
-                "delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "delivery_cv": compute_cv(month_data),
                 "sample_count": len(month_data),
             }
 
@@ -555,9 +551,7 @@ def calculate_contractor_shortage_monthly(
             "mi_contractor_code": contractor_code,
             "water_month": 0,
             "shortage_avg_taf": round(float(data.mean()), 2),
-            "shortage_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "shortage_cv": compute_cv(data),
             "shortage_frequency_pct": round((shortage_count / len(data)) * 100, 2),
             "sample_count": len(data),
         }
@@ -583,9 +577,7 @@ def calculate_contractor_shortage_monthly(
                 "mi_contractor_code": contractor_code,
                 "water_month": wm,
                 "shortage_avg_taf": round(float(month_data.mean()), 2),
-                "shortage_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "shortage_cv": compute_cv(month_data),
                 "shortage_frequency_pct": round(
                     (shortage_count / len(month_data)) * 100, 2
                 ),
@@ -679,12 +671,7 @@ def calculate_contractor_period_summary(
 
     annual_delivery = df_copy.groupby("WaterYear")["total_delivery"].sum()
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
-    if annual_delivery.mean() > CV_MIN_MEAN_TAF:
-        result["annual_delivery_cv"] = round(
-            float(annual_delivery.std() / annual_delivery.mean()), 4
-        )
-    else:
-        result["annual_delivery_cv"] = 0
+    result["annual_delivery_cv"] = compute_cv(annual_delivery)
 
     for p in EXCEEDANCE_PERCENTILES:
         result[f"delivery_exc_p{p}"] = round(

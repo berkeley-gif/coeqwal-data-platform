@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF, MWD_TABLE_A_ANNUAL_TAF  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF, compute_cv  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional imports
@@ -379,8 +379,6 @@ def calculate_du_statistics(
     # This filters out floating-point precision artifacts from CalSim's linear programming solver.
     SHORTAGE_THRESHOLD_TAF = 0.1
 
-    # CV_MIN_MEAN_TAF imported from units.py
-
     processed = 0
     skipped = 0
 
@@ -447,11 +445,7 @@ def calculate_du_statistics(
             # Delivery statistics (match existing column names: delivery_avg_taf, q0, q10, etc.)
             if not del_month.empty:
                 row["delivery_avg_taf"] = round(float(del_month.mean()), 2)
-                row["delivery_cv"] = (
-                    round(float(del_month.std() / del_month.mean()), 4)
-                    if del_month.mean() > CV_MIN_MEAN_TAF
-                    else 0
-                )
+                row["delivery_cv"] = compute_cv(del_month)
                 # Percentiles use q0, q10, etc. not delivery_q0
                 for p in PERCENTILES:
                     row[f"q{p}"] = round(float(np.percentile(del_month, p)), 2)
@@ -485,11 +479,7 @@ def calculate_du_statistics(
                 }
 
                 shortage_row["shortage_avg_taf"] = round(float(short_month.mean()), 2)
-                shortage_row["shortage_cv"] = (
-                    round(float(short_month.std() / short_month.mean()), 4)
-                    if short_month.mean() > CV_MIN_MEAN_TAF
-                    else 0
-                )
+                shortage_row["shortage_cv"] = compute_cv(short_month)
                 # Frequency: percentage of months with shortage above threshold
                 shortage_row["shortage_frequency_pct"] = round(
                     ((short_month > SHORTAGE_THRESHOLD_TAF).sum() / len(short_month))
@@ -548,11 +538,7 @@ def calculate_du_statistics(
         ad = annual_delivery.dropna()
         if not ad.empty:
             summary["annual_delivery_avg_taf"] = round(float(ad.mean()), 2)
-            summary["annual_delivery_cv"] = (
-                round(float(ad.std() / ad.mean()), 4)
-                if ad.mean() > CV_MIN_MEAN_TAF
-                else 0
-            )
+            summary["annual_delivery_cv"] = compute_cv(ad)
             # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
             for p in EXCEEDANCE_PERCENTILES:
                 summary[f"delivery_exc_p{p}"] = round(

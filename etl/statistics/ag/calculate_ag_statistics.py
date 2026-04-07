@@ -57,7 +57,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
-    CV_MIN_MEAN_TAF,
+    compute_cv,
     parse_dss_csv_header,
     safe_pct,
     validate_water_balance,
@@ -380,9 +380,7 @@ def calculate_du_demand_monthly(
             "du_id": du_id,
             "water_month": 0,
             "demand_avg_taf": round(float(data.mean()), 2),
-            "demand_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "demand_cv": compute_cv(data),
             "sample_count": len(data),
         }
 
@@ -404,9 +402,7 @@ def calculate_du_demand_monthly(
                 "du_id": du_id,
                 "water_month": wm,
                 "demand_avg_taf": round(float(month_data.mean()), 2),
-                "demand_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "demand_cv": compute_cv(month_data),
                 "sample_count": len(month_data),
             }
 
@@ -455,9 +451,7 @@ def calculate_du_sw_delivery_monthly(
             "du_id": du_id,
             "water_month": 0,
             "sw_delivery_avg_taf": round(float(data.mean()), 2),
-            "sw_delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "sw_delivery_cv": compute_cv(data),
             "sample_count": len(data),
         }
 
@@ -479,9 +473,7 @@ def calculate_du_sw_delivery_monthly(
                 "du_id": du_id,
                 "water_month": wm,
                 "sw_delivery_avg_taf": round(float(month_data.mean()), 2),
-                "sw_delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "sw_delivery_cv": compute_cv(month_data),
                 "sample_count": len(month_data),
             }
 
@@ -551,9 +543,7 @@ def calculate_du_gw_pumping_monthly(
             "du_id": du_id,
             "water_month": 0,
             "gw_pumping_avg_taf": round(float(data.mean()), 2),
-            "gw_pumping_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "gw_pumping_cv": compute_cv(data),
             "is_calculated": is_calculated,
             "sample_count": len(data),
         }
@@ -576,9 +566,7 @@ def calculate_du_gw_pumping_monthly(
                 "du_id": du_id,
                 "water_month": wm,
                 "gw_pumping_avg_taf": round(float(month_data.mean()), 2),
-                "gw_pumping_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "gw_pumping_cv": compute_cv(month_data),
                 "is_calculated": is_calculated,
                 "sample_count": len(month_data),
             }
@@ -667,9 +655,7 @@ def calculate_du_shortage_monthly(
             "du_id": du_id,
             "water_month": 0,
             "shortage_avg_taf": round(float(shortage_data.mean()), 2),
-            "shortage_cv": round(float(shortage_data.std() / shortage_data.mean()), 4)
-            if shortage_data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "shortage_cv": compute_cv(shortage_data),
             "shortage_frequency_pct": round(
                 (shortage_count / len(shortage_data)) * 100, 2
             ),
@@ -707,11 +693,7 @@ def calculate_du_shortage_monthly(
                 "du_id": du_id,
                 "water_month": wm,
                 "shortage_avg_taf": round(float(shortage_data.mean()), 2),
-                "shortage_cv": round(
-                    float(shortage_data.std() / shortage_data.mean()), 4
-                )
-                if shortage_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "shortage_cv": compute_cv(shortage_data),
                 "shortage_frequency_pct": round(
                     (shortage_count / len(shortage_data)) * 100, 2
                 ),
@@ -781,12 +763,7 @@ def calculate_du_period_summary(
     # Annual DEMAND statistics (from DV AW_*)
     annual_demand = df_copy.groupby("WaterYear")["demand"].sum()
     result["annual_demand_avg_taf"] = round(float(annual_demand.mean()), 2)
-    if annual_demand.mean() > CV_MIN_MEAN_TAF:
-        result["annual_demand_cv"] = round(
-            float(annual_demand.std() / annual_demand.mean()), 4
-        )
-    else:
-        result["annual_demand_cv"] = 0
+    result["annual_demand_cv"] = compute_cv(annual_demand)
 
     for p in EXCEEDANCE_PERCENTILES:
         result[f"demand_exc_p{p}"] = round(
@@ -796,12 +773,7 @@ def calculate_du_period_summary(
     # Annual SW DELIVERY statistics (from DV DN_*)
     annual_sw_delivery = df_copy.groupby("WaterYear")["sw_delivery"].sum()
     result["annual_sw_delivery_avg_taf"] = round(float(annual_sw_delivery.mean()), 2)
-    if annual_sw_delivery.mean() > CV_MIN_MEAN_TAF:
-        result["annual_sw_delivery_cv"] = round(
-            float(annual_sw_delivery.std() / annual_sw_delivery.mean()), 4
-        )
-    else:
-        result["annual_sw_delivery_cv"] = 0
+    result["annual_sw_delivery_cv"] = compute_cv(annual_sw_delivery)
 
     for p in EXCEEDANCE_PERCENTILES:
         result[f"sw_delivery_exc_p{p}"] = round(
@@ -811,12 +783,7 @@ def calculate_du_period_summary(
     # Annual GW PUMPING statistics (from GP_* or calculated)
     annual_gw_pumping = df_copy.groupby("WaterYear")["gw_pumping"].sum()
     result["annual_gw_pumping_avg_taf"] = round(float(annual_gw_pumping.mean()), 2)
-    if annual_gw_pumping.mean() > CV_MIN_MEAN_TAF:
-        result["annual_gw_pumping_cv"] = round(
-            float(annual_gw_pumping.std() / annual_gw_pumping.mean()), 4
-        )
-    else:
-        result["annual_gw_pumping_cv"] = 0
+    result["annual_gw_pumping_cv"] = compute_cv(annual_gw_pumping)
 
     for p in EXCEEDANCE_PERCENTILES:
         result[f"gw_pumping_exc_p{p}"] = round(
@@ -927,9 +894,7 @@ def calculate_aggregate_monthly(
             "aggregate_code": aggregate_code,
             "water_month": 0,
             "delivery_avg_taf": round(float(data.mean()), 2),
-            "delivery_cv": round(float(data.std() / data.mean()), 4)
-            if data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "delivery_cv": compute_cv(data),
             "sample_count": len(data),
         }
 
@@ -945,11 +910,7 @@ def calculate_aggregate_monthly(
             shortage_data = df_copy["shortage"].dropna()
             if not shortage_data.empty:
                 row["shortage_avg_taf"] = round(float(shortage_data.mean()), 2)
-                row["shortage_cv"] = (
-                    round(float(shortage_data.std() / shortage_data.mean()), 4)
-                    if shortage_data.mean() > CV_MIN_MEAN_TAF
-                    else 0
-                )
+                row["shortage_cv"] = compute_cv(shortage_data)
                 # Use threshold to filter floating-point noise
                 row["shortage_frequency_pct"] = round(
                     (
@@ -971,9 +932,7 @@ def calculate_aggregate_monthly(
                 "aggregate_code": aggregate_code,
                 "water_month": wm,
                 "delivery_avg_taf": round(float(month_data.mean()), 2),
-                "delivery_cv": round(float(month_data.std() / month_data.mean()), 4)
-                if month_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "delivery_cv": compute_cv(month_data),
                 "sample_count": len(month_data),
             }
 
@@ -991,11 +950,7 @@ def calculate_aggregate_monthly(
                 ].dropna()
                 if not shortage_month.empty:
                     row["shortage_avg_taf"] = round(float(shortage_month.mean()), 2)
-                    row["shortage_cv"] = (
-                        round(float(shortage_month.std() / shortage_month.mean()), 4)
-                        if shortage_month.mean() > CV_MIN_MEAN_TAF
-                        else 0
-                    )
+                    row["shortage_cv"] = compute_cv(shortage_month)
                     # Use threshold to filter floating-point noise
                     row["shortage_frequency_pct"] = round(
                         (
@@ -1045,12 +1000,7 @@ def calculate_aggregate_period_summary(
 
     annual_delivery = df_copy.groupby("WaterYear")["delivery"].sum()
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
-    if annual_delivery.mean() > CV_MIN_MEAN_TAF:
-        result["annual_delivery_cv"] = round(
-            float(annual_delivery.std() / annual_delivery.mean()), 4
-        )
-    else:
-        result["annual_delivery_cv"] = 0
+    result["annual_delivery_cv"] = compute_cv(annual_delivery)
 
     # Exceedance percentiles: exc_pX = value exceeded X% of time = (100-X)th percentile
     for p in EXCEEDANCE_PERCENTILES:

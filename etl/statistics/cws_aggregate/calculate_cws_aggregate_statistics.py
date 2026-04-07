@@ -29,8 +29,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
-    CV_MIN_MEAN_TAF,
     MWD_TABLE_A_ANNUAL_TAF,
+    compute_cv,
     check_post_conversion_magnitude,
     parse_dss_csv_header,
 )
@@ -305,9 +305,7 @@ def calculate_aggregate_monthly(
             "cws_aggregate_id": aggregate_id,
             "water_month": 0,
             "delivery_avg_taf": round(float(delivery_data.mean()), 2),
-            "delivery_cv": round(float(delivery_data.std() / delivery_data.mean()), 4)
-            if delivery_data.mean() > CV_MIN_MEAN_TAF
-            else 0,
+            "delivery_cv": compute_cv(delivery_data),
             "sample_count": len(delivery_data),
         }
 
@@ -324,11 +322,7 @@ def calculate_aggregate_monthly(
         # Shortage statistics
         if not shortage_data.empty:
             row["shortage_avg_taf"] = round(float(shortage_data.mean()), 2)
-            row["shortage_cv"] = (
-                round(float(shortage_data.std() / shortage_data.mean()), 4)
-                if shortage_data.mean() > CV_MIN_MEAN_TAF
-                else 0
-            )
+            row["shortage_cv"] = compute_cv(shortage_data)
             row["shortage_frequency_pct"] = round(
                 ((shortage_data > SHORTAGE_THRESHOLD_TAF).sum() / len(shortage_data))
                 * 100,
@@ -382,11 +376,7 @@ def calculate_aggregate_monthly(
                 "cws_aggregate_id": aggregate_id,
                 "water_month": wm,
                 "delivery_avg_taf": round(float(delivery_data.mean()), 2),
-                "delivery_cv": round(
-                    float(delivery_data.std() / delivery_data.mean()), 4
-                )
-                if delivery_data.mean() > CV_MIN_MEAN_TAF
-                else 0,
+                "delivery_cv": compute_cv(delivery_data),
                 "sample_count": len(delivery_data),
             }
 
@@ -403,11 +393,7 @@ def calculate_aggregate_monthly(
             # Shortage statistics
             if not shortage_data.empty:
                 row["shortage_avg_taf"] = round(float(shortage_data.mean()), 2)
-                row["shortage_cv"] = (
-                    round(float(shortage_data.std() / shortage_data.mean()), 4)
-                    if shortage_data.mean() > CV_MIN_MEAN_TAF
-                    else 0
-                )
+                row["shortage_cv"] = compute_cv(shortage_data)
                 row["shortage_frequency_pct"] = round(
                     (
                         (shortage_data > SHORTAGE_THRESHOLD_TAF).sum()
@@ -507,11 +493,7 @@ def calculate_aggregate_period_summary(
     # Annual delivery statistics (now in TAF)
     annual_delivery = df.groupby("WaterYear")["delivery_taf"].sum()
     result["annual_delivery_avg_taf"] = round(float(annual_delivery.mean()), 2)
-    result["annual_delivery_cv"] = (
-        round(float(annual_delivery.std() / annual_delivery.mean()), 4)
-        if annual_delivery.mean() > CV_MIN_MEAN_TAF
-        else 0
-    )
+    result["annual_delivery_cv"] = compute_cv(annual_delivery)
     result["annual_delivery_min_taf"] = round(float(annual_delivery.min()), 2)
     result["annual_delivery_max_taf"] = round(float(annual_delivery.max()), 2)
 

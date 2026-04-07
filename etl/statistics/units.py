@@ -33,6 +33,22 @@ MONTHLY_TAF_SANITY_LIMIT = 2000.0
 # When the mean is in LP-noise territory, CV explodes to millions.
 CV_MIN_MEAN_TAF = 0.01
 
+# Database stores CVs in NUMERIC(6,4) → max 99.9999.
+# Any real-world CV above ~10 is already extreme; 99 is a safety cap.
+MAX_CV = 99.0
+
+
+def compute_cv(series: "pd.Series") -> float:
+    """Coefficient of variation (std / |mean|), guarded and capped.
+
+    Returns 0.0 when |mean| <= CV_MIN_MEAN_TAF, caps at MAX_CV.
+    """
+    mean_val = float(series.mean())
+    if abs(mean_val) <= CV_MIN_MEAN_TAF:
+        return 0.0
+    cv = round(float(series.std() / abs(mean_val)), 4)
+    return min(cv, MAX_CV)
+
 
 def safe_pct(
     numerator: float,
