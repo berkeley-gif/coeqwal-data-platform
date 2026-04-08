@@ -133,6 +133,55 @@ from scenarios import SCENARIOS  # noqa: E402
 _failure_count = 0
 _failure_log: List[str] = []
 
+BUCKET = "coeqwal-model-run"
+
+
+def preflight_check_duplicates(scenario_id: str, csv_path: Optional[str] = None) -> int:
+    """Check a scenario CSV for duplicate B-part column names.
+
+    Reads only the 7-row header.  Logs a warning for each duplicate
+    found and returns the number of duplicated variable names.
+    """
+    import io
+    from collections import Counter
+
+    import pandas as pd
+
+    try:
+        if csv_path:
+            hdr = pd.read_csv(csv_path, header=None, nrows=7, low_memory=False)
+        else:
+            import boto3
+            s3 = boto3.client("s3")
+            key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv"
+            raw = s3.get_object(Bucket=BUCKET, Key=key)["Body"].read()
+            hdr = pd.read_csv(io.BytesIO(raw), header=None, nrows=7, low_memory=False)
+
+        b_row = [str(v) for v in hdr.iloc[1].tolist()]
+        dupes = {name: cnt for name, cnt in Counter(b_row).items() if cnt > 1}
+
+        if dupes:
+            log.warning(
+                "PRE-FLIGHT: %s has %d duplicate B-part column(s) — "
+                "the ETL will keep the first occurrence of each:",
+                scenario_id,
+                len(dupes),
+            )
+            for name, cnt in sorted(dupes.items()):
+                indices = [i for i, v in enumerate(b_row) if v == name]
+                c_parts = [str(hdr.iloc[2, i]) for i in indices]
+                log.warning(
+                    "  %s (%dx): C-parts = %s",
+                    name,
+                    cnt,
+                    ", ".join(c_parts),
+                )
+        return len(dupes)
+
+    except Exception as e:
+        log.warning("PRE-FLIGHT: could not check %s for duplicates: %s", scenario_id, e)
+        return 0
+
 
 def _alert_failure(
     module_name: str,
@@ -296,6 +345,8 @@ def run_all_modules(
     log.info(f"# Modules: {', '.join(modules)}")
     log.info(f"# Dry run: {dry_run}")
     log.info(f"{'#' * 60}\n")
+
+    preflight_check_duplicates(scenario_id, csv_path)
 
     for module_name in modules:
         success, elapsed = run_module(module_name, scenario_id, dry_run, csv_path)

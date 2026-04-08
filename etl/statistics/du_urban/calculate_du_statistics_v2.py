@@ -29,7 +29,12 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, MWD_TABLE_A_ANNUAL_TAF, compute_cv  # noqa: E402
+from units import (  # noqa: E402
+    CFS_TO_TAF_PER_DAY,
+    MWD_TABLE_A_ANNUAL_TAF,
+    apply_columns_and_dedup,
+    compute_cv,
+)
 from scenarios import SCENARIOS  # noqa: E402
 
 # Optional imports
@@ -160,7 +165,7 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
     var_names = [str(v) for v in header_df.iloc[1].tolist()]
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df.columns = var_names
+    data_df = apply_columns_and_dedup(data_df, var_names)
 
     # First column is date
     first_col = data_df.columns[0]

@@ -33,6 +33,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
     MWD_TABLE_A_ANNUAL_TAF,
+    apply_columns_and_dedup,
+    build_units_map_first,
     compute_cv,
     parse_dss_csv_header,
     safe_pct,
@@ -305,12 +307,12 @@ def load_calsim_csv_from_s3(
             raw_bytes = response["Body"].read()
 
             var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
-            units_map = dict(zip(var_names, units_row))
+            units_map = build_units_map_first(var_names, units_row)
 
             data_df = pd.read_csv(
                 io.BytesIO(raw_bytes), header=None, skiprows=7, low_memory=False
             )
-            data_df.columns = var_names
+            data_df = apply_columns_and_dedup(data_df, var_names)
 
             log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df, units_map
@@ -337,10 +339,10 @@ def load_calsim_csv_from_file(
     log.info(f"Loading from file: {file_path}")
 
     var_names, units_row = parse_dss_csv_header(file_path)
-    units_map = dict(zip(var_names, units_row))
+    units_map = build_units_map_first(var_names, units_row)
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df.columns = var_names
+    data_df = apply_columns_and_dedup(data_df, var_names)
 
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, units_map

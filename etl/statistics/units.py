@@ -174,9 +174,14 @@ def check_post_conversion_magnitude(
 #   Row 5     : Record type  (PER-AVER, PER-CUM, INST-VAL)
 #   Row 6     : Units        (CFS, TAF, NONE, …)
 #
-# The V3 pipeline may add TAF duplicates for CFS columns via
-# ``convert_all_cfs_to_taf``, meaning a single variable name can
-# appear twice (once CFS, once TAF).  The helpers below handle this.
+# The ETL identifies columns by B-part (row 1).  Duplicate B-parts
+# can arise when the DSS file contains two pathnames that share the
+# same B-part but differ in their C-part — e.g.
+#   /CALSIM/SHRTG_PCWA3/DELIVERY-SHORTAGE/…
+#   /CALSIM/SHRTG_PCWA3/SHORTAGE/…
+# dss_to_csv.py writes both as separate columns (they have distinct
+# series keys), but both show the same B-part in the header.
+# The helpers below keep the first occurrence to avoid ambiguity.
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -193,6 +198,43 @@ def parse_dss_csv_header(
     return var_names, units_row
 
 
+def build_units_map_first(
+    var_names: List[str], units_row: List[str]
+) -> Dict[str, str]:
+    """Build a units map keeping the *first* occurrence of each variable.
+
+    Duplicate B-parts can appear when the DSS file has two pathnames
+    with the same variable name but different C-parts (e.g.
+    DELIVERY-SHORTAGE vs SHORTAGE).  ``dict(zip(...))`` would keep the
+    last entry, so this helper preserves the first (original) unit.
+    """
+    units_map: Dict[str, str] = {}
+    for name, unit in zip(var_names, units_row):
+        if name not in units_map:
+            units_map[name] = unit
+    return units_map
+
+
+def apply_columns_and_dedup(
+    data_df: pd.DataFrame, var_names: List[str]
+) -> pd.DataFrame:
+    """Set column names and drop duplicate columns (keep first).
+
+    Duplicate B-parts arise when the DSS file has two pathnames with the
+    same variable name but different C-parts (e.g. DELIVERY-SHORTAGE vs
+    SHORTAGE for SHRTG_PCWA3).  Keeping the first prevents a TypeError
+    when indexing by column name (which returns a DataFrame instead of a
+    Series when duplicates exist).
+    """
+    data_df.columns = var_names
+    dupes = data_df.columns.duplicated(keep="first")
+    if dupes.any():
+        n = int(dupes.sum())
+        log.info(f"Dropped {n} duplicate column(s) from CSV (kept first occurrence)")
+        data_df = data_df.loc[:, ~dupes]
+    return data_df
+
+
 def load_dss_csv(
     file_path: str,
 ) -> Tuple[pd.DataFrame, Dict[str, str]]:
@@ -202,9 +244,9 @@ def load_dss_csv(
     name to its declared unit (e.g. ``"CFS"``, ``"TAF"``).
     """
     var_names, units_row = parse_dss_csv_header(file_path)
-    units_map = dict(zip(var_names, units_row))
+    units_map = build_units_map_first(var_names, units_row)
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df.columns = var_names
+    data_df = apply_columns_and_dedup(data_df, var_names)
 
     return data_df, units_map

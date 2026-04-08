@@ -207,6 +207,26 @@ class DSSProcessor:
             if not time_series_groups:
                 raise RuntimeError("No time series data read from DSS.")
 
+            # Detect duplicate B-parts (same variable name, different C-part).
+            # The downstream ETL identifies columns by B-part alone, so
+            # duplicates here will cause ambiguity or crashes.
+            b_part_groups: Dict[str, list] = {}
+            for sk, info in time_series_groups.items():
+                b_part_groups.setdefault(info["b"], []).append(
+                    (sk, info["c"], info.get("units", ""))
+                )
+            dup_b_parts = {b: entries for b, entries in b_part_groups.items() if len(entries) > 1}
+            if dup_b_parts:
+                log.warning(
+                    "DUPLICATE B-PARTS DETECTED: %d variable(s) have multiple "
+                    "C-parts sharing the same B-part name. The downstream ETL "
+                    "uses B-part as the column identifier, so these will collide.",
+                    len(dup_b_parts),
+                )
+                for b_name, entries in sorted(dup_b_parts.items()):
+                    c_parts = ", ".join(f"{c} ({u})" for _, c, u in entries)
+                    log.warning("  %s: C-parts = [%s]", b_name, c_parts)
+
             log.debug("Creating output DataFrame...")
             combined_df = self._create_output_dataframe(
                 time_series_groups, all_datetimes, config
@@ -230,6 +250,7 @@ class DSSProcessor:
             "datetimes": len(all_datetimes),
             "csv": output_csv_path,
             "dss_type": self.dss_type,
+            "duplicate_b_parts": len(dup_b_parts),
         }
         return metrics
 
