@@ -2,20 +2,27 @@
 """
 Independent DSS-vs-CSV unit verification.
 
-Downloads the original DSS file (from the staging ZIP in S3) and the
+Downloads the original DSS file (from the model run ZIP in S3) and the
 extracted CSV for each scenario, then compares the unit metadata from
 the DSS against the unit declared in the CSV header row.
 
 This is the ground-truth check: no rules or expectations — just
 "what did the DSS say?" vs "what ended up in the CSV?".
 
-Requires pydsstools (available on Cloud9 / the Batch container).
+Requires pydsstools (available in the COEQWAL extraction Docker image).
 
-Usage:
-    python verify_dss_csv_units.py                         # all scenarios
-    python verify_dss_csv_units.py --scenario s0025        # one scenario
-    python verify_dss_csv_units.py --workers 4             # parallel
-    python verify_dss_csv_units.py --output report.csv     # save CSV report
+Usage (inside Docker container or any env with pydsstools):
+    # Single scenario
+    python verify_dss_csv_units.py --scenario s0025
+
+    # All scenarios (auto-discovered from S3 bucket)
+    python verify_dss_csv_units.py --scenarios-from-s3
+
+    # Parallel (keep low — DSS reads are CPU-bound)
+    python verify_dss_csv_units.py --scenarios-from-s3 --workers 2
+
+    # Save mismatch report
+    python verify_dss_csv_units.py --scenarios-from-s3 --output report.csv
 """
 from __future__ import annotations
 
@@ -44,11 +51,11 @@ log = logging.getLogger("verify_units")
 
 BUCKET = "coeqwal-model-run"
 
-# Same unit-sanitization as dss_to_csv.py
 _UNIT_STRIP_RE = re.compile(r"[{}\[\]()]+")
 
 
 def _sanitize_unit(raw: str) -> str:
+    """Strip stray braces/brackets from DSS unit metadata (matches dss_to_csv.py)."""
     return _UNIT_STRIP_RE.sub("", raw).strip().upper()
 
 
@@ -68,15 +75,27 @@ def _find_run_zip(s3, scenario_id: str) -> Optional[str]:
             if obj["Key"].lower().endswith(".zip")]
     if not zips:
         return None
-    # If multiple, pick the most recently modified
     if len(zips) == 1:
         return zips[0]
-    # list_objects_v2 returns LastModified; re-fetch with detail
     best = max(
         resp["Contents"],
         key=lambda o: o.get("LastModified", ""),
     )
     return best["Key"] if best["Key"].lower().endswith(".zip") else zips[0]
+
+
+def discover_scenarios_from_s3(s3) -> List[str]:
+    """List all scenario IDs that have both a run/ ZIP and a csv/ output in S3."""
+    paginator = s3.get_paginator("list_objects_v2")
+    scenario_ids = set()
+    for page in paginator.paginate(Bucket=BUCKET, Prefix="scenario/", Delimiter="/"):
+        for cp in page.get("CommonPrefixes", []):
+            prefix = cp["Prefix"]
+            sid = prefix.strip("/").split("/")[-1]
+            if re.match(r"^s\d{4}$", sid):
+                scenario_ids.add(sid)
+    log.info("Discovered %d scenario(s) in s3://%s/scenario/", len(scenario_ids), BUCKET)
+    return sorted(scenario_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -130,11 +149,7 @@ def _classify_dss_paths(paths: List[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def _read_dss_units(dss_path: str) -> Dict[str, Dict[str, str]]:
-    """Open DSS and return {b_part: {c_part: unit}} for all pathnames.
-
-    Import pydsstools lazily so the module can be imported on any platform
-    (it only fails at runtime if the DSS isn't available).
-    """
+    """Open DSS and return {b_part: {c_part: unit}} for all pathnames."""
     from pydsstools.heclib.dss import HecDss  # noqa: PLC0415
 
     result: Dict[str, Dict[str, str]] = {}
@@ -178,15 +193,11 @@ def _read_csv_units(s3, scenario_id: str) -> Dict[str, Dict[str, str]]:
 def verify_scenario(
     scenario_id: str,
 ) -> Tuple[str, int, int, List[Dict]]:
-    """Verify one scenario. Returns (scenario_id, total_checked, mismatches_count, details).
-
-    Each detail dict: {b_part, c_part, dss_unit, csv_unit}.
-    """
+    """Verify one scenario. Returns (scenario_id, total_checked, mismatches_count, details)."""
     s3 = boto3.client("s3")
     tmp_dir = tempfile.mkdtemp(prefix=f"verify_{scenario_id}_")
 
     try:
-        # 1. Find and download the model run ZIP
         zip_key = _find_run_zip(s3, scenario_id)
         if not zip_key:
             log.warning("%s: no ZIP found in s3://%s/scenario/%s/run/",
@@ -197,7 +208,6 @@ def verify_scenario(
         zip_local = os.path.join(tmp_dir, "input.zip")
         s3.download_file(BUCKET, zip_key, zip_local)
 
-        # 2. Extract and find the CalSim output DSS
         with zipfile.ZipFile(zip_local, "r") as zf:
             dss_names = [n for n in zf.namelist() if n.lower().endswith(".dss")]
             dv_path = _classify_dss_paths(dss_names)
@@ -214,11 +224,9 @@ def verify_scenario(
         log.info("%s: opening DSS (%s) ...", scenario_id, dv_path)
         dss_units = _read_dss_units(dss_local)
 
-        # 3. Read CSV header
         log.info("%s: reading CSV header ...", scenario_id)
         csv_units = _read_csv_units(s3, scenario_id)
 
-        # 4. Compare
         mismatches = []
         checked = 0
         for b_part, c_map in dss_units.items():
@@ -259,7 +267,13 @@ def main():
     )
     parser.add_argument(
         "--scenario", "-s",
-        help="Verify a single scenario (default: all known scenarios)",
+        help="Verify a single scenario",
+    )
+    parser.add_argument(
+        "--scenarios-from-s3",
+        action="store_true",
+        help="Auto-discover all scenarios from the S3 bucket "
+        "(looks for scenario/sNNNN/ prefixes with a run/ ZIP)",
     )
     parser.add_argument(
         "--workers", "-w", type=int, default=1,
@@ -273,13 +287,11 @@ def main():
 
     if args.scenario:
         scenarios = [args.scenario]
+    elif args.scenarios_from_s3:
+        s3 = boto3.client("s3")
+        scenarios = discover_scenarios_from_s3(s3)
     else:
-        try:
-            from scenarios import SCENARIOS
-            scenarios = list(SCENARIOS)
-        except ImportError:
-            log.error("Cannot import SCENARIOS — use --scenario or ensure scenarios.py is importable")
-            sys.exit(1)
+        parser.error("Provide --scenario or --scenarios-from-s3")
 
     workers = max(1, args.workers)
     log.info("Verifying %d scenario(s) with %d worker(s)", len(scenarios), workers)

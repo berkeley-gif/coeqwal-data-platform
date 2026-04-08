@@ -90,21 +90,45 @@ finally:
 PY
 }
 
+SV_UNIT_MISMATCHES=0
+CAL_UNIT_MISMATCHES=0
+
+# Helper: extract unit_mismatches from the METRICS JSON line in converter output
+extract_unit_mismatches () {
+  python -c "
+import sys, json, re
+for line in sys.stdin:
+    m = re.search(r'METRICS\s+(\{.*\})', line)
+    if m:
+        print(json.loads(m.group(1)).get('unit_mismatches', 0))
+        sys.exit(0)
+print(0)
+"
+}
+
 if [[ -n "${SV_PATH}" ]]; then
   echo "[INFO] Converting SV DSS: ${SV_PATH}"
+  SV_CONVERT_LOG="${WORKDIR}/sv_convert.log"
   python /app/python-code/dss_to_csv.py \
     --dss "./${SV_PATH}" \
     --csv "${SV_CSV_LOCAL}" \
-    --type sv_input || echo "[WARN] SV convert error."
+    --type sv_input --verify-units 2>&1 | tee "${SV_CONVERT_LOG}" \
+    || echo "[WARN] SV convert error."
+  SV_UNIT_MISMATCHES=$(extract_unit_mismatches < "${SV_CONVERT_LOG}")
+  echo "[INFO] SV unit mismatches: ${SV_UNIT_MISMATCHES}"
   sample_bparts_py "${SV_PATH}" "${SV_BPARTS_FILE}"
 fi
 
 if [[ -n "${CALSIM_OUTPUT_PATH}" ]]; then
   echo "[INFO] Converting CalSim DSS: ${CALSIM_OUTPUT_PATH}"
+  CAL_CONVERT_LOG="${WORKDIR}/cal_convert.log"
   python /app/python-code/dss_to_csv.py \
     --dss "./${CALSIM_OUTPUT_PATH}" \
     --csv "${CAL_CSV_LOCAL}" \
-    --type calsim_output || echo "[WARN] CalSim convert error."
+    --type calsim_output --verify-units 2>&1 | tee "${CAL_CONVERT_LOG}" \
+    || echo "[WARN] CalSim convert error."
+  CAL_UNIT_MISMATCHES=$(extract_unit_mismatches < "${CAL_CONVERT_LOG}")
+  echo "[INFO] CalSim unit mismatches: ${CAL_UNIT_MISMATCHES}"
   sample_bparts_py "${CALSIM_OUTPUT_PATH}" "${CAL_BPARTS_FILE}"
 fi
 
@@ -247,6 +271,10 @@ cat > "${WORKDIR}/manifest.json" <<MF
       "summary_json_key": "${VALIDATION_JSON_KEY}",
       "mismatches_csv_key": "${VALIDATION_CSV_KEY}"
     }
+  },
+  "unit_verification": {
+    "sv_unit_mismatches": ${SV_UNIT_MISMATCHES},
+    "calsim_unit_mismatches": ${CAL_UNIT_MISMATCHES}
   },
   "variable_sample_b_parts": {
     "sv_input": "${SV_B_SAMPLE}",
