@@ -23,6 +23,8 @@ Usage:
     python reextract_all_scenarios.py --validate
 """
 
+from __future__ import annotations
+
 import argparse
 import time
 import boto3
