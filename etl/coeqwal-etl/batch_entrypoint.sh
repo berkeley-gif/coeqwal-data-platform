@@ -106,14 +106,22 @@ print(0)
 "
 }
 
+SV_CONVERT_RC=0
+CAL_CONVERT_RC=0
+
 if [[ -n "${SV_PATH}" ]]; then
   echo "[INFO] Converting SV DSS: ${SV_PATH}"
   SV_CONVERT_LOG="${WORKDIR}/sv_convert.log"
+  set +e
   python /app/python-code/dss_to_csv.py \
     --dss "./${SV_PATH}" \
     --csv "${SV_CSV_LOCAL}" \
-    --type sv_input --verify-units 2>&1 | tee "${SV_CONVERT_LOG}" \
-    || echo "[WARN] SV convert error."
+    --type sv_input --verify-units 2>&1 | tee "${SV_CONVERT_LOG}"
+  SV_CONVERT_RC=${PIPESTATUS[0]}
+  set -e
+  if [[ ${SV_CONVERT_RC} -ne 0 ]]; then
+    echo "[ERROR] SV conversion failed with exit code ${SV_CONVERT_RC}"
+  fi
   SV_UNIT_MISMATCHES=$(extract_unit_mismatches < "${SV_CONVERT_LOG}")
   echo "[INFO] SV unit mismatches: ${SV_UNIT_MISMATCHES}"
   sample_bparts_py "${SV_PATH}" "${SV_BPARTS_FILE}"
@@ -122,11 +130,16 @@ fi
 if [[ -n "${CALSIM_OUTPUT_PATH}" ]]; then
   echo "[INFO] Converting CalSim DSS: ${CALSIM_OUTPUT_PATH}"
   CAL_CONVERT_LOG="${WORKDIR}/cal_convert.log"
+  set +e
   python /app/python-code/dss_to_csv.py \
     --dss "./${CALSIM_OUTPUT_PATH}" \
     --csv "${CAL_CSV_LOCAL}" \
-    --type calsim_output --verify-units 2>&1 | tee "${CAL_CONVERT_LOG}" \
-    || echo "[WARN] CalSim convert error."
+    --type calsim_output --verify-units 2>&1 | tee "${CAL_CONVERT_LOG}"
+  CAL_CONVERT_RC=${PIPESTATUS[0]}
+  set -e
+  if [[ ${CAL_CONVERT_RC} -ne 0 ]]; then
+    echo "[ERROR] CalSim conversion failed with exit code ${CAL_CONVERT_RC}"
+  fi
   CAL_UNIT_MISMATCHES=$(extract_unit_mismatches < "${CAL_CONVERT_LOG}")
   echo "[INFO] CalSim unit mismatches: ${CAL_UNIT_MISMATCHES}"
   sample_bparts_py "${CALSIM_OUTPUT_PATH}" "${CAL_BPARTS_FILE}"
@@ -248,13 +261,29 @@ CAL_DETECTED=$([[ -n "${CALSIM_OUTPUT_PATH}" ]] && echo true || echo false)
 SV_CSV_WRITTEN=$([[ -f "${SV_CSV_LOCAL}" ]] && echo true || echo false)
 CAL_CSV_WRITTEN=$([[ -f "${CAL_CSV_LOCAL}" ]] && echo true || echo false)
 
-if [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
-  FINAL_STATUS="SUCCEEDED"
-elif [[ -n "${SV_PATH}" || -n "${CALSIM_OUTPUT_PATH}" ]]; then
-  FINAL_STATUS="SUCCEEDED_PARTIAL"
-else
+# Status is based on what was actually produced, not just what was detected.
+# If a DSS was detected but its CSV was not written, that's a failure.
+if [[ -z "${SV_PATH}" && -z "${CALSIM_OUTPUT_PATH}" ]]; then
   echo "[ERROR] No DSS candidates in expected folders; failing." >&2
   exit 1
+fi
+
+FAILURES=0
+if [[ -n "${SV_PATH}" && ! -f "${SV_CSV_LOCAL}" ]]; then
+  echo "[ERROR] SV DSS detected but CSV was not produced."
+  FAILURES=$((FAILURES + 1))
+fi
+if [[ -n "${CALSIM_OUTPUT_PATH}" && ! -f "${CAL_CSV_LOCAL}" ]]; then
+  echo "[ERROR] CalSim output DSS detected but CSV was not produced."
+  FAILURES=$((FAILURES + 1))
+fi
+
+if [[ ${FAILURES} -gt 0 ]]; then
+  FINAL_STATUS="FAILED"
+elif [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
+  FINAL_STATUS="SUCCEEDED"
+else
+  FINAL_STATUS="SUCCEEDED_PARTIAL"
 fi
 
 # ----------------------------- Manifest ----------------------------------
@@ -303,4 +332,9 @@ MF
 aws s3 cp "${WORKDIR}/manifest.json" "s3://${ZIP_BUCKET}/${MANIFEST_KEY}"
 
 echo "[INFO] Job ${JOB_ID} complete: ${FINAL_STATUS}"
+
+if [[ "${FINAL_STATUS}" == "FAILED" ]]; then
+  echo "[ERROR] Exiting with error because one or more conversions failed."
+  exit 1
+fi
 exit 0

@@ -40,12 +40,12 @@ This file is maintained from the model run file lists, often with corrected fold
 **When to pin filenames:**
 - If a Drive folder contains **multiple ZIPs** (old + new versions), set `pinned_model_run_zip` to the correct one. Use the version/date suffix from the modeling team's DV_Path to identify it.
 - If there are **multiple trend CSVs**, set `pinned_trend_csv` similarly.
-- If there's only **one file**, leave the column blank — the script auto-selects it.
+- If there's only **one file**, leave the column blank - the script auto-selects it.
 
 **`download_status` values:**
-- `ready` — folder ID verified, files confirmed by scan, ready to download
-- `needs_review` — known issue (missing files, wrong folder ID, etc.)
-- `skip` — intentionally excluded from download
+- `ready` - folder ID verified, files confirmed by scan, ready to download
+- `needs_review` - known issue (missing files, wrong folder ID, etc.)
+- `skip` - intentionally excluded from download
 
 ### 2. Add scenario metadata to the database
 
@@ -72,7 +72,7 @@ The scan lists `Model_Files/` for ZIPs and `Data_Extraction/Variables_From_trend
 - How many ZIPs and trend CSVs exist per scenario
 - Which file it would select (pinned filename if specified, otherwise most recent by date)
 - `OK` = exactly one file found (or pinned file found among multiples)
-- `ALERT_MULTIPLE_ZIP` / `ALERT_MULTIPLE_TREND` = multiple files, no pinned filename set — add one to the CSV
+- `ALERT_MULTIPLE_ZIP` / `ALERT_MULTIPLE_TREND` = multiple files, no pinned filename set - add one to the CSV
 - `MISSING_ZIP` / `MISSING_TREND` = file not found on Drive
 - `PINNED_ZIP_NOT_FOUND` / `PINNED_TREND_NOT_FOUND` = pinned filename doesn't match any file on Drive
 
@@ -128,7 +128,7 @@ Each scenario folder on the COEQWAL Shared Drive follows this structure:
 ```
 <scenario_folder_name>/
 ├── Model_Files/
-│   ├── <scenario>.zip          ← the model run ZIP (contains DSS files)
+│   ├── <scenario>.zip          # the model run ZIP (contains DSS files)
 │   └── DSS/
 │       ├── output/
 │       │   └── <scenario>_DV_<version>.dss
@@ -136,7 +136,7 @@ Each scenario folder on the COEQWAL Shared Drive follows this structure:
 │           └── coeqwal_s9999_SV_<version>.dss
 └── Data_Extraction/
     └── Variables_From_trend_report_variables_v5/
-        └── <scenario>_trend_report_<version>.csv   ← validation reference
+        └── <scenario>_trend_report_<version>.csv   # validation reference
 ```
 
 The ZIP in `Model_Files/` is what gets downloaded. The trend report CSV is used for post-extraction validation. Both are authored by the modeling team (Dino Bellugi).
@@ -147,14 +147,14 @@ The pipeline has automated and manual stages. Understanding the boundary is impo
 
 ```
                            AUTOMATED                                    MANUAL
-                   ┌──────────────────────────┐          ┌──────────────────────────────┐
-Google Drive ──►   │  S3 ready/ ──► Lambda    │          │  Statistics ETL              │
-(gdrive_bulk_      │  ──► Batch (DSS→CSV)     │          │  (run_all.py)                │
- download.py)      │  ──► S3 scenario/csv/    │          │  ──► PostgreSQL tables       │
-   [manual]        │  ──► S3 validation/       │          │  Verification                │
-                   │  ──► S3 manifest.json     │          │  (verify_all_sections.py,    │
-                   └──────────────────────────┘          │   verify_api.py)             │
-                                                         └──────────────────────────────┘
+                   +---------------------------+          +-------------------------------+
+Google Drive -->   |  S3 ready/ --> Lambda     |          |  Statistics ETL               |
+(gdrive_bulk_      |  --> Batch (DSS->CSV)     |          |  (run_all.py)                 |
+ download.py)      |  --> S3 scenario/csv/     |          |  --> PostgreSQL tables        |
+   [manual]        |  --> S3 validation/       |          |  Verification                 |
+                   |  --> S3 manifest.json     |          |  (verify_all_sections.py,     |
+                   +---------------------------+          |   verify_api.py)              |
+                                                          +-------------------------------+
 ```
 
 | Stage | Automated? | What happens |
@@ -247,6 +247,7 @@ python etl/scripts/check_extraction_results.py \
 **What to look for in the output:**
 - `extraction_status`: `SUCCEEDED` (both SV and DV), `SUCCEEDED_PARTIAL`, or `NO_MANIFEST` (pending)
 - `validation_result`: `passed`, `failed`, or `skipped`
+- `unit_verification.calsim_unit_mismatches`: `0` means all CSV units match DSS; non-zero requires investigation
 - The `SCENARIOS REQUIRING ATTENTION` section lists anything that needs investigation
 - With `--mismatches`: shows which variables (C parts) and locations (B parts) fail most often
 
@@ -311,8 +312,10 @@ Key log files to keep per load:
 #### `coeqwal-etl/` - Main ETL container
 Docker-based DSS extraction using `pydsstools`:
 - **Input**: DSS files from CalSim model runs
-- **Output**: CSV time series data
+- **Output**: CSV time series data + `.units.json` sidecar files (DSS unit ground truth)
 - **Validation**: Compares against reference data with configurable tolerances
+- **Unit verification**: `--verify-units` flag on `dss_to_csv.py` checks every column's unit against the DSS source
+- **Standalone verifier**: `verify_dss_csv_units.py` can re-verify any scenario's units on-demand from S3
 - **Platform**: Linux containers (AWS Batch compatible)
 
 #### `lambda-trigger/` - S3 Event Handler
@@ -406,7 +409,7 @@ When the modeling team delivers new or rerun scenarios, use the `gdrive_bulk_dow
 
 ### Step 0: Check and increase Cloud9 storage
 
-Cloud9 instances default to **10 GB** EBS, which is tight when downloading ~200 MB ZIPs for 24 scenarios. The script streams files through `/tmp/` and uploads to S3 immediately, so you only need space for one ZIP at a time per worker — but it's still good practice to check.
+Cloud9 instances default to **10 GB** EBS, which is tight when downloading ~200 MB ZIPs for 24 scenarios. The script streams files through `/tmp/` and uploads to S3 immediately, so you only need space for one ZIP at a time per worker, but it's still good practice to check.
 
 **Check current disk usage:**
 ```bash
@@ -438,7 +441,7 @@ sudo resize2fs /dev/xvda1
 df -h /
 ```
 
-**Alternative — skip local storage entirely:** The script uses `/tmp/` as a transient staging area and uploads to S3 immediately. With `--workers 1` you only need ~200 MB free. With `--workers 4` you need ~800 MB. If storage is a concern, reduce workers.
+**Alternative - skip local storage entirely:** The script uses `/tmp/` as a transient staging area and uploads to S3 immediately. With `--workers 1` you only need ~200 MB free. With `--workers 4` you need ~800 MB. If storage is a concern, reduce workers.
 
 ### Step 1: Install rclone on Cloud9
 
@@ -473,7 +476,7 @@ rclone config
 #   n) New remote
 #   name> gdrive
 #   Storage> drive (Google Drive)
-#   client_id> (leave blank — uses rclone's built-in OAuth client)
+#   client_id> (leave blank - uses rclone's built-in OAuth client)
 #   client_secret> (leave blank)
 #   scope> 2 (drive.readonly)
 #   service_account_file> (leave blank)
@@ -572,7 +575,7 @@ python etl/scripts/gdrive_bulk_download.py download \
 
 This will:
 1. Download the most recent ZIP from `Model_Files/`
-2. **Validate** the ZIP — open it, list all `.dss` files, classify them as SV (input) or DV (output), and alert if there is not exactly one of each type
+2. **Validate** the ZIP - open it, list all `.dss` files, classify them as SV (input) or DV (output), and alert if there is not exactly one of each type
 3. Upload the ZIP to `s3://coeqwal-model-run/staging/s0020/`
 4. Download the trend report CSV (starting with `s0020`) from `Data_Extraction/Variables_From_trend_report_variables_v5/`
 5. Upload the CSV to `s3://coeqwal-model-run/staging/s0020/`
@@ -613,7 +616,7 @@ python etl/scripts/gdrive_bulk_download.py download \
   --workers 4
 ```
 
-This processes 4 scenarios in parallel. Each downloads to `/tmp/`, validates, uploads to S3 staging, and cleans up. Total time depends on network speed; expect ~30–60 minutes for 24 scenarios.
+This processes 4 scenarios in parallel. Each downloads to `/tmp/`, validates, uploads to S3 staging, and cleans up. Total time depends on network speed; expect ~30-60 minutes for 24 scenarios.
 
 **To download a subset:**
 ```bash
@@ -731,7 +734,7 @@ docker run --platform linux/amd64 -v ./dss_processing:/data --entrypoint python 
 End-to-end verification of data accuracy across the full pipeline, from DSS extraction through database statistics to API responses. Verification runs at five layers:
 
 ```
-DSS Files ──► S3 CSVs (DV + SV) ──► PostgreSQL ──► JSON API ──► Frontend
+DSS Files --> S3 CSVs (DV + SV) --> PostgreSQL --> JSON API --> Frontend
   Layer 1        Layer 2              Layer 2b       Layer 3     Layer 4
   (extraction)   (ETL statistics)     (tier data)    (API)       (status page)
 ```
@@ -743,6 +746,72 @@ Variable lists sourced from `COEQWAL_V3/notebooks/variable_groupings.csv` and ma
 Validates that `dss_to_csv.py` extracts data correctly from HEC-DSS files. Uses `validate_csvs.py` to compare extracted CSVs against reference CSVs.
 
 Manifests stored in `audits/validation_mismatches/{scenario_id}_manifest.json`.
+
+### Layer 1b: DSS-vs-CSV Unit Verification
+
+Independently verifies that the unit metadata in every CSV column header matches what the original DSS file reports. This is a ground-truth check: it re-opens the DSS file with pydsstools and compares each variable's unit against the CSV header row 6.
+
+**How it works:**
+
+1. Downloads the model run ZIP from `s3://coeqwal-model-run/scenario/{id}/run/`
+2. Extracts and opens the CalSim output DSS with pydsstools
+3. For each DSS pathname, reads the unit from DSS metadata
+4. Downloads the CSV header from `s3://coeqwal-model-run/scenario/{id}/csv/`
+5. Compares: for every `(B-part, C-part)` present in both, does `DSS unit == CSV unit`?
+6. Logs a unit-pair summary (e.g., `CFS<>CFS (18432), TAF<>TAF (3102)`) showing what units were actually compared
+
+**Requires pydsstools** - runs inside the `coeqwal-etl` Docker image, not directly on Cloud9.
+
+**Running on Cloud9 via Docker:**
+
+```bash
+# Build the extraction Docker image (one-time, or after code changes)
+cd ~/environment/coeqwal-backend/etl/coeqwal-etl
+docker build -t coeqwal-etl:test .
+
+# Single scenario smoke test
+docker run --rm --entrypoint "" coeqwal-etl:test \
+  python /app/python-code/verify_dss_csv_units.py --scenario s0025 \
+  2>&1 | tee verify_units_s0025.log
+
+# All scenarios (auto-discovered from S3 bucket)
+docker run --rm --entrypoint "" coeqwal-etl:test \
+  python /app/python-code/verify_dss_csv_units.py --scenarios-from-s3 --workers 6 \
+  2>&1 | tee verify_units_all_$(date +%Y%m%d_%H%M%S).log
+
+# Save mismatch report to CSV
+docker run --rm --entrypoint "" coeqwal-etl:test \
+  python /app/python-code/verify_dss_csv_units.py --scenarios-from-s3 --output report.csv
+```
+
+Use `tmux` for long-running scans (all ~75 scenarios takes ~50 minutes with 6 workers). You can close your laptop or let SSO expire - the tmux session keeps running on the EC2 instance. When you come back, log into Cloud9 again and run `tmux attach` to reconnect. The log file (`~/environment/verify_units_all_*.log`) is also saved via `tee`, so you can read results with `cat` or `less` even if the tmux session ended.
+
+**Always-on at extraction time:**
+
+The `--verify-units` flag is wired into `batch_entrypoint.sh`. Every Batch extraction job automatically:
+- Runs the DSS-vs-CSV unit check after conversion
+- Writes a `.units.json` sidecar file alongside the CSV (DSS unit ground truth)
+- Uploads the sidecar to S3 at `scenario/{id}/csv/{id}_coeqwal_calsim_output.csv.units.json`
+- Records `unit_verification.calsim_unit_mismatches` in the manifest JSON
+
+**Unit map sidecar format** (`*.csv.units.json`):
+
+```json
+{"AW_01_PA": {"c_part": "APPLIED-WATER", "unit": "CFS"}, "S_SHSTA": {"c_part": "STORAGE", "unit": "TAF"}, ...}
+```
+
+The sidecar is also emitted as a `UNIT_MAP` log line in CloudWatch for every extraction, providing a permanent audit trail without needing to re-open the DSS.
+
+**Duplicate B-part detection:**
+
+The extraction code (`dss_to_csv.py`) detects when multiple DSS pathnames share the same B-part but have different C-parts (e.g., `SHRTG_PCWA3/SHORTAGE` and `SHRTG_PCWA3/DELIVERY-SHORTAGE`). These are logged as warnings and counted in the manifest under `duplicate_b_parts`. The statistics ETL resolves these using C-part-aware deduplication (preferring the expected C-part, e.g., `SHORTAGE` over `DELIVERY-SHORTAGE` for `SHRTG_*` variables).
+
+The `scan_dupes.py` script in `etl/statistics/` can scan all scenario CSVs for duplicates and audit cross-scenario unit consistency without Docker:
+
+```bash
+cd ~/environment/coeqwal-backend/etl/statistics
+python scan_dupes.py --compare-values --audit-units --workers 4
+```
 
 ### Layer 2: ETL Statistics (CSV to DB)
 
@@ -1168,7 +1237,7 @@ Variable lists derived from:
 | Variable | Description | Units |
 |----------|-------------|-------|
 | `S_{CODE}` | End-of-month storage | TAF |
-| `S_{CODE}LEVELxDV` | Storage zone x (x = 1–6) | TAF |
+| `S_{CODE}LEVELxDV` | Storage zone x (x = 1-6) | TAF |
 
 The highest zone (5 or 6 depending on reservoir) represents capacity.
 
@@ -1234,8 +1303,8 @@ python run_all.py --list-modules
 - Runs **DB row-count verification** across all 18 statistics tables (non-dry-run only)
 
 **EC2 sizing:** Each worker loads a ~300 MB CSV into memory. Recommended:
-- `--workers 1`: t3.medium (4 GB) — ~8 hours for 76 scenarios
-- `--workers 4`: t3.xlarge (16 GB) — ~2–3 hours for 76 scenarios
+- `--workers 1`: t3.medium (4 GB) - ~8 hours for 76 scenarios
+- `--workers 4`: t3.xlarge (16 GB) - ~2-3 hours for 76 scenarios
 
 **Cloud9 timeout:** Set "Stop my environment" to 4+ hours in Cloud9 Preferences before a full run. Use `screen` so browser disconnects don't kill the process.
 
@@ -1274,7 +1343,7 @@ python sensitivity/calculate_sensitivity.py --only reservoir,ag
 ```
 
 **Climate sensitivity** (`sensitivity_climate` table): For each hydroclimate sibling
-group (scenarios with identical operations but different climate — historical, cc50, cc95),
+group (scenarios with identical operations but different climate: historical, cc50, cc95),
 measures how each metric changes. Stored per (sibling_group, entity, metric, water_month):
 - `hist_value`, `cc50_value`, `cc95_value`
 - `cc50_abs_change`, `cc95_abs_change` (absolute difference from historical)
@@ -1286,7 +1355,7 @@ different operational configurations. Stored per (hydroclimate_id, entity, metri
 - `scenario_count`, `min_value`, `max_value`, `mean_value`, `std_value`
 - `range_value` (max − min), `pct_range` ((max − min) / |mean| × 100)
 
-Both tables include `water_month` 1–12 (monthly resolution) and 0 (annual/period-of-record),
+Both tables include `water_month` 1-12 (monthly resolution) and 0 (annual/period-of-record),
 covering reservoirs, AG, urban DU, MI, CWS, refuge, env flows, and delta metrics.
 
 **Querying examples:**
@@ -1552,4 +1621,13 @@ python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run --mism
 # Re-extract scenarios (re-trigger Batch)
 python etl/scripts/reextract_all_scenarios.py --dry-run
 python etl/scripts/reextract_all_scenarios.py --scenarios s0021,s0022
+
+# Unit verification (requires Docker - build image first)
+cd ~/environment/coeqwal-backend/etl/coeqwal-etl && docker build -t coeqwal-etl:test .
+docker run --rm --entrypoint "" coeqwal-etl:test \
+  python /app/python-code/verify_dss_csv_units.py --scenarios-from-s3 --workers 6
+
+# Duplicate B-part scan + cross-scenario unit consistency (no Docker needed)
+cd ~/environment/coeqwal-backend/etl/statistics
+python scan_dupes.py --compare-values --audit-units --workers 4
 ```
