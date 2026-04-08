@@ -274,7 +274,7 @@ def load_calsim_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, s
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             raw_bytes = response["Body"].read()
 
-            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            var_names, units_row, _c_parts = parse_dss_csv_header(io.BytesIO(raw_bytes))
             units_map = dict(zip(var_names, units_row))
 
             data_df = pd.read_csv(io.BytesIO(raw_bytes), header=None, skiprows=7)
@@ -305,7 +305,7 @@ def load_calsim_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, s
     """
     log.info(f"Loading from file: {file_path}")
 
-    var_names, units_row = parse_dss_csv_header(file_path)
+    var_names, units_row, _c_parts = parse_dss_csv_header(file_path)
     units_map = dict(zip(var_names, units_row))
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)

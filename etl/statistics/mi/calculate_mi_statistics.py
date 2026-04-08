@@ -306,13 +306,13 @@ def load_calsim_csv_from_s3(
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             raw_bytes = response["Body"].read()
 
-            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            var_names, units_row, c_parts = parse_dss_csv_header(io.BytesIO(raw_bytes))
             units_map = build_units_map_first(var_names, units_row)
 
             data_df = pd.read_csv(
                 io.BytesIO(raw_bytes), header=None, skiprows=7, low_memory=False
             )
-            data_df = apply_columns_and_dedup(data_df, var_names)
+            data_df = apply_columns_and_dedup(data_df, var_names, c_parts)
 
             log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
             return data_df, units_map
@@ -338,11 +338,11 @@ def load_calsim_csv_from_file(
     """
     log.info(f"Loading from file: {file_path}")
 
-    var_names, units_row = parse_dss_csv_header(file_path)
+    var_names, units_row, c_parts = parse_dss_csv_header(file_path)
     units_map = build_units_map_first(var_names, units_row)
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = apply_columns_and_dedup(data_df, var_names)
+    data_df = apply_columns_and_dedup(data_df, var_names, c_parts)
 
     log.info(f"Loaded: {data_df.shape[0]} rows, {data_df.shape[1]} columns")
     return data_df, units_map

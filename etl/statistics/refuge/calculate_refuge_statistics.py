@@ -180,6 +180,7 @@ def load_refuge_demand_units(
 def _load_dv_columns(
     var_names: List[str],
     data_df: pd.DataFrame,
+    c_parts: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """
     Extract the date column and all AW_* / DN_* refuge columns from the
@@ -188,7 +189,7 @@ def _load_dv_columns(
     CFS→TAF conversion is applied later in the orchestrator once DaysInMonth
     is available.
     """
-    data_df = apply_columns_and_dedup(data_df, var_names)
+    data_df = apply_columns_and_dedup(data_df, var_names, c_parts)
 
     date_col = var_names[0]
     refuge_ids = set(REFUGE_DU_IDS)
@@ -240,11 +241,11 @@ def load_dv_csv_from_s3(scenario_id: str) -> Tuple[pd.DataFrame, Dict[str, str]]
             log.info(f"Trying DV output: s3://{S3_BUCKET}/{key}")
             response = s3.get_object(Bucket=S3_BUCKET, Key=key)
             raw_bytes = response["Body"].read()
-            var_names, units_row = parse_dss_csv_header(io.BytesIO(raw_bytes))
+            var_names, units_row, c_parts = parse_dss_csv_header(io.BytesIO(raw_bytes))
             units_map = build_units_map_first(var_names, units_row)
 
             data_df = pd.read_csv(io.BytesIO(raw_bytes), header=None, skiprows=7, low_memory=False)
-            result = _load_dv_columns(var_names, data_df)
+            result = _load_dv_columns(var_names, data_df, c_parts)
 
             kept_map = {c: units_map.get(c, "") for c in result.columns}
             return result, kept_map
@@ -270,11 +271,11 @@ def load_dv_csv_from_file(file_path: str) -> Tuple[pd.DataFrame, Dict[str, str]]
     add_water_year_month() supplies DaysInMonth.
     """
     log.info(f"Loading DV output from file: {file_path}")
-    var_names, units_row = parse_dss_csv_header(file_path)
+    var_names, units_row, c_parts = parse_dss_csv_header(file_path)
     units_map = build_units_map_first(var_names, units_row)
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    result = _load_dv_columns(var_names, data_df)
+    result = _load_dv_columns(var_names, data_df, c_parts)
 
     kept_map = {c: units_map.get(c, "") for c in result.columns}
     return result, kept_map

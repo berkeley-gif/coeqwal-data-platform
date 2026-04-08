@@ -187,17 +187,52 @@ def compare_duplicate_values(
     return comparisons
 
 
+def audit_scenario_units(
+    s3_client,
+    scenario_id: str,
+) -> Dict[str, str]:
+    """Read the header and return a {variable_name: unit} map.
+
+    Only includes variables with well-known ETL prefixes so the audit
+    focuses on columns the pipeline actually consumes.
+    """
+    _ETL_PREFIXES = (
+        "AW_", "DN_", "GP_", "SHRTG_", "GW_SHORT_", "DEL_", "SHORT_",
+        "S_", "C_", "D_", "E_", "F_",
+    )
+    key = _csv_key(scenario_id)
+    try:
+        raw = s3_client.get_object(Bucket=BUCKET, Key=key)["Body"].read()
+    except Exception:
+        return {}
+
+    hdr = pd.read_csv(io.BytesIO(raw), header=None, nrows=7, low_memory=False)
+    b_row = [str(v) for v in hdr.iloc[1].tolist()]
+    units_row = [str(u).strip().upper() for u in hdr.iloc[6].tolist()]
+
+    result = {}
+    for name, unit in zip(b_row, units_row):
+        if any(name.startswith(p) for p in _ETL_PREFIXES):
+            if name not in result:
+                result[name] = unit
+    return result
+
+
 def _scan_one(
     scenario_id: str,
     compare: bool,
-) -> Tuple[List[Dict], List[Dict]]:
+    audit_units: bool,
+) -> Tuple[List[Dict], List[Dict], Dict[str, str]]:
     """Scan a single scenario (thread-safe: creates its own S3 client)."""
     s3 = boto3.client("s3")
     dupes = scan_scenario_header(s3, scenario_id)
     comparisons = []
     if dupes and compare:
         comparisons = compare_duplicate_values(s3, scenario_id, dupes)
-    return dupes, comparisons
+    units = {}
+    if audit_units:
+        units = audit_scenario_units(s3, scenario_id)
+    return dupes, comparisons, units
 
 
 def main():
@@ -220,6 +255,12 @@ def main():
         help="Parallel workers for scanning (default: 4)",
     )
     parser.add_argument(
+        "--audit-units",
+        action="store_true",
+        help="Audit unit declarations across scenarios. Reports any variable "
+        "whose declared unit differs between scenarios.",
+    )
+    parser.add_argument(
         "--output", "-o",
         default="duplicate_scan_results.csv",
         help="Output CSV path (default: duplicate_scan_results.csv)",
@@ -232,20 +273,26 @@ def main():
     log.info(f"Scanning {len(scenarios)} scenario(s) with {workers} worker(s)")
     if args.compare_values:
         log.info("Value comparison enabled for any duplicates found")
+    if args.audit_units:
+        log.info("Unit audit enabled")
 
     t0 = time.time()
     all_dupes: List[Dict] = []
     all_comparisons: List[Dict] = []
+    # {variable_name: {unit: [scenario_ids]}}
+    unit_registry: Dict[str, Dict[str, List[str]]] = {}
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(_scan_one, sid, args.compare_values): sid
+            executor.submit(
+                _scan_one, sid, args.compare_values, args.audit_units
+            ): sid
             for sid in scenarios
         }
         for future in as_completed(futures):
             sid = futures[future]
             try:
-                dupes, comparisons = future.result()
+                dupes, comparisons, units = future.result()
                 if dupes:
                     log.info(
                         f"  {sid}: {len(dupes)} duplicate variable(s) found"
@@ -254,6 +301,11 @@ def main():
                     all_comparisons.extend(comparisons)
                 else:
                     log.info(f"  {sid}: clean")
+
+                for var_name, unit in units.items():
+                    unit_registry.setdefault(var_name, {}).setdefault(
+                        unit, []
+                    ).append(sid)
             except Exception as e:
                 log.error(f"  {sid}: scan error — {e}")
 
@@ -302,7 +354,52 @@ def main():
             )
         print()
 
+    # Unit audit results
+    if unit_registry:
+        inconsistent = {
+            var: units_dict
+            for var, units_dict in unit_registry.items()
+            if len(units_dict) > 1
+        }
+        consistent_count = len(unit_registry) - len(inconsistent)
+
+        print("  UNIT AUDIT:")
+        print(f"  {'─' * 66}")
+        print(f"  Variables checked: {len(unit_registry)}")
+        print(f"  Consistent: {consistent_count}")
+        print(f"  Inconsistent: {len(inconsistent)}")
+
+        if inconsistent:
+            print()
+            print("  UNIT INCONSISTENCIES (variable has different units across scenarios):")
+            for var in sorted(inconsistent):
+                units_dict = inconsistent[var]
+                parts = []
+                for unit, sids in sorted(units_dict.items()):
+                    if len(sids) <= 5:
+                        parts.append(f"{unit} ({', '.join(sorted(sids))})")
+                    else:
+                        parts.append(f"{unit} ({len(sids)} scenarios)")
+                print(f"    {var}: {' vs '.join(parts)}")
+        else:
+            print("  All ETL-relevant variables have consistent units across scenarios.")
+        print()
+
     print(f"{'=' * 70}\n")
+
+    # Write unit audit CSV
+    if unit_registry:
+        unit_audit_path = args.output.replace(".csv", "_units.csv")
+        with open(unit_audit_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["variable", "unit", "scenario_count", "scenarios"])
+            for var in sorted(unit_registry):
+                for unit, sids in sorted(unit_registry[var].items()):
+                    writer.writerow([
+                        var, unit, len(sids),
+                        ";".join(sorted(sids)),
+                    ])
+        log.info(f"Unit audit written to {unit_audit_path}")
 
     # Write CSV report
     if all_dupes:

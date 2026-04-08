@@ -187,15 +187,18 @@ def check_post_conversion_magnitude(
 
 def parse_dss_csv_header(
     file_or_body,
-) -> Tuple[List[str], List[str]]:
+) -> Tuple[List[str], List[str], List[str]]:
     """Read the 7-row DSS-export header.
 
-    Returns (var_names, units_row) — both aligned by column index.
+    Returns (var_names, units_row, c_parts) — all aligned by column index.
+    ``c_parts`` is the C-part / "kind" row (row 2), e.g. SHORTAGE,
+    FLOW-DELIVERY, STORAGE, etc.
     """
     hdr = pd.read_csv(file_or_body, header=None, nrows=7, low_memory=False)
     var_names = [str(v) for v in hdr.iloc[1].tolist()]
     units_row = [str(u).strip().upper() for u in hdr.iloc[6].tolist()]
-    return var_names, units_row
+    c_parts = [str(v) for v in hdr.iloc[2].tolist()]
+    return var_names, units_row, c_parts
 
 
 def build_units_map_first(
@@ -215,24 +218,85 @@ def build_units_map_first(
     return units_map
 
 
+# When duplicate B-parts exist, prefer the column whose C-part matches
+# the expected "kind" for that variable prefix.  This mapping comes from
+# the CalSim WRESL model conventions and the ETL documentation.
+_PREFERRED_C_PARTS: Dict[str, str] = {
+    "SHRTG_": "SHORTAGE",
+    "GW_SHORT_": "GW-RESTRICT-SHORT",
+    "AW_": "APPLIED-WATER",
+    "DN_": "FLOW-DELIVERY",
+    "GP_": "FLOW-DELIVERY",
+}
+
+
 def apply_columns_and_dedup(
-    data_df: pd.DataFrame, var_names: List[str]
+    data_df: pd.DataFrame,
+    var_names: List[str],
+    c_parts: Optional[List[str]] = None,
 ) -> pd.DataFrame:
-    """Set column names and drop duplicate columns (keep first).
+    """Set column names and drop duplicate columns.
 
     Duplicate B-parts arise when the DSS file has two pathnames with the
     same variable name but different C-parts (e.g. DELIVERY-SHORTAGE vs
-    SHORTAGE for SHRTG_PCWA3).  Keeping the first prevents a TypeError
-    when indexing by column name (which returns a DataFrame instead of a
-    Series when duplicates exist).
+    SHORTAGE for SHRTG_PCWA3).
+
+    When *c_parts* is provided, duplicates are resolved by preferring
+    the column whose C-part matches ``_PREFERRED_C_PARTS`` for that
+    variable's prefix.  Without *c_parts*, the first occurrence is kept.
     """
     data_df.columns = var_names
-    dupes = data_df.columns.duplicated(keep="first")
-    if dupes.any():
-        n = int(dupes.sum())
+    dupes_mask = data_df.columns.duplicated(keep=False)
+    if not dupes_mask.any():
+        return data_df
+
+    if c_parts is None:
+        keep = ~data_df.columns.duplicated(keep="first")
+        n = int((~keep).sum())
         log.info(f"Dropped {n} duplicate column(s) from CSV (kept first occurrence)")
-        data_df = data_df.loc[:, ~dupes]
-    return data_df
+        return data_df.loc[:, keep]
+
+    keep = [True] * len(var_names)
+    seen: Dict[str, int] = {}
+    for idx, name in enumerate(var_names):
+        if not dupes_mask[idx]:
+            seen[name] = idx
+            continue
+
+        if name not in seen:
+            seen[name] = idx
+            continue
+
+        prev_idx = seen[name]
+        prev_c = c_parts[prev_idx]
+        curr_c = c_parts[idx]
+
+        preferred = None
+        for prefix, expected_c in _PREFERRED_C_PARTS.items():
+            if name.startswith(prefix):
+                preferred = expected_c
+                break
+
+        if preferred is not None and curr_c == preferred and prev_c != preferred:
+            log.info(
+                "Duplicate '%s': keeping C-part '%s' (col %d), "
+                "dropping '%s' (col %d) — matches expected kind",
+                name, curr_c, idx, prev_c, prev_idx,
+            )
+            keep[prev_idx] = False
+            seen[name] = idx
+        else:
+            log.info(
+                "Duplicate '%s': keeping C-part '%s' (col %d), "
+                "dropping '%s' (col %d)",
+                name, prev_c, prev_idx, curr_c, idx,
+            )
+            keep[idx] = False
+
+    n_dropped = sum(1 for k in keep if not k)
+    if n_dropped:
+        log.info(f"Resolved {n_dropped} duplicate column(s) using C-part preference")
+    return data_df.loc[:, keep]
 
 
 def load_dss_csv(
@@ -243,10 +307,10 @@ def load_dss_csv(
     Returns (data_df, units_map) where *units_map* maps each column
     name to its declared unit (e.g. ``"CFS"``, ``"TAF"``).
     """
-    var_names, units_row = parse_dss_csv_header(file_path)
+    var_names, units_row, c_parts = parse_dss_csv_header(file_path)
     units_map = build_units_map_first(var_names, units_row)
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = apply_columns_and_dedup(data_df, var_names)
+    data_df = apply_columns_and_dedup(data_df, var_names, c_parts)
 
     return data_df, units_map

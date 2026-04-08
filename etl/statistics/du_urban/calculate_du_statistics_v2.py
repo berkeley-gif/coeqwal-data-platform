@@ -163,9 +163,10 @@ def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
 
     header_df = pd.read_csv(file_path, header=None, nrows=7)
     var_names = [str(v) for v in header_df.iloc[1].tolist()]
+    c_parts = [str(v) for v in header_df.iloc[2].tolist()]
 
     data_df = pd.read_csv(file_path, header=None, skiprows=7, low_memory=False)
-    data_df = apply_columns_and_dedup(data_df, var_names)
+    data_df = apply_columns_and_dedup(data_df, var_names, c_parts)
 
     # First column is date
     first_col = data_df.columns[0]
