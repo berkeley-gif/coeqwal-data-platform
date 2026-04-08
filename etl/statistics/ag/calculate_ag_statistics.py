@@ -24,7 +24,8 @@ CalSim 3 Water Balance (from WRESL constraints-Deliveries.wresl):
   pre-model demand order/target — a different (higher) quantity.
 
   18 GW-only DUs have no DN in the WRESL meetAW constraint — their entire
-  supply is GP + RU.  The ETL does not synthesize a delivery value for these DUs.
+  supply is GP + RU.  The ETL synthesizes delivery as GP + RU for these DUs,
+  matching the COEQWAL notebook (DataExtraction.py) approach.
 
   Sacramento (9): 06_NA, 07N_NA, 07S_NA, 15N_NA1, 15S_NA1, 16_NA1, 17N_NA,
                   20_NA2, 26N_NA
@@ -114,6 +115,18 @@ EXCEEDANCE_PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 # This filters out floating-point precision artifacts from CalSim's linear programming solver.
 # 0.1 TAF = 100 acre-feet, which is < 0.05% of typical delivery
 SHORTAGE_THRESHOLD_TAF = 0.1
+
+# GW-only DUs have no DN_* in the WRESL meetAW constraint. Their supply is
+# entirely GP + RU. The notebook (DataExtraction.py) synthesizes DN = GP + RU
+# for these DUs. Source: CalSim3 WRESL constraints-Deliveries.
+GW_ONLY_DU_IDS = frozenset([
+    # Sacramento (9)
+    "06_NA", "07N_NA", "07S_NA", "15N_NA1", "15S_NA1",
+    "16_NA1", "17N_NA", "20_NA2", "26N_NA",
+    # SJR/Tulare (9)
+    "60S_NA1", "60S_NA2", "61_NA1", "62_NA1", "63_NA1",
+    "64_NA1", "72_NA2", "73_NA",
+])
 
 
 # Aggregate definitions — direct DV variables
@@ -433,13 +446,26 @@ def calculate_du_sw_delivery_monthly(
     sw_delivery_var = f"DN_{du_id}"
 
     if sw_delivery_var not in df.columns:
-        log.debug(
-            f"No SW delivery variable found for {du_id}: {sw_delivery_var} (may be GW-only DU)"
-        )
-        return []
-
-    df_copy = df.copy()
-    df_copy["sw_delivery"] = df_copy[sw_delivery_var]
+        if du_id in GW_ONLY_DU_IDS:
+            gp_var = f"GP_{du_id}"
+            ru_var = f"RU_{du_id}"
+            if gp_var in df.columns:
+                gp = pd.to_numeric(df[gp_var], errors="coerce").fillna(0)
+                ru = pd.to_numeric(df[ru_var], errors="coerce").fillna(0) if ru_var in df.columns else 0
+                df_copy = df.copy()
+                df_copy["sw_delivery"] = gp + ru
+                log.info(f"{du_id}: GW-only DU, synthesized delivery = GP + RU")
+            else:
+                log.debug(f"{du_id}: GW-only DU but GP_{du_id} not found")
+                return []
+        else:
+            log.debug(
+                f"No SW delivery variable found for {du_id}: {sw_delivery_var}"
+            )
+            return []
+    else:
+        df_copy = df.copy()
+        df_copy["sw_delivery"] = df_copy[sw_delivery_var]
 
     results = []
     is_annual = (df_copy["WaterMonth"] == 0).all()
@@ -742,6 +768,13 @@ def calculate_du_period_summary(
     has_sw_delivery = sw_delivery_var in df.columns
     if has_sw_delivery:
         df_copy["sw_delivery"] = df_copy[sw_delivery_var]
+    elif du_id in GW_ONLY_DU_IDS:
+        gp_var = f"GP_{du_id}"
+        ru_var = f"RU_{du_id}"
+        gp = pd.to_numeric(df_copy.get(gp_var, 0), errors="coerce").fillna(0) if gp_var in df_copy.columns else 0
+        ru = pd.to_numeric(df_copy.get(ru_var, 0), errors="coerce").fillna(0) if ru_var in df_copy.columns else 0
+        df_copy["sw_delivery"] = gp + ru
+        has_sw_delivery = True
     else:
         df_copy["sw_delivery"] = 0
 
@@ -1093,7 +1126,7 @@ def calculate_all_ag_statistics(
 
     # Convert CFS columns to TAF, using the units declared in the header.
     # Only convert columns whose header unit is CFS; skip those already in TAF.
-    AG_CFS_PREFIXES = ("AW_", "DN_", "GP_", "GW_SHORT_", "SHRTG_", "DEL_", "SHORT_")
+    AG_CFS_PREFIXES = ("AW_", "DN_", "GP_", "RU_", "GW_SHORT_", "SHRTG_", "DEL_", "SHORT_")
     cfs_cols = []
     taf_already = []
     other_unit = []

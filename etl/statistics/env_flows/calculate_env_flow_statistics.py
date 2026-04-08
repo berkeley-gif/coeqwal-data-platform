@@ -63,7 +63,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF  # noqa: E402
+from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF, MAX_CV  # noqa: E402
 from scenarios import SCENARIOS  # noqa: E402
 
 try:
@@ -462,9 +462,7 @@ def _safe_cv(data: pd.Series) -> Optional[float]:
     if abs(mean) < CV_MIN_MEAN_TAF:
         return 0.0
     cv = round(float(np.std(arr, ddof=1) / abs(mean)), 4)
-    if cv > 99.0:
-        return None
-    return cv
+    return min(cv, MAX_CV)
 
 
 def _round_or_none(value, ndigits: int = 3) -> Optional[float]:

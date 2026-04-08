@@ -204,10 +204,10 @@ MI_CONTRACTOR_VARIABLES = {
         "description": "San Gorgonio Pass Water Agency",
     },
     "KERN": {
-        "delivery_vars": ["D_CAA194_KERNA_PMI", "D_CAA194_KERNB_PMI"],
-        "shortage_vars": ["SHORT_D_CAA194_KERNA_PMI", "SHORT_D_CAA194_KERNB_PMI"],
+        "delivery_vars": ["D_CAA194_KERNA_PMI"],
+        "shortage_vars": ["SHORT_D_CAA194_KERNA_PMI"],
         "perdv_vars": ["PERDV_SWP_15"],
-        "description": "Kern County Water Agency",
+        "description": "Kern County Water Agency (A allocation only; B allocation goes to MWD)",
     },
     "CSTLN": {
         "delivery_vars": ["D_SVRWD_CSTLN_PMI"],

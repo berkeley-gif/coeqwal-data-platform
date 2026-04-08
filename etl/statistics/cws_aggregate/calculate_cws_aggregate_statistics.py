@@ -109,10 +109,12 @@ CWS_AGGREGATES = {
     "cvp_nod": {
         "id": 2,
         "label": "CVP North",
-        "delivery_var": "DEL_CVP_PMI_N",
-        "shortage_var": "SHORT_CVP_PMI_N",
+        "delivery_var": "DEL_CVP_PMI_N_WAMER",
+        "delivery_var_fallback": "DEL_CVP_PMI_N",
+        "shortage_var": "SHORT_CVP_PMI_N_WAMER",
+        "shortage_var_fallback": "SHORT_CVP_PMI_N",
         "demand_mode": "del_plus_short",
-        "description": "CVP M&I deliveries - North of Delta",
+        "description": "CVP M&I deliveries - North of Delta (incl. Western Area)",
     },
     "cvp_sod": {
         "id": 3,
@@ -609,8 +611,19 @@ def calculate_all_cws_aggregate_statistics(
         demand_mode = info.get("demand_mode", "del_plus_short")
 
         if delivery_var not in available_columns:
-            log.warning(f"Delivery variable {delivery_var} not found for {short_code}")
-            continue
+            fb = info.get("delivery_var_fallback")
+            if fb and fb in available_columns:
+                log.warning(
+                    f"{short_code}: {delivery_var} not in CSV, "
+                    f"falling back to {fb}"
+                )
+                delivery_var = fb
+                shortage_fb = info.get("shortage_var_fallback", shortage_var)
+                if shortage_var not in available_columns and shortage_fb in available_columns:
+                    shortage_var = shortage_fb
+            else:
+                log.warning(f"Delivery variable {delivery_var} not found for {short_code}")
+                continue
 
         mapped_count += 1
 

@@ -112,7 +112,33 @@ python etl/scripts/gdrive_bulk_download.py promote \
 
 Copies files from `staging/` to `ready/`. The Lambda trigger detects the ZIP upload and submits an AWS Batch extraction job.
 
-### 6. Run statistics ETL and verify
+### 6. Monitor extraction and handle failures
+
+After promoting, Lambda triggers Batch extraction jobs automatically. Monitor progress:
+
+```bash
+# Check how many jobs are running/pending/done
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status RUNNING --query 'length(jobSummaryList)'
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status SUCCEEDED --query 'length(jobSummaryList)'
+aws batch list-jobs --job-queue coeqwal-dss-queue --job-status FAILED --query 'length(jobSummaryList)'
+
+# Check extraction results across all scenarios
+python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run
+```
+
+If any jobs fail with `OutOfMemoryError`, re-extract them with more memory:
+
+```bash
+# Check what failed
+python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run --scenarios s0065
+
+# Re-extract with 16 GB (default is 8 GB)
+python etl/scripts/reextract_all_scenarios.py --scenarios s0065,s0085,s0105 --memory 16384
+```
+
+Known large scenarios that need 16 GB: the DWRadapt25 group (DCP operation) produces ~326 MB CalSim output CSVs vs ~200 MB for typical scenarios. These are the `*_DWRadapt25_*_DCP` ZIPs. If your new batch includes DCP scenarios, expect to re-extract those with `--memory 16384`.
+
+### 7. Run statistics ETL and verify
 
 ```bash
 cd etl/statistics
@@ -1322,6 +1348,64 @@ python run_all.py --list-modules
 | 8 | **delta** | `delta/main.py` | `delta_monthly`, `delta_period_summary` |
 | *post* | **sensitivity** | `sensitivity/calculate_sensitivity.py` | `sensitivity_climate`, `sensitivity_operational` |
 
+### Unit conversion rules
+
+All statistics are stored in **TAF** (thousand acre-feet). CalSim DV output variables are typically in **CFS** (cubic feet per second) as monthly averages. Each module reads the unit declared in row 6 of the CSV header and converts CFS columns before computing statistics.
+
+**Conversion factor** (defined once in `units.py`):
+
+```
+CFS_TO_TAF_PER_DAY = 86400 / 43560000    (approximately 0.001983471)
+TAF = CFS x DaysInMonth x CFS_TO_TAF_PER_DAY
+```
+
+This is the exact form of the COEQWAL notebook formula `CFS x 0.001984 x days_in_month` (from `coeqwalpackage/metrics.py` and `cqwlutils.py`). The notebook rounds to 0.001984; the ETL uses the full-precision value. The difference is ~0.027%, which is negligible.
+
+**Per-module conversion behavior:**
+
+| Module | CSV source | Variables converted | Input unit | Notes |
+|--------|-----------|-------------------|------------|-------|
+| **reservoirs** | DV | None (validates S_* are TAF) | TAF | CalSim storage output is natively TAF |
+| **du_urban** | DV + SV | DL_*, D_*_PMI, DN_*, GP_*, DEL_*, SHORT_*, SHRTG_* | CFS | SV demand (UD_*) is already TAF |
+| **mi** | DV + SV | D_*_PMI, DEL_*, SHORT_* | CFS | PERDV_* fractions left dimensionless; MWD uses Table A constant |
+| **cws_aggregate** | DV | DEL_*, SHORT_*, nod/sod splits | CFS | Falls back to "assume CFS" if unit header is missing |
+| **ag** | DV | AW_*, DN_*, GP_*, SHRTG_*, GW_SHORT_*, DEL_*, SHORT_* | CFS | TAF columns passed through without conversion |
+| **refuge** | DV | AW_*, DN_*, SHRTG_*, GW_SHORT_* | CFS | Same pattern as ag |
+| **env_flows** | DV + SV | C_*, C_*_MIF (DV flows) | CFS | SV columns in TAF are reverse-converted to CFS for ratio consistency |
+| **delta** | DV | NDO only | CFS | EC (uS/cm) and X2 (km) left in native units |
+| **sensitivity** | DB | None | N/A | Reads pre-aggregated statistics from database |
+
+**Safeguards** (all in `units.py`):
+
+- `check_post_conversion_magnitude`: flags any column exceeding 2000 TAF/month after conversion (likely double-conversion)
+- `validate_water_balance`: checks GP vs AW ratio for ag DUs (GP > 1.15x AW is suspicious)
+- `compute_cv`: caps coefficient of variation at 99.0 and returns 0.0 when mean is near zero (prevents NUMERIC overflow)
+- `safe_pct`: warns when computed percentages exceed 200% (possible unit mismatch)
+
+### Notebook alignment audit (March 2026)
+
+The ETL was audited module-by-module against the COEQWAL Jupyter notebooks (`coeqwalpackage/metrics.py`, `DataExtraction.py`, `Metrics.ipynb`, tier assignment notebooks). Results:
+
+**Verified correct (no changes needed):**
+- CFS-to-TAF factor matches notebooks (ETL uses exact `86400/43560000`, notebooks round to `0.001984`)
+- AG demand variable (`AW_*`), NOD/SOD aggregate components, all PERDV mappings, MWD Table A constant
+- Reservoir flood/dead pool logic (epsilon trick, threshold constants)
+- Delta X2 and EC seasonal groupings (Fall=9,10,11; Spring=3,4,5)
+- Shortage clipping, CV safeguards, reliability formulas
+
+**Fixes applied during audit:**
+- **San Luis flood levels**: SLUIS_CVP, SLUIS_SWP, SLUIS changed from LEVEL5DV (capacity) to LEVEL4DV (flood control). Rule: flood = one level below capacity. Matches `Tier_Assignment_Storage.ipynb`.
+- **CVP North M&I variable**: CWS aggregate changed from `DEL_CVP_PMI_N` to `DEL_CVP_PMI_N_WAMER` to match `DataExtraction.py`. Includes Western Area deliveries. Falls back to `DEL_CVP_PMI_N` with a warning if `_WAMER` is not in the CSV.
+- **KERN contractor scope**: Removed `D_CAA194_KERNB_PMI` from KERN in MI module. KERNB is a MWD allocation (notebook only has KERNA under Kern County WA).
+- **GW-only AG DU delivery**: 18 DUs now synthesize delivery as GP + RU (matching `DataExtraction.py`). Previously skipped because `DN_*` is absent from WRESL for these DUs.
+- **Env flows CV consistency**: `_safe_cv` now returns 99.0 (capped) instead of None, matching `compute_cv()` in `units.py`.
+- **Dead code removed**: Deleted orphaned `du/calculate_du_statistics.py` (not wired into `run_all.py`, no unit conversion).
+
+**Intentional design differences from notebooks:**
+- ETL uses water year (Oct-Sep) for all annualization. Notebooks use contract year (Mar-Feb) for some delivery totals. Long-run averages are nearly identical.
+- ETL computes DU-level AG shortage from `SHRTG_*`/`GW_SHORT_*`. Notebooks do not compute DU-level shortage.
+- ETL computes many metrics the notebooks don't: shortage frequency, exceedance percentiles, env flow alteration indices, CEFF seasonal aggregation, 60-channel and 92-reservoir coverage.
+
 ### Cross-scenario sensitivity analysis
 
 After per-scenario statistics are computed, an optional post-processing step computes
@@ -1558,6 +1642,7 @@ The Cloud9 EC2 instance uses `AWSCloud9SSMAccessRole`. This role has AWS-managed
         "batch:SubmitJob",
         "batch:DescribeJobs",
         "batch:DescribeJobDefinitions",
+        "batch:RegisterJobDefinition",
         "batch:ListJobs",
         "batch:DescribeComputeEnvironments",
         "batch:DescribeJobQueues",
@@ -1565,6 +1650,15 @@ The Cloud9 EC2 instance uses `AWSCloud9SSMAccessRole`. This role has AWS-managed
         "batch:CancelJob"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "PassBatchRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::533266975152:role/BatchEcsTaskExecutionRole",
+        "arn:aws:iam::533266975152:role/coeqwal-dss-batch-task-role"
+      ]
     }
   ]
 }
@@ -1574,7 +1668,8 @@ The Cloud9 EC2 instance uses `AWSCloud9SSMAccessRole`. This role has AWS-managed
 |-----------|---------------|-----------------|
 | CloudWatchLogsRead | Read Batch, Lambda, and RDS logs | Debugging failed extractions |
 | ECRRead | Check Docker image push timestamps | Confirming GitHub Actions built the image |
-| BatchOperations | Submit, monitor, and cancel Batch jobs | Running `reextract_all_scenarios.py` and managing jobs |
+| BatchOperations | Submit, monitor, cancel, and update Batch jobs | Running `reextract_all_scenarios.py`, managing jobs, updating job definitions |
+| PassBatchRoles | Pass the two Batch IAM roles when registering job definitions | Required by `batch:RegisterJobDefinition` |
 
 Note: the Cloud9 IAM role credentials never expire. Long-running jobs in tmux keep running even when your SSO session drops. SSO expiring only locks you out of the Cloud9 browser UI until you re-authenticate.
 
@@ -1585,6 +1680,8 @@ Note: the Cloud9 IAM role credentials never expire. Long-running jobs in tmux ke
 Quick reference commands for inspecting and managing the ETL infrastructure.
 
 ### Batch compute environment
+
+The job definition allocates 16 GB memory and 2 vCPUs per extraction job (revision 3, updated April 2026). Previously 8 GB, which caused OOM kills on larger scenarios like the DWRadapt25 group (s0065, s0085, s0105) whose CalSim output CSVs are ~326 MB vs ~200 MB for typical scenarios. Signs of OOM: manifest shows `calsim_csv_written: false` with status `FAILED`, and `aws batch describe-jobs` shows `OutOfMemoryError: container killed due to memory usage`. If needed, `reextract_all_scenarios.py` supports `--memory` to override per-job (e.g., `--memory 32768` for 32 GB).
 
 ```bash
 # Check compute environment sizing and type
@@ -1705,8 +1802,8 @@ python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run --mism
 python etl/scripts/reextract_all_scenarios.py --dry-run
 python etl/scripts/reextract_all_scenarios.py --scenarios s0021,s0022
 
-# Re-extract with more memory (for large scenarios that OOM at the default 8 GB)
-python etl/scripts/reextract_all_scenarios.py --scenarios s0065,s0085,s0105 --memory 16384
+# Re-extract with more memory (default is now 16 GB; use 32 GB if still OOM)
+python etl/scripts/reextract_all_scenarios.py --scenarios s0065 --memory 32768
 
 # Unit verification (requires Docker - build image first)
 cd ~/environment/coeqwal-backend/etl/coeqwal-etl && docker build -t coeqwal-etl:test .

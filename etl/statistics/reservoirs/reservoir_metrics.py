@@ -443,8 +443,8 @@ RESERVOIR_THRESHOLDS = {
         "flood_var": 524.0,
         "dead_var": 135.0,
     },
-    "SLUIS_CVP": {  # San Luis CVP share (1062 TAF)
-        "flood_var": "S_SLUIS_CVPLEVEL5DV",
+    "SLUIS_CVP": {  # San Luis CVP share (1062 TAF) - capacity at LEVEL5DV, flood at LEVEL4DV
+        "flood_var": "S_SLUIS_CVPLEVEL4DV",
         "dead_var": "S_SLUIS_CVPLEVEL1DV",
     },
     #
@@ -453,12 +453,12 @@ RESERVOIR_THRESHOLDS = {
         "flood_var": "S_OROVLLEVEL5DV",
         "dead_var": "S_OROVLLEVEL1DV",
     },
-    "SLUIS_SWP": {  # San Luis SWP share (979 TAF)
-        "flood_var": "S_SLUIS_SWPLEVEL5DV",
+    "SLUIS_SWP": {  # San Luis SWP share (979 TAF) - capacity at LEVEL5DV, flood at LEVEL4DV
+        "flood_var": "S_SLUIS_SWPLEVEL4DV",
         "dead_var": "S_SLUIS_SWPLEVEL1DV",
     },
-    "SLUIS": {  # Combined San Luis (2041 TAF)
-        "flood_var": "S_SLUISLEVEL5DV",
+    "SLUIS": {  # Combined San Luis (2041 TAF) - capacity at LEVEL5DV, flood at LEVEL4DV
+        "flood_var": "S_SLUISLEVEL4DV",
         "dead_var": "S_SLUISLEVEL1DV",
     },
     #
