@@ -80,7 +80,8 @@ def find_validation_csv(s3, bucket: str, scenario_id: str) -> str:
 
 
 def submit_job(batch_client, scenario_id: str, zip_key: str,
-               validation_csv_key: str = "", sv_only: bool = False):
+               validation_csv_key: str = "", sv_only: bool = False,
+               memory_mb: int | None = None, vcpus: int | None = None):
     """Submit an AWS Batch job matching the Lambda's format."""
     job_name = f"reextract-{scenario_id}-{int(time.time())}"
 
@@ -93,6 +94,18 @@ def submit_job(batch_client, scenario_id: str, zip_key: str,
         {"name": "REL_TOL", "value": "1e-6"},
     ]
 
+    container_override = {
+        "name": "main",
+        "environment": environment,
+    }
+    if memory_mb or vcpus:
+        reqs = []
+        if memory_mb:
+            reqs.append({"type": "MEMORY", "value": str(memory_mb)})
+        if vcpus:
+            reqs.append({"type": "VCPU", "value": str(vcpus)})
+        container_override["resourceRequirements"] = reqs
+
     resp = batch_client.submit_job(
         jobName=job_name,
         jobQueue=JOB_QUEUE,
@@ -100,12 +113,7 @@ def submit_job(batch_client, scenario_id: str, zip_key: str,
         ecsPropertiesOverride={
             "taskProperties": [
                 {
-                    "containers": [
-                        {
-                            "name": "main",
-                            "environment": environment,
-                        }
-                    ]
+                    "containers": [container_override]
                 }
             ]
         },
@@ -132,6 +140,14 @@ def main():
     parser.add_argument(
         "--sv-only", action="store_true",
         help="(Not yet implemented) Re-extract only SV input files"
+    )
+    parser.add_argument(
+        "--memory", type=int, default=None,
+        help="Override memory allocation in MB (default: use job definition, currently 8192)"
+    )
+    parser.add_argument(
+        "--vcpus", type=int, default=None,
+        help="Override vCPU allocation (default: use job definition, currently 2)"
     )
     parser.add_argument(
         "--bucket", default=S3_BUCKET,
@@ -191,6 +207,8 @@ def main():
             job["scenario_id"],
             job["zip_key"],
             job["validation_csv_key"],
+            memory_mb=args.memory,
+            vcpus=args.vcpus,
         )
         print(f"  {job['scenario_id']}: submitted job {job_id}")
 

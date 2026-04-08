@@ -1517,6 +1517,69 @@ define short_cvp_pag_s {alias X_50_PA1 + X_71_PA1 + X_71_PA2 + ...
 
 ---
 
+## Cloud9 IAM permissions
+
+The Cloud9 EC2 instance uses `AWSCloud9SSMAccessRole`. This role has AWS-managed policies for SSM and S3 access, plus an inline policy (`ETLOperations`) for ETL-specific operations. If you're setting up a new Cloud9 environment, add this inline policy to the role:
+
+**IAM console:** https://us-west-2.console.aws.amazon.com/iam/home#/roles/details/AWSCloud9SSMAccessRole
+
+**Inline policy name:** `ETLOperations`
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogsRead",
+      "Effect": "Allow",
+      "Action": [
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups"
+      ],
+      "Resource": "arn:aws:logs:us-west-2:533266975152:log-group:*"
+    },
+    {
+      "Sid": "ECRRead",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:DescribeImages",
+        "ecr:DescribeRepositories",
+        "ecr:ListImages"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BatchOperations",
+      "Effect": "Allow",
+      "Action": [
+        "batch:SubmitJob",
+        "batch:DescribeJobs",
+        "batch:DescribeJobDefinitions",
+        "batch:ListJobs",
+        "batch:DescribeComputeEnvironments",
+        "batch:DescribeJobQueues",
+        "batch:TerminateJob",
+        "batch:CancelJob"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+| Statement | What it allows | Why you need it |
+|-----------|---------------|-----------------|
+| CloudWatchLogsRead | Read Batch, Lambda, and RDS logs | Debugging failed extractions |
+| ECRRead | Check Docker image push timestamps | Confirming GitHub Actions built the image |
+| BatchOperations | Submit, monitor, and cancel Batch jobs | Running `reextract_all_scenarios.py` and managing jobs |
+
+Note: the Cloud9 IAM role credentials never expire. Long-running jobs in tmux keep running even when your SSO session drops. SSO expiring only locks you out of the Cloud9 browser UI until you re-authenticate.
+
+---
+
 ## AWS Cheatsheet
 
 Quick reference commands for inspecting and managing the ETL infrastructure.
@@ -1554,6 +1617,26 @@ aws batch list-jobs --job-queue coeqwal-dss-queue --job-status FAILED --query 'l
 aws batch describe-jobs --jobs <job-id> \
   --query 'jobs[0].{status: status, started: startedAt, stopped: stoppedAt, reason: statusReason}' \
   --output table
+
+# Diagnose a failed job (shows failure reason, exit code, and log stream)
+aws batch describe-jobs --jobs <job-id> --output json \
+  | python -c "
+import sys, json
+job = json.load(sys.stdin)['jobs'][0]
+print('Status:', job.get('status'))
+print('Reason:', job.get('statusReason', 'none'))
+for att in job.get('attempts', []):
+    print('---')
+    print('Attempt reason:', att.get('statusReason', 'none'))
+    for tc in att.get('taskProperties', []):
+        for c in tc.get('containers', []):
+            print('Container reason:', c.get('reason', 'none'))
+            print('Exit code:', c.get('exitCode', 'none'))
+            ls = c.get('logStreamName', 'none')
+            print('Log stream:', ls)
+            if ls != 'none':
+                print('  View logs: aws logs get-log-events --log-group-name /aws/batch/job --log-stream-name', ls, '--limit 200 --query events[].message --output text')
+"
 ```
 
 ### Lambda
@@ -1621,6 +1704,9 @@ python etl/scripts/check_extraction_results.py --bucket coeqwal-model-run --mism
 # Re-extract scenarios (re-trigger Batch)
 python etl/scripts/reextract_all_scenarios.py --dry-run
 python etl/scripts/reextract_all_scenarios.py --scenarios s0021,s0022
+
+# Re-extract with more memory (for large scenarios that OOM at the default 8 GB)
+python etl/scripts/reextract_all_scenarios.py --scenarios s0065,s0085,s0105 --memory 16384
 
 # Unit verification (requires Docker - build image first)
 cd ~/environment/coeqwal-backend/etl/coeqwal-etl && docker build -t coeqwal-etl:test .
