@@ -246,6 +246,11 @@ class DSSProcessor:
 
         log.info("Conversion completed successfully")
 
+        # Write unit map sidecar JSON (always — serves as audit trail)
+        unit_map = self._build_unit_map(time_series_groups)
+        unit_map_path = output_csv_path + ".units.json"
+        self._write_unit_map(unit_map, unit_map_path)
+
         metrics = {
             "pathnames": len(available_pathnames),
             "series": len(time_series_groups),
@@ -257,7 +262,7 @@ class DSSProcessor:
 
         if self._verify:
             unit_mismatches = self._verify_csv_units(
-                output_csv_path, time_series_groups, config
+                output_csv_path, unit_map_path
             )
             metrics["unit_mismatches"] = unit_mismatches
 
@@ -354,54 +359,73 @@ class DSSProcessor:
         df.to_csv(output_csv_path, index=False, header=False, na_rep="NaN")
         log.info("Exported CSV: %s", output_csv_path)
 
+    @staticmethod
+    def _build_unit_map(time_series_groups: Dict) -> Dict[str, Dict[str, str]]:
+        """Build {b_part: {c_part, unit}} from the in-memory extraction data."""
+        result: Dict[str, Dict[str, str]] = {}
+        for info in time_series_groups.values():
+            b, c = info["b"], info["c"]
+            if b not in result:
+                result[b] = {"c_part": c, "unit": info["units"]}
+        return result
+
+    @staticmethod
+    def _write_unit_map(unit_map: Dict, path: str) -> None:
+        """Write unit map to JSON sidecar and emit to log for CloudWatch."""
+        with open(path, "w") as f:
+            json.dump(unit_map, f, sort_keys=True)
+        log.info("UNIT_MAP written to %s (%d variables)", path, len(unit_map))
+        log.info("UNIT_MAP %s", json.dumps(unit_map, sort_keys=True))
+
     def _verify_csv_units(
         self,
         csv_path: str,
-        time_series_groups: Dict,
-        config: Dict,
+        unit_map_path: str,
     ) -> int:
-        """Read the CSV back and verify units match what DSS reported.
+        """Compare the JSON sidecar (DSS ground truth) against the CSV header.
 
-        Compares the unit in CSV header row 6 against the unit stored
-        during DSS extraction for every series.  Returns the number of
-        mismatches found.
+        Reads both files from disk — a true file-vs-file comparison.
+        Returns the number of mismatches found.
         """
-        log.info("VERIFY: reading CSV back for unit cross-check...")
-        hdr = pd.read_csv(csv_path, header=None, nrows=7, low_memory=False)
+        log.info("VERIFY: comparing %s against %s ...", unit_map_path, csv_path)
 
+        with open(unit_map_path) as f:
+            unit_map = json.load(f)
+
+        hdr = pd.read_csv(csv_path, header=None, nrows=7, low_memory=False)
         csv_b_parts = [str(v) for v in hdr.iloc[1].tolist()]
         csv_c_parts = [str(v) for v in hdr.iloc[2].tolist()]
         csv_units = [str(v).strip().upper() for v in hdr.iloc[6].tolist()]
 
-        sorted_keys = sorted(
-            time_series_groups.keys(),
-            key=lambda x: time_series_groups[x]["b"],
-        )
-
         mismatches = 0
-        for col_idx, series_key in enumerate(sorted_keys, start=1):
-            info = time_series_groups[series_key]
-            dss_unit = info["units"].strip().upper()
+        checked = 0
+        for col_idx in range(1, len(csv_b_parts)):
+            csv_b = csv_b_parts[col_idx]
+            csv_c = csv_c_parts[col_idx]
             csv_unit = csv_units[col_idx] if col_idx < len(csv_units) else "??"
-            csv_b = csv_b_parts[col_idx] if col_idx < len(csv_b_parts) else "??"
-            csv_c = csv_c_parts[col_idx] if col_idx < len(csv_c_parts) else "??"
+
+            dss_entry = unit_map.get(csv_b)
+            if dss_entry is None:
+                continue
+            checked += 1
+            dss_unit = dss_entry["unit"].strip().upper()
 
             if dss_unit != csv_unit:
                 mismatches += 1
                 log.warning(
-                    "VERIFY MISMATCH: %s (C=%s) — DSS says '%s', CSV says '%s'",
+                    "VERIFY MISMATCH: %s (C=%s) — JSON says '%s', CSV says '%s'",
                     csv_b, csv_c, dss_unit, csv_unit,
                 )
 
         if mismatches == 0:
             log.info(
-                "VERIFY: all %d series have matching units between DSS and CSV",
-                len(sorted_keys),
+                "VERIFY: all %d columns match between JSON sidecar and CSV",
+                checked,
             )
         else:
             log.error(
-                "VERIFY: %d unit mismatch(es) found out of %d series!",
-                mismatches, len(sorted_keys),
+                "VERIFY: %d unit mismatch(es) found out of %d columns!",
+                mismatches, checked,
             )
         return mismatches
 

@@ -211,9 +211,22 @@ SV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv"
 CAL_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
 MANIFEST_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/${SCENARIO_ID}_manifest.json"
 
-# Upload main CSV outputs
+# Upload main CSV outputs and unit map sidecars
 [[ -f "${SV_CSV_LOCAL}"  ]] && aws s3 cp "${SV_CSV_LOCAL}"  "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
 [[ -f "${CAL_CSV_LOCAL}" ]] && aws s3 cp "${CAL_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${CAL_CSV_KEY}" || CAL_CSV_KEY=""
+
+SV_UNITS_KEY=""
+CAL_UNITS_KEY=""
+if [[ -f "${SV_CSV_LOCAL}.units.json" ]]; then
+  SV_UNITS_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv.units.json"
+  aws s3 cp "${SV_CSV_LOCAL}.units.json" "s3://${ZIP_BUCKET}/${SV_UNITS_KEY}"
+  echo "[INFO] Uploaded SV unit map: s3://${ZIP_BUCKET}/${SV_UNITS_KEY}"
+fi
+if [[ -f "${CAL_CSV_LOCAL}.units.json" ]]; then
+  CAL_UNITS_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv.units.json"
+  aws s3 cp "${CAL_CSV_LOCAL}.units.json" "s3://${ZIP_BUCKET}/${CAL_UNITS_KEY}"
+  echo "[INFO] Uploaded CalSim unit map: s3://${ZIP_BUCKET}/${CAL_UNITS_KEY}"
+fi
 
 # Upload validation reports
 VALIDATION_JSON_KEY=""

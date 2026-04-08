@@ -229,6 +229,7 @@ def verify_scenario(
 
         mismatches = []
         checked = 0
+        pair_counts: Dict[str, int] = {}
         for b_part, c_map in dss_units.items():
             csv_c_map = csv_units.get(b_part, {})
             for c_part, dss_unit in c_map.items():
@@ -236,6 +237,8 @@ def verify_scenario(
                 if csv_unit is None:
                     continue
                 checked += 1
+                pair_key = f"{dss_unit or 'NONE'}\u2194{csv_unit or 'NONE'}"
+                pair_counts[pair_key] = pair_counts.get(pair_key, 0) + 1
                 if dss_unit != csv_unit:
                     mismatches.append({
                         "scenario": scenario_id,
@@ -244,6 +247,11 @@ def verify_scenario(
                         "dss_unit": dss_unit,
                         "csv_unit": csv_unit,
                     })
+
+        pairs_str = ", ".join(
+            f"{k} ({v})" for k, v in sorted(pair_counts.items(), key=lambda x: -x[1])
+        )
+        log.info("%s: unit pairs: %s", scenario_id, pairs_str)
 
         if mismatches:
             log.warning("%s: %d mismatch(es) out of %d checked",
