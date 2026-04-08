@@ -48,6 +48,7 @@ class DSSProcessor:
         frequency: str = "monthly",
         missing_value: float = -901,
         timestamp_adjustment: str = "end_of_month",
+        verify: bool = False,
     ):
         self.dss_type = dss_type
         self.start_date = pd.Timestamp(start_date) if start_date else None
@@ -55,6 +56,7 @@ class DSSProcessor:
         self.frequency = frequency
         self.missing_value = missing_value
         self.timestamp_adjustment = timestamp_adjustment
+        self._verify = verify
 
         # Default processing configs by DSS type
         self.processing_configs = {
@@ -252,6 +254,13 @@ class DSSProcessor:
             "dss_type": self.dss_type,
             "duplicate_b_parts": len(dup_b_parts),
         }
+
+        if self._verify:
+            unit_mismatches = self._verify_csv_units(
+                output_csv_path, time_series_groups, config
+            )
+            metrics["unit_mismatches"] = unit_mismatches
+
         return metrics
 
     def _adjust_timestamp(self, dt: datetime, adjustment: str) -> pd.Timestamp:
@@ -345,6 +354,57 @@ class DSSProcessor:
         df.to_csv(output_csv_path, index=False, header=False, na_rep="NaN")
         log.info("Exported CSV: %s", output_csv_path)
 
+    def _verify_csv_units(
+        self,
+        csv_path: str,
+        time_series_groups: Dict,
+        config: Dict,
+    ) -> int:
+        """Read the CSV back and verify units match what DSS reported.
+
+        Compares the unit in CSV header row 6 against the unit stored
+        during DSS extraction for every series.  Returns the number of
+        mismatches found.
+        """
+        log.info("VERIFY: reading CSV back for unit cross-check...")
+        hdr = pd.read_csv(csv_path, header=None, nrows=7, low_memory=False)
+
+        csv_b_parts = [str(v) for v in hdr.iloc[1].tolist()]
+        csv_c_parts = [str(v) for v in hdr.iloc[2].tolist()]
+        csv_units = [str(v).strip().upper() for v in hdr.iloc[6].tolist()]
+
+        sorted_keys = sorted(
+            time_series_groups.keys(),
+            key=lambda x: time_series_groups[x]["b"],
+        )
+
+        mismatches = 0
+        for col_idx, series_key in enumerate(sorted_keys, start=1):
+            info = time_series_groups[series_key]
+            dss_unit = info["units"].strip().upper()
+            csv_unit = csv_units[col_idx] if col_idx < len(csv_units) else "??"
+            csv_b = csv_b_parts[col_idx] if col_idx < len(csv_b_parts) else "??"
+            csv_c = csv_c_parts[col_idx] if col_idx < len(csv_c_parts) else "??"
+
+            if dss_unit != csv_unit:
+                mismatches += 1
+                log.warning(
+                    "VERIFY MISMATCH: %s (C=%s) — DSS says '%s', CSV says '%s'",
+                    csv_b, csv_c, dss_unit, csv_unit,
+                )
+
+        if mismatches == 0:
+            log.info(
+                "VERIFY: all %d series have matching units between DSS and CSV",
+                len(sorted_keys),
+            )
+        else:
+            log.error(
+                "VERIFY: %d unit mismatch(es) found out of %d series!",
+                mismatches, len(sorted_keys),
+            )
+        return mismatches
+
 
 def export_all_paths_to_csv(dss_file_path, output_csv_path):
     processor = DSSProcessor(dss_type="calsim_output")
@@ -407,6 +467,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--info", action="store_true", help="Show information about the DSS file and exit"
     )
+    parser.add_argument(
+        "--verify-units",
+        action="store_true",
+        help="After extraction, read the CSV back and verify that the unit "
+        "in each column header matches what the DSS file reported. "
+        "Reports mismatches as warnings.",
+    )
 
     args = parser.parse_args()
 
@@ -423,6 +490,7 @@ if __name__ == "__main__":
         frequency=args.frequency,
         missing_value=args.missing_value,
         timestamp_adjustment=args.timestamp_adjustment,
+        verify=args.verify_units,
     )
 
     metrics = processor.process_dss_file(args.dss, csv_path)

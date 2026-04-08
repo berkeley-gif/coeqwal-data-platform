@@ -158,14 +158,16 @@ def preflight_check_duplicates(scenario_id: str, csv_path: Optional[str] = None)
             hdr = pd.read_csv(io.BytesIO(raw), header=None, nrows=7, low_memory=False)
 
         b_row = [str(v) for v in hdr.iloc[1].tolist()]
+        total_cols = len(b_row) - 1  # exclude DateTime
         dupes = {name: cnt for name, cnt in Counter(b_row).items() if cnt > 1}
 
         if dupes:
             log.warning(
-                "PRE-FLIGHT: %s has %d duplicate B-part column(s) — "
-                "the ETL will keep the first occurrence of each:",
+                "PRE-FLIGHT: %s — %d duplicate B-part(s) in %d columns "
+                "(C-part-aware dedup will resolve):",
                 scenario_id,
                 len(dupes),
+                total_cols,
             )
             for name, cnt in sorted(dupes.items()):
                 indices = [i for i, v in enumerate(b_row) if v == name]
@@ -176,6 +178,12 @@ def preflight_check_duplicates(scenario_id: str, csv_path: Optional[str] = None)
                     cnt,
                     ", ".join(c_parts),
                 )
+        else:
+            log.info(
+                "PRE-FLIGHT: %s — %d columns, no duplicates",
+                scenario_id,
+                total_cols,
+            )
         return len(dupes)
 
     except Exception as e:
@@ -346,7 +354,7 @@ def run_all_modules(
     log.info(f"# Dry run: {dry_run}")
     log.info(f"{'#' * 60}\n")
 
-    preflight_check_duplicates(scenario_id, csv_path)
+    n_dupes = preflight_check_duplicates(scenario_id, csv_path)
 
     for module_name in modules:
         success, elapsed = run_module(module_name, scenario_id, dry_run, csv_path)
@@ -363,6 +371,8 @@ def run_all_modules(
 
     log.info(f"\n{'=' * 60}")
     log.info(f"SUMMARY for {scenario_id}:")
+    if n_dupes > 0:
+        log.info(f"  ⚠️  {n_dupes} duplicate B-part(s) detected (resolved via C-part preference)")
     for module_name, info in results.items():
         icon = "✅" if info["status"] == "success" else "❌"
         log.info(
@@ -373,6 +383,7 @@ def run_all_modules(
         log.info(f"  ⚠️  Running failure tally: {_failure_count} total failures so far")
     log.info(f"{'=' * 60}\n")
 
+    results["_meta"] = {"duplicate_b_parts": n_dupes}
     return results
 
 
@@ -721,8 +732,12 @@ def print_scorecard(
     total_skipped = 0
     scenario_status = {}
 
+    scenarios_with_dupes = []
+
     for scenario_id in scenarios:
         results = all_results.get(scenario_id, {})
+        meta = results.get("_meta", {})
+        n_dupes = meta.get("duplicate_b_parts", 0)
         row = f"{scenario_id:^11} │"
 
         scenario_successes = 0
@@ -760,6 +775,10 @@ def print_scorecard(
             row += " ⚠️ PARTIAL"
             scenario_status[scenario_id] = "partial"
 
+        if n_dupes > 0:
+            row += f"  [DUP:{n_dupes}]"
+            scenarios_with_dupes.append(scenario_id)
+
         print(row)
 
     print("─" * len(header))
@@ -785,6 +804,10 @@ def print_scorecard(
     if total_skipped > 0:
         print(f"              {total_skipped} skipped")
     print()
+    print(f"  Duplicates: {len(scenarios_with_dupes)} scenario(s) had duplicate B-parts")
+    if scenarios_with_dupes:
+        print(f"              {', '.join(scenarios_with_dupes)}")
+    print()
 
     # List of failures for easy reference
     if total_failed > 0:
@@ -793,6 +816,8 @@ def print_scorecard(
         for scenario_id in scenarios:
             results = all_results.get(scenario_id, {})
             for mod, raw in results.items():
+                if mod == "_meta":
+                    continue
                 st = raw["status"] if isinstance(raw, dict) else raw
                 if st == "failed":
                     print(
@@ -827,6 +852,8 @@ def write_audit_csv(
     rows = []
     for scenario_id in scenarios:
         results = all_results.get(scenario_id, {})
+        meta = results.get("_meta", {})
+        n_dupes = meta.get("duplicate_b_parts", 0)
         for mod in modules:
             raw = results.get(mod)
             if isinstance(raw, dict):
@@ -846,10 +873,14 @@ def write_audit_csv(
                     "status": status,
                     "elapsed_s": f"{elapsed:.1f}",
                     "dry_run": str(dry_run),
+                    "duplicate_b_parts": n_dupes,
                 }
             )
 
-    fieldnames = ["timestamp", "scenario", "module", "status", "elapsed_s", "dry_run"]
+    fieldnames = [
+        "timestamp", "scenario", "module", "status", "elapsed_s",
+        "dry_run", "duplicate_b_parts",
+    ]
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
