@@ -428,7 +428,8 @@ def load_scenario_metadata(conn) -> pd.DataFrame:
                h.short_code AS hydroclimate_code
         FROM scenario s
         JOIN hydroclimate h ON s.hydroclimate_id = h.id
-        WHERE s.hydroclimate_id IS NOT NULL
+        WHERE s.is_active = TRUE
+          AND s.hydroclimate_id IS NOT NULL
           AND s.hydroclimate_sibling IS NOT NULL
     """
     df = pd.read_sql(query, conn)
