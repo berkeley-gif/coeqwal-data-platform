@@ -34,6 +34,7 @@ import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 try:
@@ -43,6 +44,18 @@ try:
     HAS_PSYCOPG2 = True
 except ImportError:
     HAS_PSYCOPG2 = False
+
+
+def _py_native(val):
+    """Convert numpy scalars to Python native types for psycopg2."""
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    if isinstance(val, (np.integer,)):
+        return int(val)
+    if isinstance(val, (np.floating,)):
+        return float(val)
+    return val
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -581,13 +594,13 @@ def compute_climate_sensitivity(
                 metric_name,
                 int(wm),
                 unit,
-                hist_val,
-                cc50_val,
-                cc95_val,
-                cc50_abs,
-                cc95_abs,
-                cc50_pct,
-                cc95_pct,
+                _py_native(hist_val),
+                _py_native(cc50_val),
+                _py_native(cc95_val),
+                _py_native(cc50_abs),
+                _py_native(cc95_abs),
+                _py_native(cc50_pct),
+                _py_native(cc95_pct),
             )
         )
 

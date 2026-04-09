@@ -318,18 +318,8 @@ def cleanup_temp_files(scenario_id: str):
                 log.warning(f"Could not remove {f}: {e}")
         log.info(f"Cleaned up {len(tmp_files)} temp files matching {tmp_pattern}")
 
-    # Also clean up any /tmp/s0* pattern (catches all scenario temp files)
-    all_scenario_tmp = glob.glob("/tmp/s0*")
-    if all_scenario_tmp:
-        for f in all_scenario_tmp:
-            try:
-                if os.path.isdir(f):
-                    shutil.rmtree(f)
-                else:
-                    os.remove(f)
-            except Exception as e:
-                log.warning(f"Could not remove {f}: {e}")
-        log.info(f"Cleaned up {len(all_scenario_tmp)} additional temp files")
+    # NOTE: Do NOT glob "/tmp/s0*" here -- with parallel workers,
+    # that would delete temp files belonging to other in-flight scenarios.
 
 
 def run_all_modules(
@@ -556,7 +546,7 @@ Examples:
 
                 scenario_had_failure = any(
                     (r["status"] if isinstance(r, dict) else r) == "failed"
-                    for r in results.values()
+                    for k, r in results.items() if k != "_meta"
                 )
                 if scenario_had_failure and not args.continue_on_error:
                     remaining = len(scenarios) - global_idx
@@ -598,7 +588,7 @@ Examples:
 
                         scenario_had_failure = any(
                             (r["status"] if isinstance(r, dict) else r) == "failed"
-                            for r in results.values()
+                            for k, r in results.items() if k != "_meta"
                         )
                         if scenario_had_failure and not args.continue_on_error:
                             log.error(

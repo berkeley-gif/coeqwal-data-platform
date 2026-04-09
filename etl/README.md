@@ -300,6 +300,51 @@ python verify_all_sections.py --scenario s0070 2>&1 | tee verify_s0070_$(date +%
 
 **What to look for:** Each module (reservoirs, du_urban, mi, cws_aggregate, ag) should report row counts loaded. Verification should show `PASS` for all sections.
 
+#### Inspecting ETL logs after a full run
+
+After `run_all.py` finishes, the log file contains per-scenario summaries, row counts, and any errors. Use these commands to quickly assess results without reading the entire file:
+
+```bash
+# Find the log file
+ls -la ~/environment/coeqwal-backend/etl/statistics/stats_run_*.log
+
+# Check every scenario's summary block (each should show 8 green checkmarks)
+grep -A 12 "SUMMARY for" stats_run_*.log | head -200
+
+# Count how many module runs completed successfully
+grep -c "completed successfully" stats_run_*.log
+
+# Find real errors (DB overflow, connection issues, data integrity)
+grep -E "numeric field overflow|DataError|IntegrityError|could not connect|Traceback" stats_run_*.log
+
+# Check the audit CSV for a compact summary (one row per scenario x module)
+column -s, -t < stats_audit_*.csv | head -30
+```
+
+**Verifying database row counts directly** (the most reliable check):
+
+```bash
+psql $DATABASE_URL -c "
+SELECT 'reservoir_storage_monthly' AS tbl, COUNT(DISTINCT scenario_short_code) AS scenarios, COUNT(*) AS rows FROM reservoir_storage_monthly
+UNION ALL SELECT 'du_delivery_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM du_delivery_monthly
+UNION ALL SELECT 'mi_delivery_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM mi_delivery_monthly
+UNION ALL SELECT 'cws_aggregate_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM cws_aggregate_monthly
+UNION ALL SELECT 'ag_du_demand_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM ag_du_demand_monthly
+UNION ALL SELECT 'refuge_du_delivery_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM refuge_du_delivery_monthly
+UNION ALL SELECT 'env_flow_channel_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM env_flow_channel_monthly
+UNION ALL SELECT 'delta_monthly', COUNT(DISTINCT scenario_short_code), COUNT(*) FROM delta_monthly
+ORDER BY tbl;
+"
+```
+
+All 8 tables should show 76 scenarios. If any table has fewer, re-run the missing scenarios with `python run_all.py --scenario s00XX --only <module>`.
+
+**Copying logs off Cloud9** (if you need to share or archive them):
+
+```bash
+aws s3 cp stats_run_*.log s3://coeqwal-model-run/staging/etl-logs/
+```
+
 #### Recommended log retention
 
 Keep log files on Cloud9 for each batch load in a dedicated directory:
@@ -1314,7 +1359,7 @@ python run_all.py --scenario s0020 --only reservoirs,du_urban
 python run_all.py --all-scenarios --workers 4 --continue-on-error --with-sensitivity
 
 # Full production run with logging (recommended)
-screen -S etl
+tmux new -s etl
 python run_all.py \
   --all-scenarios --workers 4 --continue-on-error --with-sensitivity \
   2>&1 | tee stats_run_$(date +%Y%m%d).log
@@ -1332,7 +1377,7 @@ python run_all.py --list-modules
 - `--workers 1`: t3.medium (4 GB) - ~8 hours for 76 scenarios
 - `--workers 4`: t3.xlarge (16 GB) - ~2-3 hours for 76 scenarios
 
-**Cloud9 timeout:** Set "Stop my environment" to 4+ hours in Cloud9 Preferences before a full run. Use `screen` so browser disconnects don't kill the process.
+**Cloud9 timeout:** Set "Stop my environment" to 4+ hours in Cloud9 Preferences before a full run. Use `tmux` so browser disconnects don't kill the process. Detach with `Ctrl+B d`, reattach with `tmux attach -t etl`.
 
 ### Modules (run in order)
 
