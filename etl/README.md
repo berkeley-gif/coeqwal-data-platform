@@ -1616,8 +1616,14 @@ demand AS (
   WHERE del.water_month = 0
     AND del.metric_name = 'annual_delivery_avg'
     AND del.module = 'refuge'
+),
+entity_name AS (
+  SELECT short_code AS eid, contractor_name AS name FROM mi_contractor
+  UNION ALL
+  SELECT network_arc_id, name FROM channel_entity
 )
 SELECT d.module, d.entity_id,
+       en.name AS entity_name,
        ROUND(AVG(dm.hist_demand)::numeric, 1) AS avg_demand_taf,
        ROUND(AVG(d.spread)::numeric, 1)        AS avg_spread_taf,
        ROUND(AVG(
@@ -1628,13 +1634,14 @@ JOIN demand dm
   ON d.sibling_group = dm.sibling_group
  AND d.module = dm.module
  AND d.entity_id = dm.entity_id
-GROUP BY d.module, d.entity_id
+LEFT JOIN entity_name en ON d.entity_id = en.eid
+GROUP BY d.module, d.entity_id, en.name
 HAVING AVG(dm.hist_demand) > 0
 ORDER BY pct_demand_at_risk DESC
 LIMIT 30;
 ```
 
-For **most resilient** (least vulnerable), change `ORDER BY pct_demand_at_risk ASC`.
+The `entity_name` column is populated for MI contractors (e.g., "Kern County Water Agency") and env_flow channels (e.g., "Sacramento R below Shasta"). For ag, du_urban, refuge, and cws_aggregate, the `entity_id` itself is the identifier (e.g., "02_NA", "FRFLD", "SWP_total"). For **most resilient** (least vulnerable), change `ORDER BY pct_demand_at_risk ASC`.
 
 **Query 1b. Climate vulnerability for reservoirs (capacity-normalized)**
 
@@ -1672,22 +1679,23 @@ ORDER BY pct_capacity_at_risk DESC;
 `pct_unimpaired` and `pct_ff` are already expressed as percentages of unimpaired/functional flow. The spread across climates is in percentage points and directly meaningful -- no normalizer needed.
 
 ```sql
-SELECT entity_id, metric_name,
-       ROUND(AVG(hist_value)::numeric, 1) AS avg_hist_pct,
-       ROUND(AVG(cc50_value)::numeric, 1) AS avg_cc50_pct,
-       ROUND(AVG(cc95_value)::numeric, 1) AS avg_cc95_pct,
+SELECT sc.entity_id, ce.name AS channel_name, sc.metric_name,
+       ROUND(AVG(sc.hist_value)::numeric, 1) AS avg_hist_pct,
+       ROUND(AVG(sc.cc50_value)::numeric, 1) AS avg_cc50_pct,
+       ROUND(AVG(sc.cc95_value)::numeric, 1) AS avg_cc95_pct,
        ROUND(AVG(
-         GREATEST(hist_value, cc50_value, cc95_value)
-         - LEAST(hist_value, cc50_value, cc95_value)
+         GREATEST(sc.hist_value, sc.cc50_value, sc.cc95_value)
+         - LEAST(sc.hist_value, sc.cc50_value, sc.cc95_value)
        )::numeric, 1) AS avg_spread_points
-FROM sensitivity_climate
-WHERE water_month = 0
-  AND module = 'env_flows'
-  AND metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
-  AND hist_value IS NOT NULL
-  AND cc50_value IS NOT NULL
-  AND cc95_value IS NOT NULL
-GROUP BY entity_id, metric_name
+FROM sensitivity_climate sc
+LEFT JOIN channel_entity ce ON sc.entity_id = ce.network_arc_id
+WHERE sc.water_month = 0
+  AND sc.module = 'env_flows'
+  AND sc.metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
+  AND sc.hist_value IS NOT NULL
+  AND sc.cc50_value IS NOT NULL
+  AND sc.cc95_value IS NOT NULL
+GROUP BY sc.entity_id, ce.name, sc.metric_name
 ORDER BY avg_spread_points DESC
 LIMIT 30;
 ```
@@ -1697,7 +1705,19 @@ LIMIT 30;
 Delta metrics each have different units and different "worse" directions, so they are listed separately. NDO (outflow) is in TAF -- lower is worse. X2 (salinity intrusion) is in KM -- higher means salt moves further inland. EC (salinity) is in UMHOS/CM -- higher is worse. Normalization uses the historical value as denominator, which is safe because these metrics are always large/positive.
 
 ```sql
-SELECT entity_id, metric_name, unit,
+SELECT entity_id,
+       CASE entity_id
+         WHEN 'ndo'       THEN 'Net Delta Outflow'
+         WHEN 'x2'        THEN 'X2 Position (2 ppt isohaline)'
+         WHEN 'em_ec'     THEN 'Emmaton EC'
+         WHEN 'jp_ec'     THEN 'Jersey Point EC'
+         WHEN 'rs_ec'     THEN 'Rock Slough EC'
+         WHEN 'co_ec'     THEN 'Collinsville EC'
+         WHEN 'banks_ec'  THEN 'Banks Pumping Plant EC'
+         WHEN 'tracy_ec'  THEN 'Tracy Pumping Plant EC'
+         ELSE entity_id
+       END AS entity_name,
+       unit,
        ROUND(AVG(hist_value)::numeric, 2) AS avg_hist,
        ROUND(AVG(cc50_value)::numeric, 2) AS avg_cc50,
        ROUND(AVG(cc95_value)::numeric, 2) AS avg_cc95,
@@ -1716,11 +1736,11 @@ WHERE water_month = 0
   AND hist_value IS NOT NULL
   AND cc50_value IS NOT NULL
   AND cc95_value IS NOT NULL
-GROUP BY entity_id, metric_name, unit
+GROUP BY entity_id, unit
 ORDER BY pct_spread DESC;
 ```
 
-With only 8 delta variables, no LIMIT is needed. The results show each variable's absolute spread and percentage spread. For NDO, a negative trend (cc95 < hist) means less Delta outflow under hot/dry climate. For EC stations, a positive trend (cc95 > hist) means saltier water at that compliance point.
+With only 8 delta variables, no LIMIT is needed. For NDO, a negative trend (cc95 < hist) means less Delta outflow under hot/dry climate. For EC stations, a positive trend (cc95 > hist) means saltier water at that compliance point.
 
 ---
 
@@ -1761,8 +1781,14 @@ demand AS (
     AND del_op.water_month = 0
     AND del_op.metric_name = 'annual_delivery_avg'
     AND del_op.module = 'refuge'
+),
+entity_name AS (
+  SELECT short_code AS eid, contractor_name AS name FROM mi_contractor
+  UNION ALL
+  SELECT network_arc_id, name FROM channel_entity
 )
 SELECT d.module, d.entity_id,
+       en.name AS entity_name,
        ROUND(dm.demand_mean::numeric, 1)  AS demand_taf,
        ROUND(d.del_range::numeric, 1)     AS op_range_taf,
        ROUND(
@@ -1772,6 +1798,7 @@ FROM del d
 JOIN demand dm
   ON d.module = dm.module
  AND d.entity_id = dm.entity_id
+LEFT JOIN entity_name en ON d.entity_id = en.eid
 WHERE dm.demand_mean > 0
 ORDER BY pct_demand_at_risk DESC
 LIMIT 30;
@@ -1804,16 +1831,17 @@ ORDER BY pct_capacity_at_risk DESC;
 Under historical climate, which channels vary the most across operational configurations? Since pct_unimpaired and pct_ff are already percentages, the range is in percentage points.
 
 ```sql
-SELECT entity_id, metric_name,
-       ROUND(mean_value::numeric, 1) AS mean_pct,
-       ROUND(min_value::numeric, 1)  AS min_pct,
-       ROUND(max_value::numeric, 1)  AS max_pct,
-       ROUND(range_value::numeric, 1) AS op_range_points
-FROM sensitivity_operational
-WHERE hydroclimate_id = 2
-  AND water_month = 0
-  AND module = 'env_flows'
-  AND metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
+SELECT so.entity_id, ce.name AS channel_name, so.metric_name,
+       ROUND(so.mean_value::numeric, 1) AS mean_pct,
+       ROUND(so.min_value::numeric, 1)  AS min_pct,
+       ROUND(so.max_value::numeric, 1)  AS max_pct,
+       ROUND(so.range_value::numeric, 1) AS op_range_points
+FROM sensitivity_operational so
+LEFT JOIN channel_entity ce ON so.entity_id = ce.network_arc_id
+WHERE so.hydroclimate_id = 2
+  AND so.water_month = 0
+  AND so.module = 'env_flows'
+  AND so.metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
 ORDER BY op_range_points DESC
 LIMIT 30;
 ```
@@ -1823,7 +1851,19 @@ LIMIT 30;
 Under historical climate, how much do Delta outflow, X2, and salinity change across operational configurations?
 
 ```sql
-SELECT entity_id, metric_name, unit,
+SELECT entity_id,
+       CASE entity_id
+         WHEN 'ndo'       THEN 'Net Delta Outflow'
+         WHEN 'x2'        THEN 'X2 Position (2 ppt isohaline)'
+         WHEN 'em_ec'     THEN 'Emmaton EC'
+         WHEN 'jp_ec'     THEN 'Jersey Point EC'
+         WHEN 'rs_ec'     THEN 'Rock Slough EC'
+         WHEN 'co_ec'     THEN 'Collinsville EC'
+         WHEN 'banks_ec'  THEN 'Banks Pumping Plant EC'
+         WHEN 'tracy_ec'  THEN 'Tracy Pumping Plant EC'
+         ELSE entity_id
+       END AS entity_name,
+       unit,
        ROUND(mean_value::numeric, 2) AS mean_val,
        ROUND(min_value::numeric, 2)  AS min_val,
        ROUND(max_value::numeric, 2)  AS max_val,
@@ -2047,11 +2087,18 @@ ranked AS (
   JOIN demand dm ON d.sibling_group = dm.sibling_group
    AND d.module = dm.module AND d.entity_id = dm.entity_id
   WHERE dm.hist_demand > 0
+),
+entity_name AS (
+  SELECT short_code AS eid, contractor_name AS name FROM mi_contractor
+  UNION ALL
+  SELECT network_arc_id, name FROM channel_entity
 )
-SELECT module, entity_id, sibling_group AS best_operation,
-       demand_taf, spread_taf, pct_risk AS lowest_pct_risk
-FROM ranked
-WHERE best_rank = 1
+SELECT r.module, r.entity_id, en.name AS entity_name,
+       r.sibling_group AS best_operation,
+       r.demand_taf, r.spread_taf, r.pct_risk AS lowest_pct_risk
+FROM ranked r
+LEFT JOIN entity_name en ON r.entity_id = en.eid
+WHERE r.best_rank = 1
 ORDER BY lowest_pct_risk DESC
 LIMIT 30;
 ```
@@ -2110,10 +2157,12 @@ WITH ranked AS (
     AND metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
     AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
 )
-SELECT entity_id, metric_name, sibling_group AS best_operation,
-       hist_pct, spread_points AS smallest_spread
-FROM ranked
-WHERE best_rank = 1
+SELECT r.entity_id, ce.name AS channel_name,
+       r.metric_name, r.sibling_group AS best_operation,
+       r.hist_pct, r.spread_points AS smallest_spread
+FROM ranked r
+LEFT JOIN channel_entity ce ON r.entity_id = ce.network_arc_id
+WHERE r.best_rank = 1
 ORDER BY smallest_spread DESC
 LIMIT 30;
 ```
@@ -2142,8 +2191,19 @@ WITH ranked AS (
   WHERE water_month = 0 AND module = 'delta'
     AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
 )
-SELECT entity_id, metric_name, unit,
-       sibling_group AS best_operation,
+SELECT entity_id,
+       CASE entity_id
+         WHEN 'ndo'       THEN 'Net Delta Outflow'
+         WHEN 'x2'        THEN 'X2 Position (2 ppt isohaline)'
+         WHEN 'em_ec'     THEN 'Emmaton EC'
+         WHEN 'jp_ec'     THEN 'Jersey Point EC'
+         WHEN 'rs_ec'     THEN 'Rock Slough EC'
+         WHEN 'co_ec'     THEN 'Collinsville EC'
+         WHEN 'banks_ec'  THEN 'Banks Pumping Plant EC'
+         WHEN 'tracy_ec'  THEN 'Tracy Pumping Plant EC'
+         ELSE entity_id
+       END AS entity_name,
+       unit, sibling_group AS best_operation,
        hist_val, spread, pct_spread AS lowest_pct_spread
 FROM ranked
 WHERE best_rank = 1
