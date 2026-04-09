@@ -826,7 +826,11 @@ def process_delta(
     ref_hydro_id: int,
     dry_run: bool,
 ) -> Tuple[int, int]:
-    """Process the delta_monthly table (variable_code × unit structure)."""
+    """Process the delta_monthly table (variable_code x unit structure).
+
+    Writes both monthly rows (water_month 1-12) and annual averages
+    (water_month 0) so delta metrics appear in resilience queries.
+    """
     df = fetch_delta_monthly(conn)
     if df is None or df.empty:
         return 0, 0
@@ -838,6 +842,7 @@ def process_delta(
         unit_str = str(unit_val).strip() if unit_val else "UNKNOWN"
         metric_name = f"avg_{var_code}"
 
+        # Monthly rows (water_month 1-12)
         climate_rows = compute_climate_sensitivity(
             var_df, meta, ref_hydro_id, "delta", metric_name, unit_str
         )
@@ -850,6 +855,28 @@ def process_delta(
 
         total_climate += len(climate_rows)
         total_ops += len(ops_rows)
+
+        # Annual average rows (water_month 0) for resilience queries
+        annual = (
+            var_df.groupby("scenario_short_code")
+            .agg(value=("value", "mean"))
+            .reset_index()
+        )
+        annual["entity_id"] = var_code
+        annual["water_month"] = 0
+
+        annual_climate = compute_climate_sensitivity(
+            annual, meta, ref_hydro_id, "delta", metric_name, unit_str
+        )
+        annual_ops = compute_operational_sensitivity(
+            annual, meta, "delta", metric_name, unit_str
+        )
+
+        write_climate_rows(conn, annual_climate, dry_run)
+        write_operational_rows(conn, annual_ops, dry_run)
+
+        total_climate += len(annual_climate)
+        total_ops += len(annual_ops)
 
     return total_climate, total_ops
 

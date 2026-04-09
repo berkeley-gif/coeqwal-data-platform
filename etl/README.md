@@ -1537,9 +1537,9 @@ The sensitivity calculation extracts these period-level metrics (stored as `wate
 | **refuge** | `annual_delivery_avg`, `annual_shortage_avg`, `reliability` | `refuge_du_period_summary` |
 | **reservoir** | `storage_avg` (monthly only) | `reservoir_storage_monthly` |
 | **env_flows** | `annual_pct_unimpaired`, `annual_pct_ff` (period); `flow_avg_taf`, `flow_avg_cfs`, `pct_unimpaired` (monthly) | `env_flow_channel_*` |
-| **delta** | `avg_{variable_code}` (data-driven, monthly only) | `delta_monthly` |
+| **delta** | `avg_{variable_code}` (data-driven; monthly + annual) | `delta_monthly` |
 
-If the sensitivity tables are missing `annual_demand_avg` rows for du_urban, mi, or cws_aggregate, re-run the sensitivity calculation after pulling the latest code:
+If the sensitivity tables are missing `annual_demand_avg` rows for du_urban/mi/cws_aggregate, or missing `water_month = 0` rows for delta, re-run the sensitivity calculation after pulling the latest code:
 
 ```bash
 python sensitivity/calculate_sensitivity.py 2>&1 | tee ~/sensitivity_rerun.log
@@ -1549,9 +1549,9 @@ python sensitivity/calculate_sensitivity.py 2>&1 | tee ~/sensitivity_rerun.log
 
 Three questions:
 
-1. **Which entities are most vulnerable to climate change?** Which deliveries, reservoirs, and ecosystems swing the most across the range of possible climates (historical, CC50, CC95)? (Queries 1a-1c per entity; 4a per sector; 6a/6b per metric)
-2. **Which entities are most sensitive to operational choices?** Under a given climate, which entities change the most depending on how the system is operated? (Queries 2a-2c per entity; 4b per sector; 6c/6d per metric)
-3. **Which operations best protect vulnerable entities?** For climate-vulnerable entities, which operational configuration keeps their outcomes most stable? Answered per sector (5a deliveries, 5b reservoirs, 5c env flows), system-wide (5d), and by metric (6c Part 2).
+1. **Which entities are most vulnerable to climate change?** Which deliveries, reservoirs, ecosystems, and Delta conditions swing the most across the range of possible climates (historical, CC50, CC95)? (Queries 1a-1d per entity; 4a per sector; 6a/6b per metric)
+2. **Which entities are most sensitive to operational choices?** Under a given climate, which entities change the most depending on how the system is operated? (Queries 2a-2d per entity; 4b per sector; 6c/6d per metric)
+3. **Which operations best protect vulnerable entities?** For climate-vulnerable entities, which operational configuration keeps their outcomes most stable? Answered per sector (5a deliveries, 5b reservoirs, 5c env flows, 5e Delta), system-wide (5d), and by metric (6c Part 2).
 
 **Measuring resilience without hiding small systems**
 
@@ -1565,6 +1565,9 @@ The question is how to normalize that spread so you can compare a large system (
 | AG | SW delivery spread across 3 climates | Historical demand (AW, a direct metric) | "What % of ag water need is at stake?" |
 | Reservoirs | Storage spread across 3 climates | Reservoir capacity (from `reservoir_entity`) | "What % of usable storage swings with climate?" |
 | Env Flows | pct_unimpaired / pct_ff already percentages | None needed | Spread is in percentage points |
+| Delta -- NDO | Outflow spread across 3 climates | Historical outflow (always large/positive) | "What % of Delta outflow swings with climate?" |
+| Delta -- X2 | X2 position spread across 3 climates | Historical X2 (always 60-90 KM) | "By what % does salt intrusion shift with climate?" |
+| Delta -- EC (salinity) | EC spread across 3 climates | Historical EC (always measurable) | "By what % does salinity change at this station?" |
 
 Demand and capacity are always positive, so there is no near-zero denominator problem. Small systems are not filtered out. They rank alongside large ones.
 
@@ -1689,6 +1692,36 @@ ORDER BY avg_spread_points DESC
 LIMIT 30;
 ```
 
+**Query 1d. Climate vulnerability -- Delta metrics (outflow, X2, salinity)**
+
+Delta metrics each have different units and different "worse" directions, so they are listed separately. NDO (outflow) is in TAF -- lower is worse. X2 (salinity intrusion) is in KM -- higher means salt moves further inland. EC (salinity) is in UMHOS/CM -- higher is worse. Normalization uses the historical value as denominator, which is safe because these metrics are always large/positive.
+
+```sql
+SELECT entity_id, metric_name, unit,
+       ROUND(AVG(hist_value)::numeric, 2) AS avg_hist,
+       ROUND(AVG(cc50_value)::numeric, 2) AS avg_cc50,
+       ROUND(AVG(cc95_value)::numeric, 2) AS avg_cc95,
+       ROUND(AVG(
+         GREATEST(hist_value, cc50_value, cc95_value)
+         - LEAST(hist_value, cc50_value, cc95_value)
+       )::numeric, 2) AS avg_spread,
+       ROUND(AVG(
+         (GREATEST(hist_value, cc50_value, cc95_value)
+          - LEAST(hist_value, cc50_value, cc95_value))
+         / NULLIF(ABS(hist_value), 0) * 100
+       )::numeric, 1) AS pct_spread
+FROM sensitivity_climate
+WHERE water_month = 0
+  AND module = 'delta'
+  AND hist_value IS NOT NULL
+  AND cc50_value IS NOT NULL
+  AND cc95_value IS NOT NULL
+GROUP BY entity_id, metric_name, unit
+ORDER BY pct_spread DESC;
+```
+
+With only 8 delta variables, no LIMIT is needed. The results show each variable's absolute spread and percentage spread. For NDO, a negative trend (cc95 < hist) means less Delta outflow under hot/dry climate. For EC stations, a positive trend (cc95 > hist) means saltier water at that compliance point.
+
 ---
 
 **Query 2a. Operational vulnerability for water deliveries (demand-normalized)**
@@ -1785,6 +1818,27 @@ ORDER BY op_range_points DESC
 LIMIT 30;
 ```
 
+**Query 2d. Operational vulnerability -- Delta metrics**
+
+Under historical climate, how much do Delta outflow, X2, and salinity change across operational configurations?
+
+```sql
+SELECT entity_id, metric_name, unit,
+       ROUND(mean_value::numeric, 2) AS mean_val,
+       ROUND(min_value::numeric, 2)  AS min_val,
+       ROUND(max_value::numeric, 2)  AS max_val,
+       ROUND(range_value::numeric, 2) AS op_range,
+       ROUND(range_value / NULLIF(ABS(mean_value), 0) * 100::numeric, 1)
+         AS pct_range
+FROM sensitivity_operational
+WHERE hydroclimate_id = 2
+  AND water_month = 0
+  AND module = 'delta'
+ORDER BY pct_range DESC;
+```
+
+Compare 1d and 2d: if NDO has a large `pct_spread` in 1d but small `pct_range` in 2d, Delta outflow is driven by climate, not operations. If a salinity station has a large `pct_range` in 2d, operational choices significantly affect water quality there -- that is a policy lever.
+
 ---
 
 **Query 4a. Cross-sector comparison -- which sectors are most at risk from climate?**
@@ -1848,6 +1902,18 @@ entity_risk AS (
     AND metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
     AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
   GROUP BY entity_id
+  UNION ALL
+  -- Delta: spread / historical (simple % -- safe because values are always large)
+  SELECT 'delta', entity_id,
+         AVG(
+           (GREATEST(hist_value, cc50_value, cc95_value)
+            - LEAST(hist_value, cc50_value, cc95_value))
+           / NULLIF(ABS(hist_value), 0) * 100
+         )
+  FROM sensitivity_climate
+  WHERE water_month = 0 AND module = 'delta'
+    AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
+  GROUP BY entity_id
 )
 SELECT module,
        COUNT(*) AS entity_count,
@@ -1861,7 +1927,7 @@ GROUP BY module
 ORDER BY median_pct_at_risk DESC;
 ```
 
-The sector with the highest `median_pct_at_risk` is the most climate-vulnerable overall. Note: env_flows percentage-point spread and delivery/reservoir percent-of-demand are not strictly the same unit, but both express "how much of the relevant baseline swings with climate" and are comparable at the sector level.
+The sector with the highest `median_pct_at_risk` is the most climate-vulnerable overall. Delta appears as its own row so you can compare it directly against deliveries, storage, and environmental flows.
 
 **Query 4b. Cross-sector comparison -- which sectors are most sensitive to operations?**
 
@@ -1913,6 +1979,13 @@ entity_risk AS (
   WHERE hydroclimate_id = 2 AND water_month = 0
     AND module = 'env_flows'
     AND metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
+  UNION ALL
+  -- Delta: operational range / mean (simple % -- safe for large values)
+  SELECT 'delta', entity_id,
+         range_value / NULLIF(ABS(mean_value), 0) * 100
+  FROM sensitivity_operational
+  WHERE hydroclimate_id = 2 AND water_month = 0
+    AND module = 'delta'
 )
 SELECT module,
        COUNT(*) AS entity_count,
@@ -2045,6 +2118,40 @@ ORDER BY smallest_spread DESC
 LIMIT 30;
 ```
 
+**Query 5e. Best-protecting operations -- Delta metrics**
+
+For each Delta variable (outflow, X2, salinity stations), which operational configuration keeps the metric most stable across climates?
+
+```sql
+WITH ranked AS (
+  SELECT entity_id, metric_name, unit, sibling_group,
+         ROUND(hist_value::numeric, 2) AS hist_val,
+         ROUND((GREATEST(hist_value, cc50_value, cc95_value)
+                - LEAST(hist_value, cc50_value, cc95_value))::numeric, 2)
+           AS spread,
+         ROUND((GREATEST(hist_value, cc50_value, cc95_value)
+                - LEAST(hist_value, cc50_value, cc95_value))
+               / NULLIF(ABS(hist_value), 0) * 100::numeric, 1)
+           AS pct_spread,
+         ROW_NUMBER() OVER (
+           PARTITION BY entity_id, metric_name
+           ORDER BY GREATEST(hist_value, cc50_value, cc95_value)
+                    - LEAST(hist_value, cc50_value, cc95_value) ASC
+         ) AS best_rank
+  FROM sensitivity_climate
+  WHERE water_month = 0 AND module = 'delta'
+    AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
+)
+SELECT entity_id, metric_name, unit,
+       sibling_group AS best_operation,
+       hist_val, spread, pct_spread AS lowest_pct_spread
+FROM ranked
+WHERE best_rank = 1
+ORDER BY lowest_pct_spread DESC;
+```
+
+With only 8 delta variables, this shows the full picture. If the same sibling group appears as best for both NDO and salinity stations, that operation provides the most Delta-wide climate protection.
+
 **Query 5d. Which single operational configuration provides the best overall climate protection?**
 
 This is the key question for decision-makers. For each of the 24 operational configurations, compute the average climate risk across all entities and sectors. The operation with the lowest score is the one that keeps the overall water system most stable under climate uncertainty.
@@ -2104,6 +2211,15 @@ entity_op_risk AS (
   FROM sensitivity_climate
   WHERE water_month = 0 AND module = 'env_flows'
     AND metric_name IN ('annual_pct_unimpaired', 'annual_pct_ff')
+    AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
+  UNION ALL
+  -- Delta: spread / |historical| per (sibling_group, entity)
+  SELECT sibling_group, 'delta', entity_id,
+         (GREATEST(hist_value, cc50_value, cc95_value)
+          - LEAST(hist_value, cc50_value, cc95_value))
+         / NULLIF(ABS(hist_value), 0) * 100
+  FROM sensitivity_climate
+  WHERE water_month = 0 AND module = 'delta'
     AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
 ),
 sector_avg AS (
