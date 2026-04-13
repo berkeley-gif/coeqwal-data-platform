@@ -1661,7 +1661,7 @@ python sensitivity/calculate_sensitivity.py 2>&1 | tee ~/sensitivity_rerun.log
 
 Three questions:
 
-1. **Which entities are most vulnerable to climate change?** Which deliveries, reservoirs, ecosystems, and Delta conditions swing the most across the range of possible climates (historical, CC50, CC95)? (Queries 1a-1d per entity; 4a per sector; 6a/6b per metric)
+1. **Which entities are most vulnerable to climate change?** Which deliveries, reservoirs, ecosystems, and Delta conditions swing the most across the range of possible climates (historical, CC50, CC95)? (Queries 1a-1d per entity; 4a per sector; 6a/6b per metric; 7a/7b named entity lists for reporting)
 2. **Which entities are most sensitive to operational choices?** Under a given climate, which entities change the most depending on how the system is operated? (Queries 2a-2d per entity; 4b per sector; 6c/6d per metric)
 3. **Which operations best protect vulnerable entities?** For climate-vulnerable entities, which operational configuration keeps their outcomes most stable? Answered per sector (5a deliveries, 5b reservoirs, 5c env flows, 5e Delta), system-wide (5d), and by metric (6c Part 2).
 
@@ -2425,101 +2425,168 @@ WHERE short_code IN ('s0023', 's0024')
   AND is_active = TRUE;
 ```
 
+**Query 5d-vol. Same question, volume-weighted: how much actual water is at risk?**
+
+Query 5d treats every entity equally -- a small refuge and Shasta both get one vote. This is useful for counting how many locations are at risk. But a 20% swing at Shasta (4,552 TAF) has a far greater real-world impact than a 20% swing at a small farm needing 5 TAF/year. Query 5d-vol sums the actual TAF of delivery swing and storage swing across the whole system, then divides by total system demand + capacity. The result tells you how much physical water is climate-dependent. For delivery modules, each entity's weight is its historical demand in TAF. For reservoirs, the weight is capacity in TAF. Env flows and delta are excluded because they are not measured in comparable volumetric units.
+
+The output sentence is: "Under [operation], approximately X,000 TAF out of Y,000 TAF system-wide is climate-dependent (Z%)."
+
+```sql
+WITH delivery AS (
+  SELECT sibling_group, module, entity_id,
+         GREATEST(hist_value, cc50_value, cc95_value)
+           - LEAST(hist_value, cc50_value, cc95_value) AS spread_taf
+  FROM sensitivity_climate
+  WHERE water_month = 0
+    AND metric_name IN ('annual_delivery_avg', 'annual_sw_delivery_avg')
+    AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
+),
+demand AS (
+  SELECT sibling_group, module, entity_id, hist_value AS hist_demand
+  FROM sensitivity_climate
+  WHERE water_month = 0
+    AND metric_name = 'annual_demand_avg'
+    AND module IN ('ag', 'du_urban', 'mi', 'cws_aggregate')
+  UNION ALL
+  SELECT del.sibling_group, del.module, del.entity_id,
+         del.hist_value + COALESCE(sh.hist_value, 0)
+  FROM sensitivity_climate del
+  LEFT JOIN sensitivity_climate sh
+    ON del.sibling_group = sh.sibling_group
+   AND del.module = sh.module AND del.entity_id = sh.entity_id
+   AND sh.water_month = 0 AND sh.metric_name = 'annual_shortage_avg'
+  WHERE del.water_month = 0 AND del.metric_name = 'annual_delivery_avg'
+    AND del.module = 'refuge'
+),
+vol_delivery AS (
+  SELECT d.sibling_group,
+         SUM(d.spread_taf) AS total_spread_taf,
+         SUM(dm.hist_demand) AS total_demand_taf
+  FROM delivery d
+  JOIN demand dm ON d.sibling_group = dm.sibling_group
+   AND d.module = dm.module AND d.entity_id = dm.entity_id
+  WHERE dm.hist_demand > 0
+  GROUP BY d.sibling_group
+),
+vol_reservoir AS (
+  SELECT sc.sibling_group,
+         SUM(GREATEST(sc.hist_value, sc.cc50_value, sc.cc95_value)
+             - LEAST(sc.hist_value, sc.cc50_value, sc.cc95_value)) AS total_spread_taf,
+         SUM(re.capacity_taf) AS total_capacity_taf
+  FROM sensitivity_climate sc
+  JOIN reservoir_entity re ON sc.entity_id = re.id::text
+  WHERE sc.water_month = 0 AND sc.module = 'reservoir' AND sc.metric_name = 'storage_avg'
+    AND sc.hist_value IS NOT NULL AND sc.cc50_value IS NOT NULL AND sc.cc95_value IS NOT NULL
+  GROUP BY sc.sibling_group
+),
+combined AS (
+  SELECT sibling_group,
+         total_spread_taf AS spread, total_demand_taf AS base
+  FROM vol_delivery
+  UNION ALL
+  SELECT sibling_group,
+         total_spread_taf, total_capacity_taf
+  FROM vol_reservoir
+),
+overall AS (
+  SELECT sibling_group,
+         SUM(spread) AS system_spread_taf,
+         SUM(base) AS system_base_taf
+  FROM combined
+  GROUP BY sibling_group
+)
+SELECT o.sibling_group,
+       s.run_name,
+       ROUND(o.system_spread_taf::numeric, 0) AS taf_at_risk,
+       ROUND(o.system_base_taf::numeric, 0) AS total_system_taf,
+       ROUND((o.system_spread_taf / NULLIF(o.system_base_taf, 0) * 100)::numeric, 1)
+         AS pct_system_water_at_risk
+FROM overall o
+JOIN scenario s ON o.sibling_group = s.short_code AND s.is_active = TRUE
+ORDER BY pct_system_water_at_risk ASC;
+```
+
+Reading the output: `taf_at_risk` is the total TAF of delivery + storage that swings with climate across the entire system. `total_system_taf` is the total demand + capacity. `pct_system_water_at_risk` is the ratio -- "X% of the system's water is climate-dependent." This directly answers: "how much actual water is in play?"
+
+Comparing 5d and 5d-vol: if 5d ranks an operation highly but 5d-vol does not, it means that operation protects many small entities but lets large ones swing. If 5d-vol ranks it highly but 5d does not, it protects the big systems but leaves small ones exposed.
+
 ---
 
 **Interpreting the results:**
 
-- `pct_demand_at_risk` answers: "what fraction of this entity's historical water need could change depending on which climate materializes?" A value of 30% means the delivery swing across all three climates equals 30% of the entity's demand.
-- `pct_capacity_at_risk` answers: "what fraction of this reservoir's usable storage swings with climate?"
+- `pct_demand_at_risk` answers: "what fraction of this entity's water need could change depending on which climate shows up?" A value of 30% means the delivery swing across all three climates equals 30% of the entity's demand. For example, if a farming district needs 100 TAF/year and gets 95, 85, or 75 TAF depending on climate, the swing is 20 TAF -- 20% of its need.
+- `pct_capacity_at_risk` answers: "what fraction of this reservoir's usable storage swings with climate?" If a 500 TAF reservoir holds 400, 350, or 300 TAF across climates, the swing is 100 TAF -- 20% of capacity.
+- `avg_system_risk` in Query 5d answers: "what percentage of the system's locations are climate-exposed?" A value of 8% means the typical entity sees about 8% of its water need at stake from climate; the other 92% is stable regardless. Every entity counts equally -- a small refuge and Shasta reservoir both get one vote.
+- `pct_system_water_at_risk` in Query 5d-vol answers the volume-weighted version: "how much actual TAF of water is climate-dependent?" This weights large entities proportionally -- a 20% swing at Shasta (4,552 TAF capacity) contributes far more than a 20% swing at a 50 TAF foothill reservoir. Use 5d for identifying how many locations are at risk; use 5d-vol for quantifying how much water is at risk.
 - Small community water systems and refuges appear in the rankings alongside large ones, because demand (not delivery) is the normalizer.
 - Compare 4a (climate) and 4b (operations) to classify sectors: hydrology-driven (high in 4a, low in 4b), policy-driven (low in 4a, high in 4b), or doubly exposed (high in both).
 - Queries 5a-5c identify the best-protecting operation per entity within each sector. If the same sibling group keeps appearing as the best across multiple entities and sectors, that operation is a strong candidate for system-wide climate resilience.
 - Query 5d aggregates across all sectors with equal sector weighting, directly answering: "if we had to pick one operational configuration to minimize climate risk system-wide, which would it be?"
-- Queries 6a-6d shift the lens from entities to metrics. Cross-referencing 6a/6b (climate) with 6c/6d (operations) reveals the four quadrants: climate-driven (high 6a, low 6c), policy-driven (low 6a, high 6c), doubly volatile (high in both), and structurally stable (low in both). Metrics in the "policy-driven" quadrant are the best targets for operational intervention.
+- Queries 6a-6d shift the lens from entities to metrics. Shortage, demand, and reliability metrics are excluded because their near-zero baselines produce misleading percentages (e.g. refuge shortage at 200% just means shortage went from near zero to slightly more). The meaningful signal is in delivery, storage, and flow metrics.
+- Queries 7a/7b show the top 20 most and least climate-vulnerable individual entities with human-readable names and actual values (TAF, CFS, KM). These are designed for direct use in reports and emails.
 
 ---
 
 **Query 6a. Top 10 metrics most sensitive to climate change**
 
-Instead of asking "which entities are vulnerable?", this asks "which *aspects* of the water system swing the most with climate?" Each (module, metric_name) pair is scored by its average percentage spread across all entities and all 24 sibling groups. A high score means that metric is heavily affected by which climate materializes.
+Which aspects of the water system swing the most with climate? Each (module, metric_name) pair is scored by its average percentage spread across all entities and all 24 sibling groups.
+
+Shortage, demand, and reliability are excluded because they have near-zero baselines that produce misleading percentages (e.g. refuge shortage might report 200%+ spread, but that just means shortage went from nearly zero to slightly-less-nearly-zero). The meaningful signal is in delivery, storage, and flow metrics.
 
 ```sql
-WITH metric_spread AS (
-  SELECT module, metric_name,
-         COUNT(DISTINCT entity_id) AS entity_count,
-         AVG(
-           (GREATEST(hist_value, cc50_value, cc95_value)
-            - LEAST(hist_value, cc50_value, cc95_value))
-           / NULLIF(ABS(hist_value), 0) * 100
-         ) AS avg_pct_spread
-  FROM sensitivity_climate
-  WHERE water_month = 0
-    AND hist_value IS NOT NULL
-    AND cc50_value IS NOT NULL
-    AND cc95_value IS NOT NULL
-    AND ABS(hist_value) > 0.1
-  GROUP BY module, metric_name
-  HAVING COUNT(DISTINCT entity_id) >= 3
-)
-SELECT module, metric_name, entity_count,
-       ROUND(avg_pct_spread::numeric, 1) AS avg_pct_spread
-FROM metric_spread
+SELECT module, metric_name,
+       COUNT(DISTINCT entity_id) AS entity_count,
+       ROUND(AVG(
+         (GREATEST(hist_value, cc50_value, cc95_value)
+          - LEAST(hist_value, cc50_value, cc95_value))
+         / NULLIF(ABS(hist_value), 0) * 100
+       )::numeric, 1) AS avg_pct_spread
+FROM sensitivity_climate
+WHERE water_month = 0
+  AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
+  AND ABS(hist_value) > 1.0
+  AND metric_name NOT IN ('annual_shortage_avg', 'annual_demand_avg', 'reliability')
+GROUP BY module, metric_name
 ORDER BY avg_pct_spread DESC
 LIMIT 10;
 ```
-
-Interpretation: if `(ag, annual_shortage_avg)` tops the list at 85%, it means ag shortage values swing on average 85% relative to their historical baseline depending on which climate materializes. This is the "canary in the coal mine" -- the metric that climate change hits hardest.
 
 **Query 6b. Top 10 metrics most resilient to climate change**
 
 Same calculation, reversed ranking. These metrics barely change regardless of climate.
 
 ```sql
-WITH metric_spread AS (
-  SELECT module, metric_name,
-         COUNT(DISTINCT entity_id) AS entity_count,
-         AVG(
-           (GREATEST(hist_value, cc50_value, cc95_value)
-            - LEAST(hist_value, cc50_value, cc95_value))
-           / NULLIF(ABS(hist_value), 0) * 100
-         ) AS avg_pct_spread
-  FROM sensitivity_climate
-  WHERE water_month = 0
-    AND hist_value IS NOT NULL
-    AND cc50_value IS NOT NULL
-    AND cc95_value IS NOT NULL
-    AND ABS(hist_value) > 0.1
-  GROUP BY module, metric_name
-  HAVING COUNT(DISTINCT entity_id) >= 3
-)
-SELECT module, metric_name, entity_count,
-       ROUND(avg_pct_spread::numeric, 1) AS avg_pct_spread
-FROM metric_spread
+SELECT module, metric_name,
+       COUNT(DISTINCT entity_id) AS entity_count,
+       ROUND(AVG(
+         (GREATEST(hist_value, cc50_value, cc95_value)
+          - LEAST(hist_value, cc50_value, cc95_value))
+         / NULLIF(ABS(hist_value), 0) * 100
+       )::numeric, 1) AS avg_pct_spread
+FROM sensitivity_climate
+WHERE water_month = 0
+  AND hist_value IS NOT NULL AND cc50_value IS NOT NULL AND cc95_value IS NOT NULL
+  AND ABS(hist_value) > 1.0
+  AND metric_name NOT IN ('annual_shortage_avg', 'annual_demand_avg', 'reliability')
+GROUP BY module, metric_name
 ORDER BY avg_pct_spread ASC
 LIMIT 10;
 ```
 
-Interpretation: if `(reservoir, storage_avg)` appears near the top at 3%, it means average storage barely shifts across climates -- reservoirs buffer climate variation effectively.
-
 **Query 6c. Top 10 metrics most sensitive to operational choices (and which operations drive them)**
 
-Part 1 -- rank metrics by operational sensitivity. Uses `sensitivity_operational` under historical climate (hydroclimate_id = 2). The `range_value` in that table is the spread across all operational configurations for a fixed climate.
+Part 1 -- rank metrics by operational sensitivity. Uses `sensitivity_operational` under historical climate (hydroclimate_id = 2). The `range_value` in that table is the spread across all operational configurations for a fixed climate. Same exclusions as 6a/6b.
 
 ```sql
-WITH metric_op_sensitivity AS (
-  SELECT module, metric_name,
-         COUNT(DISTINCT entity_id) AS entity_count,
-         AVG(range_value / NULLIF(ABS(mean_value), 0) * 100) AS avg_pct_range
-  FROM sensitivity_operational
-  WHERE hydroclimate_id = 2
-    AND water_month = 0
-    AND ABS(mean_value) > 0.1
-  GROUP BY module, metric_name
-  HAVING COUNT(DISTINCT entity_id) >= 3
-)
-SELECT module, metric_name, entity_count,
-       ROUND(avg_pct_range::numeric, 1) AS avg_pct_range
-FROM metric_op_sensitivity
+SELECT module, metric_name,
+       COUNT(DISTINCT entity_id) AS entity_count,
+       ROUND(AVG(range_value / NULLIF(ABS(mean_value), 0) * 100)::numeric, 1) AS avg_pct_range
+FROM sensitivity_operational
+WHERE hydroclimate_id = 2
+  AND water_month = 0
+  AND ABS(mean_value) > 1.0
+  AND metric_name NOT IN ('annual_shortage_avg', 'annual_demand_avg', 'reliability')
+GROUP BY module, metric_name
 ORDER BY avg_pct_range DESC
 LIMIT 10;
 ```
@@ -2560,25 +2627,95 @@ The top rows are the operations that produce the highest average value for that 
 Same as 6c Part 1, reversed. These metrics barely change no matter how the system is operated -- they are structurally determined by hydrology rather than policy.
 
 ```sql
-WITH metric_op_sensitivity AS (
-  SELECT module, metric_name,
-         COUNT(DISTINCT entity_id) AS entity_count,
-         AVG(range_value / NULLIF(ABS(mean_value), 0) * 100) AS avg_pct_range
-  FROM sensitivity_operational
-  WHERE hydroclimate_id = 2
-    AND water_month = 0
-    AND ABS(mean_value) > 0.1
-  GROUP BY module, metric_name
-  HAVING COUNT(DISTINCT entity_id) >= 3
-)
-SELECT module, metric_name, entity_count,
-       ROUND(avg_pct_range::numeric, 1) AS avg_pct_range
-FROM metric_op_sensitivity
+SELECT module, metric_name,
+       COUNT(DISTINCT entity_id) AS entity_count,
+       ROUND(AVG(range_value / NULLIF(ABS(mean_value), 0) * 100)::numeric, 1) AS avg_pct_range
+FROM sensitivity_operational
+WHERE hydroclimate_id = 2
+  AND water_month = 0
+  AND ABS(mean_value) > 1.0
+  AND metric_name NOT IN ('annual_shortage_avg', 'annual_demand_avg', 'reliability')
+GROUP BY module, metric_name
 ORDER BY avg_pct_range ASC
 LIMIT 10;
 ```
 
-Interpretation: metrics appearing in 6b (climate-resilient) AND 6d (operationally-resilient) are the most stable aspects of the water system -- they do not respond to either climate or policy. Metrics appearing in 6a (climate-sensitive) AND 6c (operationally-sensitive) are the most volatile -- both climate and policy choices affect them. Metrics high in 6a but low in 6c are climate-driven and cannot be mitigated by operations. Metrics low in 6a but high in 6c are the best targets for policy intervention: operations matter, climate does not.
+**How to read 6a-6d together:** metrics appearing in 6b (climate-resilient) AND 6d (operationally-resilient) are the most stable aspects of the water system. Metrics appearing in 6a (climate-sensitive) AND 6c (operationally-sensitive) are the most volatile. Metrics high in 6a but low in 6c are climate-driven and cannot be mitigated by operations. Metrics low in 6a but high in 6c are the best targets for policy intervention: operations matter, climate does not.
+
+---
+
+**Query 7a. Top 20 most climate-vulnerable entities (named, with actual values)**
+
+Entity-level detail for reporting. Shows named locations/agencies, their historical values, and the actual TAF/CFS/KM swing across climates. Excludes shortage/demand/reliability for the same reasons as 6a-6d.
+
+```sql
+WITH ranked AS (
+  SELECT sc.module, sc.entity_id, sc.metric_name,
+         ROUND(AVG(sc.hist_value)::numeric, 1) AS hist_val,
+         ROUND(AVG(sc.cc50_value)::numeric, 1) AS cc50_val,
+         ROUND(AVG(sc.cc95_value)::numeric, 1) AS cc95_val,
+         ROUND(AVG(
+           GREATEST(sc.hist_value, sc.cc50_value, sc.cc95_value)
+           - LEAST(sc.hist_value, sc.cc50_value, sc.cc95_value)
+         )::numeric, 1) AS spread,
+         COALESCE(mc.contractor_name, ce.name, re.name,
+                  sc.entity_id) AS entity_name
+  FROM sensitivity_climate sc
+  LEFT JOIN mi_contractor mc ON sc.module = 'mi' AND sc.entity_id = mc.short_code
+  LEFT JOIN channel_entity ce ON sc.module = 'env_flows' AND sc.entity_id = ce.network_arc_id
+  LEFT JOIN reservoir_entity re ON sc.module = 'reservoir' AND sc.entity_id = re.id::text
+  WHERE sc.water_month = 0
+    AND sc.metric_name NOT IN ('annual_shortage_avg', 'annual_demand_avg', 'reliability')
+    AND sc.hist_value IS NOT NULL AND sc.cc50_value IS NOT NULL AND sc.cc95_value IS NOT NULL
+    AND ABS(sc.hist_value) > 1.0
+  GROUP BY sc.module, sc.entity_id, sc.metric_name,
+           mc.contractor_name, ce.name, re.name
+)
+SELECT module, entity_name, metric_name,
+       hist_val, cc50_val, cc95_val, spread,
+       ROUND((spread / NULLIF(ABS(hist_val), 0) * 100)::numeric, 1) AS pct_spread
+FROM ranked
+ORDER BY pct_spread DESC
+LIMIT 20;
+```
+
+Reading the output: the entity at the top has the largest climate swing relative to its baseline. The `hist_val`, `cc50_val`, `cc95_val` columns show actual values (TAF, CFS, KM, etc.) so you can see exactly how much water or flow is at stake.
+
+**Query 7b. Top 20 most climate-stable entities (named, with actual values)**
+
+Same structure, reversed. These are the entities that barely change across climates.
+
+```sql
+WITH ranked AS (
+  SELECT sc.module, sc.entity_id, sc.metric_name,
+         ROUND(AVG(sc.hist_value)::numeric, 1) AS hist_val,
+         ROUND(AVG(sc.cc50_value)::numeric, 1) AS cc50_val,
+         ROUND(AVG(sc.cc95_value)::numeric, 1) AS cc95_val,
+         ROUND(AVG(
+           GREATEST(sc.hist_value, sc.cc50_value, sc.cc95_value)
+           - LEAST(sc.hist_value, sc.cc50_value, sc.cc95_value)
+         )::numeric, 1) AS spread,
+         COALESCE(mc.contractor_name, ce.name, re.name,
+                  sc.entity_id) AS entity_name
+  FROM sensitivity_climate sc
+  LEFT JOIN mi_contractor mc ON sc.module = 'mi' AND sc.entity_id = mc.short_code
+  LEFT JOIN channel_entity ce ON sc.module = 'env_flows' AND sc.entity_id = ce.network_arc_id
+  LEFT JOIN reservoir_entity re ON sc.module = 'reservoir' AND sc.entity_id = re.id::text
+  WHERE sc.water_month = 0
+    AND sc.metric_name NOT IN ('annual_shortage_avg', 'annual_demand_avg', 'reliability')
+    AND sc.hist_value IS NOT NULL AND sc.cc50_value IS NOT NULL AND sc.cc95_value IS NOT NULL
+    AND ABS(sc.hist_value) > 1.0
+  GROUP BY sc.module, sc.entity_id, sc.metric_name,
+           mc.contractor_name, ce.name, re.name
+)
+SELECT module, entity_name, metric_name,
+       hist_val, cc50_val, cc95_val, spread,
+       ROUND((spread / NULLIF(ABS(hist_val), 0) * 100)::numeric, 1) AS pct_spread
+FROM ranked
+WHERE spread > 0
+ORDER BY pct_spread ASC
+LIMIT 20;
+```
 
 ---
 

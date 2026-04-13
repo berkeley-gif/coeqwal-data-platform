@@ -793,6 +793,9 @@ def write_operational_rows(conn, rows: List[Tuple], dry_run: bool):
 # ────────────────────────────────────────────────────────────────────────
 
 
+ANNUAL_SYNTHESIS_MODULES = {"reservoir"}
+
+
 def process_source(
     conn,
     src: MetricSource,
@@ -817,7 +820,28 @@ def process_source(
     write_climate_rows(conn, climate_rows, dry_run)
     write_operational_rows(conn, ops_rows, dry_run)
 
-    return len(climate_rows), len(ops_rows)
+    total_c = len(climate_rows)
+    total_o = len(ops_rows)
+
+    if not src.is_period and src.module in ANNUAL_SYNTHESIS_MODULES:
+        annual = (
+            data.groupby(["scenario_short_code", "entity_id"])
+            .agg(value=("value", "mean"))
+            .reset_index()
+        )
+        annual["water_month"] = 0
+        ac = compute_climate_sensitivity(
+            annual, meta, ref_hydro_id, src.module, src.metric_name, src.unit
+        )
+        ao = compute_operational_sensitivity(
+            annual, meta, src.module, src.metric_name, src.unit
+        )
+        write_climate_rows(conn, ac, dry_run)
+        write_operational_rows(conn, ao, dry_run)
+        total_c += len(ac)
+        total_o += len(ao)
+
+    return total_c, total_o
 
 
 def process_delta(
