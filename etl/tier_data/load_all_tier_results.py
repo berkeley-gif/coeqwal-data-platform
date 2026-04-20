@@ -15,10 +15,12 @@ Single-value (one tier level per scenario):
   6. DELTA_ECO      - Delta Ecology
   7. FW_DELTA_USES  - Freshwater for In-Delta Uses
   8. FW_EXP         - Freshwater for Delta Exports
-  9. WRC_SALMON_AB  - Salmon Abundance (hardcoded tier 4; s0065 excluded)
+  9. WRC_SALMON_AB  - Salmon Abundance (from WRC_SALMON_AB.csv when present,
+                     else legacy hardcoded tier 4 with s0065 excluded)
 
 Staging CSVs live in etl/tier_data/staging/ and are named by tier short code
-(e.g. CWS_DEL.csv, ENV_FLOWS.csv). WRC_SALMON_AB has no CSV.
+(e.g. CWS_DEL.csv, ENV_FLOWS.csv, WRC_SALMON_AB.csv). The staging files are
+produced from the data team's raw drops by stage_tier_results.py.
 
 Uses UPSERT to preserve existing data while updating/adding new records.
 Also deactivates tier data for retired scenario s0029.
@@ -739,19 +741,92 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
+def _parse_tier_range(raw) -> int:
+    """
+    Parse the salmon CSV Tier_range column into an integer tier level.
+    Accepts values like 'Tier 4', 'tier 3', '4', 4. Returns the integer
+    or raises ValueError for unrecognized input.
+    """
+    if pd.isna(raw):
+        raise ValueError("Tier_range is NaN")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return int(raw)
+    s = str(raw).strip()
+    if s.isdigit():
+        return int(s)
+    parts = s.split()
+    if len(parts) == 2 and parts[0].lower() == 'tier' and parts[1].isdigit():
+        return int(parts[1])
+    raise ValueError(f"Cannot parse Tier_range: {raw!r}")
+
+
 def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
     """
     WRC_SALMON_AB — Salmon Abundance.
-    No CSV — hardcoded as tier 4 for all active scenarios.
-    s0065 is excluded (not reported).
-    One network node location per qualifying scenario: SAC299 (Sacramento at Keswick).
+
+    Preferred path: read staging/WRC_SALMON_AB.csv (produced by
+    stage_tier_results.py from the data team's
+    salmon/TIERS_WRLCM_01_BestYearSummary_*.csv drop). Expected columns:
+        scenario, Hydroclimate, Tier_range, tier_score_cont
+
+    Fallback (legacy): if the CSV is missing, treat tier as hardcoded 4 for
+    every active scenario except s0065. This preserves the behavior that
+    predated the salmon file so older checkouts keep loading.
+
+    All scenarios filtered through ALLOWED_SCENARIOS. Single representative
+    location per scenario: network node SAC299 (Sacramento River at Keswick).
     """
+    csv_path = STAGING_DIR / 'WRC_SALMON_AB.csv'
+
+    location_results: List[Dict] = []
+    tier_results: List[Dict] = []
+
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        if 'scenario' not in df.columns or 'Tier_range' not in df.columns:
+            print(f"WARNING: {csv_path.name} missing expected columns "
+                  f"(got {list(df.columns)}), falling back to hardcoded tier 4")
+        else:
+            skipped_scenarios: List[str] = []
+            parse_errors: List[str] = []
+            for _, row in df.iterrows():
+                scenario = normalize_scenario_id(row['scenario'])
+                if scenario not in ALLOWED_SCENARIOS:
+                    skipped_scenarios.append(scenario)
+                    continue
+                try:
+                    tier = _parse_tier_range(row['Tier_range'])
+                except ValueError as exc:
+                    parse_errors.append(f"{scenario}: {exc}")
+                    continue
+                agg = _single_value_aggregate(scenario, 'WRC_SALMON_AB', tier)
+                agg['_source_file'] = csv_path.name
+                tier_results.append(agg)
+                location_results.append({
+                    'scenario_short_code': scenario,
+                    'tier_short_code': 'WRC_SALMON_AB',
+                    'location_type': 'network_node',
+                    'location_id': 'SAC299',
+                    'location_name': 'Sacramento River at Keswick',
+                    'tier_level': tier,
+                    'tier_value': 1,
+                    'display_order': 1,
+                    '_source_file': csv_path.name,
+                })
+            if skipped_scenarios:
+                preview = ', '.join(sorted(set(skipped_scenarios))[:10])
+                more = '...' if len(set(skipped_scenarios)) > 10 else ''
+                print(f"  WRC_SALMON_AB skipped (not in ALLOWED_SCENARIOS): {preview}{more}")
+            if parse_errors:
+                print(f"  WRC_SALMON_AB parse errors: {'; '.join(parse_errors[:5])}")
+            print(f"WRC_SALMON_AB: {len(location_results)} location records, "
+                  f"{len(tier_results)} scenario aggregates  (from {csv_path.name})")
+            return location_results, tier_results
+
+    # Legacy fallback: hardcoded tier 4 for all active scenarios except s0065.
+    print(f"WARNING: {csv_path} not found, using legacy hardcoded tier 4 (excluding s0065)")
     excluded = {'s0065'}
     qualifying = ALLOWED_SCENARIOS - excluded
-
-    location_results = []
-    tier_results = []
-
     for scenario in sorted(qualifying):
         tier = 4
         agg = _single_value_aggregate(scenario, 'WRC_SALMON_AB', tier)
@@ -769,7 +844,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             '_source_file': 'hardcoded',
         })
 
-    print(f"WRC_SALMON_AB: {len(location_results)} location records, {len(tier_results)} scenario aggregates")
+    print(f"WRC_SALMON_AB: {len(location_results)} location records, {len(tier_results)} scenario aggregates  (hardcoded fallback)")
     return location_results, tier_results
 
 
@@ -1083,16 +1158,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Tier outcomes loaded:
-  CWS_DEL      - Community Water System Deliveries  (multi-value)
-  AG_REV       - Agricultural Revenue               (multi-value)
-  ENV_FLOWS    - Environmental Flows                (multi-value)
-  RES_STOR     - Reservoir Storage                  (multi-value)
-  GW_STOR      - Groundwater Storage                (multi-value)
-  DELTA_ECO    - Delta Ecology                      (single-value)
-  FW_DELTA_USES- Freshwater for In-Delta Uses       (single-value)
-  FW_EXP       - Freshwater for Delta Exports       (single-value)
-
-Also removes any existing WRC_SALMON_AB (salmon) data from the DB.
+  CWS_DEL       - Community Water System Deliveries  (multi-value)
+  AG_REV        - Agricultural Revenue               (multi-value)
+  ENV_FLOWS     - Environmental Flows                (multi-value)
+  RES_STOR      - Reservoir Storage                  (multi-value)
+  GW_STOR       - Groundwater Storage                (multi-value)
+  DELTA_ECO     - Delta Ecology                      (single-value)
+  FW_DELTA_USES - Freshwater for In-Delta Uses       (single-value)
+  FW_EXP        - Freshwater for Delta Exports       (single-value)
+  WRC_SALMON_AB - Winter-run Salmon Abundance        (single-value; from staging/WRC_SALMON_AB.csv
+                                                      if present, else legacy hardcoded tier 4)
         """
     )
     parser.add_argument('--dry-run', action='store_true',
@@ -1122,7 +1197,7 @@ Also removes any existing WRC_SALMON_AB (salmon) data from the DB.
 
     all_tiers = [
         'CWS_DEL', 'AG_REV', 'ENV_FLOWS', 'RES_STOR', 'GW_STOR',
-        'DELTA_ECO', 'FW_DELTA_USES', 'FW_EXP',
+        'DELTA_ECO', 'FW_DELTA_USES', 'FW_EXP', 'WRC_SALMON_AB',
     ]
     tiers_to_load = all_tiers
     if args.only:
@@ -1173,7 +1248,6 @@ Also removes any existing WRC_SALMON_AB (salmon) data from the DB.
     tier_sql = generate_tier_result_sql(all_tier_results)
     location_sql = generate_location_result_sql(all_location_results)
     deactivation_sql = generate_deactivation_sql()
-    salmon_removal_sql = generate_salmon_removal_sql()
     extended_verification = generate_verification_sql()
 
     full_sql = f"""-- ============================================================================
@@ -1192,7 +1266,6 @@ Also removes any existing WRC_SALMON_AB (salmon) data from the DB.
 {location_sql}
 
 {deactivation_sql}
-{salmon_removal_sql}
 -- ============================================================================
 -- VERIFICATION
 -- ============================================================================

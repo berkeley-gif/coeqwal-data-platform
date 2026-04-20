@@ -363,6 +363,109 @@ Key log files to keep per load:
 
 ---
 
+## How to load tier results
+
+Tier results are a separate data product: integer tier levels (1..4) assigned per scenario and per location for 9 tier outcome codes. They live in two tables, `tier_result` (scenario aggregates) and `tier_location_result` (per-location rows), both keyed by `tier_version_id` (currently `8`). Unlike the statistics ETL, tier assignments are produced by various teams from CalSim outputs and delivered to us as CSVs.
+
+### Inputs: where the data team drops files
+
+Tier teams drop their results csv's in drop boxes located at:
+
+https://docs.google.com/spreadsheets/d/1xcQIR_J96-cs7BuCrXjznwkinLgxl-Pf9tA3mJ2GiyA
+
+Tier tab, column I
+
+### Pipeline
+
+```
+Team drop --> preprocess --> loader (dry run) --> manifest review -->
+  loader (generate SQL) --> psql on Cloud9 --> verify manifest vs DB -->
+  verify API vs staging
+```
+
+### 1. Preprocess: normalize raw drops into canonical flat files
+
+```bash
+python etl/tier_data/stage_tier_results.py
+```
+
+This reads `etl/tier_data/staging/tier_results/**` and writes the canonical flat files directly into `etl/tier_data/staging/`. The operation is idempotent -- it will overwrite existing flat files every run, so re-run after any new team drop. Use `--dry-run` to print what would be written without touching disk.
+
+### 2. Dry run the loader and review the manifest
+
+```bash
+python etl/tier_data/load_all_tier_results.py --dry-run
+```
+
+Inspect `etl/tier_data/staging/tier_upload_manifest.csv`. This file lists every `tier_result` and `tier_location_result` row that will be upserted, along with the source CSV filename. Spot-check:
+- Row counts per tier code match expectations (72 active scenarios).
+- No unexpected scenarios (anything outside `ALLOWED_SCENARIOS` in `load_all_tier_results.py` is silently dropped -- the dry run summary will surface mismatches).
+- Salmon rows have the right tier level from the CSV (not the old hardcoded `4` fallback).
+
+### 3. Generate the SQL file
+
+```bash
+python etl/tier_data/load_all_tier_results.py --output-sql all_tiers.sql
+```
+
+The script emits UPSERT statements (`ON CONFLICT ... DO UPDATE`) for both tables plus any required deactivations. It does **not** connect to the database in this mode.
+
+### 4. Apply on Cloud9
+
+```bash
+psql "$DATABASE_URL" -f all_tiers.sql
+```
+
+`DATABASE_URL` must point at the target (staging or prod) RDS instance. The SQL is keyed by `(scenario_short_code, tier_short_code, tier_version_id)` on `tier_result` and `(scenario_short_code, tier_short_code, location_id, tier_version_id)` on `tier_location_result`, so re-running is safe and idempotent.
+
+### 5. Verify: manifest vs database (THIS STEP IS MANDATORY)
+
+**Never skip this.** After psql reports success, confirm every row in the manifest actually landed in the database:
+
+```bash
+DATABASE_URL="$DATABASE_URL" python etl/tier_data/load_all_tier_results.py --verify
+```
+
+This reads `staging/tier_upload_manifest.csv` back and checks each row against the live DB. It reports:
+- `Rows checked` -- should equal manifest row count
+- `Missing` -- rows in manifest but not in DB (must be 0)
+- `Mismatches` -- rows present but with different tier levels (must be 0)
+- `Status: PASS` or `Status: FAIL`
+
+If `FAIL`, do **not** proceed. Re-run `psql`, investigate triggers/constraints, or revert.
+
+### 6. Verify: staging vs API
+
+Second verification layer, catches problems introduced between DB and API (views, caching, pagination):
+
+```bash
+python etl/tier_data/verify_tiers.py --api-url https://api.coeqwal.org/api
+```
+
+Narrow with `--scenario s0070` or `--tier ENV_FLOWS` when investigating a single failure.
+
+### Troubleshooting
+
+- **Unknown scenarios skipped** -- the loader enforces `ALLOWED_SCENARIOS` (currently 72 scenarios). If the team delivers data for a new scenario, it must first be added to the `scenario` table (see "How to load new scenarios" above) and then added to `ALLOWED_SCENARIOS` in `load_all_tier_results.py` and `verify_tiers.py`.
+- **ENV_FLOWS scenarios appear in more than one split file** -- expected. The loader processes `historical` first, then `cc50`, then `cc95`, and later files overwrite earlier ones. If a scenario legitimately has data in only one file, nothing special is needed.
+- **DELTA_ECO scenarios use numeric IDs** -- the source files list scenarios as `"11"`, `"65"`, etc. The loader's `normalize_scenario_id` converts these to `s0011`, `s0065`.
+- **Salmon CSV missing** -- `load_salmon_data()` falls back to the legacy hardcoded tier 4 (s0065 excluded) so an older checkout still loads. If you want to force a re-ingest from CSV, run the preprocessor first.
+
+### Tier version bumps
+
+`tier_version_id` is a constant at the top of `load_all_tier_results.py`. Bump it (and add a row to the `tier_version` table) only when the tier methodology or thresholds change in a way that should coexist with existing data. Day-to-day data refreshes should keep the same version id so UPSERT continues to work.
+
+### Follow-up TODO
+
+The repo still contains two legacy artifacts from the single-outcome ENV_FLOWS loader that predates `load_all_tier_results.py`:
+
+- `etl/tier_data/load_eflows_tier_results.py`
+- `etl/tier_data/eflows_tier_results.sql`
+
+Both are superseded by the unified loader and are not called from any pipeline. They are harmless to leave in the tree for now and should be retired in a follow-up cleanup (delete both files, confirm no docs or scripts still reference them).
+
+---
+
 ## AWS production deployment
 
 ### Architecture
@@ -974,7 +1077,10 @@ Verification results are served by `GET /api/verification/status` and displayed 
 
 1. Ensure DSS-to-CSV extraction has run and manifests show PASS in `audits/validation_mismatches/`
 2. Run the ETL statistics: `python etl/statistics/run_all.py --scenario {id}`
-3. Load tier data: `python etl/tier_data/load_all_tier_results.py`
+3. Load tier data (see "How to load tier results" above for the full flow):
+   - `python etl/tier_data/stage_tier_results.py` (normalize team drops into flat files)
+   - `python etl/tier_data/load_all_tier_results.py --output-sql all_tiers.sql` then `psql "$DATABASE_URL" -f all_tiers.sql`
+   - `DATABASE_URL="$DATABASE_URL" python etl/tier_data/load_all_tier_results.py --verify` (mandatory)
 4. Run Layer 2 verification: `python etl/statistics/verify_all_sections.py --scenario {id}`
 5. Run Layer 3 verification: `python etl/statistics/verify_api.py --scenario {id}`
 6. Check results at `/verification` on the frontend
