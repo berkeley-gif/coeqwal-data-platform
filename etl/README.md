@@ -409,7 +409,6 @@ python etl/tier_data/load_all_tier_results.py --dry-run
 Inspect `etl/tier_data/staging/tier_upload_manifest.csv`. This file lists every `tier_result` and `tier_location_result` row that will be upserted, along with the source CSV filename. Spot-check:
 - Row counts per tier code match expectations (72 active scenarios).
 - No unexpected scenarios (anything outside `ALLOWED_SCENARIOS` in `load_all_tier_results.py` is silently dropped -- the dry run summary will surface mismatches).
-- Salmon rows have the right tier level from the CSV (not the old hardcoded `4` fallback).
 
 ### 3. Generate the SQL file
 
@@ -458,7 +457,7 @@ Narrow with `--scenario s0070` or `--tier ENV_FLOWS` when investigating a single
 - **Unknown scenarios skipped** -- the loader enforces `ALLOWED_SCENARIOS` (currently 72 scenarios). If the team delivers data for a new scenario, it must first be added to the `scenario` table (see "How to load new scenarios" above) and then added to `ALLOWED_SCENARIOS` in `load_all_tier_results.py` and `verify_tiers.py`.
 - **ENV_FLOWS scenarios appear in more than one split file** -- expected. The loader processes `historical` first, then `cc50`, then `cc95`, and later files overwrite earlier ones. If a scenario legitimately has data in only one file, nothing special is needed.
 - **DELTA_ECO scenarios use numeric IDs** -- the source files list scenarios as `"11"`, `"65"`, etc. The loader's `normalize_scenario_id` converts these to `s0011`, `s0065`.
-- **Salmon CSV missing** -- `load_salmon_data()` falls back to the legacy hardcoded tier 4 (s0065 excluded) so an older checkout still loads. If you want to force a re-ingest from CSV, run the preprocessor first.
+- **Salmon CSV missing** -- Run `stage_tier_results.py` to regenerate `staging/WRC_SALMON_AB.csv` from `staging/tier_results/salmon/`.
 
 ### Tier version bumps
 
@@ -1080,7 +1079,7 @@ Verification results are served by `GET /api/verification/status` and displayed 
 
 **Not yet implemented:**
 - Groundwater level, storage volume, level/storage change (no CalSim variable mapping established)
-- Salmon abundance as a real computed metric (currently a hardcoded tier placeholder)
+- Salmon abundance as a continuous/raw metric (`WRC_SALMON_AB` is currently stored only as the categorical tier level parsed from the data team's CSV. `tier_score_cont` is passed through but not persisted)
 
 ### How to add a new scenario
 

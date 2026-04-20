@@ -15,8 +15,7 @@ Single-value (one tier level per scenario):
   6. DELTA_ECO      - Delta Ecology
   7. FW_DELTA_USES  - Freshwater for In-Delta Uses
   8. FW_EXP         - Freshwater for Delta Exports
-  9. WRC_SALMON_AB  - Salmon Abundance (from WRC_SALMON_AB.csv when present,
-                     else legacy hardcoded tier 4 with s0065 excluded)
+  9. WRC_SALMON_AB  - Salmon Abundance (from WRC_SALMON_AB.csv)
 
 Staging CSVs live in etl/tier_data/staging/ and are named by tier short code
 (e.g. CWS_DEL.csv, ENV_FLOWS.csv, WRC_SALMON_AB.csv). The staging files are
@@ -762,75 +761,51 @@ def _parse_tier_range(raw) -> int:
 
 def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
     """
-    WRC_SALMON_AB — Salmon Abundance.
+    WRC_SALMON_AB - Salmon Abundance.
 
-    Preferred path: read staging/WRC_SALMON_AB.csv (produced by
-    stage_tier_results.py from the data team's
-    salmon/TIERS_WRLCM_01_BestYearSummary_*.csv drop). Expected columns:
-        scenario, Hydroclimate, Tier_range, tier_score_cont
-
-    Fallback (legacy): if the CSV is missing, treat tier as hardcoded 4 for
-    every active scenario except s0065. This preserves the behavior that
-    predated the salmon file so older checkouts keep loading.
+    Reads staging/WRC_SALMON_AB.csv (produced by stage_tier_results.py from
+    the data team's salmon/TIERS_WRLCM_01_BestYearSummary_*.csv drop).
+    Expected columns: scenario, Hydroclimate, Tier_range, tier_score_cont.
 
     All scenarios filtered through ALLOWED_SCENARIOS. Single representative
     location per scenario: network node SAC299 (Sacramento River at Keswick).
+
+    Fails fast if the CSV is missing or malformed. The previous hardcoded
+    tier-4 fallback was removed once real salmon data was delivered, to
+    prevent a missing file from silently corrupting the DB.
     """
     csv_path = STAGING_DIR / 'WRC_SALMON_AB.csv'
+    if not csv_path.exists():
+        raise FileNotFoundError(
+            f"{csv_path} not found. Run stage_tier_results.py first, or pass "
+            f"--skip WRC_SALMON_AB if you explicitly want to omit salmon."
+        )
+
+    df = pd.read_csv(csv_path)
+    missing_cols = [c for c in ('scenario', 'Tier_range') if c not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"{csv_path.name} missing expected columns {missing_cols}; "
+            f"got {list(df.columns)}. Check the upstream salmon CSV."
+        )
 
     location_results: List[Dict] = []
     tier_results: List[Dict] = []
+    skipped_scenarios: List[str] = []
+    parse_errors: List[str] = []
 
-    if csv_path.exists():
-        df = pd.read_csv(csv_path)
-        if 'scenario' not in df.columns or 'Tier_range' not in df.columns:
-            print(f"WARNING: {csv_path.name} missing expected columns "
-                  f"(got {list(df.columns)}), falling back to hardcoded tier 4")
-        else:
-            skipped_scenarios: List[str] = []
-            parse_errors: List[str] = []
-            for _, row in df.iterrows():
-                scenario = normalize_scenario_id(row['scenario'])
-                if scenario not in ALLOWED_SCENARIOS:
-                    skipped_scenarios.append(scenario)
-                    continue
-                try:
-                    tier = _parse_tier_range(row['Tier_range'])
-                except ValueError as exc:
-                    parse_errors.append(f"{scenario}: {exc}")
-                    continue
-                agg = _single_value_aggregate(scenario, 'WRC_SALMON_AB', tier)
-                agg['_source_file'] = csv_path.name
-                tier_results.append(agg)
-                location_results.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'WRC_SALMON_AB',
-                    'location_type': 'network_node',
-                    'location_id': 'SAC299',
-                    'location_name': 'Sacramento River at Keswick',
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'display_order': 1,
-                    '_source_file': csv_path.name,
-                })
-            if skipped_scenarios:
-                preview = ', '.join(sorted(set(skipped_scenarios))[:10])
-                more = '...' if len(set(skipped_scenarios)) > 10 else ''
-                print(f"  WRC_SALMON_AB skipped (not in ALLOWED_SCENARIOS): {preview}{more}")
-            if parse_errors:
-                print(f"  WRC_SALMON_AB parse errors: {'; '.join(parse_errors[:5])}")
-            print(f"WRC_SALMON_AB: {len(location_results)} location records, "
-                  f"{len(tier_results)} scenario aggregates  (from {csv_path.name})")
-            return location_results, tier_results
-
-    # Legacy fallback: hardcoded tier 4 for all active scenarios except s0065.
-    print(f"WARNING: {csv_path} not found, using legacy hardcoded tier 4 (excluding s0065)")
-    excluded = {'s0065'}
-    qualifying = ALLOWED_SCENARIOS - excluded
-    for scenario in sorted(qualifying):
-        tier = 4
+    for _, row in df.iterrows():
+        scenario = normalize_scenario_id(row['scenario'])
+        if scenario not in ALLOWED_SCENARIOS:
+            skipped_scenarios.append(scenario)
+            continue
+        try:
+            tier = _parse_tier_range(row['Tier_range'])
+        except ValueError as exc:
+            parse_errors.append(f"{scenario}: {exc}")
+            continue
         agg = _single_value_aggregate(scenario, 'WRC_SALMON_AB', tier)
-        agg['_source_file'] = 'hardcoded'
+        agg['_source_file'] = csv_path.name
         tier_results.append(agg)
         location_results.append({
             'scenario_short_code': scenario,
@@ -841,10 +816,22 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             'tier_level': tier,
             'tier_value': 1,
             'display_order': 1,
-            '_source_file': 'hardcoded',
+            '_source_file': csv_path.name,
         })
 
-    print(f"WRC_SALMON_AB: {len(location_results)} location records, {len(tier_results)} scenario aggregates  (hardcoded fallback)")
+    if skipped_scenarios:
+        preview = ', '.join(sorted(set(skipped_scenarios))[:10])
+        more = '...' if len(set(skipped_scenarios)) > 10 else ''
+        print(f"  WRC_SALMON_AB skipped (not in ALLOWED_SCENARIOS): {preview}{more}")
+    if parse_errors:
+        raise ValueError(
+            f"WRC_SALMON_AB parse errors in {csv_path.name}: "
+            f"{'; '.join(parse_errors[:5])}"
+            f"{'...' if len(parse_errors) > 5 else ''}"
+        )
+
+    print(f"WRC_SALMON_AB: {len(location_results)} location records, "
+          f"{len(tier_results)} scenario aggregates  (from {csv_path.name})")
     return location_results, tier_results
 
 
@@ -1166,8 +1153,7 @@ Tier outcomes loaded:
   DELTA_ECO     - Delta Ecology                      (single-value)
   FW_DELTA_USES - Freshwater for In-Delta Uses       (single-value)
   FW_EXP        - Freshwater for Delta Exports       (single-value)
-  WRC_SALMON_AB - Winter-run Salmon Abundance        (single-value; from staging/WRC_SALMON_AB.csv
-                                                      if present, else legacy hardcoded tier 4)
+  WRC_SALMON_AB - Winter-run Salmon Abundance        (single-value; from staging/WRC_SALMON_AB.csv)
         """
     )
     parser.add_argument('--dry-run', action='store_true',
