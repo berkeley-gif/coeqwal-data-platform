@@ -336,6 +336,62 @@ def parse_single_value(filename: str, scenario_col: str, tier_col: str) -> dict:
     return results
 
 
+def _parse_tier_range(raw) -> int:
+    """Mirror load_all_tier_results._parse_tier_range: 'Tier 4' or 4 -> 4."""
+    if pd.isna(raw):
+        raise ValueError("Tier_range is NaN")
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return int(raw)
+    s = str(raw).strip()
+    if s.isdigit():
+        return int(s)
+    parts = s.split()
+    if len(parts) == 2 and parts[0].lower() == "tier" and parts[1].isdigit():
+        return int(parts[1])
+    raise ValueError(f"Cannot parse Tier_range: {raw!r}")
+
+
+def parse_wrc_salmon_ab() -> dict:
+    """
+    WRC_SALMON_AB is a single-value tier (one integer level per scenario),
+    stored wide with columns: scenario, Hydroclimate, Tier_range, tier_score_cont.
+    """
+    path = STAGING_DIR / "WRC_SALMON_AB.csv"
+    if not path.exists():
+        return {}
+    df = pd.read_csv(path)
+    if "scenario" not in df.columns or "Tier_range" not in df.columns:
+        print(
+            f"  WRC_SALMON_AB: unexpected columns {list(df.columns)}, skipping"
+        )
+        return {}
+
+    results = {}
+    parse_errors = []
+    for _, row in df.iterrows():
+        sid = normalize_scenario_id(row["scenario"])
+        if sid not in ALLOWED_SCENARIOS:
+            continue
+        try:
+            level = _parse_tier_range(row["Tier_range"])
+        except ValueError as exc:
+            parse_errors.append(f"{sid}: {exc}")
+            continue
+        results[sid] = {"level": level}
+
+    if parse_errors:
+        print(f"  WRC_SALMON_AB parse errors: {'; '.join(parse_errors[:5])}")
+
+    missing = sorted(ALLOWED_SCENARIOS - set(results.keys()))
+    if missing:
+        print(
+            f"  WRC_SALMON_AB: no salmon data in CSV for "
+            f"{len(missing)} allowed scenarios (skipping): "
+            f"{', '.join(missing[:10])}{'...' if len(missing) > 10 else ''}"
+        )
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Verification
 # ---------------------------------------------------------------------------
@@ -447,6 +503,7 @@ def main():
             ),
             "single",
         ),
+        ("WRC_SALMON_AB", parse_wrc_salmon_ab, "single"),
     ]
 
     total_ok = 0
