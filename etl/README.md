@@ -383,6 +383,15 @@ Team drop --> preprocess --> loader (dry run) --> manifest review -->
   verify API vs staging
 ```
 
+### EC2 sizing
+
+The tier pipeline is lightweight compared to the scenario statistics ETL: it parses a handful of CSVs (largest is ~1 MB), emits an SQL file, and runs `psql`. Peak memory is well under 1 GB. Any of the following works:
+
+- **t3.small / t3.medium** is sufficient if you spin up a dedicated instance.
+- **t3a.2xlarge** is what the Cloud9 instance is currently sized to for the scenario statistics ETL (`run_all.py --workers 8`, see below). The tier pipeline happily reuses it with plenty of headroom, so in practice you'll run it on whatever Cloud9 is already provisioned.
+
+**Stop the EC2 instance when you're done.** Tier runs are fast (minutes), so it's easy to forget and leave the Cloud9 instance running. See the callout in the scenario statistics ETL section below for how to stop it from the Cloud9 UI or EC2 console.
+
 ### 1. Preprocess: normalize raw drops into canonical flat files
 
 ```bash
@@ -1495,8 +1504,15 @@ python run_all.py --list-modules
 **EC2 sizing:** Each worker loads a ~300 MB CSV into memory. Recommended:
 - `--workers 1`: t3.medium (4 GB) - ~8 hours for 76 scenarios
 - `--workers 4`: t3.xlarge (16 GB) - ~2-3 hours for 76 scenarios
+- `--workers 8`: **t3a.2xlarge (8 vCPU, 32 GB) - current production choice for the multi-threaded scenario ETL + DB upload.** Headroom for pandas spikes on the DCP/DWRadapt25 scenarios and fast enough to finish the full 76-scenario run in a single Cloud9 session.
 
 **Cloud9 timeout:** Set "Stop my environment" to 4+ hours in Cloud9 Preferences before a full run. Use `tmux` so browser disconnects don't kill the process. Detach with `Ctrl+B d`, reattach with `tmux attach -t etl`.
+
+> [!IMPORTANT]
+> **Stop the EC2 instance when you're done.** `t3a.2xlarge` is not free when idle. After your run finishes (and after you've copied off any logs you care about), stop the Cloud9 environment so the underlying EC2 instance is shut down:
+> - Cloud9 UI: **File > Quit Cloud9** or set "Stop my environment" to the shortest timeout (30 min) so it auto-stops.
+> - Or from the EC2 console: **Instances > select the Cloud9 instance > Instance state > Stop instance**.
+> Stopped instances preserve their EBS volume (so state and configs are kept) but don't accrue compute charges. Verify with `aws ec2 describe-instances --query 'Reservations[].Instances[].[InstanceId,State.Name]'` or the EC2 console before logging off.
 
 ### Modules (run in order)
 

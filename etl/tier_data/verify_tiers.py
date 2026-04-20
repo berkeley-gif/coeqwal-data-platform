@@ -130,58 +130,132 @@ def parse_ag_rev() -> dict:
         return {}
     df = pd.read_csv(path)
     results = {}
-    for sid, group in df.groupby("scenario"):
-        sid = normalize_scenario_id(sid)
-        if sid not in ALLOWED_SCENARIOS:
-            continue
-        counts = Counter()
-        locations = {}
-        for _, row in group.iterrows():
-            tier = int(row["tier"])
-            region = str(row["region"])
-            counts[tier] += 1
-            locations[region] = tier
-        total = sum(counts.values())
-        results[sid] = {
-            "tier_1": counts.get(1, 0),
-            "tier_2": counts.get(2, 0),
-            "tier_3": counts.get(3, 0),
-            "tier_4": counts.get(4, 0),
-            "total": total,
-            "locations": locations,
-        }
+
+    is_long_format = "region" in df.columns and "tier" in df.columns
+
+    if is_long_format:
+        for sid, group in df.groupby("scenario"):
+            sid = normalize_scenario_id(sid)
+            if sid not in ALLOWED_SCENARIOS:
+                continue
+            counts = Counter()
+            locations = {}
+            for _, row in group.iterrows():
+                tier = int(row["tier"])
+                region = str(row["region"])
+                counts[tier] += 1
+                locations[region] = tier
+            total = sum(counts.values())
+            results[sid] = {
+                "tier_1": counts.get(1, 0),
+                "tier_2": counts.get(2, 0),
+                "tier_3": counts.get(3, 0),
+                "tier_4": counts.get(4, 0),
+                "total": total,
+                "locations": locations,
+            }
+    else:
+        scenario_col = df.columns[0]
+        du_columns = [c for c in df.columns[1:] if c]
+        for _, row in df.iterrows():
+            sid = normalize_scenario_id(row[scenario_col])
+            if sid not in ALLOWED_SCENARIOS:
+                continue
+            counts = Counter()
+            locations = {}
+            for du_id in du_columns:
+                val = row[du_id]
+                if pd.isna(val) or str(val).strip().upper() == "NA":
+                    continue
+                tier = int(float(val))
+                counts[tier] += 1
+                locations[str(du_id)] = tier
+            total = sum(counts.values())
+            results[sid] = {
+                "tier_1": counts.get(1, 0),
+                "tier_2": counts.get(2, 0),
+                "tier_3": counts.get(3, 0),
+                "tier_4": counts.get(4, 0),
+                "total": total,
+                "locations": locations,
+            }
     return results
 
 
-def parse_env_flows() -> dict:
-    path = STAGING_DIR / "ENV_FLOWS.csv"
-    if not path.exists():
-        return {}
+def _discover_env_flows_files() -> list:
+    """Mirror load_all_tier_results._discover_env_flows_files ordering."""
+    priority = {"historical": 0, "cc50": 1, "cc95": 2}
+
+    def sort_key(p):
+        name_lower = p.stem.lower()
+        for tag, order in priority.items():
+            if tag in name_lower:
+                return order
+        return 99
+
+    files = []
+    legacy = STAGING_DIR / "ENV_FLOWS.csv"
+    if legacy.exists():
+        files.append(legacy)
+    files.extend(sorted(STAGING_DIR.glob("ENV_FLOWS_*.csv"), key=sort_key))
+    return files
+
+
+def _load_one_env_flows_frame(path) -> "pd.DataFrame":
+    """
+    Return a DataFrame with index=stations, columns=scenario IDs.
+
+    Auto-detects orientation: if the first column's values look like scenario
+    IDs (s0xxx) we transpose; otherwise we strip any "(tag)" suffix from
+    column headers to recover clean scenario IDs.
+    """
     df = pd.read_csv(path, index_col=0)
-    seen = set()
-    results = {}
+    first_vals = [str(v) for v in df.index[:5]]
+    rows_are_scenarios = bool(first_vals) and all(
+        v.startswith("s0") for v in first_vals
+    )
+    if rows_are_scenarios:
+        return df.T
+
+    rename = {}
     for col in df.columns:
-        sid = normalize_scenario_id(col.split("(")[0])
-        if sid not in ALLOWED_SCENARIOS or sid in seen:
-            continue
-        seen.add(sid)
-        counts = Counter()
-        locations = {}
-        for station, val in df[col].items():
-            if pd.isna(val):
+        base = col.split("(")[0].strip()
+        if base and base not in rename.values():
+            rename[col] = base
+    return df.rename(columns=rename)
+
+
+def parse_env_flows() -> dict:
+    files = _discover_env_flows_files()
+    if not files:
+        return {}
+
+    # Later files (cc50, cc95) overwrite earlier ones (historical) for
+    # overlapping scenarios, matching load_all_tier_results.py semantics.
+    results = {}
+    for path in files:
+        df = _load_one_env_flows_frame(path)
+        for col in df.columns:
+            sid = normalize_scenario_id(str(col).strip())
+            if sid not in ALLOWED_SCENARIOS:
                 continue
-            tier = int(val)
-            counts[tier] += 1
-            locations[str(station)] = tier
-        total = sum(counts.values())
-        results[sid] = {
-            "tier_1": counts.get(1, 0),
-            "tier_2": counts.get(2, 0),
-            "tier_3": counts.get(3, 0),
-            "tier_4": counts.get(4, 0),
-            "total": total,
-            "locations": locations,
-        }
+            counts = Counter()
+            locations = {}
+            for station, val in df[col].items():
+                if pd.isna(val):
+                    continue
+                tier = int(float(val))
+                counts[tier] += 1
+                locations[str(station)] = tier
+            total = sum(counts.values())
+            results[sid] = {
+                "tier_1": counts.get(1, 0),
+                "tier_2": counts.get(2, 0),
+                "tier_3": counts.get(3, 0),
+                "tier_4": counts.get(4, 0),
+                "total": total,
+                "locations": locations,
+            }
     return results
 
 
