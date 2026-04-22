@@ -14,12 +14,17 @@ Two tier types:
 - single_value: Single overall tier level (1-4)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Dict, List, Optional, Any
+from fastapi import APIRouter, HTTPException, Depends, Query, Response
+from typing import Dict, List, Any
 import asyncpg
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/tiers", tags=["tiers"])
+
+# Cache-Control header for catalog endpoints whose contents only change between
+# ETL runs (tier definitions, scenario lists, etc.). 5 minutes gives CDNs and
+# browsers a safe reuse window without masking new data for long after a deploy.
+STATIC_CATALOG_CACHE_CONTROL = "public, max-age=300"
 
 # =============================================================================
 # PYDANTIC MODELS
@@ -39,37 +44,12 @@ class TierDefinition(BaseModel):
     is_active: bool = Field(..., description="Whether this tier is currently active")
 
 
-class TierData(BaseModel):
-    """Single tier level data point"""
-
-    tier: str = Field(
-        ..., description="Tier identifier: 'tier1', 'tier2', 'tier3', 'tier4'"
-    )
-    value: Optional[int] = Field(
-        None, description="Raw count of locations at this tier"
-    )
-    normalized: Optional[float] = Field(None, description="Normalized value (0.0-1.0)")
-
-
-class MultiValueTierResult(BaseModel):
-    """Result for multi-value tier (distribution across locations)"""
-
-    scenario: str = Field(..., description="Scenario ID (e.g., 's0020')")
-    tier_code: str = Field(..., description="Tier indicator code")
-    tier_type: str = Field("multi_value", description="Always 'multi_value'")
-    data: List[TierData] = Field(..., description="Tier distribution data")
-    total_value: int = Field(..., description="Total number of locations")
-
-
-class SingleValueTierResult(BaseModel):
-    """Result for single-value tier (one overall tier level)"""
-
-    scenario: str = Field(..., description="Scenario ID (e.g., 's0020')")
-    tier_code: str = Field(..., description="Tier indicator code")
-    tier_type: str = Field("single_value", description="Always 'single_value'")
-    single_tier_level: int = Field(
-        ..., ge=1, le=4, description="Overall tier level (1-4)"
-    )
+# NOTE: `TierData`, `MultiValueTierResult`, and `SingleValueTierResult` Pydantic
+# models previously lived here but were never referenced as response_model on
+# any handler (handlers return bare Dict[str, Any] shapes with richer fields
+# than these models described). They were removed to prevent schema drift
+# between the models and the actual responses. If we want typed responses here
+# in the future, generate fresh models from the real handler return shapes.
 
 
 # Database connection dependency (set by main.py)
@@ -203,6 +183,7 @@ def calculate_tier_scores(
 
 @router.get("/definitions", summary="Get tier descriptions")
 async def get_tier_definitions(
+    response: Response,
     connection: asyncpg.Connection = Depends(get_db),
 ) -> Dict[str, str]:
     """
@@ -229,7 +210,7 @@ async def get_tier_definitions(
 
         rows = await connection.fetch(query)
 
-        # Return as {short_code: description} for frontend compatibility
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return {row["short_code"]: row["description"] or row["name"] for row in rows}
 
     except Exception as e:
@@ -240,6 +221,7 @@ async def get_tier_definitions(
     "/list", summary="List all tier indicators", response_model=List[TierDefinition]
 )
 async def get_all_tier_definitions(
+    response: Response,
     connection: asyncpg.Connection = Depends(get_db),
 ) -> List[TierDefinition]:
     """
@@ -263,6 +245,7 @@ async def get_all_tier_definitions(
 
         rows = await connection.fetch(query)
 
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return [
             TierDefinition(
                 short_code=row["short_code"],
@@ -676,6 +659,7 @@ async def get_batch_scenario_tiers(
 
 @router.get("/scenarios", summary="List available scenarios")
 async def get_available_scenarios(
+    response: Response,
     connection: asyncpg.Connection = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -722,6 +706,7 @@ async def get_available_scenarios(
             for row in rows
         ]
 
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return {"scenarios": scenarios, "total": len(scenarios)}
 
     except Exception as e:

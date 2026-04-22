@@ -4,11 +4,16 @@ Scenario API endpoints for COEQWAL.
 Provides scenario metadata and definitions.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import Dict, List, Any
 import asyncpg
 
 router = APIRouter(prefix="/api/scenarios", tags=["scenarios"])
+
+# Cache-Control header for catalog endpoints whose contents only change between
+# ETL runs. 5 minutes gives CDNs and browsers a safe reuse window without
+# masking new data for long after a deploy.
+STATIC_CATALOG_CACHE_CONTROL = "public, max-age=300"
 
 # Database connection dependency (set by main.py)
 db_pool = None
@@ -28,6 +33,7 @@ async def get_db():
 
 @router.get("", summary="List all scenarios")
 async def get_all_scenarios(
+    response: Response,
     connection: asyncpg.Connection = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """
@@ -38,16 +44,25 @@ async def get_all_scenarios(
     - `run_name`: Technical run name (e.g., 's0020_DCRadjBL_2020LU_wTUCP')
     - `name`: Display name
     - `short_description`: Brief description
+    - `hydroclimate_id`: Numeric hydroclimate id (internal)
+    - `hydroclimate_short_code`: Hydroclimate short code, e.g. `historical`, `cc50`,
+      `cc95`. Frontends should prefer this over the numeric id when resolving
+      sibling groups to concrete scenario runs for a given hydroclimate.
     - `is_active`: Whether scenario is active
 
-    **Use case:** Build scenario selection UI, show scenario cards.
+    **Use case:** Build scenario selection UI, show scenario cards, resolve
+    sibling-group IDs to actual scenario codes for the active hydroclimate
+    without needing a hardcoded string-to-id map on the client.
     """
     try:
+        # Join hydroclimate to expose short_code so clients can resolve sibling
+        # groups to the active hydroclimate without a hardcoded numeric map.
         query = """
         SELECT
             s.short_code,
             s.run_name,
             s.hydroclimate_id,
+            h.short_code AS hydroclimate_short_code,
             s.hydroclimate_sibling,
             s.is_active,
             sg.name,
@@ -57,6 +72,8 @@ async def get_all_scenarios(
         FROM scenario s
         LEFT JOIN scenario_hydroclimate_sibling sg
             ON s.hydroclimate_sibling = sg.short_code
+        LEFT JOIN hydroclimate h
+            ON s.hydroclimate_id = h.id
         WHERE s.is_active = TRUE
         ORDER BY s.short_code
         """
@@ -69,6 +86,7 @@ async def get_all_scenarios(
                 s.short_code,
                 s.run_name,
                 s.hydroclimate_id,
+                h.short_code AS hydroclimate_short_code,
                 s.hydroclimate_sibling,
                 s.is_active,
                 sg.name,
@@ -78,10 +96,13 @@ async def get_all_scenarios(
             FROM scenario s
             LEFT JOIN scenario_hydroclimate_sibling sg
                 ON s.hydroclimate_sibling = sg.short_code
+            LEFT JOIN hydroclimate h
+                ON s.hydroclimate_id = h.id
             ORDER BY s.short_code
             """
             rows = await connection.fetch(query_all)
 
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return [
             {
                 "short_code": row["short_code"],
@@ -89,6 +110,7 @@ async def get_all_scenarios(
                 "name": row["name"] or row["short_code"],
                 "short_description": row["short_description"],
                 "hydroclimate_id": row["hydroclimate_id"],
+                "hydroclimate_short_code": row["hydroclimate_short_code"],
                 "baseline_scenario": row["baseline_group"],
                 "sibling_group": row["hydroclimate_sibling"],
                 "is_active": bool(row["is_active"])

@@ -17,11 +17,16 @@ GeoJSON Format:
 - Frontend can color by tier_level
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Response
 from typing import Dict, List, Optional, Any
 import asyncpg
 from pydantic import BaseModel, Field
 import json
+
+# Cache-Control header for catalog endpoints whose contents only change between ETL
+# runs (tier/scenario/hydroclimate lists and their joins). 5 minutes gives CDNs and
+# browsers a safe reuse window without masking new data for long after a deploy.
+STATIC_CATALOG_CACHE_CONTROL = "public, max-age=300"
 
 router = APIRouter(prefix="/api/tier-map", tags=["tier-map"])
 
@@ -70,6 +75,7 @@ async def get_db():
 
 @router.get("/scenarios", summary="List available scenarios")
 async def get_available_scenarios(
+    response: Response,
     connection: asyncpg.Connection = Depends(get_db),
 ) -> Dict[str, Any]:
     """
@@ -78,16 +84,30 @@ async def get_available_scenarios(
     **Use case:** Build scenario selector for map visualization.
 
     Returns count of tiers and locations available for each scenario.
+
+    Filters to active scenarios only (`tier_result.is_active = TRUE`). Retired
+    scenario rows still present in `tier_location_result` are excluded via the
+    join, so API consumers never have to filter the active set themselves.
     """
     try:
+        # INNER JOIN tier_result so retired scenarios (e.g. s0029) are not
+        # surfaced even though their tier_location_result rows remain in the
+        # database.tier_location_result has no is_active column, so
+        # tier_result.is_active is the authoritative flag across the tier
+        # surface.
         query = """
-        SELECT DISTINCT 
-            scenario_short_code,
-            COUNT(DISTINCT tier_short_code) as tier_count,
+        SELECT
+            tlr.scenario_short_code,
+            COUNT(DISTINCT tlr.tier_short_code) as tier_count,
             COUNT(*) as location_count
-        FROM tier_location_result
-        GROUP BY scenario_short_code
-        ORDER BY scenario_short_code
+        FROM tier_location_result tlr
+        JOIN tier_result tr
+          ON tr.scenario_short_code = tlr.scenario_short_code
+         AND tr.tier_short_code = tlr.tier_short_code
+         AND tr.tier_version_id = tlr.tier_version_id
+         AND tr.is_active = TRUE
+        GROUP BY tlr.scenario_short_code
+        ORDER BY tlr.scenario_short_code
         """
 
         rows = await connection.fetch(query)
@@ -101,6 +121,7 @@ async def get_available_scenarios(
             for row in rows
         ]
 
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return {"scenarios": scenarios, "total": len(scenarios)}
 
     except Exception as e:
@@ -109,6 +130,7 @@ async def get_available_scenarios(
 
 @router.get("/tiers", summary="List available tier indicators")
 async def get_available_tiers(
+    response: Response,
     scenario_short_code: Optional[str] = Query(
         None, description="Filter by scenario (e.g., 's0020')"
     ),
@@ -176,6 +198,7 @@ async def get_available_tiers(
                 tier_data["location_count"] = row["location_count"]
             tiers.append(tier_data)
 
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return {"tiers": tiers, "total": len(tiers)}
 
     except Exception as e:
@@ -255,8 +278,175 @@ async def get_scenario_tier_summary(
 
 
 # =============================================================================
-# LOCATIONS ENDPOINT (Returns data even without geometry)
+# LOCATIONS ENDPOINTS (Return data even without geometry)
+#
+# Route ordering: the batch variant `/{scenario}/locations` is declared BEFORE
+# the single-tier variant `/{scenario}/{tier}/locations` so FastAPI matches
+# the literal "locations" segment instead of binding "locations" to the
+# {tier_short_code} parameter of the older route.
 # =============================================================================
+
+
+@router.get(
+    "/{scenario_short_code}/locations",
+    summary="Get tier locations for multiple outcomes (batch, no geometry)",
+)
+async def get_tier_locations_batch(
+    scenario_short_code: str,
+    codes: str = Query(
+        ...,
+        description=(
+            "Comma-separated list of tier short codes, e.g. "
+            "`CWS_DEL,AG_REV,ENV_FLOWS`. Must be non-empty."
+        ),
+    ),
+    connection: asyncpg.Connection = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Get per-location tier assignments for multiple outcomes in a single request.
+
+    Additive counterpart to `/{scenario_short_code}/{tier_short_code}/locations`
+    (the single-tier route still works unchanged). One SQL query replaces N
+    parallel calls when a panel needs several outcomes at once (e.g. an equity
+    heatmap showing all nine outcomes for one scenario).
+
+    **Use case:** Batched per-location data for multi-outcome panels.
+
+    **Example:** `GET /api/tier-map/s0020/locations?codes=CWS_DEL,AG_REV,ENV_FLOWS`
+
+    **Response:**
+    ```json
+    {
+      "scenario": "s0020",
+      "results": {
+        "CWS_DEL": { "scenario": "s0020", "tier_code": "CWS_DEL", "tier_name": ..., "tier_type": ..., "locations": [...], "metadata": {...} },
+        "AG_REV":  { "scenario": "s0020", "tier_code": "AG_REV",  ... },
+        "ENV_FLOWS": { ... }
+      },
+      "missing": []
+    }
+    ```
+
+    Each per-code entry matches the shape of the single-tier `/locations`
+    endpoint, so callers can reuse the same parsing code. `missing` lists codes
+    the client requested that have no active rows for this scenario (this is a
+    normal case, for example `WRC_SALMON_AB` on `s0065`).
+
+    Filters `tier_result.is_active = TRUE`, so retired scenarios and retired
+    tier versions are never surfaced.
+    """
+    # Parse and lightly validate the codes list. Deduplicate while preserving
+    # request order, upper-case for tolerance, reject empty / malformed lists.
+    seen = set()
+    requested: List[str] = []
+    for raw in codes.split(","):
+        code = raw.strip().upper()
+        if not code:
+            continue
+        if not code.replace("_", "").isalnum():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid tier short code: '{raw}'",
+            )
+        if code in seen:
+            continue
+        seen.add(code)
+        requested.append(code)
+
+    if not requested:
+        raise HTTPException(
+            status_code=400,
+            detail="Query parameter 'codes' must list at least one tier short code.",
+        )
+
+    try:
+        # Single query: same join shape as the single-tier endpoint but with
+        # tier_short_code = ANY($2). tier_result.is_active = TRUE is the
+        # authoritative active-set filter across the tier surface.
+        query = """
+        SELECT
+            tlr.tier_short_code,
+            tlr.location_type,
+            tlr.location_id,
+            tlr.location_name,
+            tlr.tier_level,
+            tlr.tier_value,
+            tlr.display_order,
+            td.name AS tier_name,
+            td.tier_type
+        FROM tier_location_result tlr
+        JOIN tier_definition td ON tlr.tier_short_code = td.short_code
+        JOIN tier_result tr
+          ON tr.scenario_short_code = tlr.scenario_short_code
+         AND tr.tier_short_code = tlr.tier_short_code
+         AND tr.tier_version_id = tlr.tier_version_id
+         AND tr.is_active = TRUE
+        WHERE tlr.scenario_short_code = $1
+          AND tlr.tier_short_code = ANY($2::text[])
+        ORDER BY tlr.tier_short_code, tlr.display_order, tlr.location_name
+        """
+
+        rows = await connection.fetch(query, scenario_short_code, requested)
+
+        # Bucket rows by tier_short_code. Keys are only created for codes that
+        # actually returned rows; codes with no active data land in `missing`.
+        buckets: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            code = row["tier_short_code"]
+            bucket = buckets.get(code)
+            if bucket is None:
+                bucket = {
+                    "scenario": scenario_short_code,
+                    "tier_code": code,
+                    "tier_name": row["tier_name"],
+                    "tier_type": row["tier_type"],
+                    "locations": [],
+                    "_location_types": set(),
+                    "_tier_counts": {1: 0, 2: 0, 3: 0, 4: 0},
+                }
+                buckets[code] = bucket
+
+            bucket["locations"].append(
+                {
+                    "location_id": row["location_id"],
+                    "location_name": row["location_name"],
+                    "location_type": row["location_type"],
+                    "tier_level": row["tier_level"],
+                    "tier_value": row["tier_value"],
+                    "display_order": row["display_order"],
+                }
+            )
+            bucket["_location_types"].add(row["location_type"])
+            if row["tier_level"] in bucket["_tier_counts"]:
+                bucket["_tier_counts"][row["tier_level"]] += 1
+
+        results: Dict[str, Any] = {}
+        for code, bucket in buckets.items():
+            results[code] = {
+                "scenario": bucket["scenario"],
+                "tier_code": bucket["tier_code"],
+                "tier_name": bucket["tier_name"],
+                "tier_type": bucket["tier_type"],
+                "locations": bucket["locations"],
+                "metadata": {
+                    "total_locations": len(bucket["locations"]),
+                    "location_types": sorted(bucket["_location_types"]),
+                    "tier_counts": bucket["_tier_counts"],
+                },
+            }
+
+        missing = [code for code in requested if code not in results]
+
+        return {
+            "scenario": scenario_short_code,
+            "results": results,
+            "missing": missing,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @router.get(
@@ -394,6 +584,12 @@ async def get_tier_map_data(
 ) -> TierMapResponse:
     """
     Get GeoJSON FeatureCollection for map visualization.
+
+    **Status: reserved.** No current frontend callers; the main web app uses
+    Mapbox vector tiles for polygon geometry and pairs them with the lightweight
+    `/locations` endpoint for tier levels. Kept in the API as reserved capacity
+    for future consumers that need server-rendered GeoJSON (e.g. exports,
+    third-party integrations).
 
     **Use case:** Render tier outcomes on a map with colored markers/polygons.
 

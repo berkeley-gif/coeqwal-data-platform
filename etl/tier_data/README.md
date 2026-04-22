@@ -13,7 +13,7 @@ Loads tier outcome data for all active scenarios into the `tier_result` and
 | `AG_REV` | Agricultural revenue | multi-value | Demand units (regions) |
 | `ENV_FLOWS` | Environmental flows | multi-value | 17 stream reaches |
 | `RES_STOR` | Reservoir storage | multi-value | 8 reservoirs |
-| `GW_STOR` | Groundwater storage | multi-value | 42 water budget areas + Delta |
+| `GW_STOR` | Groundwater storage | multi-value | 42 locations: 41 water budget areas + `DETAW` (Delta) |
 | `DELTA_ECO` | Delta ecology | single-value | DETAW (Delta) |
 | `FW_DELTA_USES` | Freshwater for in-Delta uses | single-value | Emmaton, Jersey Point |
 | `FW_EXP` | Freshwater for Delta exports | single-value | Banks, Jones pumping plants |
@@ -141,6 +141,15 @@ Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back to
 - Both UPSERTs are safe to re-run.they use `ON CONFLICT DO UPDATE`.
 - `tier_location_result` has no `is_active` column. Retired scenario rows remain in
   the table but are never surfaced because the API filters on `tier_result.is_active`.
+- `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by design. It is the
+  CalSim id for the Legal Delta (from the DWR Delta Evapotranspiration of Applied Water
+  model), which geographically coincides with the Legal Delta polygon used by
+  `DELTA_ECO`. The `tier_location_result` uniqueness constraint is
+  `(scenario_short_code, tier_short_code, location_id, tier_version_id)`, so the same
+  `location_id` under different `tier_short_code` values is not a collision. API routes
+  that take a tier short code in the path (e.g. `/api/tier-map/{scenario}/{tier}/locations`)
+  return only that tier's `DETAW` row. Any client code that keys rows by `location_id`
+  across tiers should use the composite key `(tier_short_code, location_id)`.
 - `all_tiers.sql` is gitignored (generated output). Only the script and staging CSVs
   are tracked in the repo.
 - To load only specific tiers (e.g. after a partial data update):
