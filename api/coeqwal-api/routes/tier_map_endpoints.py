@@ -360,6 +360,26 @@ async def get_tier_locations_batch(
         )
 
     try:
+        # Existence / active check so unknown and retired scenarios 404
+        # explicitly instead of returning a misleading 200 with every
+        # requested code dumped into `missing`. Cheap indexed lookup; zero
+        # cost on valid scenarios. The message is distinct between the two
+        # cases so operators can tell "typo" from "scenario was retired".
+        scenario_row = await connection.fetchrow(
+            "SELECT is_active FROM scenario WHERE short_code = $1",
+            scenario_short_code,
+        )
+        if scenario_row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown scenario '{scenario_short_code}'.",
+            )
+        if not scenario_row["is_active"]:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Scenario '{scenario_short_code}' is not active.",
+            )
+
         # Single query: same join shape as the single-tier endpoint but with
         # tier_short_code = ANY($2). tier_result.is_active = TRUE is the
         # authoritative active-set filter across the tier surface.
