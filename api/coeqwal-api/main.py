@@ -390,10 +390,33 @@ async def root(request: Request):
 
 @app.get("/api", tags=["system"], summary="API Reference")
 @limiter.limit("100/minute")
-async def api_root(request: Request):
+async def api_root(
+    request: Request,
+    db: asyncpg.Connection = Depends(get_db),
+):
     """
     Complete endpoint reference for developers.
+
+    `data_summary` counts are computed live from the database on each
+    request (cached 5 minutes at the CDN via Cache-Control). They reflect
+    only `is_active = TRUE` rows for scenarios and tier indicators, to
+    match the listing endpoints.
     """
+    # Live counts so the summary never drifts from reality. Four small
+    # COUNT(*) queries against tables we already index; in practice this
+    # adds ~5ms to a request that's cached for 5 minutes anyway.
+    scenarios_count = await db.fetchval(
+        "SELECT COUNT(*) FROM scenario WHERE is_active = TRUE"
+    )
+    sibling_groups_count = await db.fetchval(
+        "SELECT COUNT(DISTINCT hydroclimate_sibling) FROM scenario WHERE is_active = TRUE"
+    )
+    tier_indicators_count = await db.fetchval(
+        "SELECT COUNT(*) FROM tier_definition WHERE is_active = TRUE"
+    )
+    network_nodes_count = await db.fetchval("SELECT COUNT(*) FROM network_node")
+    network_arcs_count = await db.fetchval("SELECT COUNT(*) FROM network_arc")
+
     return {
         "api": API_TITLE,
         "version": API_VERSION,
@@ -445,10 +468,11 @@ async def api_root(request: Request):
             },
         },
         "data_summary": {
-            "scenarios": 8,
-            "tier_indicators": 9,
-            "network_nodes": 1400,
-            "network_arcs": 1063,
+            "scenarios": scenarios_count,
+            "sibling_groups": sibling_groups_count,
+            "tier_indicators": tier_indicators_count,
+            "network_nodes": network_nodes_count,
+            "network_arcs": network_arcs_count,
         },
     }
 
