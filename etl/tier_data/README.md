@@ -17,7 +17,7 @@ Loads tier outcome data for all active scenarios into the `tier_result` and
 | `DELTA_ECO` | Delta ecology | single-value | DETAW (Delta) |
 | `FW_DELTA_USES` | Freshwater for in-Delta uses | single-value | Emmaton, Jersey Point |
 | `FW_EXP` | Freshwater for Delta exports | single-value | Banks, Jones pumping plants |
-| `WRC_SALMON_AB` | Salmon abundance | single-value | Sacramento at Keswick (hardcoded tier 4; s0065 excluded) |
+| `WRC_SALMON_AB` | Salmon abundance | single-value | Sacramento at Keswick (s0065 excluded by data team) |
 
 ---
 
@@ -28,14 +28,14 @@ Each tier has a CSV file in `staging/` named by its short code. The formats diff
 | File | Column layout |
 |------|--------------|
 | `CWS_DEL.csv` | `scenario_id`, then one column per demand unit short code; values = tier 1–4 or NA |
-| `AG_REV.csv` | `(index)`, `scenario`, `region`, `tier` |
+| `AG_REV.csv` | Wide: `scenario_id`, then one column per region; values = tier 1–4 (long `scenario, region, tier` format also auto-detected for backwards compatibility) |
 | `ENV_FLOWS.csv` | First col = station short code (row index); remaining cols = scenario codes; values = tier 1–4 |
 | `RES_STOR.csv` | `Scenario`, then one column per reservoir (e.g. `S_SHSTA_Storage_Tier`); values = tier 1–4 |
 | `GW_STOR.csv` | `scenario`, then one column per WBA (e.g. `WBA2`, `WBA7N`) plus `DETAW`; values = tier 0–4 |
 | `DELTA_ECO.csv` | `Scenario` (numeric, e.g. `11` for `s0011`), `TierValue` |
 | `FW_DELTA_USES.csv` | `ScenarioID`, `Salinity_Tier` |
 | `FW_EXP.csv` | `Scenario`, `Salinity_Export_Tier` |
-| `WRC_SALMON_AB` | No CSV.hardcoded as tier 4 for all active scenarios except `s0065` |
+| `WRC_SALMON_AB.csv` | `scenario`, `Tier_range` (string like `"Tier 4"`); `s0065` is excluded by the data team |
 
 NA cells in any CSV are skipped (no location row generated for that slot).
 

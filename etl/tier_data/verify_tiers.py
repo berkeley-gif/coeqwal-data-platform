@@ -543,34 +543,6 @@ def main():
                 total_missing += 1
         print()
 
-    # WRC_SALMON_AB.hardcoded tier 4, s0065 excluded
-    if not args.tier or args.tier == "WRC_SALMON_AB":
-        print(f"{'=' * 60}")
-        print("TIER: WRC_SALMON_AB (single, hardcoded)")
-        print(f"{'=' * 60}")
-        check_scenarios = sorted(ALLOWED_SCENARIOS - {"s0065"})
-        if args.scenario:
-            check_scenarios = [args.scenario] if args.scenario != "s0065" else []
-        for sid in check_scenarios:
-            api_scenario = api_data.get(sid)
-            if not api_scenario:
-                print(f"  MISSING WRC_SALMON_AB {sid}: not in API")
-                total_missing += 1
-                continue
-            tier_info = api_scenario.get("tiers", {}).get("WRC_SALMON_AB")
-            if not tier_info:
-                print(f"  MISSING WRC_SALMON_AB {sid}: tier not in API response")
-                total_missing += 1
-                continue
-            api_level = tier_info.get("level")
-            if api_level != 4:
-                print(f"  MISMATCH WRC_SALMON_AB {sid}: expected=4 API={api_level}")
-                total_mismatch += 1
-            else:
-                print(f"  OK WRC_SALMON_AB {sid}: level 4")
-                total_ok += 1
-        print()
-
     # Summary
     print("=" * 60)
     print("SUMMARY")

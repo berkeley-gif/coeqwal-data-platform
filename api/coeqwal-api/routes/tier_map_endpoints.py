@@ -125,6 +125,9 @@ async def get_available_tiers(
     """
     try:
         if scenario_short_code:
+            # Join tier_result so deactivated scenarios (e.g. retired s0029)
+            # are not surfaced.tier_location_result has no is_active column,
+            # so we rely on tier_result.is_active as the authoritative flag.
             query = """
             SELECT DISTINCT 
                 td.short_code,
@@ -135,6 +138,11 @@ async def get_available_tiers(
                 COUNT(tlr.id) as location_count
             FROM tier_definition td
             JOIN tier_location_result tlr ON td.short_code = tlr.tier_short_code
+            JOIN tier_result tr
+              ON tr.scenario_short_code = tlr.scenario_short_code
+             AND tr.tier_short_code = tlr.tier_short_code
+             AND tr.tier_version_id = tlr.tier_version_id
+             AND tr.is_active = TRUE
             WHERE tlr.scenario_short_code = $1
             AND td.is_active = TRUE
             GROUP BY td.short_code, td.name, td.description, td.tier_type, td.tier_count
@@ -188,6 +196,9 @@ async def get_scenario_tier_summary(
     **Example:** `GET /api/tier-map/summary/s0020`
     """
     try:
+        # Join tier_result so the summary returns 404 for retired scenarios
+        # (e.g. s0029) whose tier_location_result rows still exist but are
+        # flagged inactive at the tier_result level.
         query = """
         SELECT 
             td.short_code,
@@ -199,6 +210,11 @@ async def get_scenario_tier_summary(
             COUNT(DISTINCT tlr.tier_level) as tier_levels_used
         FROM tier_definition td
         JOIN tier_location_result tlr ON td.short_code = tlr.tier_short_code
+        JOIN tier_result tr
+          ON tr.scenario_short_code = tlr.scenario_short_code
+         AND tr.tier_short_code = tlr.tier_short_code
+         AND tr.tier_version_id = tlr.tier_version_id
+         AND tr.is_active = TRUE
         WHERE tlr.scenario_short_code = $1
         AND td.is_active = TRUE
         GROUP BY td.short_code, td.name, td.description, td.tier_type, td.tier_count
@@ -283,6 +299,8 @@ async def get_tier_locations(
     - AG_REV (132 agricultural demand units)
     """
     try:
+        # Join tier_result so retired scenarios (e.g. s0029) return 404
+        # instead of leaking their still-present tier_location_result rows.
         query = """
         SELECT 
             tlr.location_type,
@@ -295,6 +313,11 @@ async def get_tier_locations(
             td.tier_type
         FROM tier_location_result tlr
         JOIN tier_definition td ON tlr.tier_short_code = td.short_code
+        JOIN tier_result tr
+          ON tr.scenario_short_code = tlr.scenario_short_code
+         AND tr.tier_short_code = tlr.tier_short_code
+         AND tr.tier_version_id = tlr.tier_version_id
+         AND tr.is_active = TRUE
         WHERE tlr.scenario_short_code = $1
         AND tlr.tier_short_code = $2
         ORDER BY tlr.display_order, tlr.location_name
@@ -414,6 +437,8 @@ async def get_tier_map_data(
         # This avoids referencing geometry tables (reservoirs, wba, compliance_stations)
         # that may not yet be populated.PostgreSQL would fail at query planning time
         # even for CASE branches that are never executed.
+        # Join tier_result so retired scenarios (e.g. s0029) return 404
+        # instead of leaking GeoJSON for still-present but inactive rows.
         base_query = """
             SELECT
                 tlr.location_type,
@@ -426,6 +451,11 @@ async def get_tier_map_data(
                 td.tier_type
             FROM tier_location_result tlr
             JOIN tier_definition td ON tlr.tier_short_code = td.short_code
+            JOIN tier_result tr
+              ON tr.scenario_short_code = tlr.scenario_short_code
+             AND tr.tier_short_code = tlr.tier_short_code
+             AND tr.tier_version_id = tlr.tier_version_id
+             AND tr.is_active = TRUE
             WHERE tlr.scenario_short_code = $1
               AND tlr.tier_short_code = $2
             ORDER BY tlr.display_order, tlr.location_name

@@ -463,15 +463,6 @@ Narrow with `--scenario s0070` or `--tier ENV_FLOWS` when investigating a single
 
 `tier_version_id` is a constant at the top of `load_all_tier_results.py`. Bump it (and add a row to the `tier_version` table) only when the tier methodology or thresholds change in a way that should coexist with existing data. Day-to-day data refreshes should keep the same version id so UPSERT continues to work.
 
-### Follow-up TODO
-
-The repo still contains two legacy artifacts from the single-outcome ENV_FLOWS loader that predates `load_all_tier_results.py`:
-
-- `etl/tier_data/load_eflows_tier_results.py`
-- `etl/tier_data/eflows_tier_results.sql`
-
-Both are superseded by the unified loader and are not called from any pipeline. They are harmless to leave in the tree for now and should be retired in a follow-up cleanup (delete both files, confirm no docs or scripts still reference them).
-
 ---
 
 ## AWS production deployment

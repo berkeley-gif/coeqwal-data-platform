@@ -958,20 +958,6 @@ UPDATE tier_result
 """
 
 
-def generate_salmon_removal_sql() -> str:
-    """Generate SQL to remove WRC_SALMON_AB data (not reporting salmon results)."""
-    return f"""-- Remove WRC_SALMON_AB tier data (salmon results not being reported)
-DELETE FROM tier_location_result
- WHERE tier_short_code = 'WRC_SALMON_AB'
-   AND tier_version_id = {TIER_VERSION_ID};
-
-DELETE FROM tier_result
- WHERE tier_short_code = 'WRC_SALMON_AB'
-   AND tier_version_id = {TIER_VERSION_ID};
-
-"""
-
-
 # =============================================================================
 # MANIFEST & VERIFICATION
 # =============================================================================
