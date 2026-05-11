@@ -36,6 +36,7 @@ import csv
 import json
 import logging
 import os
+import shutil
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -853,7 +854,7 @@ def main() -> None:
         lines.append(md_table(rows))
         return rows
 
-    # ── Header ────────────────────────────────────────────────────────────
+    # ── Header──
     lines.append("# COEQWAL Monthly Database Audit\n")
     lines.append(f"**Generated:** {started.strftime('%Y-%m-%d %H:%M:%S')}  \n")
 
@@ -961,6 +962,13 @@ def main() -> None:
                             p(f"  - `{m['table']}`: in DB but not ERD: {extra}")
                         if missing:
                             p(f"  - `{m['table']}`: in ERD but not DB: {missing}")
+                stub_tables = erd_result.get("stub_tables") or []
+                if stub_tables:
+                    p(f"\n**Tables with ERD stub entries (no column tree, "
+                      f"skipped from column check):** {len(stub_tables)}")
+                    p(f"  {', '.join(f'`{t}`' for t in stub_tables)}")
+                    p("  _Add column trees to the ERD to enable column-level "
+                      "verification for these tables._")
                 p(f"\n_Correct tables: {erd_result['correct_count']}_")
         else:
             p(f"_ERD file not found at {erd_path}. Skipping comparison._")
@@ -1248,6 +1256,26 @@ def main() -> None:
     report_path = run_dir / "report.md"
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
+    # Maintain audits/latest.json so verify_erd_against_audit.py and the docs
+    # in database/audit/README.md work as written. Only updated when the
+    # content section ran and produced a fresh snapshot. Symlink where
+    # supported, plain copy as a portable fallback.
+    snapshot_file = run_dir / "schema_snapshot.json"
+    latest_link = Path(args.output_dir) / "latest.json"
+    latest_status: str
+    if snapshot_file.exists():
+        latest_status = "symlink"
+        try:
+            if latest_link.exists() or latest_link.is_symlink():
+                latest_link.unlink()
+            latest_link.symlink_to(snapshot_file.relative_to(latest_link.parent))
+        except OSError:
+            shutil.copyfile(snapshot_file, latest_link)
+            latest_status = "copy"
+        latest_msg = f"{latest_link} ({latest_status} -> {snapshot_file.name})"
+    else:
+        latest_msg = "skipped (no schema snapshot produced this run)"
+
     print()
     print("=" * 60)
     print("MONTHLY AUDIT COMPLETE")
@@ -1255,7 +1283,8 @@ def main() -> None:
     print(f"  Time:    {elapsed:.1f}s")
     print(f"  Output:  {run_dir.resolve()}")
     print(f"  Report:  {report_path.name}")
-    print(f"  Snapshot:{(run_dir / 'schema_snapshot.json').name}")
+    print(f"  Snapshot:{snapshot_file.name if snapshot_file.exists() else '(skipped)'}")
+    print(f"  Latest:  {latest_msg}")
     print("  Exports: layer_exports/ + results_samples/")
     print("=" * 60)
 

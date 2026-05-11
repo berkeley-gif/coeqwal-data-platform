@@ -121,7 +121,7 @@ LAYERS: dict[str, list[str]] = {
 }
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers─────────
 
 def build_select(cur: psycopg2.extensions.cursor, table_name: str):
     """
@@ -190,7 +190,7 @@ def export_table(
     return len(rows)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Main────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser(

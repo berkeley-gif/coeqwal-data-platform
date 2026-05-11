@@ -96,7 +96,7 @@ logging.basicConfig(
 log = logging.getLogger("env_flow_statistics")
 
 
-# ─── Constants ────────────────────────────────────────────────────────────────
+# ─── Constants──────
 
 
 S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")

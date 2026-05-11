@@ -10,9 +10,9 @@
 
 BEGIN;
 
--- ──────────────────────────────────────────────────────────────────────
+--────────────
 -- 1. Climate sensitivity
--- ──────────────────────────────────────────────────────────────────────
+--────────────
 CREATE TABLE IF NOT EXISTS sensitivity_climate (
     id                  SERIAL PRIMARY KEY,
     sibling_group       VARCHAR(20)  NOT NULL,
@@ -40,9 +40,9 @@ CREATE INDEX IF NOT EXISTS idx_sensitivity_climate_module_month
 CREATE INDEX IF NOT EXISTS idx_sensitivity_climate_sibling
     ON sensitivity_climate (sibling_group);
 
--- ──────────────────────────────────────────────────────────────────────
+--────────────
 -- 2. Operational sensitivity
--- ──────────────────────────────────────────────────────────────────────
+--────────────
 CREATE TABLE IF NOT EXISTS sensitivity_operational (
     id                  SERIAL PRIMARY KEY,
     hydroclimate_id     INTEGER      NOT NULL REFERENCES hydroclimate(id),
@@ -70,9 +70,9 @@ CREATE INDEX IF NOT EXISTS idx_sensitivity_operational_module_month
 CREATE INDEX IF NOT EXISTS idx_sensitivity_operational_hydro
     ON sensitivity_operational (hydroclimate_id);
 
--- ──────────────────────────────────────────────────────────────────────
+--────────────
 -- Verification
--- ──────────────────────────────────────────────────────────────────────
+--────────────
 SELECT 'sensitivity_climate'    AS "table", COUNT(*) AS rows FROM sensitivity_climate
 UNION ALL
 SELECT 'sensitivity_operational', COUNT(*) FROM sensitivity_operational;

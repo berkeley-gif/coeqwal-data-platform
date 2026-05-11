@@ -129,8 +129,16 @@ database/scripts/sql/**/*_cloud9.sql
 
 # Local audit outputs
 audits/
+costs/
 
-reference/*
-!reference/coeqwal_cs3_scenario_listing_v6*
+# Private infrastructure documentation (AWS account IDs, ARNs, runbooks)
+docs/INFRASTRUCTURE.md
+
+# Reference files: small spreadsheets and crosswalks travel with the schema.
+# Large per-scenario output dumps belong in S3 (coeqwal-model-run), not git.
+reference/.DS_Store
+reference/s00*/
+reference/s00*.zip
+reference/s00*.csv
 
 database/scripts/sql/migrations/

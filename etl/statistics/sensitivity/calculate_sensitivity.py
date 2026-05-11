@@ -64,9 +64,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("sensitivity")
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Data-source definitions
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 @dataclass(frozen=True)
@@ -434,9 +434,9 @@ PERIOD_SOURCES: List[MetricSource] = [
 
 ALL_MODULES = sorted({s.module for s in MONTHLY_SOURCES + PERIOD_SOURCES})
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Helper: safe percent change
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 def _pct_change(new_val, ref_val):
@@ -450,9 +450,9 @@ def _pct_change(new_val, ref_val):
     return (new_val - ref_val) / abs(ref_val) * 100.0
 
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Core: load scenario metadata
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 def load_scenario_metadata(conn) -> pd.DataFrame:
@@ -493,9 +493,9 @@ def identify_reference_hydroclimate(meta: pd.DataFrame) -> int:
     return ref_id
 
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Core: pull metric values for all scenarios
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 def fetch_metric_data(conn, src: MetricSource) -> Optional[pd.DataFrame]:
@@ -547,9 +547,9 @@ def fetch_delta_monthly(conn) -> Optional[pd.DataFrame]:
         return None
 
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Core: compute climate sensitivity
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 def compute_climate_sensitivity(
@@ -644,9 +644,9 @@ def compute_climate_sensitivity(
     return rows
 
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Core: compute operational sensitivity
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 def compute_operational_sensitivity(
@@ -707,9 +707,9 @@ def compute_operational_sensitivity(
     return rows
 
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Core: write results
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 CLIMATE_INSERT = """
     INSERT INTO sensitivity_climate
@@ -788,9 +788,9 @@ def write_operational_rows(conn, rows: List[Tuple], dry_run: bool):
     log.info(f"  Wrote {len(rows)} operational sensitivity rows")
 
 
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 # Main orchestration
-# ────────────────────────────────────────────────────────────────────────
+#──────────────
 
 
 ANNUAL_SYNTHESIS_MODULES = {"reservoir"}

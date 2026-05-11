@@ -46,6 +46,9 @@
 - `du_agriculture_entity` (144 records)
 - `du_refuge_entity` (18 records)
 - `wba` (42 records)
+- `cws_entity` (planned — ~476 records, see "PLANNED TABLES — community water systems (CWS)" below)
+- `cws_du_link` (planned — ~586 records)
+- `cws_list` + `cws_list_du_member` (planned — list/registry pattern for project vs CalSim DU lists)
 
 ### **Tier System**
 - `tier_definition` (9 records)
@@ -1669,5 +1672,160 @@ Table: watershed
 Records: 13
 Columns: 11
 ```
+
+---
+
+## PLANNED TABLES — community water systems (CWS)
+
+> Designed but **not yet implemented**. Source data lives in `reference/community_water_systems/`. See `database/README.md` → "03_ENTITY: entity tables and the entity-attribute pattern" → "Project list vs CalSim list (community water systems)" for the rationale and reconciliation work needed before these are created.
+
+### **cws_entity** (planned)
+
+One row per California Public Water System (PWSID), ~476 rows from `Master list of systems served for sw units updated april 13.xlsx`.
+
+```
+Table: cws_entity
+Records: ~476 (planned)
+Columns: 13
+Audit: Full audit trail
+
+Columns:
+  id                       integer              [PK]
+  short_code               text                 [UNIQUE NOT NULL]   -- normalised PWSID
+  pwsid                    text                 NOT NULL            -- e.g. "CA0110001"
+  system_name              text                 NOT NULL
+  pop_served               integer
+  system_lat               numeric
+  system_lon               numeric
+  geom                     geometry(Point,4326)
+  hydrologic_region_id     integer              [FK → hydrologic_region.id]
+  source_id                integer              [FK → source.id]
+  is_active                boolean              NOT NULL DEFAULT TRUE
+  created_at               timestamp with time zone
+  created_by               integer              [FK → developer.id]
+  updated_at               timestamp with time zone
+  updated_by               integer              [FK → developer.id]
+
+Constraints:
+  ├── UNIQUE (pwsid)
+  ├── FK: hydrologic_region_id → hydrologic_region.id
+  └── FK: source_id → source.id
+
+Indexes:
+  ├── idx_cws_entity_pwsid (pwsid)
+  ├── idx_cws_entity_hydrologic_region (hydrologic_region_id)
+  └── idx_cws_entity_geom (geom) USING GIST
+```
+
+### **cws_du_link** (planned)
+
+M:N junction `cws_entity` ↔ `du_urban_entity`. ~586 rows from the systems-served list (a system may serve multiple DUs and a DU may be served by multiple systems).
+
+```
+Table: cws_du_link
+Records: ~586 (planned)
+Columns: 8
+Audit: Full audit trail
+
+Columns:
+  id              integer              [PK]
+  cws_entity_id   integer              NOT NULL  [FK → cws_entity.id]
+  du_id           character varying    NOT NULL  [FK → du_urban_entity.du_id]
+  is_active       boolean              NOT NULL DEFAULT TRUE
+  created_at      timestamp with time zone
+  created_by      integer              [FK → developer.id]
+  updated_at      timestamp with time zone
+  updated_by      integer              [FK → developer.id]
+
+Constraints:
+  ├── UNIQUE (cws_entity_id, du_id)
+  ├── FK: cws_entity_id → cws_entity.id
+  └── FK: du_id → du_urban_entity.du_id
+
+Indexes:
+  ├── idx_cws_du_link_cws (cws_entity_id)
+  └── idx_cws_du_link_du (du_id)
+```
+
+### **cws_list** (planned, layer 01_lookup)
+
+Registry of named CWS-domain DU lists. Lets us record which list any given DU belongs to (project master, focal SW, focal GW, HHS allocation, M&I crosswalk, CalSim urban, tier matrix, etc.). One row per named list.
+
+```
+Table: cws_list
+Records: ~7 (planned)
+Columns: 10
+Audit: Full audit trail
+
+Columns:
+  id              integer              [PK]
+  short_code      text                 [UNIQUE NOT NULL]   -- e.g. "coeqwal_master_du"
+  label           text                 NOT NULL
+  description     text
+  source_id       integer              [FK → source.id]
+  is_active       boolean              NOT NULL DEFAULT TRUE
+  created_at      timestamp with time zone
+  created_by      integer              [FK → developer.id]
+  updated_at      timestamp with time zone
+  updated_by      integer              [FK → developer.id]
+
+Initial rows (planned):
+  - coeqwal_master_du      (124 DUs)
+  - coeqwal_focal_sw_du    (75 DUs)
+  - coeqwal_focal_gw_du    (83 DUs)
+  - calsim_urban_du        (145 DUs)
+  - tier_matrix            (71 DUs — already in du_urban_group.tier)
+  - hhs_allocation         (76 DUs)
+  - mi_delivery_crosswalk  (75 DUs)
+```
+
+### **cws_list_du_member** (planned)
+
+M:N junction `cws_list` ↔ `du_urban_entity`. The membership table for the registry above.
+
+```
+Table: cws_list_du_member
+Records: ~700 (planned, sum of list sizes)
+Columns: 8
+Audit: Full audit trail
+
+Columns:
+  id              integer              [PK]
+  cws_list_id     integer              NOT NULL  [FK → cws_list.id]
+  du_id           character varying    NOT NULL  [FK → du_urban_entity.du_id]
+  is_active       boolean              NOT NULL DEFAULT TRUE
+  created_at      timestamp with time zone
+  created_by      integer              [FK → developer.id]
+  updated_at      timestamp with time zone
+  updated_by      integer              [FK → developer.id]
+
+Constraints:
+  ├── UNIQUE (cws_list_id, du_id)
+  ├── FK: cws_list_id → cws_list.id
+  └── FK: du_id → du_urban_entity.du_id
+
+Indexes:
+  ├── idx_cws_list_du_member_list (cws_list_id)
+  └── idx_cws_list_du_member_du (du_id)
+```
+
+### Planned column additions to **du_urban_entity**
+
+Promoted from per-DU attributes in the new master CSVs.
+
+```
+ALTER TABLE du_urban_entity
+  ADD COLUMN is_sw_du                          boolean,
+  ADD COLUMN is_gw_du                          boolean,
+  ADD COLUMN largest_system_centroid_lat       numeric,
+  ADD COLUMN largest_system_centroid_lon       numeric,
+  ADD COLUMN calsim_centroid_lat               numeric,
+  ADD COLUMN calsim_centroid_lon               numeric,
+  ADD COLUMN hhs_allocation_taf                numeric;
+```
+
+### Planned `du_urban_variable` update
+
+Re-load with `Updated Master crosswalk SW DUs M&I May7 2026.xlsx` so each of the 75 SW DUs carries the agreed `delivery_variable`. Triggers a full re-run of `etl/statistics/du_urban/run_all.py` for every active scenario.
 
 ---

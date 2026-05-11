@@ -53,6 +53,16 @@ _SYSTEM_TABLES = {'spatial_ref_sys'}
 # these appear in pg_indexes but don't need to be documented in the ERD.
 _AUTO_INDEX_PREFIXES = ('pg_',)
 
+# Standard columns the COEQWAL conventions guarantee on most tables.
+# The ERD usually omits them (they would just be visual noise on every table)
+# so the verifier treats them as implicitly documented and excludes them
+# from "missing in ERD" mismatches.
+_IMPLICIT_COLUMNS = {
+    'id', 'is_active',
+    'created_at', 'created_by',
+    'updated_at', 'updated_by',
+}
+
 
 # ---------------------------------------------------------------------------
 # ERD parser
@@ -304,13 +314,25 @@ def compare_schemas(
 
     # ------------------------------------------------------------------ #
     # 3. Column mismatches
+    #
+    # Two filters keep this signal-only:
+    #   - Tables documented in stub form ("Records: N \n Columns: M" with no
+    #     column tree) are skipped — they have no column list to compare against.
+    #   - The six implicit standard columns (`id`, `is_active`, `created_at`,
+    #     `created_by`, `updated_at`, `updated_by`) are not flagged as
+    #     "missing from ERD"; they are guaranteed by convention.
+    # Anything still flagged after these filters is real drift.
     # ------------------------------------------------------------------ #
     common_tables = set(erd_tables) & set(audit_tables)
     col_mismatches = []
+    stub_tables = []
     for t in sorted(common_tables):
         erd_cols = set(erd_tables[t]['columns'])
         db_cols  = set(audit_tables[t]['columns'])
-        missing_in_erd = sorted(db_cols - erd_cols)
+        if not erd_cols:
+            stub_tables.append(t)
+            continue
+        missing_in_erd = sorted(db_cols - erd_cols - _IMPLICIT_COLUMNS)
         extra_in_erd   = sorted(erd_cols - db_cols)
         if missing_in_erd or extra_in_erd:
             col_mismatches.append({
@@ -332,15 +354,30 @@ def compare_schemas(
             if m['extra_in_erd']:
                 out(f"    In ERD but not in DB:        {', '.join(m['extra_in_erd'])}")
             if verbose:
-                out(f"    DB columns:  {', '.join(sorted(audit_tables[m['table']]['columns']))}")
-                out(f"    ERD columns: {', '.join(sorted(erd_tables[m['table']]['columns']))}")
+                db_show  = sorted(set(audit_tables[m['table']]['columns']) - _IMPLICIT_COLUMNS)
+                erd_show = sorted(set(erd_tables[m['table']]['columns']) - _IMPLICIT_COLUMNS)
+                out(f"    DB columns (excl. implicit):  {', '.join(db_show)}")
+                out(f"    ERD columns (excl. implicit): {', '.join(erd_show)}")
+        out()
+    if stub_tables:
+        out(f"   Skipped (ERD stub, no column list): {len(stub_tables)} tables — "
+            f"add column trees to the ERD to enable column-level checks.")
+        if verbose:
+            for t in stub_tables:
+                out(f"     - {t}")
         out()
 
     # ------------------------------------------------------------------ #
     # 4. Audit field documentation mismatches
+    #
+    # Same stub-table filter as section 3: an ERD entry without a column
+    # tree implicitly inherits the standard audit fields. Only flag a real
+    # mismatch when the ERD did list its columns and they disagree.
     # ------------------------------------------------------------------ #
     audit_field_mismatches = []
     for t in sorted(common_tables):
+        if not erd_tables[t]['columns']:
+            continue
         if erd_tables[t]['has_audit_fields'] != audit_tables[t]['has_audit_fields']:
             audit_field_mismatches.append({
                 'table':         t,
@@ -529,7 +566,8 @@ def compare_schemas(
     # ------------------------------------------------------------------ #
     # Summary
     # ------------------------------------------------------------------ #
-    correct_count = len(common_tables) - len(col_mismatches)
+    fully_verified_count = len(common_tables) - len(col_mismatches) - len(stub_tables)
+    correct_count = fully_verified_count
     is_synchronized = not any([
         missing_from_erd, col_mismatches, audit_field_mismatches, unpopulated_audit,
         index_mismatches, fk_mismatches, check_mismatches,
@@ -541,9 +579,10 @@ def compare_schemas(
     out("=" * 80)
     out("SUMMARY:")
     out("-" * 80)
-    out(f"  Tables documented correctly:              {correct_count:>4}")
+    out(f"  Tables fully verified (column-level):     {correct_count:>4}")
     out(f"  Tables with column mismatches:            {len(col_mismatches):>4}")
     out(f"  Tables with audit field mismatches:       {len(audit_field_mismatches):>4}")
+    out(f"  Tables with ERD stub only (not verified): {len(stub_tables):>4}")
     out(f"  Tables with unpopulated audit fields:     {len(unpopulated_audit):>4}")
     out(f"  Tables missing from ERD:                  {len(missing_from_erd):>4}")
     out(f"  Tables in ERD but not DB:                 {len(missing_from_db):>4}")
@@ -567,6 +606,7 @@ def compare_schemas(
         'missing_from_erd':        sorted(missing_from_erd),
         'missing_from_db':         missing_from_db,
         'column_mismatches':       col_mismatches,
+        'stub_tables':             stub_tables,
         'audit_field_mismatches':  audit_field_mismatches,
         'unpopulated_audit_fields': unpopulated_audit,
         'index_mismatches':        index_mismatches,

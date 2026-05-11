@@ -2,6 +2,27 @@
 
 A comprehensive data platform for the Collaboratory for Equity in Water Allocation (COEQWAL) project, providing multi-level data schema, PostgreSQL database with PostGIS extension, data APIs, and upload and verification infrastructure for California water management scenario presentation, analysis, and review.
 
+## Backend at a glance
+
+- **PostgreSQL + PostGIS on RDS**, FastAPI in front (`api/coeqwal-api/`), ETL pipelines under `etl/`, and audit & verification under `database/audit/` and `etl/statistics/verify_*`.
+- The schema is a strict layered architecture (see `database/README.md` for full details):
+  - **Layers 00–08** = foundational/reference data (versioning, lookups, network, **entities**, variables, assumptions/operations, scenarios, hydroclimate, themes).
+  - **Layers 10+** = derived results (tier results, monthly stats, period summaries).
+- Source-of-truth ERD: `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` (~96 tables, ~402k rows). The latest monthly audit is in `audits/monthly_<timestamp>/report.md`.
+- Audit chain (per `database/audit/README.md`):
+  - `database/audit/run_monthly_audit.py` → schema + content + health + cost.
+  - `database/audit/verify_erd_against_audit.py` → ERD doc vs. live DB schema.
+  - `database/scripts/sql/<layer>/09_verify_level<NN>.sql` → per-layer structural checks.
+  - `etl/statistics/verify_all_sections.py` → CSV→DB statistics accuracy (Layer 2).
+  - `etl/statistics/verify_api.py` → DB→API accuracy (Layer 3).
+- Standard data shape (used for every domain — reservoirs, channels, ag DUs, refuges, MI contractors, CWS — community water systems):
+  1. **Entity table** in layer `03_entity/` with `id` PK, `short_code` UNIQUE, FKs to lookup tables (`hydrologic_region_id`, `source_id`, `model_source_id`, …), and the standard audit columns (`is_active`, `created_at`, `created_by`, `updated_at`, `updated_by`) populated by the `set_audit_fields()` trigger.
+  2. **Variable mapping** in layer `04_variable/` (e.g. `du_urban_variable`, `channel_variable`) holding the CalSim variable names per entity.
+  3. **Optional multi-arc / sub-entity tables** (`du_urban_delivery_arc`, `mi_contractor_delivery_arc`) for entities that need to sum multiple CalSim arcs.
+  4. **Group/membership tables** (`*_group` + `*_group_member`) for analytical filtering.
+  5. **Statistics tables** in layer 10+ (`*_monthly`, `*_period_summary`) keyed by `scenario_short_code` + `<entity>_id`.
+  6. Standards documented in `database/CHECKLIST_TABLE_STANDARDS.md`: snake_case, FK IDs (never text), audit trigger applied, row in `domain_family_map` for versioning. Every new table also needs an SQL script under `database/scripts/sql/<layer>/` and a seed CSV under `database/seed_tables/<layer>/`.
+
 ## Tech stack
 
 ### API layer

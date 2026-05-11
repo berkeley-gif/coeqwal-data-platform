@@ -85,7 +85,7 @@ def diagnose_scenario(s3, scenario_id, dv_ids, sv_ids):
     print(f"Scenario: {scenario_id}")
     print(f"{'=' * 60}")
 
-    # ── DV ────────────────────────────────────────────────────────────────
+    # ── DV──────
     dv_keys = [
         f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_calsim_output.csv",
         f"scenario/{scenario_id}/csv/{scenario_id}_DV.csv",
@@ -115,7 +115,7 @@ def diagnose_scenario(s3, scenario_id, dv_ids, sv_ids):
         else:
             print("  All target DV variables present ✓")
 
-    # ── SV ────────────────────────────────────────────────────────────────
+    # ── SV──────
     sv_key = f"scenario/{scenario_id}/csv/{scenario_id}_coeqwal_sv_input.csv"
     sv_vars = get_header_vars(s3, S3_BUCKET, sv_key)
 

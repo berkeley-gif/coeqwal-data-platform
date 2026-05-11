@@ -54,7 +54,7 @@ REL_TOL = 0.001
 from scenarios import SCENARIOS as ALL_SCENARIOS  # noqa: E402
 
 
-# ── Data Classes ─────────────────────────────────────────────────────────────
+# ── Data Classes───
 
 
 @dataclass
@@ -157,7 +157,7 @@ class APIReport:
                 )
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers────────
 
 
 def _sf(val) -> Optional[float]:
@@ -354,7 +354,7 @@ def verify_delta(report: APIReport, conn, api_url: str, sid: str):
         report.add("data_present", section, "all", 1.0, 0.0)
 
 
-# ── Verify: Tiers ───────────────────────────────────────────────────────────
+# ── Verify: Tiers─
 
 TIER_CODES = [
     "CWS_DEL",
@@ -459,7 +459,7 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
         report.add("avg_pct_unimpaired", section, code, db_unimp, api_unimp)
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Main───────────
 
 
 def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIReport:

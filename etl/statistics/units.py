@@ -162,7 +162,7 @@ def check_post_conversion_magnitude(
     return flagged
 
 
-# ─────────────────────────────────────────────────────────────────────
+#───────────
 # DSS-format CSV header helpers
 #
 # CalSim CSVs exported from DSS have a 7-row header:
@@ -182,7 +182,7 @@ def check_post_conversion_magnitude(
 # dss_to_csv.py writes both as separate columns (they have distinct
 # series keys), but both show the same B-part in the header.
 # The helpers below keep the first occurrence to avoid ambiguity.
-# ─────────────────────────────────────────────────────────────────────
+#───────────
 
 
 def parse_dss_csv_header(

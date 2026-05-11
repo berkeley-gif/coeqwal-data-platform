@@ -417,6 +417,249 @@ Example output (26 subtypes):
 
 ---
 
+### 03_ENTITY: entity tables and the entity-attribute pattern
+
+The entity layer holds the canonical, version-controlled list of every "thing" the model and the website talk about: every reservoir, every channel, every demand unit, every M&I contractor, every community water system, every water budget area. Statistics tables in layer 10+ all reference rows in this layer by `<entity>_id`.
+
+#### The entity-attribute pattern
+
+Every domain in the database follows the same five-piece shape. Use this pattern when adding a new domain (e.g. `community_water_system`, future `inflow_entity`, etc.) so the audit, ETL, and API layers all behave consistently.
+
+```
+Layer 01 — lookups        hydrologic_region, source, model_source, unit, statistic_type, ...
+                              ▲
+                              │ FK
+Layer 03 — entity         <domain>_entity                 (the "thing": one row per real-world object)
+                          <domain>_group                   (optional; analytical groupings)
+                          <domain>_group_member            (M:N membership)
+                          <domain>_delivery_arc            (optional; multi-arc CalSim sums)
+                          <related>_<domain>_link          (M:N to other entities, e.g. CWS↔DU)
+                              ▲
+                              │ FK
+Layer 04 — variables      <domain>_variable                (CalSim variable names per entity)
+                              ▲
+                              │ FK (entity_id) + scenario_short_code
+Layer 10+ — statistics    <domain>_<period>                (e.g. *_monthly, *_period_summary)
+```
+
+**Required columns on every entity table** (per `database/CHECKLIST_TABLE_STANDARDS.md`):
+- `id SERIAL PRIMARY KEY`
+- `short_code TEXT UNIQUE NOT NULL` — stable, machine-readable code used by ETL and API
+- Domain attributes (FK IDs to lookup tables — never store text values for things that have a lookup)
+- `is_active BOOLEAN NOT NULL DEFAULT TRUE` — soft delete
+- `created_at`, `created_by`, `updated_at`, `updated_by` — populated automatically by the `set_audit_fields()` trigger
+- A row in `domain_family_map` so the versioning system knows which `version_family` governs the table
+
+**The `aggregate` adjective.** Several entity tables carry the suffix `_aggregate_entity` (`ag_aggregate_entity`, `cws_aggregate_entity`). It denotes a CalSim **project-level rollup** — one row per pre-computed CalSim variable that already sums many demand units (`DEL_SWP_PMI`, `DEL_CVP_PAG_N`, `DEL_SWP_MWD`, etc.). It does NOT mean "an aggregation of community water systems"; it means "this table holds the entities CalSim itself reports as aggregates rather than per-DU." The naming is accurate and stays as-is.
+
+**Standard prefixes (canonical).** The COEQWAL team uses these short prefixes everywhere — in tables, columns, ETL, API routes, and frontend hooks. Pick the right prefix for any new table in this domain.
+
+| Prefix | Meaning | Example tables |
+|---|---|---|
+| `cws_` | Community water system domain (urban / M&I / drinking water) | `cws_aggregate_entity`, `cws_entity` (planned), `cws_du_link` (planned), `cws_list` (planned) |
+| `du_urban_` | Per-CalSim-DU rows in the CWS domain | `du_urban_entity`, `du_urban_variable`, `du_urban_group` |
+| `mi_` | Per-M&I-contractor rows (subset of CWS domain) | `mi_contractor`, `mi_delivery_monthly` |
+| `ag_` | Agricultural domain | `ag_aggregate_entity`, `ag_du_demand_monthly` |
+| `du_agriculture_`, `du_refuge_` | Per-DU rows in the ag and refuge domains | `du_agriculture_entity`, `du_refuge_entity` |
+| `reservoir_` | Reservoir domain | `reservoir_entity`, `reservoir_storage_monthly` |
+| `channel_` | Channel domain | `channel_entity`, `env_flow_channel_monthly` |
+
+> **Rule of thumb for new tables in the CWS domain:** use `cws_*` for things that are scoped to a community water system (e.g. PWSID-keyed entity, lookup, link). Keep `du_urban_*` for things scoped to a CalSim urban demand unit, and `mi_*` for things scoped to an M&I contractor. Do not introduce new prefixes.
+
+#### Implemented entity tables
+
+Counts are from the most recent monthly audit (run `python database/audit/run_monthly_audit.py` to refresh).
+
+| Domain | Entity table | Records | Variable / link / group tables | Statistics tables (Layer 10+) |
+|---|---|---:|---|---|
+| Reservoirs | `reservoir_entity` | 92 | `reservoir_group`, `reservoir_group_member`; `reservoir_variable` (planned) | `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_monthly_percentile`, `reservoir_period_summary` |
+| Channels | `channel_entity` | 669 | `channel_variable` | `env_flow_channel_monthly`, `env_flow_channel_seasonal`, `env_flow_channel_period_summary` |
+| Compliance stations | `compliance_station` | 2 | — | (Delta tables, indirectly) |
+| Water budget areas | `wba` | 42 | (referenced by DU tables via `wba_id`) | — |
+| Agricultural DUs | `du_agriculture_entity` | 144 | — | `ag_du_demand_monthly`, `ag_du_sw_delivery_monthly`, `ag_du_gw_pumping_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary` |
+| Refuge DUs | `du_refuge_entity` | 18 | — | `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary` |
+| CWS DUs (urban) | `du_urban_entity` | 145 | `du_urban_variable`, `du_urban_delivery_arc`, `du_urban_group`, `du_urban_group_member` | `du_delivery_monthly`, `du_shortage_monthly`, `du_period_summary` |
+| CWS contractors (M&I) | `mi_contractor` | 30 | `mi_contractor_delivery_arc`, `mi_contractor_group`, `mi_contractor_group_member` | `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary` |
+| Agricultural project aggregates | `ag_aggregate_entity` | 9 | (delivery variable on entity row) | `ag_aggregate_monthly`, `ag_aggregate_period_summary` |
+| CWS project aggregates | `cws_aggregate_entity` | 6 | (delivery + shortage variables on entity row) | `cws_aggregate_monthly`, `cws_aggregate_period_summary` |
+| Reservoir (legacy) | `reservoir` | 7 | — | (predates `reservoir_entity`; kept for FK compatibility) |
+
+**Project-level aggregates currently in the DB.** These are CalSim's pre-computed project-level totals — useful for "which DUs are SWP vs CVP" and "NOD vs SOD" questions at the **project** level. (Per-DU SWP/CVP/NOD/SOD membership lives in `du_urban_group_member` for urban DUs and is derivable from `du_agriculture_entity` for ag DUs.)
+
+`cws_aggregate_entity` (6 rows) — CWS / M&I rollups:
+
+| short_code | label | project | region | delivery_var | shortage_var |
+|---|---|---|---|---|---|
+| `swp_total` | SWP Total M&I | SWP | total | `DEL_SWP_PMI` | `SHORT_SWP_PMI` |
+| `swp_nod` | SWP North | SWP | nod | `DEL_SWP_PMI_N` | `SHORT_SWP_PMI_N` |
+| `swp_sod` | SWP South | SWP | sod | `DEL_SWP_PMI_S` | `SHORT_SWP_PMI_S` |
+| `cvp_nod` | CVP North | CVP | nod | `DEL_CVP_PMI_N` | `SHORT_CVP_PMI_N` |
+| `cvp_sod` | CVP South | CVP | sod | `DEL_CVP_PMI_S` | `SHORT_CVP_PMI_S` |
+| `mwd` | Metropolitan WD | MWD | — | `DEL_SWP_MWD` | `SHORT_SWP_MWD` |
+
+`ag_aggregate_entity` (9 rows) — agricultural rollups:
+
+| short_code | label | project | region | delivery_var |
+|---|---|---|---|---|
+| `swp_pag` | SWP Project AG | SWP | TOTAL | `DEL_SWP_PAG` |
+| `swp_pag_n` | SWP Project AG North | SWP | NOD | `DEL_SWP_PAG_N` |
+| `swp_pag_s` | SWP Project AG South | SWP | SOD | `DEL_SWP_PAG_S` |
+| `cvp_pag_n` | CVP Project AG North | CVP | NOD | `DEL_CVP_PAG_N` |
+| `cvp_pag_s` | CVP Project AG South | CVP | SOD | `DEL_CVP_PAG_S` |
+| `cvp_psc_n` | CVP Settlement Contractors NOD | CVP | NOD | `DEL_CVP_PSC_N` |
+| `cvp_pex_s` | CVP Exchange Contractors SOD | CVP | SOD | `DEL_CVP_PEX_S` |
+| `nod_ag` | Total NOD AG | — | NOD | `COMPUTED` (sum) |
+| `sod_ag` | Total SOD AG | — | SOD | `COMPUTED` (sum) |
+
+`mi_contractor_group` (6 rows) — contractor-level groupings: `swp`, `cvp_nod`, `cvp_sod`, `all_mi`, `swp_mi`, `swp_ag`.
+
+`du_urban_group` (11 rows) — per-DU groupings: `tier` (71 members — the existing canonical focal set), `nod` (0), `sod` (0), `swp_served` (0), `cvp_served` (0), `swp_delivery_point` (0), `var_wba` (40), `var_gw_only` (3), `var_swp_contractor` (11), `var_named_locality` (15), `var_missing` (2). The 5 zero-member groups need to be backfilled.
+
+> **No other aggregate-style tables exist.** Reservoir / channel / refuge / wba domains do not have `*_aggregate_entity` tables; their roll-ups are computed at query / API time when needed.
+
+#### Planned entity tables (in ERD, not yet in DB)
+
+Per the audit's "Tables in ERD but NOT in DB" section, these are documented but not implemented:
+
+| Domain | Planned table | Notes |
+|---|---|---|
+| Inflows | `inflow_entity` | Watershed inflow nodes; see ERD for column list. Variable side already partly designed (`inflow_variable.csv` seed exists). |
+| Reservoirs | `reservoir_variable` | Variable mapping for reservoirs (storage, spill, levels). Currently the ETL uses hardcoded `S_*`, `C_*_FLOOD`, `S_*LEVELxDV` patterns; promoting these to a table would match the channel / DU pattern. |
+| Network attribution | `network_arc_attribute`, `network_node_attribute`, `network_source_attribution` | Per-network typed attribute extensions. |
+| Network connectivity | `network_physical_connectivity`, `network_computational_connectivity`, `network_operational_connectivity` | Three connectivity perspectives planned in the ERD. |
+| Network variables | `network_variable`, `variable_prefix` | Variable catalog at the network level. |
+| Watershed | `river_watershed` | Watershed↔river crosswalk. |
+| Hydroclimate | `hydroclimate_source` | Source attribution for hydroclimate scenarios. |
+| Themes | `theme_source_link` | Source attribution for themes (parallel to `scenario_source_link`). |
+| Outcomes | `outcome_category`, `outcome_statistic` | Outcome-framework tables (see `database/seed_tables/03_outcome_framework/` for partial seed). |
+| ETL provenance | `data_load_log` | Batch-level load tracking; flagged as TODO in this README. |
+
+New tables coming from the spring-2026 CWS data delivery (see plan in `database/seed_tables/03_entity/cws/` once staged):
+
+| Planned table | Layer | Purpose |
+|---|---|---|
+| `cws_entity` | 03_entity | One row per California Public Water System (PWSID): `pwsid`, `system_name`, `pop_served`, `system_lat`, `system_lon`, `hydrologic_region_id`, `source_id`. ~476 systems from the 2026-04-13 master list. |
+| `cws_du_link` | 03_entity | M:N junction `cws_entity` ↔ `du_urban_entity` (a system may serve multiple DUs and a DU may be served by multiple systems). One row per system-DU pair (~586 rows). |
+| `cws_list` | 01_lookup | List/registry catalog (e.g. `coeqwal_master_du`, `coeqwal_focal_sw_du`, `calsim_urban_du`, `tier_matrix`, `hhs_allocation`). One row per named list. |
+| `cws_list_du_member` | 03_entity | M:N junction `cws_list` ↔ `du_urban_entity`. Indicates which list(s) each DU belongs to (replaces / generalizes `du_urban_group_member` for CWS lists; see *Project list vs CalSim list* below). |
+
+Plus new attribute columns on `du_urban_entity`: `is_sw_du`, `is_gw_du`, `largest_system_centroid_lat`, `largest_system_centroid_lon`, `calsim_centroid_lat`, `calsim_centroid_lon`, `hhs_allocation_taf`. And an updated delivery-variable crosswalk merged into `du_urban_variable`.
+
+#### Project list vs CalSim list (community water systems)
+
+The COEQWAL project's CWS focus list (delivered in `reference/community_water_systems/`) is **not** identical to the full CalSim urban DU list now in the database. The team needs to know which list any given DU belongs to. Numbers below are from the audit + reference CSVs as of 2026-05-11:
+
+| List | Source | DUs |
+|---|---|---:|
+| `calsim_urban_du` | `du_urban_entity` (current DB) | 145 |
+| `coeqwal_master_du` | `Master demand unit list updated April 13 2026.xlsx` | 124 |
+| `coeqwal_focal_sw_du` | SW DUs in master list | 75 |
+| `coeqwal_focal_gw_du` | GW DUs in master list | 83 |
+| `hhs_allocation` | `Updated HHS allocations May 6 2026.xlsx` | 76 |
+| `mi_delivery_crosswalk` | `Updated Master crosswalk SW DUs M&I May7 2026.xlsx` | 75 |
+| `tier_matrix` | `du_urban_group` row `tier` | 71 |
+
+**Set differences:**
+- **In project master AND CalSim DB:** 117 DUs (the overlap)
+- **In project master but NOT in CalSim DB (7):** `ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION` — these need to be **added to `du_urban_entity`** (or reconciled to existing rows under different `du_id`s).
+- **In CalSim DB but NOT in project master (28):** `26N_NA`, `26N_NU513`, `50_PA1`, `50_PA2`, `60N_PA`, `60N_PU1`, `60S_PA`, `60S_PU`, `61_PA`, `61_PU1`, `61_PU2`, `63_PA`, `63_PR`, `64_PA`, `64_PU`, `65_PA`, `65_PU`, `70_PA`, `70_PU1`, `71_PA`, `72_PU1`, `72_PU2`, `90_PU5`, `CCWDI`, `CLLPT`, `CWD`, `ESB415`, `PINES` — flagged as **out-of-scope for the CWS focus** but kept for full CalSim compatibility.
+- **In HHS list but NOT in project master (1):** `ESB355` — needs reconciliation (typo? `ESB315`/`ESB415`?).
+- **HHS vs M&I crosswalk:** identical except `ESB355`.
+
+The project master and the M&I crosswalk also carry **per-DU attributes that are not in CalSim** (`is_sw_du`, `is_gw_du`, two centroid pairs, HHS allocation in TAF). Those become columns on `du_urban_entity`.
+
+**How to record list membership in the DB.** Two compatible patterns:
+
+1. **Lookup + junction (recommended for the CWS list registry):**
+
+   ```
+   01_lookup/cws_list                        — id, short_code, label, description, source_id, is_active, audit fields
+   03_entity/cws_list_du_member              — cws_list_id (FK), du_id (FK to du_urban_entity), is_active, audit fields
+                                              UNIQUE (cws_list_id, du_id)
+   ```
+
+   This generalizes nicely if PWSID-level lists arrive later (`cws_list_system_member` keyed by `cws_entity_id`).
+
+2. **Existing `du_urban_group` pattern:** the four new lists could just be added as new rows in `du_urban_group` and populated in `du_urban_group_member`. That is the lowest-friction path because the table already exists, but the prefix `du_urban_group` reads as "groupings of DUs" rather than "registries of CWS lists" — fine if the team accepts that. Note that 5 of the 11 existing `du_urban_group` rows (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) currently have **0 members** and need to be backfilled either way.
+
+> **Recommendation.** Use option 1 (`cws_list` + `cws_list_du_member`) for the new project lists, and backfill the legacy `du_urban_group` rows in the same migration. Both tables are queryable, both reference `du_urban_entity` by `du_id`, and the registry is explicit about its purpose.
+
+#### How the database represents lists, subsets, and group memberships
+
+Eight distinct patterns are in use today. New work should pick the one that best fits the cardinality and stability of the relationship.
+
+| # | Pattern | Where it's used | Populated? |
+|---|---|---|---|
+| 1 | **`X_group` + `X_group_member` junction** (M:N) | `reservoir_group` (4 rows) + `reservoir_group_member` (24 rows) — `major`, `cvp`, `swp`, `tier`. `du_urban_group` (11 rows) + `du_urban_group_member` (142 rows) — `tier`, `nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`, `var_*`. `mi_contractor_group` (6 rows) + `mi_contractor_group_member` (60 rows) — `swp`, `cvp_nod`, `cvp_sod`, `all_mi`, `swp_mi`, `swp_ag`. | Reservoirs: fully populated. Urban DUs: 6 of 11 groups populated (5 geographic/project groups `nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point` are **empty**). MI: 3 of 6 groups populated (`swp` 30, `swp_mi` 23, `swp_ag` 7); `cvp_nod`, `cvp_sod` empty because no CVP contractors are loaded yet; `all_mi` empty (missed seed step). |
+| 2 | **Aggregate-entity table** (one row per pre-summed CalSim variable) | `cws_aggregate_entity` (6 rows: `swp_total`, `swp_nod`, `swp_sod`, `cvp_nod`, `cvp_sod`, `mwd`). `ag_aggregate_entity` (9 rows: SWP/CVP PAG NOD/SOD, settlement, exchange, two computed totals). | Yes. **No** companion junction table mapping individual DUs to the aggregate they roll up into — that mapping is implicit in CalSim variable naming today. |
+| 3 | **Lookup table + FK column on entity** | `hydrologic_region` (7 rows) → `*_entity.hydrologic_region_id`; `source` (12) → `*.source_id`; `model_source` (1) → `*.model_source_id`; `network_type` (21) / `network_subtype` (28) → `network.type_id`/`subtype_ids[]`; `geometry_type`, `network_entity_type`, `statistic_category`, `statistic_type`, `temporal_scale`, `spatial_scale`, `unit`, `variable_type`, `derived_variable_type`, `calsim_model_variable_type`, `assumption_category`, `operation_category`, `env_flow_season`, `slr`. | Yes — this is the most common subset pattern in the DB. |
+| 4 | **Tag + tag-link junction** (M:N) | `scenario_tag` (10 rows) + `scenario_tag_link` (109 rows) — free-form labels like `baseline`, `dcr`, `dcp`. | Yes. |
+| 5 | **Direct M:N link table** (named relation, no separate "list" lookup) | `theme_scenario_link` (79 rows), `scenario_key_assumption_link` (73), `scenario_key_operation_link` (514), `scenario_hydroclimate_sibling` (27). | Yes. |
+| 6 | **Boolean / categorical column on entity** | `channel_entity.has_mif`, `.has_eflows`, `.has_tiers`, `.has_gis_data`, `.is_main`, `.boundary_condition`, `.channel_class`. `du_urban_entity.gw`/`.sw`. `du_agriculture_entity.gw`/`.sw`/`.cs3_type`/`.bank`/`.agency`/`.provider`. `du_refuge_entity.refuge_or_wildlife_area`/`.managed_by`/`.provider`. `reservoir_entity.is_main`/`.has_tiers`/`.operational_purpose`. | Yes — denormalized. Fast to query, but multi-membership / re-grouping is awkward. |
+| 7 | **Free-text "registry" column** (no FK) | `du_urban_entity.community_agency`, `du_agriculture_entity.agency`/`.provider`/`.river_reach`/`.demand_unit`, `du_refuge_entity.refuge_or_wildlife_area`/`.managed_by`. `network_arc.river` (459 distinct strings). | Yes but un-normalized. Good candidates for promotion to lookup tables. |
+| 8 | **Multi-arc sub-entity** (one entity expanded into N arcs) | `du_urban_delivery_arc` (57 rows for 145 DUs), `mi_contractor_delivery_arc` (39 rows for 30 contractors). | Yes. Used when one entity sums multiple CalSim arcs. |
+
+**Where this maps to recurring user questions:**
+
+| User question | Pattern | Today |
+|---|---|---|
+| "Which reservoirs are SWP / CVP / major?" | (1) | Live: `reservoir_group` |
+| "Which urban DUs are NOD/SOD/SWP-served?" | (1) | Designed but **5 groups empty** in `du_urban_group_member` |
+| "Which contractors are SWP M&I vs CVP NOD?" | (1) | Live: `mi_contractor_group` (CVP groups empty because no CVP contractors loaded) |
+| "What's the SWP total CWS delivery this scenario?" | (2) | Live: `cws_aggregate_entity.swp_total` |
+| "Which ag DUs roll up into SWP PAG South?" | (2) needs companion (1) | **Implicit only** — no junction. Either add `ag_du_aggregate_member` (1) or compute from CalSim variable names at ETL time. |
+| "Which urban DUs are in the COEQWAL focal SW list?" | (1) — proposed `cws_list` | **Planned** (`cws_list` + `cws_list_du_member`). |
+| "Which channels have MIF?" | (6) | Live: `channel_entity.has_mif` flag. |
+| "Which ag DUs are in the SAC region?" | (3) | Live: `du_agriculture_entity.hydrologic_region_id`. |
+| "Which ag DUs are 'project-ag'?" | (6) | Implicit via `du_agriculture_entity.cs3_type` (`PA`/`SA`/`NA`/`PR`) — not normalized. |
+| "Which ag DUs are CVP vs SWP service area?" | (6) | Implicit via `du_agriculture_entity.provider` text — not normalized. |
+
+#### Per-sector aggregates: tying the DB to the website's Data Explorer
+
+The site's `apps/main/app/features/scenarioExplorer/dataExplorer/` already has the entity-level toggle wired up for CWS (project totals / contractors / DUs) and AG (project totals / DUs / region filter — coded but currently suppressed in the UI). Endpoints used today:
+
+- CWS: `/api/statistics/cws-aggregates`, `/api/statistics/mi-contractors`, `/api/statistics/demand-units`
+- AG: `/api/statistics/ag-aggregates`, `/api/statistics/ag-demand-units`
+- Refuge: `/api/statistics/refuge-demand-units`
+- Reservoir: `/api/statistics/reservoirs`, `/api/statistics/scenarios/{id}/storage-monthly?group=major`
+- Channels: `/api/statistics/channels`
+- Delta: `/api/statistics/scenarios/{id}/delta/monthly`
+
+**What we can already report per-sector without any new DB work:**
+
+| Sector | Available aggregates | API + table |
+|---|---|---|
+| CWS — SWP total | `swp_total` | `/cws-aggregates` → `cws_aggregate_entity` |
+| CWS — SWP NOD vs SOD | `swp_nod`, `swp_sod` | same |
+| CWS — CVP NOD vs SOD | `cvp_nod`, `cvp_sod` | same |
+| CWS — MWD | `mwd` | same |
+| CWS — per-contractor (30 — all SWP today) | M&I contractor table | `/mi-contractors` → `mi_contractor` |
+| CWS — contractor groups (3 populated, 3 empty) | Populated: `swp` (30), `swp_mi` (23), `swp_ag` (7). Empty: `cvp_nod`, `cvp_sod` (no CVP contractors loaded yet), `all_mi` (missed seed step — should equal SWP-MI + CVP-MI when CVP contractors land). | `mi_contractor_group(_member)` — needs API exposure |
+| Ag — SWP NOD/SOD/total | `swp_pag`, `swp_pag_n`, `swp_pag_s` | `/ag-aggregates` |
+| Ag — CVP NOD/SOD | `cvp_pag_n`, `cvp_pag_s` | same |
+| Ag — Settlement / Exchange | `cvp_psc_n`, `cvp_pex_s` | same |
+| Ag — total NOD / SOD | `nod_ag`, `sod_ag` (computed) | same |
+| Reservoir — major / CVP / SWP / tier | 4 groups, fully populated | `?group=...` parameter on storage endpoints |
+
+**Gaps to fill so the data explorer can show richer per-sector views (do this in three small tranches):**
+
+1. **Backfill the 5 empty `du_urban_group_member` rows.** Once `nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point` have members, the website can offer "Show me only NOD CWS DUs" / "Show me only SWP-served CWS DUs" without any API change beyond exposing `du_urban_group_member` membership on the existing `/demand-units` endpoint.
+2. **Add ag DU groups to mirror the urban side.** Create `du_agriculture_group` + `du_agriculture_group_member` with at least: `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-region groups (`sac`, `sjr`, `tulare`). All can be populated by a one-time SQL pass over the `cs3_type`/`provider`/`hydrologic_region_id` columns already on `du_agriculture_entity`. This unlocks the suppressed Ag region filter in the UI without any frontend change.
+3. **Add `cws_list` + `cws_list_du_member` (already in the planned-tables section).** Lets the data explorer expose the focal-SW-DU list, the HHS-allocation list, and the M&I crosswalk list as filters.
+
+After steps 1-3, the data explorer can offer per-sector aggregate views (NOD/SOD, SWP/CVP, M&I/Ag, Project/Contractor/DU, region) directly from the DB without any client-side hardcoding. No new statistics tables are needed — the existing `du_*_monthly` tables can be filtered by membership.
+
+#### Per-layer verification
+
+`database/scripts/sql/02_network/09_verify_level02.sql` is the template. A `09_verify_level03.sql` is on the TODO list (see "Verification gaps" below) and should cover, at minimum:
+1. Every entity table has the standard audit columns and the `set_audit_fields` trigger applied.
+2. Every entity row resolves to a real `developer.id` for `created_by` / `updated_by`.
+3. Every `<domain>_variable.<entity>_id` and every `<domain>_group_member.<entity>_id` resolves to a real entity row (no orphans).
+4. Every `<domain>_entity.short_code` is unique and non-empty.
+5. Row counts match the expected targets in `database/audit/run_monthly_audit.py` (these targets live in the `EXPECTED_COUNTS` dict).
+
+---
+
 ## Best practices checklist
 
 ### Database best practices
@@ -1330,6 +1573,25 @@ Known improvements and cleanup tasks for future work.
 
 - **Extend per-layer SQL verification** — only layers 00, 01, and 02 have `09_verify_level*.sql` scripts. Add scripts for layers 03 through 08 following the same pattern.
 - **`data_load_log` is still PLANNED** — see "ETL batch tracking" in the ERD Layer 00 section. This table would provide batch-level provenance for bulk ETL loads instead of per-row `created_by` attribution.
+- **Section 1b "Tables with column mismatches" was a noisy false positive** — the verifier now skips tables whose ERD entry is just a stub (no column tree) and ignores the six implicit standard columns (`id`, `is_active`, `created_at`, `created_by`, `updated_at`, `updated_by`). Anything still flagged in section 1b after the next audit is real drift. The follow-up is to flesh out the ~60 stub tables in `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` so they get column-level checks too — listed separately under "ERD documentation gaps" below.
+- **ERD documentation gaps.** Roughly 60 of the ~96 tables in the live DB are documented in stub form in `COEQWAL_SCENARIOS_DB_ERD.md` (just `Table:` / `Records:` / `Columns:` and no column tree). They pass the ERD-DB synchronization check trivially. Filling them in would let `verify_erd_against_audit.py` catch column-level drift for those tables too. Track per-table progress against the latest audit report's section 1b "stub" list.
+
+### Community water systems (CWS) — spring-2026 work
+
+Source data is in `reference/community_water_systems/`. See the entity-pattern section above for the full plan. Sequenced TODOs:
+
+1. **Stage and reconcile new CSVs** under `database/seed_tables/03_entity/cws/` and `database/seed_tables/01_lookup/cws_list/`. Strip the trailing newlines in `DWUC_*` headers and resolve the `ESB355` discrepancy (HHS list contains it but project master does not).
+2. **Add the 7 missing project DUs to `du_urban_entity`** (`ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION`) — or document why each one maps to an existing DU under a different `du_id`.
+3. **`ALTER TABLE du_urban_entity` to add the 7 new attribute columns** (`is_sw_du`, `is_gw_du`, `largest_system_centroid_lat/lon`, `calsim_centroid_lat/lon`, `hhs_allocation_taf`).
+4. **Reload `du_urban_variable`** with the M&I delivery-variable crosswalk for the 75 SW DUs, then **re-run `etl/statistics/du_urban/run_all.py`** for every active scenario (only this ETL module is affected).
+5. **Create `cws_entity` (Layer 03)** with one row per PWSID; load the ~476 systems.
+6. **Create `cws_du_link` (Layer 03)** as M:N junction `cws_entity` ↔ `du_urban_entity`; load the ~586 system-DU rows.
+7. **Create `cws_list` (Layer 01) + `cws_list_du_member` (Layer 03)** to hold the registry of named CWS lists. Initial seed rows: `coeqwal_master_du`, `coeqwal_focal_sw_du`, `coeqwal_focal_gw_du`, `calsim_urban_du`, `tier_matrix`, `hhs_allocation`, `mi_delivery_crosswalk`. Populate `cws_list_du_member` from the reference CSVs.
+8. **Backfill the 5 zero-member `du_urban_group` rows** (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) so the existing per-DU SWP/CVP/NOD/SOD memberships are queryable. (These are the per-DU twin of the project-level rollups already in `cws_aggregate_entity`.)
+9. **Mirror the group pattern on the ag side** — create `du_agriculture_group` + `du_agriculture_group_member` and populate `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-region groups (`sac`, `sjr`, `tulare`) from the existing `cs3_type` / `provider` / `hydrologic_region_id` columns on `du_agriculture_entity`. Unlocks the suppressed Ag region filter in the website's Data Explorer without frontend changes.
+10. **Expose group-membership in the `/demand-units` and `/ag-demand-units` API responses** so the website can filter by membership without re-issuing per-group queries. (One join in the existing FastAPI route handlers.)
+11. **Add `09_verify_level03.sql`** — verify `cws_*` integrity, `du_urban_entity ↔ cws_du_link ↔ cws_entity` referential integrity, and that every `cws_list` and `du_*_group` row has at least one member.
+12. **Re-run `database/audit/run_monthly_audit.py` and `verify_erd_against_audit.py`** to confirm zero drift.
 
 ### Developer access and authentication
 

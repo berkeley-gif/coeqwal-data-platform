@@ -48,7 +48,7 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# ── Constants──────
 
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
 from scenarios import SCENARIOS as ALL_SCENARIOS  # noqa: E402
@@ -150,7 +150,7 @@ SAMPLE_CWS_DUS = ["02_PU", "26S_PU1", "71_PU1", "GDPUD_NU", "MWD", "CCWD"]
 SAMPLE_AG_DUS = ["02_PA", "08N_PA", "61_PA1", "71_PA1", "02_NA", "64_PA1"]
 
 
-# ── Data Classes ─────────────────────────────────────────────────────────────
+# ── Data Classes───
 
 
 @dataclass
@@ -264,7 +264,7 @@ class Report:
                 print(f"  ... and {len(failures) - 20} more")
 
 
-# ── CSV Parsing ──────────────────────────────────────────────────────────────
+# ── CSV Parsing────
 
 
 def parse_calsim_csv(file_path: str) -> Tuple[pd.DataFrame, pd.Series]:
@@ -357,7 +357,7 @@ def monthly_avg(series: pd.Series, months: pd.Series, month: int) -> Optional[fl
     return round(float(vals.mean()), 4)
 
 
-# ── DB Helpers ───────────────────────────────────────────────────────────────
+# ── DB Helpers─────
 
 
 def connect_db() -> Optional[object]:
@@ -879,7 +879,7 @@ def verify_refuge(report: Report, conn) -> None:
         report.add("data_present", section, "all", 1.0, 0.0)
 
 
-# ── Section: Delta ──────────────────────────────────────────────────────────
+# ── Section: Delta
 
 
 def verify_delta(
@@ -1023,7 +1023,7 @@ def verify_delta(
         )
 
 
-# ── Section: Tiers ──────────────────────────────────────────────────────────
+# ── Section: Tiers
 
 TIER_CODES = [
     "CWS_DEL",
@@ -1193,7 +1193,7 @@ def verify_unit_conversion(
         )
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers────────
 
 
 def _safe_round(val, decimals=4) -> Optional[float]:
@@ -1218,7 +1218,7 @@ def find_file(base_dir: Path, run_id: str, suffix: str) -> Optional[Path]:
     return None
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Main───────────
 
 
 def run_scenario(
