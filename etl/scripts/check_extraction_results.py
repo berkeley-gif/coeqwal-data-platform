@@ -16,8 +16,8 @@ Usage:
     # Include cross-scenario mismatch pattern analysis
     python check_extraction_results.py --bucket coeqwal-model-run --mismatches
 
-    # Write audit CSV to a custom path
-    python check_extraction_results.py --bucket coeqwal-model-run -o extraction_audit.csv
+    # Write audit CSV to a custom path (default: etl/scripts/output/extraction_audit.csv)
+    python check_extraction_results.py --bucket coeqwal-model-run -o /tmp/foo.csv
 """
 
 import argparse
@@ -25,12 +25,16 @@ import csv
 import io
 import json
 import sys
+from pathlib import Path
 from typing import Optional
 
 import boto3
 
 S3_BUCKET = "coeqwal-model-run"
 REGION = "us-west-2"
+
+# Default output directory for audit CSVs. Gitignored via etl/**/output/.
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
 
 AUDIT_COLUMNS = [
     "scenario_id",
@@ -319,6 +323,7 @@ def print_mismatch_analysis(mismatch_rows: list[dict]) -> None:
 
 def write_audit_csv(rows: list[dict], path: str) -> None:
     """Write the audit results to a CSV file."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=AUDIT_COLUMNS)
         writer.writeheader()
@@ -348,8 +353,10 @@ def main():
         help="Write combined mismatch CSV to this path (implies --mismatches)",
     )
     parser.add_argument(
-        "-o", "--output", default="extraction_audit.csv",
-        help="Output CSV path (default: extraction_audit.csv)",
+        "-o", "--output",
+        default=str(DEFAULT_OUTPUT_DIR / "extraction_audit.csv"),
+        help=f"Output CSV path (default: {DEFAULT_OUTPUT_DIR / 'extraction_audit.csv'}). "
+             "Parent dir is auto-created.",
     )
     args = parser.parse_args()
 
@@ -386,6 +393,7 @@ def main():
             print_mismatch_analysis(mismatch_rows)
 
             if args.mismatch_output and mismatch_rows:
+                Path(args.mismatch_output).parent.mkdir(parents=True, exist_ok=True)
                 fieldnames = list(mismatch_rows[0].keys())
                 with open(args.mismatch_output, "w", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=fieldnames)

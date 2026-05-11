@@ -35,10 +35,15 @@ import tempfile
 import threading
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 import openpyxl
+
+# Default output directory for audit CSVs. Gitignored via etl/**/output/.
+# Override per-invocation with --output-dir.
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
 
 # ---------------------------------------------------------------------------
 # classify_dss.py logic (inlined to avoid fragile cross-directory imports)
@@ -755,7 +760,9 @@ def cmd_download(args):
                         "notes": sc.get("notes", ""),
                     })
 
-    local_report = os.path.join(os.getcwd(), "audit_report.csv")
+    output_dir = Path(getattr(args, "output_dir", None) or DEFAULT_OUTPUT_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    local_report = str(output_dir / "audit_report.csv")
     write_audit_report(results, local_report, s3_client, args.s3_bucket)
 
 
@@ -1238,7 +1245,9 @@ def cmd_scan(args):
                         "status": "WORKER_ERROR",
                     })
 
-    local_path = os.path.join(os.getcwd(), "scan_audit.csv")
+    output_dir = Path(getattr(args, "output_dir", None) or DEFAULT_OUTPUT_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    local_path = str(output_dir / "scan_audit.csv")
     write_scan_audit(results, local_path)
 
 
@@ -1274,6 +1283,9 @@ def main():
                     help="Include needs_review/skip scenarios (default: ready only)")
     dl.add_argument("--dry-run", action="store_true",
                     help="List files without downloading")
+    dl.add_argument("--output-dir", default=None,
+                    help=f"Directory for audit_report.csv (default: "
+                         f"{DEFAULT_OUTPUT_DIR}). Auto-created if missing.")
 
     pr = sub.add_parser("promote",
                         help="Copy staged files from staging/ to ready/")
@@ -1296,6 +1308,9 @@ def main():
                     help="Include needs_review/skip scenarios (default: ready only)")
     sc.add_argument("--local-only", action="store_true",
                     help="Parse CSV and write manifest without Drive access")
+    sc.add_argument("--output-dir", default=None,
+                    help=f"Directory for scan_audit.csv (default: "
+                         f"{DEFAULT_OUTPUT_DIR}). Auto-created if missing.")
 
     args = parser.parse_args()
     if args.command == "download":

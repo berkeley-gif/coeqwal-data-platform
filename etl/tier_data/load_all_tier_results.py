@@ -30,7 +30,11 @@ Usage:
 
     # Generate SQL file (then run with psql)
     python load_all_tier_results.py --output-sql all_tiers.sql
-    psql $DATABASE_URL -f all_tiers.sql
+    psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
+
+    # Bare filenames passed to --output-sql are auto-routed into
+    # etl/tier_data/output/ (gitignored). Pass a path with a '/' or an
+    # absolute path to write somewhere else.
 
     # Load only specific tiers
     python load_all_tier_results.py --only ENV_FLOWS,RES_STOR --output-sql partial.sql
@@ -68,6 +72,11 @@ TIER_VERSION_ID = 8
 
 # Staging directory — CSVs named by tier short code
 STAGING_DIR = Path(__file__).parent / 'staging'
+
+# Default output directory for generated SQL. Gitignored via etl/**/output/.
+# Bare filenames passed to --output-sql land here; absolute paths or paths
+# with a directory component are respected verbatim.
+OUTPUT_DIR = Path(__file__).parent / 'output'
 
 # =============================================================================
 # LOCATION NAME MAPPINGS
@@ -1145,7 +1154,9 @@ Tier outcomes loaded:
     parser.add_argument('--dry-run', action='store_true',
                         help='Preview data counts without generating SQL')
     parser.add_argument('--output-sql', type=str,
-                        help='Write SQL to this file instead of executing')
+                        help='Write SQL to this file instead of executing. '
+                             'Bare filenames (no "/") are auto-routed into '
+                             'etl/tier_data/output/ which is gitignored.')
     parser.add_argument('--only', type=str,
                         help='Comma-separated tier short codes to load (e.g. ENV_FLOWS,RES_STOR)')
     parser.add_argument('--verify', type=str, nargs='?', const='auto',
@@ -1259,12 +1270,17 @@ ORDER BY tier_short_code;
 """
 
     if args.output_sql:
-        output_path = Path(args.output_sql)
+        raw = Path(args.output_sql)
+        if raw.is_absolute() or len(raw.parts) > 1:
+            output_path = raw
+        else:
+            output_path = OUTPUT_DIR / raw
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
             f.write(full_sql)
         print(f"\nSQL written to: {output_path}")
         print("\nTo apply on Cloud9:")
-        print(f"  psql $DATABASE_URL -f {output_path.name}")
+        print(f"  psql $DATABASE_URL -f {output_path}")
         return
 
     # Execute directly

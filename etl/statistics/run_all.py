@@ -54,6 +54,10 @@ log = logging.getLogger("run_all")
 # Script directory
 SCRIPT_DIR = Path(__file__).parent
 
+# Default directory for the per-run stats_audit_*.csv. Gitignored via
+# etl/**/output/. Override with --audit-dir.
+DEFAULT_AUDIT_DIR = SCRIPT_DIR / "output"
+
 # Available ETL modules and their entry points
 ETL_MODULES = {
     "reservoirs": {
@@ -446,6 +450,12 @@ Examples:
     parser.add_argument(
         "--list-modules", action="store_true", help="List available modules and exit"
     )
+    parser.add_argument(
+        "--audit-dir",
+        default=str(DEFAULT_AUDIT_DIR),
+        help=f"Directory to write the per-run stats_audit_*.csv "
+        f"(default: {DEFAULT_AUDIT_DIR}). Auto-created if missing.",
+    )
 
     args = parser.parse_args()
 
@@ -634,7 +644,11 @@ Examples:
     has_failures = print_scorecard(all_results, scenarios, effective_modules)
 
     # Write structured audit CSV
-    audit_path = f"stats_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    audit_dir = Path(args.audit_dir)
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    audit_path = str(
+        audit_dir / f"stats_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    )
     write_audit_csv(
         all_results,
         scenarios,
@@ -871,6 +885,7 @@ def write_audit_csv(
         "timestamp", "scenario", "module", "status", "elapsed_s",
         "dry_run", "duplicate_b_parts",
     ]
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

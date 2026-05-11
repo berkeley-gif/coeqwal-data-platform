@@ -2,6 +2,13 @@
 
 Calculate and load reservoir statistics from CalSim model outputs to the database.
 
+> **Output files** — `run_all.py` writes a per-run scorecard to
+> `etl/statistics/output/stats_audit_<ts>.csv`, and `scan_dupes.py` writes
+> `etl/statistics/output/duplicate_scan_results.csv` (+ sibling `_units.csv`).
+> The whole `output/` directory is gitignored. Override locations with
+> `--audit-dir` or `-o`. See [`etl/README.md`](../README.md#output-files-audits-generated-sql)
+> for the full output catalog.
+
 ## Overview
 
 This pipeline processes CalSim model output CSVs stored in S3 to calculate reservoir statistics. The calculated metrics are loaded directly into PostgreSQL for the COEQWAL website API.
@@ -179,7 +186,8 @@ psql $DATABASE_URL -c "SELECT DISTINCT scenario_short_code FROM delta_period_sum
 #### After completion
 
 The log ends with a **scorecard** showing pass/fail for every scenario × module, plus
-a CSV audit file (`stats_audit_*.csv`) written to the working directory.
+a CSV audit file (`stats_audit_*.csv`) written to `etl/statistics/output/` by
+default (gitignored). Override the destination with `--audit-dir`.
 
 #### Resuming after a failure
 

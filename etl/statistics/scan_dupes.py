@@ -24,6 +24,7 @@ import sys
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import boto3
@@ -31,6 +32,9 @@ import numpy as np
 import pandas as pd
 
 from scenarios import SCENARIOS
+
+# Default output directory for scan results. Gitignored via etl/**/output/.
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -262,8 +266,11 @@ def main():
     )
     parser.add_argument(
         "--output", "-o",
-        default="duplicate_scan_results.csv",
-        help="Output CSV path (default: duplicate_scan_results.csv)",
+        default=str(DEFAULT_OUTPUT_DIR / "duplicate_scan_results.csv"),
+        help=f"Output CSV path (default: "
+             f"{DEFAULT_OUTPUT_DIR / 'duplicate_scan_results.csv'}). "
+             "Parent dir is auto-created. Sibling _units.csv is written "
+             "alongside.",
     )
     args = parser.parse_args()
 
@@ -390,6 +397,7 @@ def main():
     # Write unit audit CSV
     if unit_registry:
         unit_audit_path = args.output.replace(".csv", "_units.csv")
+        Path(unit_audit_path).parent.mkdir(parents=True, exist_ok=True)
         with open(unit_audit_path, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["variable", "unit", "scenario_count", "scenarios"])
@@ -414,6 +422,7 @@ def main():
                 "col1_mean", "col2_mean",
             ])
 
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()

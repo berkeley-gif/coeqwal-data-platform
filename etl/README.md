@@ -8,6 +8,55 @@ Automated DSS file processing pipeline that:
 
 ---
 
+## Output files (audits, generated SQL)
+
+Every script that produces an artifact writes it into a module-local `output/`
+directory. The whole set is gitignored via the umbrella pattern
+`etl/**/output/` in `.gitignore`, so these files **never** belong in git or in
+the repo root — they're regeneratable artifacts that live next to the script
+that creates them.
+
+| Stage | File | Purpose | Default location | Generator | Override |
+|---|---|---|---|---|---|
+| Pre-download (Drive scan) | `scan_audit.csv` | "Are all the expected ZIPs and trend CSVs actually present on Google Drive?" Should be all `OK` before downloading. | `etl/scripts/output/` | `gdrive_bulk_download.py scan` | `--output-dir` |
+| Post-download | `audit_report.csv` | "Did each scenario download cleanly from Drive and stage to S3?" Per-scenario validation flags. Also uploaded to `s3://coeqwal-model-run/staging/audit_report.csv`. | `etl/scripts/output/` | `gdrive_bulk_download.py download` | `--output-dir` |
+| Post-extraction | `extraction_audit.csv` | "After the EC2 extraction Lambda ran on staged ZIPs, did each scenario produce valid CSVs?" | `etl/scripts/output/` | `check_extraction_results.py` | `-o` / `--output` |
+| Statistics ETL | `stats_audit_<ts>.csv` | "For my last big stats run, which `(scenario × module)` pairs succeeded and how long did each take?" One file per run, timestamped — multiple runs accumulate. | `etl/statistics/output/` | `run_all.py` | `--audit-dir` |
+| Data-quality scan | `duplicate_scan_results.csv` (+ sibling `_units.csv`) | "Which CalSim variables show up twice with the same column name in the same scenario CSV?" Cross-scenario diagnostic. | `etl/statistics/output/` | `scan_dupes.py` | `-o` / `--output` |
+| Tier loader | `all_tiers.sql` | The big idempotent UPSERT script that loads tier results into `tier_result` and `tier_location_result`. Fed to `psql -f`. Working artifact — once `psql` succeeds, the data is in the DB and the file is no longer needed. | `etl/tier_data/output/` | `load_all_tier_results.py` | `--output-sql` (bare filenames are auto-routed into `output/`; paths with `/` are respected) |
+
+### Why these files aren't in git
+
+They're all **generated** from inputs that already live in git or S3:
+- `all_tiers.sql` is regenerated from staging CSVs in `etl/tier_data/staging/tier_results/` (which are tracked).
+- The audit CSVs are regenerated from S3 + Google Drive + database state every time their scripts run.
+- The stats audit is a per-run scorecard — committing one is meaningless because the next run produces a new one.
+
+Tracking any of them would bloat history without adding any information that isn't already recoverable.
+
+### Why they live on Cloud9, not on your laptop
+
+The ETL pipeline runs on Cloud9 because that's where the credentials and access live: AWS SSO for S3, `rclone gdrive` for Google Drive, and `DATABASE_URL` pointing at the RDS instance. You don't run the pipeline on your laptop, so you don't need its outputs there. If you want to inspect a file, copy it over with `aws s3 cp …` or `scp`.
+
+### Cleaning up legacy mess in `cwd`
+
+Older versions of these scripts wrote into the current working directory. If you have leftovers in your Cloud9 home (or repo root), one-time cleanup:
+
+```bash
+# safe: empty typo files and the regeneratable tier SQL
+rm -f etl/statistics/ORDER export etl/tier_data/all_tiers.sql
+
+# safe: audit CSVs from older runs (they're scratch logs)
+git clean -fd \
+  audit_report.csv extraction_audit.csv scan_audit.csv \
+  etl/statistics/duplicate_scan_results.csv \
+  etl/statistics/stats_audit_*.csv
+```
+
+After your next `git pull`, future runs land under `etl/<module>/output/` instead of polluting `cwd`, and `git status` stays quiet.
+
+---
+
 ## How to load new scenarios
 
 This is the process for bringing new CalSim model runs from the COEQWAL Shared Drive into the data platform. Each scenario is a CalSim3 model run packaged as a ZIP file on Google Drive, with a companion Trend Report CSV for validation.
@@ -76,7 +125,7 @@ The scan lists `Model_Files/` for ZIPs and `Data_Extraction/Variables_From_trend
 - `MISSING_ZIP` / `MISSING_TREND` = file not found on Drive
 - `PINNED_ZIP_NOT_FOUND` / `PINNED_TREND_NOT_FOUND` = pinned filename doesn't match any file on Drive
 
-Review `scan_audit.csv` before proceeding. All scenarios should show `OK` (except known missing trend reports like s0011).
+Review `etl/scripts/output/scan_audit.csv` before proceeding (override location with `--output-dir`). All scenarios should show `OK` (except known missing trend reports like s0011).
 
 ### 4. Download and stage to S3
 
@@ -318,7 +367,7 @@ grep -c "completed successfully" stats_run_*.log
 grep -E "numeric field overflow|DataError|IntegrityError|could not connect|Traceback" stats_run_*.log
 
 # Check the audit CSV for a compact summary (one row per scenario x module)
-column -s, -t < stats_audit_*.csv | head -30
+column -s, -t < etl/statistics/output/stats_audit_*.csv | head -30
 ```
 
 **Verifying database row counts directly** (the most reliable check):
@@ -355,9 +404,9 @@ mkdir -p ~/logs/load_$(date +%Y%m%d)
 ```
 
 Key log files to keep per load:
-- `scan_audit.csv` -- pre-download validation
+- `etl/scripts/output/scan_audit.csv` -- pre-download validation (default location; override with `--output-dir`)
 - `etl_download_*.log` -- download/staging output
-- `extraction_audit.csv` -- post-extraction status and validation results
+- `etl/scripts/output/extraction_audit.csv` -- post-extraction status and validation results (default location; override with `-o`)
 - `statistics_*.log` -- per-scenario statistics ETL output
 - `verify_*.log` -- per-scenario verification output
 
@@ -416,12 +465,12 @@ Inspect `etl/tier_data/staging/tier_upload_manifest.csv`. This file lists every 
 python etl/tier_data/load_all_tier_results.py --output-sql all_tiers.sql
 ```
 
-The script emits UPSERT statements (`ON CONFLICT ... DO UPDATE`) for both tables plus any required deactivations. It does **not** connect to the database in this mode.
+The bare filename lands in `etl/tier_data/output/all_tiers.sql` (gitignored). Pass an absolute or relative path containing `/` to write somewhere else. The script emits UPSERT statements (`ON CONFLICT ... DO UPDATE`) for both tables plus any required deactivations. It does **not** connect to the database in this mode.
 
 ### 4. Apply on Cloud9
 
 ```bash
-psql "$DATABASE_URL" -f all_tiers.sql
+psql "$DATABASE_URL" -f etl/tier_data/output/all_tiers.sql
 ```
 
 `DATABASE_URL` must point at the target (staging or prod) RDS instance. The SQL is keyed by `(scenario_short_code, tier_short_code, tier_version_id)` on `tier_result` and `(scenario_short_code, tier_short_code, location_id, tier_version_id)` on `tier_location_result`, so re-running is safe and idempotent.
@@ -700,7 +749,7 @@ python etl/scripts/gdrive_bulk_download.py scan \
   --workers 4
 ```
 
-This lists `Model_Files/` and `Data_Extraction/Variables_From_trend_report_variables_v5/` for each scenario via rclone, counts ZIP files and trend report CSVs, and writes `scan_audit.csv`.
+This lists `Model_Files/` and `Data_Extraction/Variables_From_trend_report_variables_v5/` for each scenario via rclone, counts ZIP files and trend report CSVs, and writes `scan_audit.csv` to `etl/scripts/output/` (gitignored). Override with `--output-dir`.
 
 **Scan a subset of scenarios:**
 ```bash
@@ -752,7 +801,7 @@ This will:
 3. Upload the ZIP to `s3://coeqwal-model-run/staging/s0020/`
 4. Download the trend report CSV (starting with `s0020`) from `Data_Extraction/Variables_From_trend_report_variables_v5/`
 5. Upload the CSV to `s3://coeqwal-model-run/staging/s0020/`
-6. Write `audit_report.csv` locally and to `s3://coeqwal-model-run/staging/`
+6. Write `audit_report.csv` to `etl/scripts/output/` (gitignored; override with `--output-dir`) and upload to `s3://coeqwal-model-run/staging/`
 
 **Verify in S3:**
 ```bash
@@ -762,8 +811,8 @@ aws s3 ls s3://coeqwal-model-run/staging/s0020/
 ### Step 6: Review the audit report
 
 ```bash
-# View locally
-column -s, -t < audit_report.csv | less -S
+# View locally (default location; --output-dir overrides)
+column -s, -t < etl/scripts/output/audit_report.csv | less -S
 
 # Or download from S3
 aws s3 cp s3://coeqwal-model-run/staging/audit_report.csv .
@@ -1078,7 +1127,7 @@ Verification results are served by `GET /api/verification/status` and displayed 
 2. Run the ETL statistics: `python etl/statistics/run_all.py --scenario {id}`
 3. Load tier data (see "How to load tier results" above for the full flow):
    - `python etl/tier_data/stage_tier_results.py` (normalize team drops into flat files)
-   - `python etl/tier_data/load_all_tier_results.py --output-sql all_tiers.sql` then `psql "$DATABASE_URL" -f all_tiers.sql`
+   - `python etl/tier_data/load_all_tier_results.py --output-sql all_tiers.sql` then `psql "$DATABASE_URL" -f etl/tier_data/output/all_tiers.sql`
    - `DATABASE_URL="$DATABASE_URL" python etl/tier_data/load_all_tier_results.py --verify` (mandatory)
 4. Run Layer 2 verification: `python etl/statistics/verify_all_sections.py --scenario {id}`
 5. Run Layer 3 verification: `python etl/statistics/verify_api.py --scenario {id}`
@@ -1487,7 +1536,7 @@ python run_all.py --list-modules
 ```
 
 **After a run completes**, `run_all.py` automatically:
-- Writes a structured **audit CSV** (`stats_audit_YYYYMMDD_HHMMSS.csv`) with one row per (scenario, module) including status and timing
+- Writes a structured **audit CSV** (`etl/statistics/output/stats_audit_YYYYMMDD_HHMMSS.csv`, override with `--audit-dir`) with one row per (scenario, module) including status and timing
 - Prints a **scorecard** showing success/failure per scenario x module
 - Runs **DB row-count verification** across all 18 statistics tables (non-dry-run only)
 

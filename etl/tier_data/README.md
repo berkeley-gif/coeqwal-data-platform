@@ -3,6 +3,12 @@
 Loads tier outcome data for all active scenarios into the `tier_result` and
 `tier_location_result` database tables.
 
+> **Output files** — `load_all_tier_results.py --output-sql <name>` writes the
+> generated UPSERT script to `etl/tier_data/output/<name>` (gitignored). Bare
+> filenames are auto-routed there; paths with `/` are respected. See
+> [`etl/README.md`](../README.md#output-files-audits-generated-sql) for the
+> full output catalog.
+
 ---
 
 ## Tier outcomes
@@ -92,10 +98,14 @@ Expected counts per scenario:
 python load_all_tier_results.py --output-sql all_tiers.sql
 ```
 
+The bare filename is auto-routed into `etl/tier_data/output/all_tiers.sql`
+(gitignored). Pass an absolute or relative path containing `/` to write
+elsewhere.
+
 ### 7. Apply to the database
 
 ```bash
-psql $DATABASE_URL -f all_tiers.sql
+psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
 ```
 
 Check the two verification tables printed at the end:
@@ -150,10 +160,11 @@ Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back to
   that take a tier short code in the path (e.g. `/api/tier-map/{scenario}/{tier}/locations`)
   return only that tier's `DETAW` row. Any client code that keys rows by `location_id`
   across tiers should use the composite key `(tier_short_code, location_id)`.
-- `all_tiers.sql` is gitignored (generated output). Only the script and staging CSVs
-  are tracked in the repo.
+- Generated SQL lands in `etl/tier_data/output/` by default and that whole
+  directory is gitignored (see `etl/**/output/` in `.gitignore`). Only the
+  script and staging CSVs are tracked.
 - To load only specific tiers (e.g. after a partial data update):
   ```bash
   python load_all_tier_results.py --only ENV_FLOWS,RES_STOR --output-sql partial.sql
-  psql $DATABASE_URL -f partial.sql
+  psql $DATABASE_URL -f etl/tier_data/output/partial.sql
   ```
