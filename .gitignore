@@ -135,11 +135,10 @@ costs/
 # Private infrastructure documentation (AWS account IDs, ARNs, runbooks)
 docs/INFRASTRUCTURE.md
 
-# Reference files: small spreadsheets and crosswalks travel with the schema.
-# Large per-scenario output dumps belong in S3 (coeqwal-model-run), not git.
-reference/.DS_Store
-reference/s00*/
-reference/s00*.zip
-reference/s00*.csv
+# reference/ is fully local-only.
+# Large per-scenario dumps belong in S3 (coeqwal-model-run).
+# Source spreadsheets and crosswalks (scenario listings, community water systems)
+# are kept on developer machines and on the COEQWAL Shared Drive, not in git.
+reference/
 
 database/scripts/sql/migrations/
