@@ -2,17 +2,30 @@
 
 A comprehensive data platform for the Collaboratory for Equity in Water Allocation (COEQWAL) project, providing multi-level data schema, PostgreSQL database with PostGIS extension, data APIs, and upload and verification infrastructure for California water management scenario presentation, analysis, and review.
 
-The backend is organized into four modules plus its AWS infrastructure. Each module has its own README. This page is the navigation hub.
+The backend is organized into four modules plus its AWS infrastructure. Each module has its own README.
 
 ## Data
 
-Source materials that feed the rest of the backend. Most of `data/` is **local-only working tree**. Only the hand-extracted CalSim 3 report tables under `data/raw/csv_from_CalSim_report_pdf/` are tracked in git. Everything else (GIS geopackages, model run drops, tier deliveries, sample CSVs) is staged here from Google Drive or S3 while a developer pre-processes it into seed CSVs or ETL inputs.
-
-See [`data/README.md`](data/README.md) for the full inventory: type, purpose, location, and downstream consumer for each kind of data.
+See [`data/README.md`](data/README.md) for the data inventory.
 
 ## ETL
 
-The pipeline that turns CalSim 3 model outputs into rows in the database. Three automatic stages and two operator-driven stages, all laid out as siblings under `etl/`:
+The pipeline that moves CalSim 3 model output from the COEQWAL Shared Drive through extraction, validation, and statistical processing into the database, with audit artifacts at every step.
+
+This pipeline:
+
+- **Ingests** CalSim 3 model run ZIPs and trend report CSVs from the COEQWAL Shared Drive into S3, validated against [`etl/ingestion/model_run_file_source.csv`](etl/ingestion/model_run_file_source.csv) (the canonical scenario -> Drive folder mapping).
+- **Reorganizes** uploaded ZIPs into a per-scenario S3 layout (`scenario/<id>/run/`) and submits a Batch job per ZIP through a Lambda trigger.
+- **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files, preserves the DSS unit metadata as a row-6 CSV header, and writes a `.units.json` sidecar.
+- **Verifies units** that every CSV column's unit matches the DSS file's ground truth, and detects duplicate B-part pathnames within the same DSS.
+- **Validates content** by comparing each extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits a per-scenario validation summary and a manifest JSON.
+- **Audits extraction** across all scenarios into a single console table and audit CSV (manifest status, validation result, unit mismatches).
+- **Computes statistics** from the extracted CSVs (reservoir storage, urban delivery, agricultural demand and shortage, M&I contractor reliability, environmental flow alteration, refuge delivery, delta salinity / NDO / X2, climate and operational sensitivity) and loads them into the layer 10+ tables in PostgreSQL.
+- **Loads tier outcomes** delivered by the data team (CWS deliveries, AG revenue, env flows, reservoir storage, groundwater storage, delta ecology, salmon abundance, freshwater salinity) into `tier_result` and `tier_location_result` via idempotent UPSERT SQL.
+- **Verifies accuracy** end-to-end at four layers: DSS extraction (Layer 1), DSS-vs-CSV units (Layer 1b), CSV-to-DB statistics (Layer 2), DB-to-API responses (Layer 3), and surfaces results on the public `/verification` page (Layer 4).
+- **Produces audit artifacts** at every stage (`scan_audit.csv`, `audit_report.csv`, `extraction_audit.csv`, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
+
+Three of those stages run automatically, the rest are operator-driven. All are laid out as siblings under `etl/`:
 
 | Stage | Directory | Trigger |
 |---|---|---|
@@ -36,6 +49,8 @@ PostgreSQL + PostGIS on RDS. A strictly layered schema of ~96 tables and ~402k r
 - **00-08** Foundational and reference data: versioning, lookups, network, **entities**, variables, assumptions and operations, scenarios, hydroclimate, themes.
 - **10+** Derived results: tier results, monthly stats, period summaries.
 
+<!-- TODO: refine this block, then un-comment.
+
 **Standard data shape** (every domain follows this pattern: reservoirs, channels, ag DUs, refuges, MI contractors, and CWS for community water systems):
 
 1. Entity table in `03_entity/` with `id` PK, `short_code` UNIQUE, FKs to lookup tables, and the audit columns populated by the `set_audit_fields()` trigger.
@@ -45,6 +60,9 @@ PostgreSQL + PostGIS on RDS. A strictly layered schema of ~96 tables and ~402k r
 5. Statistics tables in layer 10+ (`*_monthly`, `*_period_summary`) keyed by `scenario_short_code` + `<entity>_id`.
 
 Standards documented in [`database/CHECKLIST_TABLE_STANDARDS.md`](database/CHECKLIST_TABLE_STANDARDS.md): snake_case, FK IDs (never text), audit trigger applied, row in `domain_family_map` for versioning. Every new table also needs an SQL script under `database/scripts/sql/<layer>/` and a seed CSV under `database/seed_tables/<layer>/`.
+
+-->
+
 
 **Source-of-truth artifacts:**
 
