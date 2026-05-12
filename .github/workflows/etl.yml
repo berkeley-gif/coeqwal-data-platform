@@ -3,7 +3,7 @@ name: Build and push coeqwal-etl to ECR
 on:
   push:
     paths:
-      - 'etl/coeqwal-etl/**'
+      - 'etl/batch-container/**'
       - '.github/workflows/etl.yml'
     branches:
       - main
@@ -39,7 +39,7 @@ jobs:
           ECR_REPOSITORY: coeqwal-etl
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          cd etl/coeqwal-etl
+          cd etl/batch-container
 
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG

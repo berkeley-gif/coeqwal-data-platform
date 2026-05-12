@@ -9,18 +9,18 @@ Prerequisites:
     COEQWAL Shared Drive (see README for setup)
   - AWS credentials configured (for S3 access)
 
-Usage:
+Usage (run from repo root):
   # Phase 1: download + validate + stage (safe, no extraction triggered)
-  python gdrive_bulk_download.py download \
-    --listing ../../reference/COEQWAL_Completed_Scenario_Listing.xlsx \
+  python etl/ingestion/gdrive_bulk_download.py download \
+    --listing-csv etl/ingestion/model_run_file_source.csv \
     --s3-bucket coeqwal-model-run
 
   # Phase 2a: smoke-test one scenario
-  python gdrive_bulk_download.py promote \
+  python etl/ingestion/gdrive_bulk_download.py promote \
     --s3-bucket coeqwal-model-run --scenarios s0020
 
   # Phase 2b: promote all
-  python gdrive_bulk_download.py promote --s3-bucket coeqwal-model-run
+  python etl/ingestion/gdrive_bulk_download.py promote --s3-bucket coeqwal-model-run
 """
 
 import argparse
@@ -829,7 +829,7 @@ def cmd_promote(args):
 
 
 # ---------------------------------------------------------------------------
-# Scan subcommand — CSV-based path validation and Drive content auditing
+# Scan subcommand: CSV-based path validation and Drive content auditing
 # ---------------------------------------------------------------------------
 
 SCAN_AUDIT_COLUMNS = [
@@ -1158,14 +1158,14 @@ def write_scan_audit(rows: List[Dict], local_path: str):
 
 
 def cmd_scan(args):
-    """Scan Drive contents using scenario_source.csv or legacy v6 CSV."""
+    """Scan Drive contents using model_run_file_source.csv or legacy v6 CSV."""
     global RCLONE_REMOTE
     RCLONE_REMOTE = args.rclone_remote
 
     fmt = _detect_csv_format(args.listing_csv)
     if fmt == "source":
         scenarios = read_scenario_source_csv(args.listing_csv)
-        log.info("Using scenario_source.csv format")
+        log.info("Using model_run_file_source.csv format")
         if not args.include_all:
             before = len(scenarios)
             scenarios = [s for s in scenarios if s["download_status"] == "ready"]
@@ -1295,9 +1295,9 @@ def main():
                     help="Comma-separated scenario IDs to promote (default: all in staging)")
 
     sc = sub.add_parser("scan",
-                        help="Scan Drive contents using scenario_source.csv")
+                        help="Scan Drive contents using model_run_file_source.csv")
     sc.add_argument("--listing-csv", required=True,
-                    help="Path to scenario_source.csv (or legacy v6 CSV)")
+                    help="Path to model_run_file_source.csv (or legacy v6 CSV)")
     sc.add_argument("--rclone-remote", default="gdrive",
                     help="Name of the rclone remote (default: gdrive)")
     sc.add_argument("--workers", type=int, default=4,

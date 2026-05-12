@@ -16,7 +16,7 @@ Usage:
     # Include cross-scenario mismatch pattern analysis
     python check_extraction_results.py --bucket coeqwal-model-run --mismatches
 
-    # Write audit CSV to a custom path (default: etl/scripts/output/extraction_audit.csv)
+    # Write audit CSV to a custom path (default: etl/ingestion/output/extraction_audit.csv)
     python check_extraction_results.py --bucket coeqwal-model-run -o /tmp/foo.csv
 """
 

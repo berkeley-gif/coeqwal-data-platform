@@ -1,4 +1,4 @@
-# etl/coeqwal-etl/Dockerfile
+# etl/batch-container/Dockerfile
 
 # ------------------------------------------------------------------
 

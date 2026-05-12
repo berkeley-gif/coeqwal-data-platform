@@ -3,9 +3,9 @@
 Loads tier outcome data for all active scenarios into the `tier_result` and
 `tier_location_result` database tables.
 
-> **Output files** — `load_all_tier_results.py --output-sql <name>` writes the
+> **Output files.** `load_all_tier_results.py --output-sql <name>` writes the
 > generated UPSERT script to `etl/tier_data/output/<name>` (gitignored). Bare
-> filenames are auto-routed there; paths with `/` are respected. See
+> filenames are auto-routed there. Paths with `/` are respected. See
 > [`etl/README.md`](../README.md#output-files-audits-generated-sql) for the
 > full output catalog.
 
@@ -33,21 +33,21 @@ Each tier has a CSV file in `staging/` named by its short code. The formats diff
 
 | File | Column layout |
 |------|--------------|
-| `CWS_DEL.csv` | `scenario_id`, then one column per demand unit short code; values = tier 1–4 or NA |
-| `AG_REV.csv` | Wide: `scenario_id`, then one column per region; values = tier 1–4 (long `scenario, region, tier` format also auto-detected for backwards compatibility) |
-| `ENV_FLOWS.csv` | First col = station short code (row index); remaining cols = scenario codes; values = tier 1–4 |
-| `RES_STOR.csv` | `Scenario`, then one column per reservoir (e.g. `S_SHSTA_Storage_Tier`); values = tier 1–4 |
-| `GW_STOR.csv` | `scenario`, then one column per WBA (e.g. `WBA2`, `WBA7N`) plus `DETAW`; values = tier 0–4 |
+| `CWS_DEL.csv` | `scenario_id`, then one column per demand unit short code. Values = tier 1-4 or NA |
+| `AG_REV.csv` | Wide: `scenario_id`, then one column per region. Values = tier 1-4. Long `scenario, region, tier` format is also auto-detected for backwards compatibility |
+| `ENV_FLOWS.csv` | First col = station short code (row index). Remaining cols = scenario codes. Values = tier 1-4 |
+| `RES_STOR.csv` | `Scenario`, then one column per reservoir (e.g. `S_SHSTA_Storage_Tier`). Values = tier 1-4 |
+| `GW_STOR.csv` | `scenario`, then one column per WBA (e.g. `WBA2`, `WBA7N`) plus `DETAW`. Values = tier 0-4 |
 | `DELTA_ECO.csv` | `Scenario` (numeric, e.g. `11` for `s0011`), `TierValue` |
 | `FW_DELTA_USES.csv` | `ScenarioID`, `Salinity_Tier` |
 | `FW_EXP.csv` | `Scenario`, `Salinity_Export_Tier` |
-| `WRC_SALMON_AB.csv` | `scenario`, `Tier_range` (string like `"Tier 4"`); `s0065` is excluded by the data team |
+| `WRC_SALMON_AB.csv` | `scenario`, `Tier_range` (string like `"Tier 4"`). `s0065` is excluded by the data team |
 
 NA cells in any CSV are skipped (no location row generated for that slot).
 
 ---
 
-## Workflow.loading new tier data
+## Workflow: loading new tier data
 
 ### 1. Update staging CSVs locally
 
@@ -71,7 +71,7 @@ cd ~/environment/coeqwal-backend
 git pull
 ```
 
-### 5. Dry run.verify counts
+### 5. Dry run, verify counts
 
 ```bash
 cd etl/tier_data
@@ -82,7 +82,7 @@ Expected counts per scenario:
 
 | Tier | Location rows / scenario |
 |------|--------------------------|
-| CWS_DEL | ~76 (varies; NAs skipped) |
+| CWS_DEL | ~76 (varies, NAs skipped) |
 | AG_REV | ~132 |
 | ENV_FLOWS | 17 |
 | RES_STOR | 8 |
@@ -112,8 +112,8 @@ Check the two verification tables printed at the end:
 
 - `tier_result`: each tier should show `(active scenarios)` = count of non-retired
   scenarios, and `(total scenarios)` = active + any retired ones.
-- `tier_location_result`: row counts should match `location rows / scenario` × number
-  of active scenarios (plus any legacy rows from retired scenarios.these are harmless).
+- `tier_location_result`: row counts should match `location rows / scenario` x number
+  of active scenarios (plus any legacy rows from retired scenarios, which are harmless).
 
 ### 8. Update seed CSVs
 
@@ -148,7 +148,7 @@ Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back to
 ## Notes
 
 - `TIER_VERSION_ID = 8` is hardcoded throughout. Do not change without data team sign-off.
-- Both UPSERTs are safe to re-run.they use `ON CONFLICT DO UPDATE`.
+- Both UPSERTs are safe to re-run. They use `ON CONFLICT DO UPDATE`.
 - `tier_location_result` has no `is_active` column. Retired scenario rows remain in
   the table but are never surfaced because the API filters on `tier_result.is_active`.
 - `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by design. It is the

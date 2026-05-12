@@ -1452,12 +1452,12 @@ CSV validation scripts for verifying ETL output:
 
 ```bash
 # Compare CSVs
-python etl/coeqwal-etl/python-code/validate_csvs.py \
+python etl/batch-container/python-code/validate_csvs.py \
   --reference data/reference/expected.csv \
   --output data/output/actual.csv
 
 # Enhanced validation with reports
-python etl/coeqwal-etl/python-code/validate_csvs_improved.py \
+python etl/batch-container/python-code/validate_csvs_improved.py \
   --reference data/reference/ \
   --output data/output/ \
   --report validation_report.json
