@@ -87,25 +87,18 @@ These are operationally useful but locally regrowable. If they get out of hand, 
 
 ## File sequence
 
-Loading a new scenario end-to-end. Run on Cloud9.
+Loading a new scenario, end-to-end on Cloud9.
 
-1. **Edit [`etl/ingestion/model_run_file_source.csv`](ingestion/model_run_file_source.csv)** to add a row for the new scenario (folder ID, pinned filenames). The upstream source the modeling team maintains is the [`coeqwal_cs3_scenario_listing_v7`](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646) Google Sheet. Pull new rows from there. Commit, push, then `git pull` on Cloud9.
+1. Update [`etl/ingestion/model_run_file_source.csv`](ingestion/model_run_file_source.csv) from the [`coeqwal_cs3_scenario_listing_v7`](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646) Google Sheet.
+2. Add the scenario row to the database: `psql -f database/scripts/sql/<n>_add_<id>.sql`.
+3. Run `python etl/ingestion/gdrive_bulk_download.py scan`. Confirms Drive folders are accessible.
+4. Run `python etl/ingestion/gdrive_bulk_download.py download`. Stages ZIPs and trend CSVs to `s3://coeqwal-model-run/staging/<id>/`.
+5. Run `python etl/ingestion/gdrive_bulk_download.py promote`. Copies to `ready/`. Lambda + Batch fire automatically and extracted CSVs land in `s3://coeqwal-model-run/scenario/<id>/csv/`.
+6. Run `python etl/ingestion/check_extraction_results.py`. Confirms each scenario extracted cleanly.
+7. Run `python etl/statistics/run_all.py --scenario <id>`. Loads statistics into PostgreSQL.
+8. Run `python etl/statistics/verify_all_sections.py --scenario <id>` and `python etl/statistics/verify_api.py --scenario <id>`. Confirms DB and API agree.
 
-2. **Add the scenario to the database** with a migration SQL under `database/scripts/sql/` (see `52_add_s0070_s0090.sql` for an example). The statistics ETL looks the scenario up by `short_code`, so the row needs to exist before step 7.
-
-3. **`python etl/ingestion/gdrive_bulk_download.py scan --listing-csv etl/ingestion/model_run_file_source.csv`** lists the Drive folders and writes `etl/ingestion/output/scan_audit.csv`. Every row should show `OK` before you continue.
-
-4. **`python etl/ingestion/gdrive_bulk_download.py download --listing-csv etl/ingestion/model_run_file_source.csv --s3-bucket coeqwal-model-run`** uses rclone to pull each ZIP and trend CSV from Drive into a local temp dir, then boto3 uploads them to `s3://coeqwal-model-run/staging/<id>/`. Review `etl/ingestion/output/audit_report.csv` before promoting.
-
-5. **`python etl/ingestion/gdrive_bulk_download.py promote --s3-bucket coeqwal-model-run`** copies files from `staging/` to `ready/` after a y/N confirmation. **This is the trigger.** The Lambda fires on each ZIP, AWS Batch runs the extraction container, and CSVs land in `s3://coeqwal-model-run/scenario/<id>/csv/` with a manifest. No further operator action during this phase. Watch via `aws batch list-jobs ...` or `aws logs tail /aws/lambda/coeqwalEtlTrigger`.
-
-6. **`python etl/ingestion/check_extraction_results.py --bucket coeqwal-model-run`** audits every Batch job's output. Each scenario should show `extraction_status: SUCCEEDED` and `validation_result: passed`. If anything failed with `OutOfMemoryError`, re-run with `python etl/ingestion/reextract_all_scenarios.py --scenarios <id> --memory 16384`.
-
-7. **`python etl/statistics/run_all.py --scenario s0070`** computes all eight statistics modules and inserts the rows into PostgreSQL. Use `--all-scenarios` for a full backfill.
-
-8. **`python etl/statistics/verify_all_sections.py --scenario s0070`** then **`python etl/statistics/verify_api.py --scenario s0070`** confirm DB matches CSV (Layer 2) and API matches DB (Layer 3).
-
-Tier data is a separate flow, only run when the data team delivers new tier CSVs. See [tier_data/README.md](tier_data/README.md).
+Tier data is a separate flow. See [tier_data/README.md](tier_data/README.md).
 
 ## AWS cheatsheet
 
