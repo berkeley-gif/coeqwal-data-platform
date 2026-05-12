@@ -89,7 +89,7 @@ These are operationally useful but locally regrowable. If they get out of hand, 
 
 Loading a new scenario end-to-end. Run on Cloud9.
 
-1. **Edit [`etl/ingestion/model_run_file_source.csv`](ingestion/model_run_file_source.csv)** to add a row for the new scenario (folder ID, pinned filenames). Commit, push, then `git pull` on Cloud9.
+1. **Edit [`etl/ingestion/model_run_file_source.csv`](ingestion/model_run_file_source.csv)** to add a row for the new scenario (folder ID, pinned filenames). The upstream source the modeling team maintains is the [`coeqwal_cs3_scenario_listing_v7`](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646) Google Sheet. Pull new rows from there. Commit, push, then `git pull` on Cloud9.
 
 2. **Add the scenario to the database** with a migration SQL under `database/scripts/sql/` (see `52_add_s0070_s0090.sql` for an example). The statistics ETL looks the scenario up by `short_code`, so the row needs to exist before step 7.
 
