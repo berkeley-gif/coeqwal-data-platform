@@ -13,12 +13,6 @@ Where to find the canonical data the backend depends on. Most of it lives outsid
 | Geoschematic | GIS source for nodes, arcs (channels), demand units, water budget areas, and watersheds. Loaded into the database and surfaced by the API as the map layer | [`berkeley-gif/coeqwal-gis-kart`](https://github.com/berkeley-gif/coeqwal-gis-kart) (separate Kart repo) |
 | Attribute data | Authoritative reference and entity definitions that give the scenario data its meaning: lookups, demand units, reservoirs, scenarios, hydroclimates, themes, tier definitions, and the version metadata that wires them all together | [`database/seed_tables/`](../database/seed_tables/), organized by schema layer (`00_versioning/`, `01_lookup/`, `02_network/`, `03_entity/`, `03_GIS/`, `03_outcome_framework/`, `04_variable/`, `04_calsim_data/`, `05_assumptions_operations/`, `06_scenario/`, `07_hydroclimate/`, `08_theme/`, `10_tier/`). Loaded via `psql \copy` from migrations |
 
-## About the `data/` directory
-
-This directory itself is **local-only working space**. The `.gitignore` excludes it except for one allowlisted slice (`data/raw/csv_from_CalSim_report_pdf/`) that holds small, hand-extracted reference tables transcribed from the CalSim 3 final report PDF. Everything else in `data/` (GIS geopackages, sample model runs, raw tier deliveries, intermediate working files) is staged here by individual developers and never goes into git.
-
-If you need a file that only exists locally on another developer's machine, pull it from the canonical source listed above.
-
 ## Related
 
 - [`etl/`](../etl/) - the production pipeline that pulls model runs and trend reports from Google Drive, extracts them, and computes statistics for the database

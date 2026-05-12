@@ -9,6 +9,7 @@ flowchart LR
   CSV["etl/ingestion/<br/>model_run_file_source.csv"]
   Drive["Google Shared Drive<br/>(COEQWAL)"]
   IngScript["etl/ingestion/<br/>gdrive_bulk_download.py"]
+  S3Staging["s3://coeqwal-model-run/<br/>staging/"]
   S3Ready["s3://coeqwal-model-run/<br/>ready/"]
   Lambda["etl/lambda/<br/>coeqwalEtlTrigger"]
   Batch["AWS Batch<br/>coeqwal-dss-queue<br/>(Fargate Spot)"]
@@ -19,9 +20,10 @@ flowchart LR
   RDS["RDS Postgres<br/>coeqwal_scenarios"]
   Verify["etl/verification/"]
 
-  CSV -->|"operator: scan + download"| IngScript
-  Drive -->|"rclone"| IngScript
-  IngScript -->|"validate + stage + promote"| S3Ready
+  CSV -->|"reads (folder IDs,<br/>pinned filenames)"| IngScript
+  Drive -->|"rclone copy<br/>(via local temp dir)"| IngScript
+  IngScript -->|"boto3 upload"| S3Staging
+  S3Staging -->|"operator: promote<br/>(S3 copy)"| S3Ready
   S3Ready -->|"S3 PUT event"| Lambda
   Lambda -->|"SubmitJob"| Batch
   Batch --> Container
