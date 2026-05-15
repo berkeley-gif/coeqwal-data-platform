@@ -90,5 +90,5 @@ Other log groups you may want at the same time:
 ## Related
 
 - The downstream extraction code: [../batch-container/README.md](../batch-container/README.md)
-- The operator scripts that put files into `ready/`: [../ingestion/README.md](../ingestion/README.md)
+- The operator scripts that put files into `ready/`: [../README.md](../README.md) (see "How to process raw scenario model run data" and "Operator scripts in `etl/ingestion/`")
 - AWS-side resource details (job definition, queue, IAM): [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)

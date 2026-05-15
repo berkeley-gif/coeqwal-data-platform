@@ -70,7 +70,7 @@ flowchart LR
   Container --> Man
 ```
 
-The manifest is the per-scenario summary. `check_extraction_results.py` ([../ingestion/README.md](../ingestion/README.md)) reads it across all scenarios.
+The manifest is the per-scenario summary. `check_extraction_results.py` (see [../README.md](../README.md) "Recovery and re-extraction") reads it across all scenarios.
 
 ## Local development (build and run on your laptop)
 
@@ -189,6 +189,6 @@ python scan_dupes.py --compare-values --audit-units --workers 4
 ## Related
 
 - The Lambda that fires extraction jobs: [../lambda/README.md](../lambda/README.md)
-- The operator scripts that put ZIPs into `ready/`: [../ingestion/README.md](../ingestion/README.md)
+- The operator scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to process raw scenario model run data" and "Operator scripts in `etl/ingestion/`")
 - End-to-end accuracy verification (Layer 1-4): [../verification/README.md](../verification/README.md)
 - AWS-side resource details: [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)

@@ -70,10 +70,6 @@ etl/tier_data/staging/tier_upload_manifest.csv
 etl/statistics/charts/
 etl/batch-container/dss_processing/output/
 
-# ETL runtime outputs (API responses, shell captures, generated SQL)
-# Per-script output dirs (audit CSVs, generated SQL, scan results) live under
-# etl/<module>/output/ by convention. Anything that lands there is regeneratable
-# and stays out of git.
 etl/**/output/
 response.json
 **/response.json

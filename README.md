@@ -14,7 +14,7 @@ The pipeline that moves CalSim 3 model output from the COEQWAL Shared Drive thro
 
 This pipeline:
 
-- **Ingests** CalSim 3 model run ZIPs and trend report CSVs from the COEQWAL Shared Drive into S3, validated against [`etl/ingestion/model_run_file_source.csv`](etl/ingestion/model_run_file_source.csv) (the canonical scenario -> Drive folder mapping).
+- **Ingests** CalSim 3 model run ZIPs and trend report CSVs from the COEQWAL Shared Drive into S3, validated against [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](etl/ingestion/scenario_listing/model_run_file_source_working.csv) (the canonical scenario -> Drive folder mapping).
 - **Reorganizes** uploaded ZIPs into a per-scenario S3 layout (`scenario/<id>/run/`) and submits a Batch job per ZIP through a Lambda trigger.
 - **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files, preserves the DSS unit metadata as a row-6 CSV header, and writes a `.units.json` sidecar.
 - **Verifies units** that every CSV column's unit matches the DSS file's ground truth, and detects duplicate B-part pathnames within the same DSS.

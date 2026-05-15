@@ -135,7 +135,7 @@ Default tolerances: `1e-6` absolute and relative. Compares all common variables 
 
 ## How to add a new scenario (verification side)
 
-After [../ingestion/README.md](../ingestion/README.md) and [../statistics/README.md](../statistics/README.md) get a new scenario into the DB:
+After [../README.md](../README.md) (ingestion) and [../statistics/README.md](../statistics/README.md) get a new scenario into the DB:
 
 1. Ensure DSS-to-CSV extraction has run and manifests show PASS in `audits/validation_mismatches/`
 2. Run the ETL statistics: `python etl/statistics/run_all.py --scenario {id}`
