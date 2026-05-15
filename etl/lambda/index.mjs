@@ -1,126 +1,165 @@
 // index.mjs
+//
+// coeqwalEtlTrigger Lambda.
+//
+// Fires on S3 PUT under `coeqwal-model-run/ready/`. For each ZIP it:
+//   1. Waits up to 60 seconds for `sidecar.json` to arrive in the same prefix
+//      (HEAD-and-retry every 5 seconds). Handles upload-order races between
+//      the operator's promote step and the S3 ObjectCreated event.
+//   2. If no sidecar shows up, infers a minimal one and writes it to
+//      `scenario/<id>/run/sidecar.json`. Marks `ingestion.path = "manual_inferred"`
+//      so the Batch container knows the hashes were not validated upstream.
+//   3. Skips Batch submission if an active job already exists for this scenario
+//      (idempotency check across SUBMITTED/PENDING/RUNNABLE/STARTING/RUNNING).
+//   4. Moves ZIP, trend CSV, and sidecar from `ready/` into `scenario/<id>/`
+//      and submits the Batch job with SCENARIO_ID, ZIP_KEY, SIDECAR_KEY, and
+//      optional VALIDATION_REF_CSV_KEY env vars.
+//
+// Designed to be additive. The legacy behavior (move ZIP, find peer CSV,
+// submit Batch) is preserved. New behavior only adds upstream protection.
+
 import {
   S3Client,
   CopyObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
   HeadObjectCommand,
+  PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { BatchClient, SubmitJobCommand } from '@aws-sdk/client-batch';
+import { BatchClient, SubmitJobCommand, ListJobsCommand } from '@aws-sdk/client-batch';
 
 const REGION = process.env.AWS_REGION || 'us-west-2';
 
-// --- Config ---
 const BUCKET = process.env.COEQWAL_S3_BUCKET || 'coeqwal-model-run';
 const JOB_QUEUE = process.env.COEQWAL_BATCH_QUEUE || 'coeqwal-dss-queue';
 const JOB_DEFINITION = process.env.COEQWAL_BATCH_JOBDEF || 'coeqwal-dss-jobdef';
+
+const SIDECAR_GRACE_MS = parseInt(process.env.SIDECAR_GRACE_MS || '60000', 10);
+const SIDECAR_POLL_MS = parseInt(process.env.SIDECAR_POLL_MS || '5000', 10);
 
 const s3 = new S3Client({ region: REGION });
 const batch = new BatchClient({ region: REGION });
 
 export async function handler(event) {
-  console.log('📦 Incoming Event:', JSON.stringify(event, null, 2));
+  console.log('Incoming event:', JSON.stringify(event, null, 2));
 
   const record = event?.Records?.[0];
   if (!record) {
-    console.error('❌ No record found in event');
+    console.error('No record found in event');
     return;
   }
 
   const sourceKey = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
   const bucket = record.s3.bucket.name || BUCKET;
 
-  // Handle .zip uploads that are in ready/
   if (!sourceKey.toLowerCase().startsWith('ready/') || !sourceKey.toLowerCase().endsWith('.zip')) {
-    console.log('ℹ️ Not a ZIP under ready/. Ignoring:', sourceKey);
+    console.log('Not a ZIP under ready/. Ignoring:', sourceKey);
     return;
   }
 
   const fileName = sourceKey.split('/').pop();
   const stem = fileName.replace(/\.zip$/i, '');
-  const scenarioId = (fileName.split('_')[0] || '').toLowerCase(); // e.g., s0020
-  // Support both flat ready/file.zip and ready/<subfolder>/file.zip
+  const scenarioId = (fileName.split('_')[0] || '').toLowerCase();
   const sourcePrefix = sourceKey.substring(0, sourceKey.lastIndexOf('/') + 1);
 
   if (!/^s\d{4}$/.test(scenarioId)) {
-    console.warn('⚠️ Could not derive scenario id from file name:', fileName);
+    console.warn('Could not derive scenario id from file name:', fileName);
     return;
   }
 
+  // --- Idempotency: skip if a job is already in flight for this scenario ---
+  try {
+    const active = await findActiveJobForScenario(scenarioId);
+    if (active) {
+      console.log(`Idempotency skip: active Batch job already exists for ${scenarioId}: ${active.jobId} (${active.status})`);
+      return;
+    }
+  } catch (err) {
+    console.warn('Idempotency check failed (continuing anyway):', err?.message || err);
+  }
+
   const zipDestKey = `scenario/${scenarioId}/run/${fileName}`;
+  const sidecarDestKey = `scenario/${scenarioId}/run/sidecar.json`;
 
   try {
-    // --- Move ZIP to its final location ---
-    console.log(`➡️ Copying ZIP ${bucket}/${sourceKey} -> ${zipDestKey}`);
+    // --- Wait for sidecar.json to land alongside the ZIP -------------------
+    const sidecarReadyKey = await waitForSidecar(bucket, sourcePrefix);
+    let sidecarFinalKey = sidecarDestKey;
+
+    if (sidecarReadyKey) {
+      console.log(`Sidecar arrived at ${sidecarReadyKey}; moving to ${sidecarDestKey}`);
+      await s3.send(new CopyObjectCommand({
+        Bucket: bucket,
+        CopySource: `${bucket}/${sidecarReadyKey}`,
+        Key: sidecarDestKey,
+      }));
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: sidecarReadyKey }));
+    } else {
+      console.warn(`No sidecar after ${SIDECAR_GRACE_MS}ms grace; inferring a minimal one for ${scenarioId}`);
+      await writeInferredSidecar(bucket, sidecarDestKey, scenarioId, fileName, zipDestKey);
+    }
+
+    // --- Move the ZIP to its final location --------------------------------
+    console.log(`Copying ZIP ${bucket}/${sourceKey} -> ${zipDestKey}`);
     await s3.send(new CopyObjectCommand({
       Bucket: bucket,
       CopySource: `${bucket}/${sourceKey}`,
       Key: zipDestKey,
     }));
-    console.log('🗑️ Deleting original ZIP from ready/');
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: sourceKey }));
 
-    // --- Try to find a peer csv in the same prefix (supports subfolders) ---
-    let validationCsvReadyKey = await findPeerCsv(bucket, stem, scenarioId, sourcePrefix);
-
-    // If found, move csv to scenario/<id>/verify/
+    // --- Find peer trend CSV in the same prefix and relocate it ------------
+    const validationCsvReadyKey = await findPeerCsv(bucket, stem, scenarioId, sourcePrefix);
     let validationCsvFinalKey = '';
     if (validationCsvReadyKey) {
       const csvName = validationCsvReadyKey.split('/').pop();
       validationCsvFinalKey = `scenario/${scenarioId}/verify/${csvName}`;
-
-      console.log(`➡️ Copying CSV ${bucket}/${validationCsvReadyKey} -> ${validationCsvFinalKey}`);
+      console.log(`Copying CSV ${bucket}/${validationCsvReadyKey} -> ${validationCsvFinalKey}`);
       await s3.send(new CopyObjectCommand({
         Bucket: bucket,
         CopySource: `${bucket}/${validationCsvReadyKey}`,
         Key: validationCsvFinalKey,
       }));
-      console.log('🗑️ Deleting original CSV from ready/');
       await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: validationCsvReadyKey }));
     } else {
-      console.log('ℹ️ No peer CSV found in ready/ for', scenarioId);
+      console.log('No peer CSV found in ready/ for', scenarioId);
     }
 
-    // --- Clean up subfolder if source was nested (e.g., ready/s0020/) ---
+    // --- Clean up the source subfolder if any leftovers remain -------------
     if (sourcePrefix !== 'ready/') {
       const remaining = await s3.send(new ListObjectsV2Command({
         Bucket: bucket,
         Prefix: sourcePrefix,
       }));
       for (const obj of (remaining.Contents || [])) {
-        console.log('🗑️ Cleaning up leftover:', obj.Key);
+        console.log('Cleaning up leftover:', obj.Key);
         await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key }));
       }
     }
 
-    // --- Submit Batch job ---
+    // --- Submit the Batch job ----------------------------------------------
     const jobName = `etl-${scenarioId}-${Date.now()}`;
     const environment = [
       { name: 'SCENARIO_ID', value: scenarioId },
       { name: 'ZIP_FILENAME', value: fileName },
       { name: 'ZIP_BUCKET', value: bucket },
       { name: 'ZIP_KEY', value: zipDestKey },
-      // pass the reference csv if any; empty means "no validation"
+      { name: 'SIDECAR_KEY', value: sidecarFinalKey },
       { name: 'VALIDATION_REF_CSV_KEY', value: validationCsvFinalKey || '' },
-      // Add validation tolerances for enhanced validation
       { name: 'ABS_TOL', value: '1e-6' },
       { name: 'REL_TOL', value: '1e-6' },
     ];
 
-    console.log('🚀 Submitting Batch job:', { jobName, JOB_QUEUE, JOB_DEFINITION, environment });
+    console.log('Submitting Batch job:', { jobName, JOB_QUEUE, JOB_DEFINITION, environment });
     const submitRes = await batch.send(new SubmitJobCommand({
       jobName,
       jobQueue: JOB_QUEUE,
       jobDefinition: JOB_DEFINITION,
-      // NOTE: using ECS-style overrides to match jobdef
       ecsPropertiesOverride: {
         taskProperties: [
           {
             containers: [
-              {
-                name: 'main',
-                environment,
-              },
+              { name: 'main', environment },
             ],
           },
         ],
@@ -128,34 +167,122 @@ export async function handler(event) {
     }));
 
     const jobId = submitRes.jobId;
-    console.log(`✅ Job submitted: ${jobId}`);
-
-    // Log validation status
+    console.log(`Submitted Batch job ${jobId} for scenario ${scenarioId}`);
+    console.log(`Sidecar: ${sidecarFinalKey}`);
     if (validationCsvFinalKey) {
-      console.log(`🔍 Validation ENABLED - Reference CSV: ${validationCsvFinalKey}`);
+      console.log(`Validation ENABLED. Reference CSV: ${validationCsvFinalKey}`);
     } else {
-      console.log(`⚠️ Validation DISABLED - No reference CSV found`);
+      console.log('Validation DISABLED. No reference CSV found');
     }
 
   } catch (err) {
-    console.error('❌ Error in Lambda handler:', err);
+    console.error('Error in Lambda handler:', err);
     throw err;
   }
 }
 
 /**
- * Find a peer csv sitting alongside the uploaded ZIP.
- * Searches in the given prefix (e.g., "ready/" or "ready/s0020/").
+ * HEAD-and-retry for `<sourcePrefix>sidecar.json`. Returns the key when found,
+ * or null after the grace window expires. The grace window absorbs the race
+ * between the operator's promote step (which uploads sidecar -> trend CSV -> ZIP)
+ * and the S3 event the ZIP PUT triggers.
+ */
+async function waitForSidecar(bucket, sourcePrefix) {
+  const sidecarKey = `${sourcePrefix}sidecar.json`;
+  const deadline = Date.now() + SIDECAR_GRACE_MS;
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    attempts++;
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: sidecarKey }));
+      console.log(`Sidecar found at ${sidecarKey} after ${attempts} attempt(s)`);
+      return sidecarKey;
+    } catch (err) {
+      const code = err?.name || err?.$metadata?.httpStatusCode;
+      if (code !== 'NotFound' && code !== 404 && code !== '404') {
+        console.warn('Unexpected sidecar HEAD error (continuing to retry):', err?.message || err);
+      }
+      if (Date.now() + SIDECAR_POLL_MS >= deadline) break;
+      await new Promise(r => setTimeout(r, SIDECAR_POLL_MS));
+    }
+  }
+  return null;
+}
+
+/**
+ * Write a minimal sidecar to S3 when none arrived. Marks the ingestion path
+ * as `manual_inferred` so downstream consumers know the file hashes were not
+ * verified at ingestion time.
+ */
+async function writeInferredSidecar(bucket, sidecarKey, scenarioId, zipFilename, zipKey) {
+  const sidecar = {
+    schema_version: 1,
+    short_code: scenarioId,
+    zip_basename: zipFilename,
+    zip_key: zipKey,
+    zip_sha256: '',
+    expected_sv_filename: '',
+    expected_dv_filename: '',
+    expected_sv_path_in_zip: '',
+    expected_dv_path_in_zip: '',
+    sv_sha256: '',
+    dv_sha256: '',
+    trend_csv_basename: null,
+    trend_csv_sha256: null,
+    ingestion: {
+      path: 'manual_inferred',
+      script: 'lambda:coeqwalEtlTrigger',
+      script_version: 'lambda-pass2b',
+      operator: 'lambda',
+      ingested_at_utc: new Date().toISOString(),
+    },
+    notes: 'Sidecar inferred by Lambda. No file hashes computed at ingestion. The Batch container is the only place hashes can be verified for this run.',
+  };
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: sidecarKey,
+    Body: JSON.stringify(sidecar, null, 2),
+    ContentType: 'application/json',
+  }));
+  console.log(`Inferred sidecar written to ${sidecarKey}`);
+}
+
+/**
+ * Look for a Batch job that's already active for this scenario id. Active
+ * means SUBMITTED, PENDING, RUNNABLE, STARTING, or RUNNING. Used to make the
+ * Lambda idempotent against duplicate S3 events or operator retries.
+ */
+async function findActiveJobForScenario(scenarioId) {
+  const activeStatuses = ['SUBMITTED', 'PENDING', 'RUNNABLE', 'STARTING', 'RUNNING'];
+  const namePrefix = `etl-${scenarioId}-`;
+  for (const status of activeStatuses) {
+    let nextToken;
+    do {
+      const res = await batch.send(new ListJobsCommand({
+        jobQueue: JOB_QUEUE,
+        jobStatus: status,
+        nextToken,
+      }));
+      const match = (res.jobSummaryList || []).find(j => (j.jobName || '').startsWith(namePrefix));
+      if (match) return match;
+      nextToken = res.nextToken;
+    } while (nextToken);
+  }
+  return null;
+}
+
+/**
+ * Find a peer csv sitting alongside the uploaded ZIP. Searches in the given
+ * prefix (e.g., "ready/" or "ready/s0020/").
  * Preference order:
  *   1) <prefix><zip_stem>.csv      (exact match)
  *   2) newest <prefix>*<scenarioId>*.csv (broader pattern)
- * Returns the S3 key (string) or '' if none.
  */
 async function findPeerCsv(bucket, zipStem, scenarioId, prefix = 'ready/') {
   const exactKey = `${prefix}${zipStem}.csv`;
   try {
     await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: exactKey }));
-    console.log('🔎 Found exact peer CSV:', exactKey);
+    console.log('Found exact peer CSV:', exactKey);
     return exactKey;
   } catch {
     // ignore 404
@@ -180,6 +307,6 @@ async function findPeerCsv(bucket, zipStem, scenarioId, prefix = 'ready/') {
   if (candidates.length === 0) return '';
 
   candidates.sort((a, b) => b.last - a.last);
-  console.log('🔎 Selected newest peer CSV:', candidates[0].key);
+  console.log('Selected newest peer CSV:', candidates[0].key);
   return candidates[0].key;
 }

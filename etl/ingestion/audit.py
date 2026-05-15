@@ -554,13 +554,13 @@ def regenerate_audit(
     s3 = boto3.client("s3")
     local_state = _read_local_state()
 
-    log.info("Listing scenarios in s3://%s/scenario/ ...", s3_bucket)
+    log.debug("Listing scenarios in s3://%s/scenario/ ...", s3_bucket)
     scenario_ids = _list_scenario_ids(s3, s3_bucket)
-    log.info("Found %d scenarios", len(scenario_ids))
+    log.info("Refreshing audit (collecting state for %d scenarios) ...", len(scenario_ids))
 
     scenario_states: List[Dict[str, Any]] = []
     for sc in scenario_ids:
-        log.info("  collecting state for %s", sc)
+        log.debug("  collecting state for %s", sc)
         scenario_states.append(_collect_scenario_state(s3, s3_bucket, sc))
 
     markdown = _render(local_state, scenario_states, show_all)

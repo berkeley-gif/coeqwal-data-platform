@@ -1260,10 +1260,7 @@ def cmd_promote(args):
         print("\nDRY RUN: not copying anything.")
         return
 
-    confirm = input("\nContinue? [y/N] ").strip().lower()
-    if confirm != "y":
-        print("Aborted.")
-        return
+    print("\nPromoting now. The ZIP PUT under ready/ triggers Lambda.\n")
 
     for sc in sorted(groups):
         for src_key in groups[sc]:  # already in safe order
@@ -1653,7 +1650,8 @@ def main():
                          "Example: --scenarios s0042 s0043. "
                          "Default: every scenario currently in staging.")
     pr.add_argument("--dry-run", action="store_true",
-                    help="Print the planned copy order without copying")
+                    help="Print the planned copy order without copying. Use this before "
+                         "a real promote to see what will fire Lambda")
 
     sc = sub.add_parser("scan",
                         help="Scan Drive contents using the working CSV")

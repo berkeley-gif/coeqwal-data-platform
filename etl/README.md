@@ -45,7 +45,7 @@ Cloud 9 is running under the instance profile: arn:aws:sts::533266975152:assumed
 
 - venv activated with `boto3` installed:
   ```bash
-  source .venv/bin/activate
+  source venv/bin/activate
   ```
   First-time setup: see "Cloud9 venv setup" in the operator reference below.
 - AWS credentials available to the shell (Cloud9 handles this automatically).
@@ -72,21 +72,6 @@ Which scenarios get processed is set on the CLI, not in the CSV (see Step 2 and 
 ```
 
 That last form is exactly what you get when you select a column in a spreadsheet and paste into quotes. The clipboard contents are newline-separated, the script splits on whitespace, and it works.
-
-**The easy paste workflow:** select the short_code column in the WAM team's spreadsheet, hit Cmd-C, then run:
-
-```bash
-# macOS:
-python etl/ingestion/gdrive_bulk_download.py scan --scenarios "$(pbpaste)"
-python etl/ingestion/gdrive_bulk_download.py download --scenarios "$(pbpaste)"
-
-# Linux / Cloud9 with xclip installed:
-python etl/ingestion/gdrive_bulk_download.py scan --scenarios "$(xclip -selection clipboard -o)"
-```
-
-`pbpaste` returns the clipboard contents as a single newline-separated string, the quotes pass it as one argument, and the script splits internally. You can also paste the column directly into quoted arguments on the command line; bash keeps the newlines inside the quotes and the script splits them.
-
-For very long batches that you want to commit to a file (and possibly add `#` comments to), use multiple invocations of `--scenarios "$(cat batch.txt)"`. There is no special file-loading flag; the same paste mechanism works for both clipboard and file contents.
 
 **2. Pre-flight against Google Drive.**
 
@@ -403,7 +388,7 @@ The rclone refresh token typically auto-renews. If you get `401 Unauthorized` af
 ```bash
 cd ~/environment/coeqwal-backend
 python3 -m venv .venv
-source .venv/bin/activate
+source venv/bin/activate
 pip install -r etl/ingestion/requirements.txt
 pip list   # confirm what is installed
 ```
