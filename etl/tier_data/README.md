@@ -3,6 +3,43 @@
 Loads tier outcome data for all active scenarios into the `tier_result` and
 `tier_location_result` database tables.
 
+---
+
+## How to load new tier data
+
+**1. Drop new CSVs into `etl/tier_data/staging/`.** Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`, `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`, `FW_EXP.csv`, `WRC_SALMON_AB.csv`.
+
+**2. If the active scenario list changed**, open `etl/tier_data/load_all_tier_results.py` and edit `ALLOWED_SCENARIOS` at the top. Move retired ones into `DEACTIVATED_SCENARIOS`.
+
+**3. Commit and push from your laptop.** The staging CSVs are git-tracked on purpose.
+
+**4. On Cloud9: `git pull`.**
+
+**5. Dry run to check counts:**
+
+```bash
+cd etl/tier_data
+python load_all_tier_results.py --dry-run
+```
+
+**6. Generate the SQL:**
+
+```bash
+python load_all_tier_results.py --output-sql all_tiers.sql
+```
+
+That writes `etl/tier_data/output/all_tiers.sql`.
+
+**7. Apply it:**
+
+```bash
+psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
+```
+
+Read the two verification tables it prints at the end. Active scenario counts should match what's in `ALLOWED_SCENARIOS`.
+
+**8. Export back into seed CSVs** so the DB can be rebuilt from scratch. The two `\COPY` blocks below; copy the outputs to `database/seed_tables/10_tier/`.
+
 > **Output files.** `load_all_tier_results.py --output-sql <name>` writes the
 > generated UPSERT script to `etl/tier_data/output/<name>` (gitignored). Bare
 > filenames are auto-routed there. Paths with `/` are respected. See
