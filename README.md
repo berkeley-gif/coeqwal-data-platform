@@ -2,7 +2,97 @@
 
 A comprehensive data platform for the Collaboratory for Equity in Water Allocation (COEQWAL) project, providing multi-level data schema, PostgreSQL database with PostGIS extension, data APIs, and upload and verification infrastructure for California water management scenario presentation, analysis, and review.
 
-The backend is organized into four modules plus its AWS infrastructure. Each module has its own README.
+The data platform code repository and documentation is organized into four modules(`data`, `etl`, `database`, `api`) plus its AWS infrastructure (documented locally). Each module has its own README.
+
+## Developer setup
+
+Two environments cover daily work:
+
+- **Cloud9 (`coeqwal-db-admin`)**: the operator environment. Owns direct access to production RDS, the only place ingestion against the live S3 buckets runs.
+- **Laptop**: matches Cloud9 for everything except production RDS. Covers ETL scripts, tier loads, audit, API local dev, schema work against a local Postgres, and Docker builds for the batch container.
+
+The Cloud9 environment is the spec. Capture it any time with `bash scripts/cloud9_snapshot.sh --write` and commit the resulting [`docs/CLOUD9_INVENTORY.md`](docs/CLOUD9_INVENTORY.md). Laptop setup tries to match that file.
+
+### One-shot laptop setup
+
+```bash
+bash scripts/setup_dev_env.sh
+```
+
+Does, in order:
+
+1. Verifies Python 3.10+ (advises an install path if missing).
+2. Creates `.venv/` at repo root and runs `pip install -r requirements.txt` (the [aggregator](requirements.txt)).
+3. Installs `rclone` if missing and prompts you to configure a `gdrive:` remote.
+4. Checks the AWS CLI and walks you through `aws configure sso` if credentials are not set.
+5. Verifies Docker is installed and the daemon is running.
+6. Brings up a local Postgres via [`docker-compose.yml`](docker-compose.yml) (`postgis/postgis:16-3.4`).
+7. Applies schema and seeds via [`scripts/load_local_seeds.sh`](scripts/load_local_seeds.sh).
+8. Runs [`scripts/check_env.sh`](scripts/check_env.sh) to confirm everything came up.
+
+Idempotent: rerun anytime. Flags `--skip-postgres` and `--skip-seeds` let you scope the run.
+
+### Verify anytime
+
+```bash
+bash scripts/check_env.sh
+```
+
+Prints `PASS` or `FAIL` for each prerequisite, with a one-line remediation hint per `FAIL`. Returns non-zero if anything failed. A clean run is the definition of "laptop is ready". Add `--container` to also `docker build` the batch container (slow).
+
+### Local Postgres only
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL="postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario"
+bash scripts/load_local_seeds.sh
+```
+
+The container's data lives in the named volume `coeqwal_pgdata` and survives restarts. Reset with `docker compose down -v`. The local DB is intentionally separate from production RDS. Direct laptop-to-RDS access is out of scope and Cloud9 owns that path.
+
+### What is intentionally out of scope locally
+
+- Direct production RDS access (use Cloud9).
+- Running ingestion against the live `coeqwal-model-run` S3 prefixes other than scoped, read-only checks. Operator runs live on Cloud9.
+- Per-developer OAuth for the shared Drive. Each developer authorizes their own Drive access via `rclone config`.
+
+### Validating a fresh setup
+
+The intended end-to-end test runs `scripts/setup_dev_env.sh` on a brand-new account, then `scripts/check_env.sh`, then per-module smoke tests. Two ways to do this:
+
+**Fresh user account on your laptop (most realistic):** create a new local user, log in as that user, install nothing manually, clone this repo, run `bash scripts/setup_dev_env.sh`. After it finishes, `bash scripts/check_env.sh` should show no `FAIL`. Delete the test user afterward.
+
+**Disposable Linux VM (faster to throw away):**
+
+```bash
+# Inside a fresh Ubuntu 22.04 / Debian 12 container or VM, with sudo available
+sudo apt-get update && sudo apt-get install -y git curl
+git clone <repo-url> coeqwal-backend && cd coeqwal-backend
+bash scripts/setup_dev_env.sh
+bash scripts/check_env.sh
+```
+
+Per-module smoke checks after `check_env.sh` is clean:
+
+| Module | Command | Expected |
+|---|---|---|
+| ETL ingestion | `python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0042` | Prints a plan for one scenario (no S3 writes) |
+| Tier data | `python etl/tier_data/load_all_tier_results.py --dry-run` | Prints what would be loaded |
+| API | `cd api/coeqwal-api && uvicorn main:app --reload` then `curl http://localhost:8000/api/health` | `{"status":"ok"}` or similar |
+| DB | `psql "$DATABASE_URL" -c "\\dt"` | Lists ~96 tables |
+| Batch container | `bash scripts/check_env.sh --container` | `PASS  docker build etl/batch-container` |
+
+If any of these fail, the failure mode and remediation should appear in `check_env.sh`'s output. File issues against the failing step.
+
+### Module-specific notes
+
+Editing dependencies for a single module is done in that module's `requirements.txt`. The top-level aggregator rarely changes. If you only work on one module you can install just that module's `requirements.txt`:
+
+- ETL ingestion: `etl/ingestion/requirements.txt`
+- ETL tier data: `etl/tier_data/requirements.txt`
+- ETL verification: `etl/verification/requirements.txt`
+- Database: `database/requirements.txt`
+- API: `api/coeqwal-api/requirements.txt`
 
 ## Data
 

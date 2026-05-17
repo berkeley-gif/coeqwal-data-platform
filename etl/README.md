@@ -21,6 +21,8 @@ And we use the ETL to insert the tier data into the database for fetching via th
 
 The database also serves as a stable repository for the data, and joins numerical data with attribute data.
 
+**Where this runs.** Developer runs against the live S3 buckets and production RDS belong on Cloud9 (`coeqwal-db-admin`). All the script-level work (developing, dry-runs, smoke tests, schema and seed work against a local Postgres) runs equally well on a local. See the [top-level Developer setup](../README.md#developer-setup) for the one-shot local bring-up (`bash scripts/setup_dev_env.sh`).
+
 ## How to process raw scenario model run data
 
 There are two ways to kick off the ETL for the model run data. One way is to manually download a scenario model run zip file from the Water Allocation Modeling Team's Model_Run directory at https://drive.google.com/drive/folders/1IBX1DjMnlxTEFqOO2Pwi0OCt61dG_Ezg.
@@ -47,7 +49,7 @@ Cloud 9 is running under the instance profile: arn:aws:sts::533266975152:assumed
   ```bash
   source venv/bin/activate
   ```
-  First-time setup: see "Cloud9 venv setup" in the operator reference below.
+  First-time setup: see "Cloud9 venv setup" in the developer reference below.
 - AWS credentials available to the shell (Cloud9 handles this automatically).
 
 ### Steps
@@ -83,7 +85,7 @@ python etl/ingestion/gdrive_bulk_download.py scan --all
 
 Walks each named Drive folder and writes `etl/ingestion/output/scan_audit.csv`. Skim it. Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
 
-`scan` does not touch S3 and does not need AWS credentials. You can run it from your laptop. Local prereqs: `rclone` configured with the `gdrive` remote (you already have this on your Mac from the original Google OAuth), Python 3.9+, and `boto3` (imported at the top of the script even though scan does not use it). One `pip install -r etl/ingestion/requirements.txt` in a venv on the Mac covers `boto3`. If you do not want to set that up locally, run it from Cloud9, which has all three already.
+`scan` does not touch S3 and does not need AWS credentials. You can run it from your local. Local prereqs: `rclone` configured with the `gdrive` remote (you already have this on your Mac from the original Google OAuth), Python 3.9+, and `boto3` (imported at the top of the script even though scan does not use it). One `pip install -r etl/ingestion/requirements.txt` in a venv on the Mac covers `boto3`. If you do not want to set that up locally, run it from Cloud9, which has all three already.
 
 **3. Download, validate, stage to S3.**
 
@@ -138,7 +140,7 @@ Each Batch job writes `classification.json` to its scenario's `scenario/<id>/run
 
 ### What is next
 
-Pass 2b will tighten the Batch container to strict-mode-against-sidecar, add Lambda sidecar inference so pure drag-and-drop in the AWS console works without operator follow-up, and add end-to-end API verification. The seven operator steps above do not change.
+Pass 2b will tighten the Batch container to strict-mode-against-sidecar, add Lambda sidecar inference so pure drag-and-drop in the AWS console works without developer follow-up, and add end-to-end API verification. The seven developer steps above do not change.
 
 For deeper context (concepts, the six layers of validation, the manual upload path, AWS-side details), see the sections below.
 
@@ -163,12 +165,12 @@ flowchart LR
   CSV -->|"reads (folder IDs,<br/>pinned filenames)"| IngScript
   Drive -->|"rclone copy<br/>(via local temp dir)"| IngScript
   IngScript -->|"boto3 upload"| S3Staging
-  S3Staging -->|"operator: promote<br/>(sidecar -> trend -> ZIP last)"| S3Ready
+  S3Staging -->|"developer: promote<br/>(sidecar -> trend -> ZIP last)"| S3Ready
   S3Ready -->|"S3 PUT event on ZIP"| Lambda
   Lambda -->|"SubmitJob"| Batch
   Batch --> Container
   Container -->|"DSS to CSV + manifest"| S3CSV
-  S3CSV -->|"operator: run_all.py"| Stats
+  S3CSV -->|"developer: run_all.py"| Stats
   S3CSV -.->|"team-delivered drops"| Tiers
   Stats -->|"INSERT"| RDS
   Tiers -->|"UPSERT"| RDS
@@ -179,11 +181,11 @@ flowchart LR
 
 | Stage | Directory | What lives here |
 |---|---|---|
-| 1. Ingestion (operator) | [ingestion/](ingestion/) | The source-of-truth CSV plus the operator scripts that pull model runs from Google Drive, validate them, stage to S3, and promote to `ready/`. Start here when loading a new scenario. |
+| 1. Ingestion (developer) | [ingestion/](ingestion/) | The source-of-truth CSV plus the developer scripts that pull model runs from Google Drive, validate them, stage to S3, and promote to `ready/`. Start here when loading a new scenario. |
 | 2. Trigger (automatic) | [lambda/](lambda/) | The `coeqwalEtlTrigger` Lambda. Fires on every `ready/` ZIP PUT, moves the ZIP and its sidecar to the scenario layout, and submits a Batch job. |
 | 3. Extraction (automatic) | [batch-container/](batch-container/) | The Dockerfile and Python code that AWS Batch runs in Fargate Spot. Reads a CalSim ZIP, classifies its DSS files, converts to CSV, verifies units, writes a manifest. Built and pushed by [.github/workflows/etl.yml](../.github/workflows/etl.yml). |
-| 4a. Statistics ETL (operator) | [statistics/](statistics/) | `run_all.py` and per-module calculators that read the extracted CSVs out of S3 and load derived metrics into the database. |
-| 4b. Tier data (operator) | [tier_data/](tier_data/) | Loads tier outcome levels from team-delivered CSVs. Independent of the Drive -> Batch path. |
+| 4a. Statistics ETL (developer) | [statistics/](statistics/) | `run_all.py` and per-module calculators that read the extracted CSVs out of S3 and load derived metrics into the database. |
+| 4b. Tier data (developer) | [tier_data/](tier_data/) | Loads tier outcome levels from team-delivered CSVs. Independent of the Drive -> Batch path. |
 | Verification | [verification/](verification/) | End-to-end accuracy checks (DSS to CSV to DB to API). |
 | Archive | [archive/](archive/) | Older code kept for reference. |
 
@@ -197,12 +199,12 @@ A few terms appear over and over in this README and in the code. The shortest de
 
 A scenario's ZIP reaches `s3://coeqwal-model-run/ready/<id>/` one of two ways:
 
-- **Automated path** (default). `gdrive_bulk_download.py download` reads the working CSV, downloads from Google Drive via rclone, validates, hashes, writes a `sidecar.json`, stages everything under `s3://coeqwal-model-run/staging/scenario_data/<id>/`, and waits for the operator to run `promote` to copy to `ready/`. The audit auto-renders at the end of `download`.
-- **Manual path**. The operator uploads the ZIP (and any peers) directly through the AWS console (drag-and-drop) or with `etl/ingestion/manual_ingest.py upload`. The sidecar is optional at upload time, but Batch requires one to run, so the operator follows up with `manual_ingest.py sidecar --retrigger-batch` if they did not include one.
+- **Automated path** (default). `gdrive_bulk_download.py download` reads the working CSV, downloads from Google Drive via rclone, validates, hashes, writes a `sidecar.json`, stages everything under `s3://coeqwal-model-run/staging/scenario_data/<id>/`, and waits for the developer to run `promote` to copy to `ready/`. The audit auto-renders at the end of `download`.
+- **Manual path**. The developer uploads the ZIP (and any peers) directly through the AWS console (drag-and-drop) or with `etl/ingestion/manual_ingest.py upload`. The sidecar is optional at upload time, but Batch requires one to run, so the developer follows up with `manual_ingest.py sidecar --retrigger-batch` if they did not include one.
 
 Both paths land at the same key shape in S3, so downstream stages do not branch on path.
 
-The S3 staging prefix is `staging/scenario_data/` (not just `staging/`). Tier-data work happens on the operator's local disk under `etl/tier_data/staging/`. That naming reserves room to add `staging/tier_data/` in S3 later without colliding with the scenario flow.
+The S3 staging prefix is `staging/scenario_data/` (not just `staging/`). Tier-data work happens on the developer's local disk under `etl/tier_data/staging/`. That naming reserves room to add `staging/tier_data/` in S3 later without colliding with the scenario flow.
 
 ### SHA-256, in plain terms
 
@@ -220,11 +222,11 @@ The full schema is documented in [`ingestion/gdrive_bulk_download.py`](ingestion
 - `trend_csv_basename`, `trend_csv_sha256` (both nullable)
 - `convention_check.short_code_in_dv_basename`, `convention_check.short_code_in_sv_basename` (booleans, informational)
 - `source.spreadsheet_url`, `source.spreadsheet_row_sha256`, `source.spreadsheet_file`
-- `ingestion.path` (`automated` | `manual` | `backfill`), `ingestion.script`, `ingestion.script_version`, `ingestion.operator`, `ingestion.ingested_at_utc`
+- `ingestion.path` (`automated` | `manual` | `backfill`), `ingestion.script`, `ingestion.script_version`, `ingestion.developer`, `ingestion.ingested_at_utc`
 
 ### `pinned_*` columns in the working CSV
 
-The working CSV has two operator-managed disambiguator columns: `pinned_model_run_zip` and `pinned_trend_csv`. The operator fills these in when a scenario's Drive folder contains more than one candidate file. Without a pin, the script refuses to guess and either skips the scenario (`MULTIPLE_ZIPS_NO_PIN`) or marks it unverified (`unverified_multi_trend`). With a pin, the script selects the exact filename you named.
+The working CSV has two developer-managed disambiguator columns: `pinned_model_run_zip` and `pinned_trend_csv`. The developer fills these in when a scenario's Drive folder contains more than one candidate file. Without a pin, the script refuses to guess and either skips the scenario (`MULTIPLE_ZIPS_NO_PIN`) or marks it unverified (`unverified_multi_trend`). With a pin, the script selects the exact filename you named.
 
 ### Path vs URL in the working CSV
 
@@ -262,7 +264,7 @@ Multiple scenarios share the same SV (input state-variable) DSS file on purpose.
 
 Two artifacts surface what happened. They have different jobs.
 
-- **Audit** (`etl/ingestion/audit.md`, regenerated by `etl/ingestion/audit.py` or auto-rendered at the end of `gdrive_bulk_download.py download`). A digestible state snapshot. One file, in git, structured. Tells the operator what needs their attention with the exact command to fix it. Read this first.
+- **Audit** (`etl/ingestion/audit.md`, regenerated by `etl/ingestion/audit.py` or auto-rendered at the end of `gdrive_bulk_download.py download`). A digestible state snapshot. One file, in git, structured. Tells the developer what needs their attention with the exact command to fix it. Read this first.
 - **Logs** (CloudWatch, console output from each script). The chronological narrative of a specific run. Verbose, transient, not in git. Read these only when you have a specific question about a specific run that the audit referenced.
 
 If you find yourself reading logs to figure out what to do next, the audit is missing a row.
@@ -273,23 +275,23 @@ Each scenario directory `s3://coeqwal-model-run/scenario/<id>/run/` ends up hold
 
 | File | Written by | Records |
 |---|---|---|
-| `sidecar.json` | ingestion (`gdrive_bulk_download.py` or `manual_ingest.py`) | What the operator believes is in the ZIP. Basenames, hashes, sizes, provenance. |
+| `sidecar.json` | ingestion (`gdrive_bulk_download.py` or `manual_ingest.py`) | What the developer believes is in the ZIP. Basenames, hashes, sizes, provenance. |
 | `lambda_status.json` | Lambda (Pass 2b) | Whether the Lambda saw the sidecar, whether it submitted a Batch job, and why if not. |
 | `classification.json` | Batch container (Pass 2b) | What the container actually extracted. Selected DV/SV, hashes, and whether they matched the sidecar. |
 
-`audit.py` walks all three across the bucket and produces `audit.md`. Together they answer the questions "did the operator know what they were uploading?", "did the Lambda do its job?", and "did the container extract the right files?"
+`audit.py` walks all three across the bucket and produces `audit.md`. Together they answer the questions "did the developer know what they were uploading?", "did the Lambda do its job?", and "did the container extract the right files?"
 
 ### Skip-not-abort
 
-Per-scenario errors during ingest skip that scenario and continue the run. They never abort the whole batch. Each skip is recorded with an `error_code` and `error_message` so the operator can fix it and re-run for just that scenario.
+Per-scenario errors during ingest skip that scenario and continue the run. They never abort the whole batch. Each skip is recorded with an `error_code` and `error_message` so the developer can fix it and re-run for just that scenario.
 
 ### Multi-match is an error
 
-If the DV (or SV) basename declared in the working CSV matches more than one non-excluded path inside a ZIP, the script refuses to pick one. The scenario is skipped with `MULTI_MATCH_DV` or `MULTI_MATCH_SV` and the operator decides which copy is canonical (or moves the others into `archive/`, `discard/`, `old/`, or `backup/`).
+If the DV (or SV) basename declared in the working CSV matches more than one non-excluded path inside a ZIP, the script refuses to pick one. The scenario is skipped with `MULTI_MATCH_DV` or `MULTI_MATCH_SV` and the developer decides which copy is canonical (or moves the others into `archive/`, `discard/`, `old/`, or `backup/`).
 
 ### No git in code
 
-The scripts in this directory never call `git`. They write files to disk in tracked locations (`etl/ingestion/audit.md`) and to S3 (sidecars, classification records). The operator commits when they are ready.
+The scripts in this directory never call `git`. They write files to disk in tracked locations (`etl/ingestion/audit.md`) and to S3 (sidecars, classification records). The developer commits when they are ready.
 
 ### Timing and race conditions, in one paragraph
 
@@ -301,9 +303,9 @@ Loading a new scenario, end-to-end on Cloud9. Pass 2b will add an end-to-end ver
 
 ### Step 0: bootstrap the working CSV (one time per repo)
 
-Both CSVs live side by side in `etl/ingestion/scenario_listing/`. Both are tracked in git so they travel between the dev machine, GitHub, and Cloud9 with a normal `git pull`. After someone has bootstrapped and committed the working copy once, subsequent operators (and Cloud9) just pull and run.
+Both CSVs live side by side in `etl/ingestion/scenario_listing/`. Both are tracked in git so they travel between the dev machine, GitHub, and Cloud9 with a normal `git pull`. After someone has bootstrapped and committed the working copy once, subsequent developers (and Cloud9) just pull and run.
 
-**Operator (first time only):** copy the pristine reference CSV into the working location, then commit.
+**Developer (first time only):** copy the pristine reference CSV into the working location, then commit.
 
 ```bash
 cp etl/ingestion/scenario_listing/model_run_file_source.csv \
@@ -312,7 +314,7 @@ git add etl/ingestion/scenario_listing/model_run_file_source_working.csv
 git commit -m "Bootstrap working scenario listing"
 ```
 
-The reference copy is the pristine download of the WAM team's [coeqwal_cs3_scenario_listing_v7](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646) sheet. The working copy is what `gdrive_bulk_download.py` reads. Operator edits go in the working copy, and the script never modifies either file. Re-download the pristine CSV from the WAM sheet whenever the upstream sheet changes.
+The reference copy is the pristine download of the WAM team's [coeqwal_cs3_scenario_listing_v7](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646) sheet. The working copy is what `gdrive_bulk_download.py` reads. Developer edits go in the working copy, and the script never modifies either file. Re-download the pristine CSV from the WAM sheet whenever the upstream sheet changes.
 
 If the working copy does not exist when you run the script, it errors out with the exact `cp` command above.
 
@@ -399,7 +401,7 @@ After the venv exists, future shells just need `source .venv/bin/activate` befor
 
 ### Step 1: edit the working CSV and run the download
 
-**Operator (prerequisite):** before extracting any data, each scenario needs a row in the `scenario` table in the database. Write a migration SQL script (see `database/scripts/sql/52_add_s0070_s0090.sql` for the pattern) that:
+**Developer (prerequisite):** before extracting any data, each scenario needs a row in the `scenario` table in the database. Write a migration SQL script (see `database/scripts/sql/52_add_s0070_s0090.sql` for the pattern) that:
 
 - Inserts the scenario with `short_code`, `run_name`, `is_active`, `hydroclimate_id`, `hydroclimate_sibling`, `scenario_version_id`, `scenario_author_id`, `model_source_id`.
 - Disables the audit trigger, sets `created_by=2` and `updated_by=2` (developer attribution), then re-enables the trigger.
@@ -407,7 +409,7 @@ After the venv exists, future shells just need `source .venv/bin/activate` befor
 
 If the scenario belongs to an existing sibling group (same operational configuration, different hydroclimate), set `hydroclimate_sibling` to the group's reference short code. If it is a new operational configuration, add a row to `scenario_hydroclimate_sibling` too. The ETL itself does not insert into `scenario`; it expects the row to be there.
 
-**Operator:** open `etl/ingestion/scenario_listing/model_run_file_source_working.csv` and confirm or set the columns for the scenario you are loading. The first five columns come straight from the WAM sheet. The rest are operator-managed.
+**Developer:** open `etl/ingestion/scenario_listing/model_run_file_source_working.csv` and confirm or set the columns for the scenario you are loading. The first five columns come straight from the WAM sheet. The rest are developer-managed.
 
 | Internal field | Working CSV column (default) | Required? | What it does |
 |---|---|---|---|
@@ -418,14 +420,14 @@ If the scenario belongs to an existing sibling group (same operational configura
 | `sv_path` | `SV_Path` | yes | Full Drive path of the SV (input) DSS file. Only the basename is used at ingest. |
 | `pinned_model_run_zip` | `pinned_model_run_zip` | when multiple | Exact ZIP filename to pick when `Model_Files/` contains more than one ZIP. |
 | `pinned_trend_csv` | `pinned_trend_csv` | when multiple | Exact CSV filename to pick when the trend folder contains more than one CSV. Trend CSVs are optional, so leaving this blank when there are multiple just marks the scenario `unverified_multi_trend`. |
-| `download_status` | `download_status` | informational | Operator note column. `ready`, `needs_review`, `skip`, etc. The script does not filter by this; run scope is set on the CLI. |
-| `notes` | `notes` | optional | Free-text scratch for the operator. Surfaced in the audit. |
+| `download_status` | `download_status` | informational | Developer note column. `ready`, `needs_review`, `skip`, etc. The script does not filter by this; run scope is set on the CLI. |
+| `notes` | `notes` | optional | Free-text scratch for the developer. Surfaced in the audit. |
 
 If the upstream sheet renames a column, update the right-hand side of `COLUMN_MAP` near the top of `etl/ingestion/gdrive_bulk_download.py`. Internal field names stay the same.
 
 **How the script knows which scenarios to process.** Run scope is set on the CLI. Pass `--scenarios <list>` to process specific short codes, or `--all` to process every row in the working CSV. Without one of these, the script errors out. The list accepts whitespace, commas, or newlines as separators (so a Cmd-C from the spreadsheet's short_code column pastes directly into `--scenarios "$(pbpaste)"`). The `download_status` column is informational only. See "Listing scenarios on the CLI" in the team-facing section above for paste examples.
 
-**Operator (optional pre-flight):** check Drive without touching S3.
+**Developer (optional pre-flight):** check Drive without touching S3.
 
 ```bash
 python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0070 s0080
@@ -435,7 +437,7 @@ python etl/ingestion/gdrive_bulk_download.py scan --all
 
 `scan` walks each scenario's Drive folder and writes `scan_audit.csv`. It catches missing folders, missing ZIPs, missing trend CSVs, folder-name mismatches, and pinned-filename-not-found cases before you spend bandwidth on a real download run. It never touches S3 and never downloads files. Run it as a pre-flight on a freshly bootstrapped working CSV, or after editing rows.
 
-#### Running scan locally (from your laptop)
+#### Running scan locally (from your local)
 
 `scan` is the only step in this flow that does not need AWS. You can run it from your Mac to iterate on the working CSV without spinning up Cloud9.
 
@@ -459,9 +461,9 @@ Run it the same way as on Cloud9:
 python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0070 s0080
 ```
 
-`download` and `promote` are NOT a good fit for the laptop. They upload ~200 MB ZIPs to S3 per scenario, which is fast over the AWS-internal network from Cloud9 and slow over a home connection. Once scan goes clean locally, commit the working CSV, push, pull on Cloud9, and continue from there.
+`download` and `promote` are NOT a good fit for the local. They upload ~200 MB ZIPs to S3 per scenario, which is fast over the AWS-internal network from Cloud9 and slow over a home connection. Once scan goes clean locally, commit the working CSV, push, pull on Cloud9, and continue from there.
 
-**Operator:** run the download. `--s3-bucket` defaults to `coeqwal-model-run`. `--scenarios` or `--all` is required.
+**Developer:** run the download. `--s3-bucket` defaults to `coeqwal-model-run`. `--scenarios` or `--all` is required.
 
 ```bash
 python etl/ingestion/gdrive_bulk_download.py download --scenarios s0070 s0080
@@ -473,7 +475,7 @@ This is the two-stage validation in action. Layer 1 validates the spreadsheet (e
 
 When the run finishes, `audit.md` regenerates automatically from the run state and current S3 state. Open it to see what staged cleanly, what skipped, and what marked itself unverified. Pass `--skip-audit` to skip the auto-render if you want to defer.
 
-**Operator:** if anything in the audit looks wrong, fix it in the working CSV (or in Drive) and re-run `download --scenarios <id>` for just that scenario. When the audit looks clean:
+**Developer:** if anything in the audit looks wrong, fix it in the working CSV (or in Drive) and re-run `download --scenarios <id>` for just that scenario. When the audit looks clean:
 
 ```bash
 python etl/ingestion/gdrive_bulk_download.py promote
@@ -503,7 +505,7 @@ Use this when the automated path cannot pick up a scenario (no Drive access, cus
 
 There are two flavors. Pick whichever fits the situation:
 
-- **AWS console drag-and-drop**: deliberate, click-by-click, fine for one or two scenarios. The operator is responsible for upload order.
+- **AWS console drag-and-drop**: deliberate, click-by-click, fine for one or two scenarios. The developer is responsible for upload order.
 - **`manual_ingest.py`**: scripted, enforces upload order, builds the sidecar for you (including SHA-256 hashes computed by streaming the ZIP). Prefer this when you have any choice.
 
 ### Upload a new scenario from a local ZIP
@@ -559,15 +561,15 @@ python etl/ingestion/backfill_sidecars.py            # execute
 
 Reads the working CSV, locates each scenario's ZIP in `scenario/<id>/run/`, computes hashes by streaming the existing S3 ZIP, and writes `sidecar.json`. Use `--overwrite` to replace an existing sidecar.
 
-## Operator scripts in `etl/ingestion/`
+## Developer scripts in `etl/ingestion/`
 
 A quick reference. Each script has its own `--help`.
 
 | Script | What it does |
 |---|---|
-| [`gdrive_bulk_download.py`](ingestion/gdrive_bulk_download.py) | The main operator tool. Subcommands `scan`, `download`, `promote`. |
+| [`gdrive_bulk_download.py`](ingestion/gdrive_bulk_download.py) | The main developer tool. Subcommands `scan`, `download`, `promote`. |
 | [`audit.py`](ingestion/audit.py) | Projects S3 state + `audit_state.json` into `etl/ingestion/audit.md`. Auto-runs at the end of `download`. Re-run manually after Batch finishes. |
-| [`manual_ingest.py`](ingestion/manual_ingest.py) | Operator helper for the manual upload path. Subcommands `upload` (with safe upload order) and `sidecar` (build a sidecar for an existing ZIP, optionally retrigger Batch). |
+| [`manual_ingest.py`](ingestion/manual_ingest.py) | Developer helper for the manual upload path. Subcommands `upload` (with safe upload order) and `sidecar` (build a sidecar for an existing ZIP, optionally retrigger Batch). |
 | [`backfill_sidecars.py`](ingestion/backfill_sidecars.py) | One-time helper to write `sidecar.json` for scenarios that landed in S3 before the sidecar contract existed. |
 | [`check_extraction_results.py`](ingestion/check_extraction_results.py) | Post-extraction audit. Reads every scenario's manifest and validation summary from S3 and produces a console table plus a CSV. Use to confirm a batch of scenarios extracted cleanly. |
 | [`reextract_all_scenarios.py`](ingestion/reextract_all_scenarios.py) | Re-submit Batch jobs against ZIPs already in `scenario/<id>/run/`. Use when the ETL container code changed and you want to regenerate CSVs without re-downloading from Drive. |
@@ -578,7 +580,7 @@ A quick reference. Each script has its own `--help`.
 
 ## Troubleshooting
 
-Most operator-facing failures surface in `audit.md` with an `error_code` and an action message. The reference table for those codes:
+Most developer-facing failures surface in `audit.md` with an `error_code` and an action message. The reference table for those codes:
 
 | Code or symptom | Where it shows up | Fix |
 |---|---|---|
@@ -712,7 +714,7 @@ This makes three paths converge on the same strict container contract:
 | `manual_ingest.py upload` | Built by the script, uploaded in safe order. `ingestion.path = "manual_ingest"`. |
 | Console drag-and-drop, no sidecar | Inferred by the Lambda from the ZIP. `ingestion.path = "lambda_inferred"`. |
 
-Console drag-and-drop with an operator-supplied sidecar is the recommended path when the ZIP has multiple DV-looking or SV-looking entries that inference cannot disambiguate. The operator uploads the sidecar first, the ZIP last. The Lambda sees the sidecar already in place and skips inference.
+Console drag-and-drop with an developer-supplied sidecar is the recommended path when the ZIP has multiple DV-looking or SV-looking entries that inference cannot disambiguate. The developer uploads the sidecar first, the ZIP last. The Lambda sees the sidecar already in place and skips inference.
 
 ## Output files (audits, generated SQL)
 
@@ -733,15 +735,15 @@ Every script that produces an artifact writes it into a module-local `output/` d
 
 They are all generated from inputs that already live in git or S3. `all_tiers.sql` is regenerated from staging CSVs in `etl/tier_data/staging/tier_results/` (which are tracked). The audit CSVs are regenerated from S3 + Google Drive + database state every time their scripts run. The stats audit is a per-run scorecard. Committing one is meaningless because the next run produces a new one. Tracking any of them would bloat history without adding information that is not already recoverable.
 
-`etl/ingestion/audit.md` is the exception. It is tracked in git intentionally as the human-facing state of the system, committed by the operator when it changes.
+`etl/ingestion/audit.md` is the exception. It is tracked in git intentionally as the human-facing state of the system, committed by the developer when it changes.
 
 ### Where you run this
 
-The ETL pipeline runs on Cloud9 because that is where the credentials and access live: AWS SSO for S3, `rclone gdrive` for Google Drive, and `DATABASE_URL` pointing at the RDS instance. You do not run the pipeline on your laptop, so you do not need its outputs there. If you want to inspect a file, copy it over with `aws s3 cp ...` or `scp`.
+The ETL pipeline runs on Cloud9 because that is where the credentials and access live: AWS SSO for S3, `rclone gdrive` for Google Drive, and `DATABASE_URL` pointing at the RDS instance. You do not run the pipeline on your local, so you do not need its outputs there. If you want to inspect a file, copy it over with `aws s3 cp ...` or `scp`.
 
-## Operator scratch directories (gitignored)
+## Developer scratch directories (gitignored)
 
-Two directories under `etl/` are operator-local working space and never go into git:
+Two directories under `etl/` are developer-local working space and never go into git:
 
 | Directory | Purpose |
 |---|---|

@@ -7,7 +7,6 @@ on:
       - '.github/workflows/api.yml'
     branches:
       - main
-      - dev
 
 jobs:
   build-and-push:
@@ -55,8 +54,9 @@ jobs:
           ECR_REPOSITORY: coeqwal-network-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build from project root (don't cd into subdirectory)
-          docker build -f api/deployment/Dockerfile.production -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          # Build context is api/coeqwal-api/ (the API service directory).
+          # The Dockerfile is multi-stage.
+          docker build --target prod -f api/coeqwal-api/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:latest api/coeqwal-api
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest

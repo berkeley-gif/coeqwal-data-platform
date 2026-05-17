@@ -1,0 +1,21 @@
+# Top-level requirements aggregator.
+#
+# Installs every Python dependency the COEQWAL backend needs across modules.
+# Each line below pulls in the per-module requirements file for that
+# subsystem. Edit the per-module files when adding new deps. This file
+# only changes when a whole new module is added.
+#
+# Quick setup for a fresh laptop or Cloud9 environment:
+#   python3.10 -m venv .venv
+#   source .venv/bin/activate
+#   pip install --upgrade pip
+#   pip install -r requirements.txt
+#
+# rclone (the Drive sync binary) is a separate non-Python install. See
+# etl/README.md for instructions.
+
+-r etl/ingestion/requirements.txt
+-r etl/tier_data/requirements.txt
+-r etl/verification/requirements.txt
+-r database/requirements.txt
+-r api/coeqwal-api/requirements.txt

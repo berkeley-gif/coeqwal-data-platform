@@ -18,19 +18,47 @@ If the auto-deploy gets stuck, see "Manual Deployment (Troubleshooting)" further
 
 ## Local development
 
+First-time local setup is one command from the repo root:
+
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+bash scripts/setup_dev_env.sh
+```
 
-# Set database connection
-export DATABASE_URL="postgresql://user:pass@host:5432/coeqwal"
+This brings up a local Postgres (via `docker compose`), loads the schema and seeds, and installs every Python dependency the API needs. See the [top-level Developer setup](../../README.md#developer-setup) for details.
 
-# Run locally
+Once setup is done:
+
+```bash
+# Activate the project venv
+source ../../.venv/bin/activate
+
+# Local DB created by scripts/setup_dev_env.sh
+export DATABASE_URL="postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario"
+
+# Run the API
 uvicorn main:app --reload --port 8000
 
 # View docs
 open http://localhost:8000/docs
 ```
+
+To point at production RDS instead, replace `DATABASE_URL` with the production connection string. That path is only available from Cloud9 or VPN.
+
+### Building the dev container
+
+If you want to exercise the same Docker image CI builds, but with the dev-friendly defaults (root user, default asyncio loop, no access log), use the `dev` target of the multi-stage Dockerfile:
+
+```bash
+# From the repo root
+docker build --target dev -t coeqwal-api:dev api/coeqwal-api
+
+# Run it pointed at the local Postgres started by scripts/setup_dev_env.sh
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL="postgresql://coeqwal:coeqwal@host.docker.internal:5432/coeqwal_scenario" \
+  coeqwal-api:dev
+```
+
+The `prod` target of the same Dockerfile is what CI pushes to ECR (see `.github/workflows/api.yml`).
 
 ## Linting
 
@@ -211,8 +239,8 @@ grep "API_VERSION" api/coeqwal-api/main.py
 # Login to ECR
 aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 533266975152.dkr.ecr.us-west-2.amazonaws.com
 
-# Build fresh (no cache)
-docker build --no-cache -f api/deployment/Dockerfile.production -t coeqwal-network-api:latest .
+# Build fresh, production target
+docker build --no-cache --target prod -f api/coeqwal-api/Dockerfile -t coeqwal-network-api:latest api/coeqwal-api
 
 # Tag and push to ECR
 docker tag coeqwal-network-api:latest 533266975152.dkr.ecr.us-west-2.amazonaws.com/coeqwal-network-api:latest

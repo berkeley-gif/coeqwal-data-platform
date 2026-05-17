@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_3" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 2721.0918 2338.4692">
+  <!-- Generator: Adobe Illustrator 30.3.0, SVG Export Plug-In . SVG Version: 2.1.3 Build 182)  -->
+  <rect x="1615.9834" y="320.7713" width="131.4858" height="137.5223" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <path d="M1652.9358,635.1516h614.9656c2.7615-8,5,2.2386,5,5v110.5209c0,2.7614-2.2385,5-5,5h-614.9656c-2.7615,0-5-2.2386-5-5v-110.5209c0-2.7614,2.2385-13,5-5Z" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g>
+    <g>
+      <path d="M1937.9543,725.6066c0,2.75-2.25,5-5,5h-252c-2.75,0-5-2.25-5-5v-50c0-2.75,2.25-5,5-5h252c2.75,0,5,2.25,5,5v50Z" style="fill: #fff;"/>
+      <path d="M1937.9543,725.6066c0,2.75-2.25,5-5,5h-252c-2.75,0-5-2.25-5-5v-50c0-2.75,2.25-5,5-5h252c2.75,0,5,2.25,5,5v50Z" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1725.3495 704.1285)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Local development environment</tspan></text>
+    </g>
+  </g>
+  <g>
+    <g>
+      <path d="M2245.1736,725.2113c0,2.75-2.25,5-5,5h-252c-2.75,0-5-2.25-5-5v-50c0-2.75,2.25-5,5-5h252c2.75,0,5,2.25,5,5v50Z" style="fill: #fff;"/>
+      <path d="M2245.1736,725.2113c0,2.75-2.25,5-5,5h-252c-2.75,0-5-2.25-5-5v-50c0-2.75,2.25-5,5-5h252c2.75,0,5,2.25,5,5v50Z" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(2048.6365 696.5333)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">AWS Cloud 9 environment</tspan></text>
+      <text transform="translate(2048.6365 710.9337)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0" xml:space="preserve">EC2 •  coeqwal-db-admin</tspan></text>
+    </g>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1656.4611 656.7369)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">developer workspace</tspan></text>
+  </g>
+  <rect x="1804.1241" y="482.0674" width="314.4286" height="120.5209" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g>
+    <rect x="1830.0028" y="519.5223" width="262.0001" height="60" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="1830.0028" y="519.5223" width="262.0001" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1903.4093 553.0444)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-data-platform</tspan></text>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1829.6309 506.6012)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">GitHub</tspan></text>
+  </g>
+  <rect x="1756.2769" y="320.7713" width="551.2642" height="137.5223" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g>
+    <g>
+      <rect x="1779.8304" y="366.572" width="95.5085" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="1779.8304" y="366.572" width="95.5085" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1792.4673 392.894)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">scenario path </tspan></text>
+      <text transform="translate(1796.8472 407.2944)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">spreadsheet</tspan></text>
+    </g>
+  </g>
+  <g>
+    <g>
+      <rect x="1636.8125" y="362.6332" width="95.5085" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="1636.8125" y="362.6332" width="95.5085" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1663.783 388.9553)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">tier data</tspan></text>
+      <text transform="translate(1651.4534 403.3557)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">spreadsheets</tspan></text>
+    </g>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1772.1055 339.7419)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">modeler workspace</tspan></text>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1626.9581 339.7419)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">tier data dropboxes</tspan></text>
+  </g>
+  <g>
+    <g>
+      <rect x="2010.8267" y="363.6986" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+      <g style="isolation: isolate;">
+        <text transform="translate(2087.7981 390.0206)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Google Drive</tspan></text>
+        <text transform="translate(2038.1428 404.421)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">/CalSim3_Model_Runs/Scenarios</tspan></text>
+      </g>
+    </g>
+    <ellipse cx="2120.5117" cy="362.44" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2120.5117" cy="424.1576" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <rect x="99.8312" y="1628.9293" width="316.1684" height="47.6151" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(125.3378 1653.4631)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">browser</tspan></text>
+  </g>
+  <rect x="1590.4668" y="776.3898" width="1121.6353" height="645.2203" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(1640.9557 795.8498)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">storage</tspan></text>
+  </g>
+  <g>
+    <g>
+      <rect x="1639.9438" y="1104.4332" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+      <g style="isolation: isolate;">
+        <text transform="translate(1743.6449 1130.755)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">S3</tspan></text>
+        <text transform="translate(1700.2054 1145.1554)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-model-run</tspan></text>
+      </g>
+    </g>
+    <ellipse cx="1749.6289" cy="1103.1746" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="1749.6289" cy="1164.8922" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g>
+    <g>
+      <rect x="1639.9834" y="1196.5406" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+      <g style="isolation: isolate;">
+        <text transform="translate(1743.6844 1222.8624)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">S3</tspan></text>
+        <text transform="translate(1699.4174 1237.2628)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-time-series</tspan></text>
+      </g>
+    </g>
+    <ellipse cx="1749.6685" cy="1195.282" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="1749.6685" cy="1256.9996" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g>
+    <g>
+      <rect x="1639.9438" y="855.352" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+      <g style="isolation: isolate;">
+        <text transform="translate(1740.0214 881.6738)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">ECR</tspan></text>
+        <text transform="translate(1720.3417 896.0742)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-etl</tspan></text>
+      </g>
+    </g>
+    <ellipse cx="1749.6289" cy="854.0934" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="1749.6289" cy="915.811" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g>
+    <g>
+      <rect x="1639.9438" y="1328.7327" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+      <g style="isolation: isolate;">
+        <text transform="translate(1740.0214 1355.0546)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">ECR</tspan></text>
+        <text transform="translate(1719.3217 1369.455)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">network-api</tspan></text>
+      </g>
+    </g>
+    <ellipse cx="1749.6289" cy="1327.474" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="1749.6289" cy="1389.1917" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g>
+    <rect x="1949.4091" y="1226.2583" width="219.4623" height="75.2238" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2059.094" cy="1224.9998" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2059.094" cy="1301.7173" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(2019.3307 1252.5801)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">RDS, us-west-2a</tspan></text>
+      <text transform="translate(2008.4528 1266.9805)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-database-1</tspan></text>
+      <text transform="translate(1997.3893 1281.3799)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">PostgreSQL 17 + PostGIS</tspan></text>
+    </g>
+  </g>
+  <g>
+    <rect x="2209.7805" y="1186.4623" width="219.4622" height="75.2238" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2319.4653" cy="1185.2037" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2319.4653" cy="1261.9213" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(2279.1802 1212.7841)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">RDS, us-west-2b</tspan></text>
+      <text transform="translate(2269.3521 1227.1844)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">synchronous replica</tspan></text>
+      <text transform="translate(2278.4365 1241.5839)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Multi AZ failover</tspan></text>
+    </g>
+  </g>
+  <rect x="1330.6309" y="1433.9133" width="907.8557" height="432.7144" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(1353.3654 1457.3383)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">compute (us-west-2)</tspan></text>
+  </g>
+  <g>
+    <rect x="1641.6783" y="1469.7094" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="1641.6783" y="1469.7094" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1730.9976 1496.0311)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Lambda</tspan></text>
+    <text transform="translate(1705.9482 1510.4315)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwalEtlTrigger</tspan></text>
+  </g>
+  <g>
+    <rect x="1904.3702" y="1470.3583" width="219.4623" height="75.2238" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="1904.3702" y="1470.3583" width="219.4623" height="75.2238" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g>
+    <g>
+      <rect x="1353.5732" y="1670.3253" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="1353.5732" y="1670.3253" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1442.8925 1696.6471)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Lambda</tspan></text>
+      <text transform="translate(1397.5751 1711.0475)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwalPresignDownload</tspan></text>
+    </g>
+  </g>
+  <g>
+    <g>
+      <rect x="1905.804" y="1560.2474" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="1905.804" y="1560.2474" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1995.1176 1586.5695)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Lambda</tspan></text>
+      <text transform="translate(1954.9486 1600.9698)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-database-audit</tspan></text>
+    </g>
+  </g>
+  <g>
+    <g>
+      <rect x="1919.2391" y="1768.1029" width="219.4623" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="1919.2391" y="1768.1029" width="219.4623" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1999.2943 1787.2247)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">ECS Fargate</tspan></text>
+      <text transform="translate(1979.1591 1801.6251)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-api-service</tspan></text>
+      <text transform="translate(1983.1967 1816.0245)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">FastAPI + asyncPG</tspan></text>
+    </g>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1999.9594 1489.892)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Batch</tspan></text>
+    <text transform="translate(1965.1962 1504.2924)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-dss-queue</tspan></text>
+    <text transform="translate(1982.1698 1518.6918)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Fargate Spot</tspan></text>
+    <text transform="translate(1963.7562 1533.0922)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-dss-jobdev</tspan></text>
+  </g>
+  <rect x="628.0307" y="1387.4156" width="266.9856" height="316.0566" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(655.0041 1412.2915)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">AWS Edge</tspan></text>
+  </g>
+  <g>
+    <rect x="651.92" y="1530.3726" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="651.92" y="1530.3726" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(723.6477 1556.6943)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">ACM certificate</tspan></text>
+    <text transform="translate(705.8938 1571.0947)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">us-east-1 (CloudFront)</tspan></text>
+  </g>
+  <g>
+    <rect x="651.9171" y="1621.7111" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="651.9171" y="1621.7111" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(723.6507 1648.0328)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">ACM certificate</tspan></text>
+    <text transform="translate(737.4266 1662.4332)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">us-west-2</tspan></text>
+  </g>
+  <g>
+    <g>
+      <rect x="650.2792" y="1440.6458" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="650.2792" y="1440.6458" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(725.5949 1466.9677)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Route 53 DNS</tspan></text>
+      <text transform="translate(738.3327 1481.368)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">domains</tspan></text>
+    </g>
+  </g>
+  <g>
+    <line x1="1889.0483" y1="587.3112" x2="1889.0483" y2="665.4303" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="1884.062 588.7701 1889.0483 580.135 1894.0345 588.7701 1884.062 588.7701" style="fill: #0f96f2;"/>
+    <polygon points="1884.062 663.9713 1889.0483 672.6066 1894.0345 663.9713 1884.062 663.9713" style="fill: #0f96f2;"/>
+  </g>
+  <path d="M1280.7316-182.1331" style="fill: none;"/>
+  <path d="M2213.8933,429.1543" style="fill: none;"/>
+  <g>
+    <line x1="2037.1326" y1="587.3112" x2="2037.1326" y2="665.4303" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="2032.1462 588.7701 2037.1326 580.135 2042.1189 588.7701 2032.1462 588.7701" style="fill: #0f96f2;"/>
+    <polygon points="2032.1462 663.9713 2037.1326 672.6066 2042.1189 663.9713 2032.1462 663.9713" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <rect x="1916.8456" y="606.6794" width="85.678" height="24.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1927.6333 621.397)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">git push/pull</tspan></text>
+    </g>
+  </g>
+  <path d="M2354.2424,454.6632" style="fill: none;"/>
+  <rect x="472.9313" y="1621.9388" width="66.6416" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(493.5609 1636.6565)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">https</tspan></text>
+  </g>
+  <g>
+    <polyline points="1859.5812 1136.2507 1879.172 1136.2507 1880.9064 1487.2371 1869.4248 1487.2371" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="1870.8838 1482.2509 1862.2487 1487.2371 1870.8838 1492.2234 1870.8838 1482.2509" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <line x1="1862.2487" y1="1498.0574" x2="1898.9183" y2="1498.1023" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="1897.4532 1503.0868 1906.0945 1498.1111 1897.4655 1493.1143 1897.4532 1503.0868" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <line x1="2012.5924" y1="1472.0785" x2="2015.5015" y2="1320.7428" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="2020.4589 1322.2974 2015.6394 1313.5679 2010.4882 1322.1057 2020.4589 1322.2974" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <rect x="1980.5236" y="1413.3423" width="66.6416" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1993.3654 1428.0599)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">asyncpg</tspan></text>
+    </g>
+  </g>
+  <g>
+    <line x1="415.7271" y1="1651.7133" x2="615.5097" y2="1651.7133" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="614.0507 1656.6995 622.6859 1651.7133 614.0507 1646.7269 614.0507 1656.6995" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <rect x="970.4119" y="1178.8445" width="266.9855" height="429.3098" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(997.3853 1200.4449)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">AWS Amplify</tspan></text>
+    </g>
+    <g>
+      <rect x="994.3013" y="1232.0463" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="994.3013" y="1232.0463" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1050.375 1251.1681)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-website-dev</tspan></text>
+      <text transform="translate(1077.2485 1265.5685)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">apps/main</tspan></text>
+      <text transform="translate(1059.165 1279.9679)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">(dev.coeqwal.org)</tspan></text>
+    </g>
+    <g>
+      <rect x="994.3013" y="1323.3846" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="994.3013" y="1323.3846" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1058.625 1342.5067)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">storyline-flow-dev</tspan></text>
+      <text transform="translate(1055.5889 1356.9071)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">apps/storyline-flow</tspan></text>
+      <text transform="translate(1057.5928 1371.3065)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">(flow.coeqwal.org)</tspan></text>
+    </g>
+    <g>
+      <rect x="994.301" y="1414.843" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+      <rect x="994.301" y="1414.843" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+    </g>
+    <g style="isolation: isolate;">
+      <text transform="translate(1051.0774 1433.9648)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">storyline-climate-dev</tspan></text>
+      <text transform="translate(1048.0413 1448.3652)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">apps/storyline-climate</tspan></text>
+      <text transform="translate(1050.0452 1462.7646)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">(climate.coeqwal.org)</tspan></text>
+    </g>
+    <g>
+      <g>
+        <rect x="994.3013" y="1505.1779" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+        <rect x="994.3013" y="1505.1779" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+      </g>
+      <g style="isolation: isolate;">
+        <text transform="translate(1100.3066 1538.7)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">...</tspan></text>
+      </g>
+    </g>
+  </g>
+  <g>
+    <line x1="877.7113" y1="1651.7133" x2="962.5439" y2="1651.7133" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <path d="M877.8993,1655.473c-2.0762,0-3.7598-1.6836-3.7598-3.7598s1.6836-3.7598,3.7598-3.7598,3.7597,1.6836,3.7597,3.7598-1.6836,3.7598-3.7597,3.7598Z" style="fill: #f79014;"/>
+    <path d="M962.3559,1655.473c2.0762,0,3.7598-1.6836,3.7598-3.7598s-1.6836-3.7598-3.7598-3.7598-3.7597,1.6836-3.7597,3.7598,1.6836,3.7598,3.7597,3.7598Z" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <line x1="877.7113" y1="1563.0032" x2="964.8486" y2="1563.0032" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <path d="M877.8993,1566.7629c-2.0762,0-3.7598-1.6836-3.7598-3.7598s1.6836-3.7598,3.7598-3.7598,3.7597,1.6836,3.7597,3.7598-1.6836,3.7598-3.7597,3.7598Z" style="fill: #f79014;"/>
+    <path d="M964.6607,1566.7629c2.0762,0,3.7598-1.6836,3.7598-3.7598s-1.6836-3.7598-3.7598-3.7598-3.7597,1.6836-3.7597,3.7598,1.6836,3.7598,3.7597,3.7598Z" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <line x1="874.1395" y1="1459.8212" x2="961.2442" y2="1459.8212" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="959.7852 1464.8075 968.4205 1459.8212 959.7852 1454.8348 959.7852 1464.8075" style="fill: #f79014;"/>
+  </g>
+  <rect x="970.8375" y="1623.6671" width="266.9856" height="235.8588" rx="5" ry="5" style="fill: #181818; isolation: isolate; opacity: .8;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(997.8108 1645.2675)" style="fill: #fff; font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">Public API surface</tspan></text>
+  </g>
+  <g>
+    <rect x="994.7268" y="1676.8688" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="994.7268" y="1676.8688" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1062.8723 1695.9908)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">API gateway (v2)</tspan></text>
+    <text transform="translate(1074.0442 1710.3912)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">x66ckhp067</tspan></text>
+    <text transform="translate(1022.301 1724.7906)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">for presign downloads (Get data)</tspan></text>
+  </g>
+  <g>
+    <rect x="994.7268" y="1768.2074" width="219.4622" height="60" rx="5" ry="5" style="fill: #fff;"/>
+    <rect x="994.7268" y="1768.2074" width="219.4622" height="60" rx="5" ry="5" style="fill: none; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g style="isolation: isolate;">
+    <text transform="translate(1094.702 1787.3291)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">ALB</tspan></text>
+    <text transform="translate(1064.2528 1801.7295)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">coeqwal-api-alb</tspan></text>
+    <text transform="translate(1056.2845 1816.1289)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">for api.coeqwal.org</tspan></text>
+  </g>
+  <g>
+    <polyline points="873.4722 1472.6863 916.3789 1472.6863 916.3789 1741.7175 956.4591 1741.7175" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="955.0001 1746.7039 963.6353 1741.7175 955.0001 1736.7312 955.0001 1746.7039" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <line x1="1214.9355" y1="1799.9318" x2="1908.1293" y2="1799.9318" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1906.6703 1804.9181 1915.3055 1799.9318 1906.6703 1794.9456 1906.6703 1804.9181" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <line x1="1214.9355" y1="1706.761" x2="1341.2468" y2="1706.761" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1339.7878 1711.7473 1348.4231 1706.761 1339.7878 1701.7747 1339.7878 1711.7473" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <polyline points="1459.5944 1671.4957 1459.5944 1140.3912 1639.0013 1141.2115" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1637.5195 1146.1912 1646.1775 1141.2444 1637.5651 1136.2186 1637.5195 1146.1912" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <rect x="1417.8051" y="1182.0259" width="81.2637" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1422.8398 1196.7434)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">presigned URL</tspan></text>
+    </g>
+  </g>
+  <g>
+    <polyline points="1904.532 1487.4716 1888.6605 1487.4716 1888.6605 1128.9749 1867.4005 1128.9749" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="1868.8595 1123.9885 1860.2242 1128.9749 1868.8595 1133.9612 1868.8595 1123.9885" style="fill: #0f96f2;"/>
+  </g>
+  <path d="M2092.5991,552.0091" style="fill: none; stroke: #1ed400; stroke-miterlimit: 10;"/>
+  <g>
+    <line x1="1866.9449" y1="886.4873" x2="1872.9449" y2="886.4873" style="fill: none; stroke: #add400; stroke-miterlimit: 10;"/>
+    <line x1="1887.0015" y1="886.4873" x2="1908.0863" y2="886.4873" style="fill: none; stroke: #add400; stroke-dasharray: 14.0566 14.0566; stroke-miterlimit: 10;"/>
+    <polyline points="1915.1146 886.4873 1921.1146 886.4873 1921.1146 892.4873" style="fill: none; stroke: #add400; stroke-miterlimit: 10;"/>
+    <line x1="1921.1146" y1="904.6317" x2="1921.1146" y2="1457.201" style="fill: none; stroke: #add400; stroke-dasharray: 12.1444 12.1444; stroke-miterlimit: 10;"/>
+    <line x1="1921.1146" y1="1463.2733" x2="1921.1146" y2="1469.2733" style="fill: none; stroke: #add400; stroke-miterlimit: 10;"/>
+    <polygon points="1868.4041 891.4736 1859.7688 886.4873 1868.4041 881.501 1868.4041 891.4736" style="fill: #add400;"/>
+  </g>
+  <g>
+    <rect x="1880.8057" y="1031.1385" width="81.2637" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1895.8064 1045.8561)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">pull image</tspan></text>
+    </g>
+  </g>
+  <g>
+    <rect x="1553.5999" y="1446.2177" width="81.2637" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1568.6007 1460.9353)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">pull image</tspan></text>
+    </g>
+  </g>
+  <g>
+    <polyline points="2139.2627 1815.1077 2164.0186 1815.1077 2164.0186 1316.7556" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="2169.0049 1318.2146 2164.0186 1309.5793 2159.0322 1318.2146 2169.0049 1318.2146" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <polyline points="1215.1805 1271.1455 1271.1823 1271.1455 1271.1823 1687.9688 1222.3568 1687.9688" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1223.8158 1682.9825 1215.1805 1687.9688 1223.8158 1692.9551 1223.8158 1682.9825" style="fill: #f79014;"/>
+  </g>
+  <path d="M1148.5841,2019.438" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+  <g>
+    <polyline points="1215.1805 1253.5778 1284.8043 1253.5778 1284.8043 1780.2958 1222.3568 1780.2958" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1223.8158 1775.3094 1215.1805 1780.2958 1223.8158 1785.2822 1223.8158 1775.3094" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <polyline points="875.7415 1488.6458 900.3606 1488.6458 900.3606 1934.6787 1316.589 1934.6787 1316.589 1725.8077 1340.1161 1725.8077" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1338.6571 1730.7941 1347.2924 1725.8077 1338.6571 1720.8214 1338.6571 1730.7941" style="fill: #f79014;"/>
+  </g>
+  <path d="M1523.9464,2069.3855" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+  <g>
+    <line x1="2063.3958" y1="1204.1171" x2="2066.5808" y2="734.4512" style="fill: none; stroke: #3adbdb; stroke-miterlimit: 10;"/>
+    <polygon points="2068.3916 1202.6913 2063.3479 1211.2931 2058.4192 1202.6248 2068.3916 1202.6913" style="fill: #3adbdb;"/>
+  </g>
+  <g>
+    <line x1="2177.072" y1="1240.7639" x2="2183.072" y2="1240.7639" style="fill: none; stroke: #fcfc06; stroke-miterlimit: 10;"/>
+    <line x1="2189.3242" y1="1240.7639" x2="2198.7024" y2="1240.7639" style="fill: none; stroke: #fcfc06; stroke-dasharray: 6.2522 6.2522; stroke-miterlimit: 10;"/>
+    <line x1="2201.8284" y1="1240.7639" x2="2207.8284" y2="1240.7639" style="fill: none; stroke: #fcfc06; stroke-miterlimit: 10;"/>
+    <polygon points="2178.531 1245.7502 2169.8958 1240.7639 2178.531 1235.7776 2178.531 1245.7502" style="fill: #fcfc06;"/>
+  </g>
+  <g>
+    <line x1="2435.8208" y1="1240.7639" x2="2441.8208" y2="1240.7639" style="fill: none; stroke: #fcfc06; stroke-miterlimit: 10;"/>
+    <line x1="2448.073" y1="1240.7639" x2="2457.4514" y2="1240.7639" style="fill: none; stroke: #fcfc06; stroke-dasharray: 6.2522 6.2522; stroke-miterlimit: 10;"/>
+    <line x1="2460.5774" y1="1240.7639" x2="2466.5774" y2="1240.7639" style="fill: none; stroke: #fcfc06; stroke-miterlimit: 10;"/>
+    <polygon points="2437.2798 1245.7502 2428.6445 1240.7639 2437.2798 1235.7776 2437.2798 1245.7502" style="fill: #fcfc06;"/>
+  </g>
+  <g>
+    <line x1="2177.072" y1="1287.6508" x2="2183.072" y2="1287.6508" style="fill: none; stroke: #fcfc06; stroke-miterlimit: 10;"/>
+    <line x1="2195.2871" y1="1287.6508" x2="2457.9109" y2="1287.6508" style="fill: none; stroke: #fcfc06; stroke-dasharray: 12.2151 12.2151; stroke-miterlimit: 10;"/>
+    <line x1="2464.0186" y1="1287.6508" x2="2470.0186" y2="1287.6508" style="fill: none; stroke: #fcfc06; stroke-miterlimit: 10;"/>
+    <polygon points="2178.531 1292.6371 2169.8958 1287.6508 2178.531 1282.6646 2178.531 1292.6371" style="fill: #fcfc06;"/>
+  </g>
+  <path d="M2566.1533,1017.7458" style="fill: none; stroke: #aa3200; stroke-dasharray: 12; stroke-miterlimit: 10;"/>
+  <g>
+    <line x1="2140.6387" y1="1796.1439" x2="2146.6387" y2="1796.1439" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polyline points="2148.3396 1796.1439 2154.3396 1796.1439 2154.3396 1790.1439" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <line x1="2154.3396" y1="1778.3123" x2="2154.3396" y2="1665.911" style="fill: none; stroke: #f79014; stroke-dasharray: 11.8317 11.8317; stroke-miterlimit: 10;"/>
+    <polyline points="2154.3396 1659.9952 2154.3396 1653.9952 2148.3396 1653.9952" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <line x1="2136.1992" y1="1653.9952" x2="1608.0905" y2="1653.9952" style="fill: none; stroke: #f79014; stroke-dasharray: 12.1404 12.1404; stroke-miterlimit: 10;"/>
+    <polyline points="1602.0203 1653.9952 1596.0203 1653.9952 1596.0203 1647.9952" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <line x1="1596.0203" y1="1635.6349" x2="1596.0203" y2="1369.8893" style="fill: none; stroke: #f79014; stroke-dasharray: 12.3603 12.3603; stroke-miterlimit: 10;"/>
+    <polyline points="1596.0203 1363.7092 1596.0203 1357.7092 1602.0203 1357.7092" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <line x1="1609.3293" y1="1357.7092" x2="1620.2928" y2="1357.7092" style="fill: none; stroke: #f79014; stroke-dasharray: 7.309 7.309; stroke-miterlimit: 10;"/>
+    <line x1="1623.9474" y1="1357.7092" x2="1629.9474" y2="1357.7092" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1628.4884 1362.6956 1637.1237 1357.7092 1628.4884 1352.7228 1628.4884 1362.6956" style="fill: #f79014;"/>
+  </g>
+  <rect x="1941.9728" y="641.0126" width="518.1796" height="1259.6022" style="fill: #fcfc06; isolation: isolate; opacity: .17; stroke: #f79014; stroke-miterlimit: 10;"/>
+  <g style="isolation: isolate;">
+    <text transform="translate(2427.7378 659.1291)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">VPC</tspan></text>
+  </g>
+  <rect x="979.4514" y="1749.198" width="967.0807" height="101.8754" style="fill: #fcfc06; isolation: isolate; opacity: .17; stroke: #f79014; stroke-miterlimit: 10;"/>
+  <g>
+    <line x1="1790.6919" y1="672.628" x2="1790.6018" y2="432.8264" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="1795.5695 434.3479 1790.6919 425.6508 1785.5975 434.2227 1795.5695 434.3479" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <line x1="1694.6685" y1="672.628" x2="1694.5784" y2="432.8264" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="1699.546 434.3479 1694.6685 425.6508 1689.5741 434.2227 1699.546 434.3479" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <line x1="2156.9341" y1="672.628" x2="2156.8401" y2="442.5161" style="fill: none; stroke: #0f96f2; stroke-miterlimit: 10;"/>
+    <polygon points="2161.8069 444.0403 2156.9341 435.3406 2151.8352 443.9098 2161.8069 444.0403" style="fill: #0f96f2;"/>
+  </g>
+  <g>
+    <rect x="2124.1445" y="531.4628" width="66.6416" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(2142.1702 546.1803)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">rclone</tspan></text>
+    </g>
+  </g>
+  <g>
+    <polyline points="1829.1969 565.4523 1422.6008 568.3723 1422.6008 879.5651 1627.6053 880.7404" style="fill: none; stroke: #add400; stroke-miterlimit: 10;"/>
+    <polygon points="1626.1178 885.7183 1634.7815 880.7815 1626.175 875.7457 1626.1178 885.7183" style="fill: #add400;"/>
+  </g>
+  <g>
+    <rect x="1442.7506" y="556.0594" width="159.5057" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1451.3398 570.8516) scale(.9682 1)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">github actions + docker build</tspan></text>
+    </g>
+  </g>
+  <g>
+    <polyline points="1829.6292 541.3813 1397.7905 541.3813 1397.7905 1338.1539 1631.4707 1338.1539" style="fill: none; stroke: #f79014; stroke-miterlimit: 10;"/>
+    <polygon points="1630.0117 1343.1403 1638.6469 1338.1539 1630.0117 1333.1675 1630.0117 1343.1403" style="fill: #f79014;"/>
+  </g>
+  <g>
+    <rect x="1442.7506" y="527.7317" width="159.5057" height="22.5393" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(1487.6133 542.5234) scale(.9682 1)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">github actions</tspan></text>
+    </g>
+  </g>
+  <g>
+    <rect x="2470.7185" y="1279.4578" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(2544.7861 1305.7795)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">S3, us-west-2a</tspan></text>
+      <text transform="translate(2530.4346 1320.1799)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">RDS daily snapshots</tspan></text>
+    </g>
+    <ellipse cx="2580.4036" cy="1278.1992" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2580.4036" cy="1339.9167" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+  <g>
+    <rect x="2470.7185" y="1190.8776" width="219.4622" height="60" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <g style="isolation: isolate;">
+      <text transform="translate(2544.2642 1217.1993)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">S3, us-west-2b</tspan></text>
+      <text transform="translate(2530.4346 1231.5997)" style="font-family: MyriadPro-Regular, &apos;Myriad Pro&apos;; font-size: 12px; isolation: isolate;"><tspan x="0" y="0">RDS daily snapshots</tspan></text>
+    </g>
+    <ellipse cx="2580.4036" cy="1189.619" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+    <ellipse cx="2580.4036" cy="1251.3365" rx="109.3494" ry="11.8506" style="fill: #fff; stroke: #181818; stroke-miterlimit: 10;"/>
+  </g>
+</svg>

@@ -95,6 +95,15 @@ If you changed the API endpoint code (anything under `api/`), including query lo
 
 ## Getting started
 
+### Two paths
+
+| Path | Use it for | Connection |
+|---|---|---|
+| **Cloud9 / VPN -> production RDS** | Developer work, monthly audits, real seed loads, DDL migrations on the live DB | `DATABASE_URL` set per "First-time setup" below |
+| **Laptop -> local Postgres** | Schema work, query development, running scripts that need a DB, iterating on migrations before they touch RDS | `DATABASE_URL=postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario` |
+
+The laptop path is bootstrapped by the top-level [`scripts/setup_dev_env.sh`](../scripts/setup_dev_env.sh), which brings up the local DB via [`docker-compose.yml`](../docker-compose.yml) and applies every schema and seed file via [`scripts/load_local_seeds.sh`](../scripts/load_local_seeds.sh). See the [top-level Developer setup](../README.md#developer-setup) for the full flow.
+
 ### Prerequisites
 
 - AWS account access (to reach the RDS instance via Cloud9 or VPN)

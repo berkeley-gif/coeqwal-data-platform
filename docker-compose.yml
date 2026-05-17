@@ -1,0 +1,40 @@
+# docker-compose.yml
+#
+# Local-only Postgres for local development. Provides a database that mirrors
+# the major version + PostGIS extension of the production RDS instance, so
+# schema scripts and migrations under `database/scripts/sql/` apply cleanly.
+#
+# Bring it up:
+#   docker compose up -d postgres
+#
+# Connection string (works from the host):
+#   postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario
+#
+# Reset to a clean slate (drops all data):
+#   docker compose down -v
+#
+# This compose file is NOT used for production. Production is managed
+# separately (see docs/INFRASTRUCTURE.md if you have access).
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: coeqwal-postgres-local
+    environment:
+      POSTGRES_USER: coeqwal
+      POSTGRES_PASSWORD: coeqwal
+      POSTGRES_DB: coeqwal_scenario
+    ports:
+      - "5432:5432"
+    volumes:
+      - coeqwal_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coeqwal -d coeqwal_scenario"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  coeqwal_pgdata:
+    name: coeqwal_pgdata
