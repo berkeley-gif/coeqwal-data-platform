@@ -29,6 +29,13 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# CFS_TO_TAF_PER_DAY = 86_400 / 43_560_000 = 0.001983471...
+# (seconds in a day) / (cubic feet per acre-foot * 1000). Multiplied by
+# DaysInMonth, converts a monthly mean CFS rate to monthly delivery in TAF.
+# Matches V3 AuxFunctions.cfs_taf() (precise form, 86400/43560/1000); note
+# that V3 metrics.convert_cfs_to_taf() uses a rounded 0.001984 — a 0.026%
+# internal V3 inconsistency. We use the precise form.
 from units import (  # noqa: E402
     CFS_TO_TAF_PER_DAY,
     MWD_TABLE_A_ANNUAL_TAF,
@@ -304,6 +311,16 @@ def compute_demand_for_du(
         )
 
     if demand_mode == "perdv":
+        # PERDV demand recovery formula (matches V3 DataExtraction.py around
+        # line 1242 for SBA029 and lines 1062-1318 for other SWP contractors):
+        #     demand_cfs = (delivery_cfs + shortage_cfs) / perdv_swp_N
+        # CalSim emits delivery and shortage as the perdv-scaled in-month
+        # values for each SWP contract grouping, where perdv_swp_N is the
+        # monthly allocation fraction (0-1) for that grouping. Dividing by
+        # perdv_swp_N inverts the scaling and recovers the unscaled monthly
+        # demand (V3's `dem_*` variable) — which is the denominator used by
+        # reliability_pct below. Months where perdv_swp_N == 0 become NaN (no
+        # allocation, no implied demand) and are dropped from annual aggregation.
         perdv_vars = params.get("perdv_vars", [])
         delivery_var = mapping.get("delivery_variable")
         shortage_var = mapping.get("shortage_variable")
@@ -570,7 +587,18 @@ def calculate_du_statistics(
                     float(np.percentile(ash, 100 - p)), 2
                 )
 
-        # Percent demand met (annual) — also used as reliability_pct
+        # reliability_pct: mean over years of (annual_delivery_taf /
+        # annual_recovered_demand_taf) * 100, clipped to [0, 100].
+        #
+        # NOTE: this denominator is the recovered annual demand (PERDV-inverted
+        # in compute_demand_for_du; matches V3's `dem_*` quantity per
+        # DataExtraction.py line 1242 for SBA029). It is NOT the perdv-scaled
+        # in-month demand that CalSim was solving against. `annual_shortage_avg_taf`
+        # (CalSim SHORT_*) uses the perdv-scaled in-month demand as ITS baseline
+        # — so the two metrics are NOT complementary and
+        # (1 - reliability_pct/100) * demand will not equal
+        # annual_shortage_avg_taf. They answer different questions
+        # about the same allocation.
         if not ad.empty and not adm.empty:
             common_years = ad.index.intersection(adm.index)
             if len(common_years) > 0:

@@ -213,8 +213,21 @@ COMMENT ON COLUMN du_delivery_monthly.water_month IS 'Water month: 1=October, 2=
 COMMENT ON COLUMN du_delivery_monthly.exc_p5 IS 'Value exceeded 5% of time (high delivery conditions)';
 COMMENT ON COLUMN du_delivery_monthly.exc_p95 IS 'Value exceeded 95% of time (low delivery conditions)';
 
-COMMENT ON COLUMN du_period_summary.reliability_pct IS 'Percentage of months where delivery met or exceeded demand';
-COMMENT ON COLUMN du_period_summary.avg_pct_demand_met IS 'Average ratio of delivery to demand across all months';
+COMMENT ON COLUMN du_period_summary.reliability_pct IS
+    'Mean over years of (annual_delivery_taf / annual_recovered_demand_taf) * 100, clipped to [0, 100]. '
+    'Denominator is the recovered annual demand, where monthly demand is computed in the ETL via the '
+    'PERDV inversion (delivery + shortage) / perdv_swp_N (matches V3 DataExtraction.py demand formula, '
+    'e.g. line 1242 for SBA029). NOT complementary to annual_shortage_avg_taf — that metric uses the '
+    'perdv-scaled in-month demand CalSim was solving against as its baseline, so the two metrics answer '
+    'different questions and (1 - reliability_pct/100) * demand will not equal annual_shortage_avg_taf. '
+    'See etl/statistics/du_urban/calculate_du_statistics_v2.py reliability_pct block for the calculation.';
+COMMENT ON COLUMN du_period_summary.avg_pct_demand_met IS
+    'Identical value to reliability_pct (kept as separate column for legacy / clarity). Same denominator (recovered annual demand).';
+COMMENT ON COLUMN du_period_summary.annual_shortage_avg_taf IS
+    '100-year mean of annual sum of CalSim SHORT_* (CFS converted to TAF via CFS_TO_TAF_PER_DAY * DaysInMonth, '
+    'negatives clamped to 0 for LP-solver noise). Baseline is the perdv-scaled in-month demand CalSim was '
+    'solving against — NOT the recovered (PERDV-inverted) annual demand used by reliability_pct. See '
+    'reliability_pct comment above for why the two are not complementary. CalSim emits SHORT_* directly; we do not redefine it.';
 
 -- ============================================
 -- VERIFICATION
