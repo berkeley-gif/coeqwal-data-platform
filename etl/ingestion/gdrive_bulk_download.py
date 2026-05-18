@@ -33,7 +33,11 @@ Drive access modes (in `_resolve_drive_access`, used by both `scan` and
   - `path`: ModelFilesLink was a bare folder name or filename (28 of 100
             rows in the WAM sheet today). Falls back to using
             `GoogleDriveFolderName` or the DV_Path root as a full Drive
-            path. No `--drive-root-folder-id` flag.
+            path, prepended with `DRIVE_SCENARIO_PREFIX` (the parent
+            directory on the Shared Drive where scenario folders live).
+            No `--drive-root-folder-id` flag. To override per-row, paste
+            the `/folders/<id>` URL into `ModelFilesLink` for that row;
+            id-mode always wins.
   - `none`: Neither a parseable URL nor a folder name is available. The
             row is recorded with `NO_DRIVE_ACCESS` in the audit.
 
@@ -144,6 +148,16 @@ JOB_DEFINITION = "coeqwal-dss-jobdef"
 STAGING_PREFIX = "staging/scenario_data"
 READY_PREFIX = "ready"
 SCENARIO_RUN_PREFIX = "scenario"
+
+# COEQWAL Shared Drive layout: scenario folders live four levels deep under
+# the rclone remote root. id-mode rows bypass this entirely (the folder URL
+# resolves to the deepest level directly), so this only affects path-mode
+# rows that fall back to using `GoogleDriveFolderName` / DV_Path root. If a
+# Drive restructure lands scenario folders elsewhere, set this to "" (or
+# the new parent path) and re-run. Operators can also override per-row by
+# pasting the `/folders/<id>` URL into `ModelFilesLink` for any one row;
+# id-mode always wins over path-mode.
+DRIVE_SCENARIO_PREFIX = "Research Teams/Water Allocation Modeling/CalSim3_Model_Runs/Scenarios"
 
 # WAM team source spreadsheet (Google Sheets). We record this URL inside
 # each scenario's `sidecar.json` under `source.spreadsheet_url` so that a
@@ -1545,10 +1559,15 @@ def _resolve_drive_access(scenario: Dict) -> tuple:
     if not base:
         return ("", "", "", "none")
 
+    # Prepend the Shared Drive prefix where scenario folders actually live.
+    # `gdrive:` is rooted at the COEQWAL Shared Drive top level; without the
+    # prefix, rclone returns "directory not found" for the per-scenario path.
+    prefix = f"{DRIVE_SCENARIO_PREFIX.rstrip('/')}/" if DRIVE_SCENARIO_PREFIX else ""
+
     return (
         "",
-        f"{base}/Model_Files/",
-        f"{base}/Data_Extraction/Variables_From_trend_report_variables_v5/",
+        f"{prefix}{base}/Model_Files/",
+        f"{prefix}{base}/Data_Extraction/Variables_From_trend_report_variables_v5/",
         "path",
     )
 
