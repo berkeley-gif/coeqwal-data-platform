@@ -389,13 +389,13 @@ The rclone refresh token typically auto-renews. If you get `401 Unauthorized` af
 
 ```bash
 cd ~/environment/coeqwal-backend
-python3 -m venv .venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r etl/ingestion/requirements.txt
 pip list   # confirm what is installed
 ```
 
-After the venv exists, future shells just need `source .venv/bin/activate` before running the scripts.
+After the venv exists, future shells just need `source venv/bin/activate` before running the scripts.
 
 **4. AWS credentials.** Cloud9 has the `AWSCloud9SSMAccessRole` IAM role attached, which is sufficient. No further setup needed. See "Cloud9 IAM permissions" below for the policy details.
 
@@ -674,7 +674,7 @@ The pipeline runs the same payload through six layers of checks. Whatever caused
 | 2 | Essential values non-empty for every `ready` row | Row is skipped, error recorded. |
 | 3 | `short_code` unique across all rows | Logged as warning. |
 | 4 | `dv_filename` unique across `ready` rows (cross-paste detector) | Logged as warning. |
-| 5 | `drive_folder_url` parses to a folder ID via `/folders/<id>` | Row keeps going with no folder ID; ingest then fails with `NO_DRIVE_LINK`. |
+| 5 | `drive_folder_url` parses to a folder ID via `/folders/<id>` | Falls back to `path` mode using `GoogleDriveFolderName` (the same fallback `scan` already uses). Ingest only fails (`NO_DRIVE_ACCESS`) when the folder name is also empty. The chosen mode is recorded in the audit's `access_mode` column and in `sidecar.json` under `ingestion.access_mode`. |
 | 6 | `short_code` appears in the DV basename | Convention warning only; surfaced in the audit per scenario. |
 
 SV basenames are intentionally NOT checked for uniqueness: SV inputs are reused across scenarios on purpose.

@@ -153,10 +153,11 @@ def _action_for_local_skip(row: Dict[str, Any]) -> str:
             f"Drive content issue. Verify the {sc} folder on the WAM Shared "
             f"Drive contains a valid ZIP. Then re-run download for {sc}."
         )
-    if code == "NO_DRIVE_LINK":
+    if code == "NO_DRIVE_ACCESS":
         return (
-            f"ModelFilesLink for {sc} did not parse to a folder ID. Fix the "
-            f"URL in the working CSV (must contain /folders/<id>)."
+            f"Cannot reach Drive for {sc}: ModelFilesLink did not parse to a "
+            f"folder ID and GoogleDriveFolderName is empty. Set either column "
+            f"on the {sc} row in the working CSV, then re-run download."
         )
     return f"Investigate. Message: {msg}"
 

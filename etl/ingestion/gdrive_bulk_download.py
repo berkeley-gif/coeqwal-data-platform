@@ -9,6 +9,37 @@ to `s3://<bucket>/staging/scenario_data/<id>/`. Run `promote` to move
 `staging/scenario_data/<id>/*` to `ready/<id>/*` once the audit looks clean.
 The ZIP PUT under `ready/` is the Lambda trigger that continues the ETL process.
 
+Pre-flight (in `_preflight`, before any row is processed):
+
+  - `rclone` is installed and on PATH.
+  - The configured rclone remote (default `gdrive:`) is registered.
+    A stale or missing config kills the run with the same fix-up message
+    the per-row code would otherwise print N times.
+  - The S3 bucket is reachable (creds + bucket name).
+
+  Run by all three subcommands, with the rclone checks always on:
+    - `download`        : full check (S3 included).
+    - `download --dry-run`: rclone only; skips S3 head_bucket so a Mac
+                            without prod AWS creds can iterate on the CSV.
+    - `scan`            : rclone only.
+    - `scan --local-only`: skipped entirely (touches neither Drive nor S3).
+
+Drive access modes (in `_resolve_drive_access`, used by both `scan` and
+`download`):
+
+  - `id`:   ModelFilesLink parsed cleanly to a /folders/<id> URL. Listings
+            and copies pass `--drive-root-folder-id=<id>` and use paths
+            relative to the folder root (e.g. `Model_Files/`).
+  - `path`: ModelFilesLink was a bare folder name or filename (28 of 100
+            rows in the WAM sheet today). Falls back to using
+            `GoogleDriveFolderName` or the DV_Path root as a full Drive
+            path. No `--drive-root-folder-id` flag.
+  - `none`: Neither a parseable URL nor a folder name is available. The
+            row is recorded with `NO_DRIVE_ACCESS` in the audit.
+
+  The selected mode is recorded per-row in `audit_report.csv` (column
+  `access_mode`) and per-scenario in `sidecar.json` (`ingestion.access_mode`).
+
 Validation runs in two layers. Layer 1 is the spreadsheet itself (paths +
 operator columns). Layer 2 is the contents of the ZIP each row points to.
 A row that clears Layer 1 but trips Layer 2 is skipped and recorded in the
@@ -21,7 +52,9 @@ Layer 1 - spreadsheet (in `read_scenario_source_csv`):
   2. Essential values non-empty for every `ready` row
   3. `short_code` unique across all rows
   4. `dv_filename` unique across `ready` rows (cross-paste detector)
-  5. `drive_folder_url` parses to a Drive folder ID via /folders/<id>
+  5. `drive_folder_url` parses to a Drive folder ID via /folders/<id>.
+     If it does not, the row falls back to path-mode access; ingest only
+     fails (with `NO_DRIVE_ACCESS`) when the folder name is also empty.
   6. (Warn) short_code appears in dv_filename basename
 
   Note: SV uniqueness is NOT checked. SV inputs are often reused across scenarios.
@@ -348,12 +381,53 @@ def classify_dss_in_zip(
 
 
 # ---------------------------------------------------------------------------
+# Run-level error
+# ---------------------------------------------------------------------------
+class PreflightError(SystemExit):
+    """Run-level error raised when the operator's environment isn't ready
+    (rclone missing/misconfigured, OAuth token revoked, S3 bucket
+    unreachable). Subclasses SystemExit so it walks cleanly out of `main()`
+    without a stack trace, just like the existing bootstrap-error path.
+    Distinct from `IngestionError`, which is per-row and recoverable."""
+
+
+# ---------------------------------------------------------------------------
 # rclone helpers
 # ---------------------------------------------------------------------------
+# rclone stderr substrings that indicate a config-level problem (no remote,
+# bad config file, expired/revoked OAuth token). When we see these, the run
+# should abort with an actionable message rather than swallow the error and
+# mark every row as "MISSING_ZIP" through a folder-not-found-shaped path.
+_RCLONE_CONFIG_ERROR_MARKERS = (
+    "didn't find section",
+    "not found in config file",
+    "couldn't find section",
+    "Failed to create file system",
+    "couldn't decrypt",
+    "401 Unauthorized",
+    "invalid_grant",
+    "Token has been expired or revoked",
+)
+
+
+def _is_rclone_config_error(stderr: str) -> bool:
+    s = stderr.lower()
+    return any(m.lower() in s for m in _RCLONE_CONFIG_ERROR_MARKERS)
+
+
 def rclone_lsjson(folder_id: str, subpath: str = "",
                   dirs_only: bool = False,
                   rclone_remote: Optional[str] = None) -> List[Dict]:
-    """List contents of a Drive folder via rclone lsjson."""
+    """List contents of a Drive folder via rclone lsjson.
+
+    Two failure shapes:
+      - Config-level error (no remote, expired token, etc.): raise
+        PreflightError so the whole run aborts with the same kind of
+        message as the up-front pre-flight checks. We never want a stale
+        rclone config to silently mark every scenario as MISSING_ZIP.
+      - Folder-not-found / per-row issue: log a warning and return [].
+        The caller surfaces this through the audit (MISSING_ZIP, etc.).
+    """
     remote = rclone_remote or RCLONE_REMOTE
     target = f"{remote}:{subpath}"
     cmd = ["rclone", "lsjson", target]
@@ -363,7 +437,17 @@ def rclone_lsjson(folder_id: str, subpath: str = "",
         cmd.append("--dirs-only")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
-        log.warning("rclone lsjson failed: %s", result.stderr.strip())
+        stderr = (result.stderr or "").strip()
+        if _is_rclone_config_error(stderr):
+            raise PreflightError(
+                f"\n[rclone] Config-level error talking to '{remote}:': {stderr}\n"
+                f"This kills the run because the same error would repeat for every "
+                f"scenario. Fix the rclone config and retry:\n"
+                f"  rclone listremotes\n"
+                f"  rclone config reconnect {remote}:    # if the OAuth token is stale\n"
+                f"See etl/README.md (Cloud9 setup -> rclone) for the full walkthrough.\n"
+            )
+        log.warning("rclone lsjson failed: %s", stderr)
         return []
     try:
         return json.loads(result.stdout)
@@ -375,32 +459,151 @@ def rclone_lsjson(folder_id: str, subpath: str = "",
 
 def rclone_copy_file(folder_id: str, remote_path: str,
                      local_dest_dir: str) -> bool:
-    """Download a single file from Drive to a local directory."""
+    """Download a single file from Drive to a local directory.
+
+    When `folder_id` is non-empty, `remote_path` is interpreted as a subpath
+    under that folder (Drive ID-rooted). When `folder_id` is empty,
+    `remote_path` is a full path from the rclone remote root (path-mode,
+    used for spreadsheet rows that have a `drive_folder_name`/`dv_root` but
+    no folder URL).
+
+    Note on output: this function is the one rclone call where we
+    deliberately do NOT capture stdout/stderr. The `--progress` flag
+    streams a live transfer bar (bytes/sec, ETA, percent) using VT100
+    escape sequences, and the only way an operator sees it is if it goes
+    straight to the parent terminal. This matches the per-step liveness
+    that `etl/statistics/run_all.py` provides via its Popen+tee pattern,
+    just for the 200 MB ZIP download specifically. With `--workers > 1`,
+    multiple progress bars will interleave (each rclone run draws its
+    own block); the per-line `[<scenario>]` log prefixes from this
+    script are still legible above and below those blocks. A failed
+    `rclone copy` writes its error to stderr live too; we just check
+    the exit code below.
+    """
     target = f"{RCLONE_REMOTE}:{remote_path}"
-    cmd = [
-        "rclone", "copy", target, local_dest_dir,
-        f"--drive-root-folder-id={folder_id}",
-        "--progress",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+    cmd = ["rclone", "copy", target, local_dest_dir]
+    if folder_id:
+        cmd.append(f"--drive-root-folder-id={folder_id}")
+    cmd.append("--progress")
+    try:
+        result = subprocess.run(cmd, timeout=3600)
+    except subprocess.TimeoutExpired:
+        log.error("rclone copy timed out after 3600s for %s", remote_path)
+        return False
     if result.returncode != 0:
-        log.error("rclone copy failed: %s", result.stderr.strip())
+        log.error("rclone copy failed (exit %d) -- see rclone output above",
+                  result.returncode)
         return False
     return True
 
 
 def rclone_cat(folder_id: str, remote_path: str) -> Optional[bytes]:
-    """Read a small file from Drive into memory."""
+    """Read a small file from Drive into memory.
+
+    When `folder_id` is non-empty, `remote_path` is interpreted as a subpath
+    under that folder. When `folder_id` is empty, `remote_path` is a full
+    path from the rclone remote root (path-mode).
+    """
     target = f"{RCLONE_REMOTE}:{remote_path}"
-    cmd = [
-        "rclone", "cat", target,
-        f"--drive-root-folder-id={folder_id}",
-    ]
+    cmd = ["rclone", "cat", target]
+    if folder_id:
+        cmd.append(f"--drive-root-folder-id={folder_id}")
     result = subprocess.run(cmd, capture_output=True, timeout=300)
     if result.returncode != 0:
         log.error("rclone cat failed: %s", result.stderr.decode().strip())
         return None
     return result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight checks
+# ---------------------------------------------------------------------------
+# Run before iterating scenarios. The goal is to fail fast with a single,
+# actionable message if the operator's environment isn't ready, rather than
+# discovering the same problem N times across the per-row loop.
+
+def _preflight_rclone_installed() -> None:
+    """Confirm `rclone` is on PATH."""
+    try:
+        result = subprocess.run(
+            ["rclone", "version"], capture_output=True, text=True, timeout=10,
+        )
+    except FileNotFoundError:
+        raise PreflightError(
+            "\n[preflight] rclone is not installed (or not on PATH).\n"
+            "Install it on Cloud9 with:\n"
+            "  curl https://rclone.org/install.sh | sudo bash\n"
+        )
+    if result.returncode != 0:
+        raise PreflightError(
+            f"\n[preflight] `rclone version` failed with exit code {result.returncode}:\n"
+            f"{(result.stderr or result.stdout).strip()}\n"
+        )
+
+
+def _preflight_rclone_remote(remote: str) -> None:
+    """Confirm the configured rclone remote is registered."""
+    try:
+        result = subprocess.run(
+            ["rclone", "listremotes"], capture_output=True, text=True, timeout=10,
+        )
+    except FileNotFoundError:
+        # _preflight_rclone_installed runs first, so this is unreachable in
+        # normal flow. Re-raise the same actionable message here for safety.
+        raise PreflightError(
+            "\n[preflight] rclone is not installed (or not on PATH).\n"
+            "Install it on Cloud9 with:\n"
+            "  curl https://rclone.org/install.sh | sudo bash\n"
+        )
+    if result.returncode != 0:
+        raise PreflightError(
+            f"\n[preflight] `rclone listremotes` failed with exit code {result.returncode}:\n"
+            f"{(result.stderr or result.stdout).strip()}\n"
+        )
+    remotes = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    expected = f"{remote}:"
+    if expected not in remotes:
+        raise PreflightError(
+            f"\n[preflight] rclone remote '{expected}' is not configured.\n"
+            f"Configured remotes: {sorted(remotes) or '(none)'}\n\n"
+            f"On Cloud9, copy the rclone config from a Mac that has already authenticated:\n"
+            f"  # On the Mac:  cat ~/.config/rclone/rclone.conf\n"
+            f"  # On Cloud9:   mkdir -p ~/.config/rclone && nano ~/.config/rclone/rclone.conf\n"
+            f"See etl/README.md (Cloud9 setup -> rclone) for the full walkthrough.\n"
+        )
+
+
+def _preflight_s3_bucket(s3_bucket: str) -> None:
+    """Confirm AWS credentials are present and the target bucket is reachable."""
+    try:
+        s3 = boto3.client("s3")
+        s3.head_bucket(Bucket=s3_bucket)
+    except Exception as e:
+        raise PreflightError(
+            f"\n[preflight] S3 bucket '{s3_bucket}' is not reachable: {e}\n"
+            f"Check AWS credentials and the bucket name:\n"
+            f"  aws sts get-caller-identity\n"
+            f"  aws s3 ls s3://{s3_bucket}/\n"
+        )
+
+
+def _preflight(rclone_remote: str, s3_bucket: str = "",
+               include_s3: bool = True) -> None:
+    """Run all pre-flight checks. Raises PreflightError (a SystemExit) on failure.
+
+    `include_s3=False` runs only the rclone checks. Used by `scan` (which
+    never touches S3) and by `download --dry-run` (which lists Drive but
+    never writes to S3, so it doesn't need head_bucket either - useful for
+    iterating from a Mac that doesn't have AWS creds for the prod bucket).
+    """
+    _preflight_rclone_installed()
+    _preflight_rclone_remote(rclone_remote)
+    if include_s3:
+        _preflight_s3_bucket(s3_bucket)
+        log.info("Pre-flight checks passed (rclone=%s:, s3=%s).",
+                 rclone_remote, s3_bucket)
+    else:
+        log.info("Pre-flight checks passed (rclone=%s:, S3 skipped).", rclone_remote)
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +864,7 @@ def build_sidecar(
     dv_filesize: int,
     trend_csv_basename: Optional[str],
     trend_csv_sha256: Optional[str],
+    access_mode: str = "id",
 ) -> Dict[str, Any]:
     """Build the sidecar.json payload that travels with the ZIP."""
     sc = scenario["short_code"]
@@ -697,6 +901,12 @@ def build_sidecar(
             "script_version": SCRIPT_VERSION,
             "operator": _operator_tag(),
             "ingested_at_utc": _now_iso_utc(),
+            # How the script reached this row's Drive folder. "id" means the
+            # ModelFilesLink URL parsed cleanly; "path" means we fell back to
+            # GoogleDriveFolderName / DV_Path root because the URL was missing
+            # or unparseable. Recorded so a future reader of the sidecar can
+            # tell whether ingest used the canonical path.
+            "access_mode": access_mode,
         },
     }
 
@@ -715,6 +925,12 @@ def _audit_row_template(scenario: Dict[str, Any]) -> Dict[str, Any]:
         "expected_dv_filename": scenario["dv_filename"],
         "expected_sv_filename": scenario["sv_filename"],
         "ingestion_path": "automated",
+        # `access_mode` records how `process_scenario` reached this row's
+        # Drive folder: "id" (folder URL parsed cleanly), "path" (fell back
+        # to GoogleDriveFolderName / DV_Path root), or "none" (could not
+        # reach Drive at all -> NO_DRIVE_ACCESS). Surfaced so operators can
+        # see at a glance which rows are running on the path fallback.
+        "access_mode": "",
         "zip_count": 0,
         "zip_selected": "",
         "zip_size_mb": "",
@@ -747,16 +963,28 @@ def process_scenario(
 ) -> Dict[str, Any]:
     """Download, validate, hash, and stage one scenario. Skip-not-abort on failure."""
     sc = scenario["short_code"]
-    folder_id = scenario["drive_folder_id"]
     row = _audit_row_template(scenario)
 
     try:
-        if not folder_id:
-            raise IngestionError("NO_DRIVE_LINK", f"[{sc}] No Google Drive folder ID")
+        # ----- Resolve how to reach this scenario on Drive -----------------
+        # Mirrors `scan_scenario`: prefer the parsed folder ID; otherwise fall
+        # back to the WAM folder name as a path-rooted lookup; otherwise this
+        # row has no Drive access at all and is recorded in the audit.
+        folder_id, model_path, trend_path, access_mode = _resolve_drive_access(scenario)
+        row["access_mode"] = access_mode
+        if access_mode == "none":
+            raise IngestionError(
+                "NO_DRIVE_ACCESS",
+                f"[{sc}] No Drive folder ID and no folder-name path; "
+                f"set ModelFilesLink (Drive URL) or GoogleDriveFolderName in the working CSV",
+            )
 
         # ----- List Model_Files for ZIPs ----------------------------------
-        log.info("[%s] Listing Drive folder (ID: %s) ...", sc, folder_id[:12])
-        all_model_files = rclone_lsjson(folder_id, "Model_Files/")
+        if access_mode == "id":
+            log.info("[%s] Listing Drive folder (ID: %s) ...", sc, folder_id[:12])
+        else:
+            log.info("[%s] Listing Drive path: %s ...", sc, model_path)
+        all_model_files = rclone_lsjson(folder_id, model_path)
         zips = [f for f in all_model_files if f["Name"].lower().endswith(".zip")]
         row["zip_count"] = len(zips)
 
@@ -792,9 +1020,7 @@ def process_scenario(
         # extracted data. If we cannot pick a
         # single CSV unambiguously, we still stage the scenario but mark its
         # `verification_status` as `unverified_*`. The audit reports this.
-        trend_files = rclone_lsjson(
-            folder_id, "Data_Extraction/Variables_From_trend_report_variables_v5/"
-        )
+        trend_files = rclone_lsjson(folder_id, trend_path)
         trend_csvs = [f for f in trend_files if f["Name"].lower().endswith(".csv")]
         row["trend_csv_count"] = len(trend_csvs)
 
@@ -847,7 +1073,7 @@ def process_scenario(
         try:
             log.info("[%s] Downloading ZIP: %s (%.1f MB) ...", sc,
                      zip_filename, size_bytes / (1024 * 1024))
-            ok = rclone_copy_file(folder_id, f"Model_Files/{zip_filename}", tmp_dir)
+            ok = rclone_copy_file(folder_id, f"{model_path}{zip_filename}", tmp_dir)
             if not ok or not os.path.exists(zip_local):
                 raise IngestionError("DOWNLOAD_FAILED", f"[{sc}] ZIP download failed")
 
@@ -881,10 +1107,7 @@ def process_scenario(
             if selected_csv is not None:
                 csv_name = selected_csv["Name"]
                 log.info("[%s] Downloading trend CSV: %s ...", sc, csv_name)
-                csv_bytes = rclone_cat(
-                    folder_id,
-                    f"Data_Extraction/Variables_From_trend_report_variables_v5/{csv_name}",
-                )
+                csv_bytes = rclone_cat(folder_id, f"{trend_path}{csv_name}")
                 if not csv_bytes:
                     # Download failure for a present-but-unreadable trend CSV
                     # Marks the scenario as unverified.
@@ -912,6 +1135,7 @@ def process_scenario(
                 dv_filesize=val["dv_filesize_bytes"],
                 trend_csv_basename=csv_name,
                 trend_csv_sha256=trend_sha,
+                access_mode=access_mode,
             )
             sidecar_bytes = json.dumps(sidecar, indent=2, sort_keys=True).encode("utf-8")
 
@@ -977,7 +1201,7 @@ def process_scenario(
 AUDIT_COLUMNS = [
     "scenario_id", "drive_folder_id", "drive_folder_name",
     "expected_dv_filename", "expected_sv_filename",
-    "ingestion_path",
+    "ingestion_path", "access_mode",
     "zip_count", "zip_selected", "zip_size_mb", "zip_sha256",
     "dss_file_count", "classification_method",
     "sv_selected", "sv_sha256",
@@ -1093,6 +1317,14 @@ def cmd_download(args):
     """Download, validate, and stage scenarios to S3."""
     global RCLONE_REMOTE
     RCLONE_REMOTE = args.rclone_remote
+
+    # Pre-flight: rclone installed, remote configured, S3 bucket reachable.
+    # Fails fast (SystemExit) with an actionable message before we open the
+    # CSV or build the per-row plan, so an unconfigured Cloud9 doesn't waste
+    # an operator's time discovering the same error N times. `--dry-run` skips
+    # the S3 head_bucket so a Mac iterating on the working CSV without prod
+    # AWS creds can still exercise the full Drive-listing path.
+    _preflight(RCLONE_REMOTE, args.s3_bucket, include_s3=not args.dry_run)
 
     _require_working_csv(args.listing_csv)
     scenarios = read_scenario_source_csv(args.listing_csv)
@@ -1506,11 +1738,16 @@ def cmd_scan(args):
     folder-name mismatches, and pinned-filename-not-found cases BEFORE
     spending bandwidth on a real download run, scan walks each scenario's
     Drive folder and writes `scan_audit.csv`. It never touches S3 and
-    never downloads files. Use it as a pre-flight on a freshly bootstrapped
+    never downloads files.     Use it as a pre-flight on a freshly bootstrapped
     working CSV, or after editing rows.
     """
     global RCLONE_REMOTE
     RCLONE_REMOTE = args.rclone_remote
+
+    # Pre-flight (rclone only - scan never touches S3). Skipped for
+    # `--local-only` because that mode bypasses Drive entirely.
+    if not args.local_only:
+        _preflight(RCLONE_REMOTE, include_s3=False)
 
     _require_working_csv(args.listing_csv)
     scenarios = read_scenario_source_csv(args.listing_csv)
