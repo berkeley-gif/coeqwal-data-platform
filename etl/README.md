@@ -485,6 +485,43 @@ python etl/ingestion/gdrive_bulk_download.py promote
 
 Use `--scenarios s0020,s0021` to promote a subset, and `--dry-run` to print the planned copy order without copying.
 
+### Full pipeline orchestrator
+
+For Cloud9 operators who want **scan → download → promote → wait for AWS Batch → statistics (`run_all.py`) → verification (`verify_all_sections.py`)** in one process, use [`run_full_pipeline.py`](run_full_pipeline.py). It subprocesses the existing tools (their stdout/stderr stream live), continues past per-scenario failures, and writes a consolidated report.
+
+**Canonical command** for every scenario in the working CSV:
+
+```bash
+python etl/run_full_pipeline.py --all --workers 4 \
+  --listing-csv etl/ingestion/scenario_listing/model_run_file_source_working.csv \
+  --s3-bucket coeqwal-model-run
+```
+
+Or pass explicit IDs: `--scenarios s0107 s0108 …`.
+
+**Stages (one line each):**
+
+1. **scan** — Google Drive presence check (`gdrive_bulk_download.py scan`); parses `scan_audit.csv`.
+2. **download** — rclone pull + Layer 2 validation + S3 staging (`download`); parses `audit_report.csv` (`validation_status == OK` continues).
+3. **promote** — copies staging → `ready/` (`promote`); confirms each ZIP exists under `ready/<id>/`.
+4. **batch** — discovers Lambda-named jobs `etl-<scenario>-*` on queue `coeqwal-dss-queue`, polls until terminal state, then cross-checks `scenario/<id>/<id>_manifest.json` (`status` must be `SUCCEEDED` or `SUCCEEDED_PARTIAL`).
+5. **statistics** — `etl/statistics/run_all.py --scenario <id>` per scenario that succeeded extraction.
+6. **verify** — `etl/statistics/verify_all_sections.py --scenario <id> --report-dir <run>/verify`.
+
+**Outputs:** default report directory `etl/ingestion/output/pipeline_runs/<UTC>/` with stage logs (`scan.log`, `download.log`, …), `pipeline_state.json` (resume), `pipeline_summary.csv`, and `pipeline_summary.json`. The process exits non-zero if any scenario failed any stage.
+
+**Resume:** reuse the same directory and loaded state:
+
+```bash
+python etl/run_full_pipeline.py --resume \
+  --report-dir etl/ingestion/output/pipeline_runs/<timestamp> \
+  --start-stage batch
+```
+
+Earlier stages are left as recorded in `pipeline_state.json`; only stages from `--start-stage` onward run again (combine with `--skip-stage scan,verify` for partial reruns).
+
+**IAM on the Cloud9 role:** in addition to existing S3 usage for ingestion, the Batch wait step needs **`batch:ListJobs`** and **`batch:DescribeJobs`** on the job queue used by the Lambda (`coeqwal-dss-queue` by default, overridable with `--batch-queue`). Statistics and verification need **`DATABASE_URL`** unless you pass **`--dry-run`** on the orchestrator (passed through to `run_all.py`; verify runs with `--csv-only` when the orchestrator is in dry-run).
+
 ### Step 2: refresh the audit after Batch finishes
 
 The auto-render at the end of `download` captures pre-promote state. Once Batch finishes (one to two minutes per scenario after promote), the container writes `classification.json` to each scenario's run prefix. To pick that up:
