@@ -217,25 +217,19 @@ These are tracked in `du_urban_delivery_arc` with `requires_sum = TRUE` in `du_u
 
 ## ETL Processing
 
-The ETL script `etl/statistics/du/calculate_du_statistics.py` processes the 71 canonical CWS demand units:
+The ETL script `etl/statistics/du_urban/main.py` (which delegates to `calculate_du_statistics_v2.py`) processes the 71 canonical CWS demand units:
 
 ### Usage
 
 ```bash
-# List available groups
-python etl/statistics/du/calculate_du_statistics.py --list-groups
-
 # Process a single scenario
-python etl/statistics/du/calculate_du_statistics.py --scenario s0020
-
-# Process only a specific group
-python etl/statistics/du/calculate_du_statistics.py --scenario s0020 --group var_wba
+python etl/statistics/du_urban/main.py --scenario s0020
 
 # Process all scenarios
-python etl/statistics/du/calculate_du_statistics.py --all-scenarios
+python etl/statistics/du_urban/main.py --all-scenarios
 
 # Dry run (calculate but don't save)
-python etl/statistics/du/calculate_du_statistics.py --scenario s0020 --dry-run
+python etl/statistics/du_urban/main.py --scenario s0020 --dry-run
 ```
 
 ### Processing Summary (s0020 example)

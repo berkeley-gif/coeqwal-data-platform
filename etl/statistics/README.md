@@ -1024,9 +1024,8 @@ TAF = CFS × 0.001984 × days_in_month
 
 | File | Purpose |
 |------|---------|
-| `du_urban/main.py` | CLI entry point |
-| `du_urban/calculate_du_statistics.py` | Main calculation module for tier matrix DUs |
-| `du_urban/calculate_du_statistics_v2.py` | Version 2 with database variable mappings |
+| `du_urban/main.py` | CLI entry point (thin wrapper that calls `calculate_du_statistics_v2.main()`) |
+| `du_urban/calculate_du_statistics_v2.py` | Main calculation module: reads CalSim DV CSV, applies unit-aware CFS->TAF conversion, writes per-DU monthly and period-summary tables |
 
 ---
 
@@ -1542,5 +1541,5 @@ not in the ETL. Documented here for reference.
 
 | # | Severity | Module | Issue | Status |
 |---|----------|--------|-------|--------|
-| 1 | **CRITICAL** | `du_urban/calculate_du_statistics.py` | No CFS→TAF conversion at all. All `*_taf` database columns contained CFS values. Did not import `units.py`, did not compute `DaysInMonth`, did not check CSV header units. | **FIXED** — now uses `parse_dss_csv_header`, unit-aware CFS→TAF conversion, and `check_post_conversion_magnitude` |
+| 1 | **CRITICAL** | `du_urban/calculate_du_statistics.py` (now deleted, see `calculate_du_statistics_v2.py`) | No CFS->TAF conversion at all. All `*_taf` database columns contained CFS values. Did not import `units.py`, did not compute `DaysInMonth`, did not check CSV header units. | **FIXED** in `calculate_du_statistics_v2.py`, which uses `parse_dss_csv_header`, unit-aware CFS->TAF conversion, and `check_post_conversion_magnitude`. Original file removed in the dead-code audit. |
 | 2 | **HIGH** | `cws_aggregate/calculate_cws_aggregate_statistics.py` | Unconditionally applied CFS→TAF conversion without checking declared units. No `check_post_conversion_magnitude` safeguard. | **FIXED** — now uses `parse_dss_csv_header`, unit-aware `_to_taf()` helper, and `check_post_conversion_magnitude` |
