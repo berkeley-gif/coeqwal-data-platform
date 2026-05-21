@@ -6,7 +6,7 @@
 
 **List of active scenarios (72, as of May 21, 2026)**: s0011, s0020, s0021, s0023, s0024, s0025, s0026, s0027, s0028, s0030, s0031, s0032, s0033, s0035, s0036, s0037, s0039, s0040, s0041, s0042, s0044, s0045, s0046, s0047, s0048, s0049, s0050, s0051, s0056, s0057, s0058, s0059, s0060, s0062, s0063, s0065, s0067, s0068, s0069, s0071, s0072, s0073, s0074, s0075, s0076, s0077, s0078, s0079, s0080, s0081, s0082, s0083, s0084, s0085, s0087, s0088, s0089, s0091, s0092, s0093, s0094, s0095, s0096, s0097, s0098, s0099, s0100, s0101, s0102, s0103, s0104, s0105
 
-_Run `python etl/ingestion/refresh_active_scenarios.py` to pull the current `is_active` set from the API into this README.
+_Run `python etl/ingestion/tools/refresh_active_scenarios.py` to pull the current `is_active` set from the API into this README.
 
 <!-- ACTIVE_SCENARIOS:END -->
 
@@ -26,6 +26,46 @@ II. The second pipeline is the tier data pipeline. This pipeline extracts the in
 
 Each pipeline has its own associated python files and stages. 
 
+
+## Repository layout
+
+A new developer arriving at `etl/` will see ten subdirectories. They fall into three groups: pipeline stages, shared infrastructure, and local-only working space.
+
+### Pipeline I: scenario model run data
+
+Runs in order. Each stage feeds the next via S3.
+
+| Directory | Stage | What it does |
+|---|---|---|
+| [`ingestion/`](ingestion/) | 0. Drive -> S3 staging | Bulk download of ZIPs and trend CSVs from the WAM team's Google Drive, Layer-1/2 validation against the working CSV, SHA-256 hashing, `sidecar.json` build, and stage to `s3://coeqwal-model-run/staging/scenario_data/<id>/`. The main CLI at the top level is `gdrive_bulk_download.py` (the pipeline). Library modules live in `ingestion/lib/`; auxiliary CLIs (audit report, manual upload, recovery, verification) live in `ingestion/tools/` (see [`tools/README.md`](ingestion/tools/README.md)). |
+| [`lambda/`](lambda/) | 1. S3 PUT trigger | The `coeqwalEtlTrigger` Lambda (Node.js). Fires on a ZIP PUT under `ready/`, waits for the sidecar, deduplicates, moves files into `scenario/<id>/`, and submits a Batch job. |
+| [`batch-container/`](batch-container/) | 2. DSS -> CSV | Docker image that runs in AWS Batch on Fargate Spot. Unzips, classifies SV vs CalSim output, extracts DSS to CSV with `pydsstools`, uploads CSVs + manifest to S3. |
+| [`statistics/`](statistics/) | 3. CSV -> DB (statistics) | Per-module statistics calculations against the extracted CSVs, written to PostgreSQL. Modules: reservoirs, deliveries, delta, du_urban, env_flows, refuge, mi, ag, cws_aggregate, sensitivity. |
+
+### Pipeline II: tier data
+
+| Directory | What it does |
+|---|---|
+| [`tier_data/`](tier_data/) | Loads the team-delivered tier-1/2/3/4 result CSVs into PostgreSQL. Independent of Pipeline I: tier inputs land on local disk (not via S3), the loader generates SQL locally, and `psql` applies it. |
+
+### Cross-cutting infrastructure
+
+| Directory | What it does |
+|---|---|
+| [`common/`](common/) | Shared Python helpers used by both pipelines: AWS resource names (`S3_BUCKET`, `BATCH_QUEUE`, ...), S3 path builders (`staging_prefix`, `sidecar_key`, ...), and a `DATABASE_URL`-aware `get_conn()`. Import from `etl.common`. |
+| [`verification/`](verification/) | End-to-end verification scripts spanning Layers 1-4 (extraction -> statistics -> DB -> API). Each layer's verifier lives next to the code it verifies; this directory holds the cross-layer runner and reference PDFs. |
+
+### Local-only working space (gitignored)
+
+These directories exist on the developer's machine but never enter git. They are regrowable from S3 or from team-supplied source files.
+
+| Directory | What's in it |
+|---|---|
+| [`staging/`](staging/) | Scratch for the bulk loader: downloaded ZIPs and intermediate CSVs before they go to S3. Wipe freely. |
+| [`reference/`](reference/) | Large reference CSVs (full-scenario DV/SV outputs, audit logs) used for local testing only. |
+| `archive/` | Historical code kept for reference (the legacy `pydsstools` setup, before it became the separate [COEQWAL-pydsstools](https://github.com/berkeley-gif/COEQWAL-pydsstools) repo). Not used in any current run. |
+
+For deeper context on each pipeline's operations, see [How to ingest the model run data](#how-to-ingest-the-model-run-data-step-by-step) and the per-directory READMEs linked above.
 
 ## How do we run the COEQWAL ETL?
 
@@ -103,9 +143,9 @@ python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0042 s0043
 python etl/ingestion/gdrive_bulk_download.py scan --all
 ```
 
-Walks each named Drive folder and writes `etl/ingestion/output/scan_audit.csv`. Skim it. Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
+Walks each named Drive folder and writes `etl/ingestion/audit_reports/scan_audit.csv`. Skim it. Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
 
-`scan` does not touch S3 and does not need AWS credentials. You can run it from your local. Local prereqs: `rclone` configured with the `gdrive` remote (you already have this on your Mac from the original Google OAuth), Python 3.9+, and `boto3` (imported at the top of the script even though scan does not use it). One `pip install -r etl/ingestion/requirements.txt` in a venv on the Mac covers `boto3`. If you do not want to set that up locally, run it from Cloud9, which has all three already.
+`scan` does not touch S3 and does not need AWS credentials. You can run it from your local machine. Local prereqs: `rclone` configured with the `gdrive` remote (you already have this on your local machine from the original Google OAuth), Python 3.9+, and `boto3` (imported at the top of the script even though scan does not use it). One `pip install -r etl/ingestion/requirements.txt` in a venv on the local machine covers `boto3`. If you do not want to set that up locally, run it from Cloud9, which has all three already.
 
 **3. Download, validate, stage to S3.**
 
@@ -153,10 +193,10 @@ Each ZIP PUT triggers the Lambda within a second or two. The Lambda moves the ZI
 **7. Refresh the audit after Batch finishes.**
 
 ```bash
-python etl/ingestion/audit.py
+python etl/ingestion/tools/audit.py
 ```
 
-Each Batch job writes `classification.json` to its scenario's `scenario/<id>/run/` prefix. Re-rendering pulls those in so the audit reflects extraction outcomes alongside ingestion outcomes. The CSVs the container produces live at `s3://coeqwal-model-run/scenario/<id>/csv/` and are now ready for the statistics ETL (`etl/statistics/run_all.py`, separate runbook).
+Each Batch job writes `<id>_manifest.json` to its scenario's `scenario/<id>/` prefix. Re-rendering reads those alongside the sidecars so the audit reflects extraction outcomes (status, validation result, mismatch counts) next to ingestion outcomes. The CSVs the container produces live at `s3://coeqwal-model-run/scenario/<id>/csv/` and are now ready for the statistics ETL (`etl/statistics/run_all.py`, separate runbook).
 
 ### What is next
 
@@ -220,7 +260,7 @@ A few terms appear over and over in this README and in the code. The shortest de
 A scenario's ZIP reaches `s3://coeqwal-model-run/ready/<id>/` one of two ways:
 
 - **Automated path** (default). `gdrive_bulk_download.py download` reads the working CSV, downloads from Google Drive via rclone, validates, hashes, writes a `sidecar.json`, stages everything under `s3://coeqwal-model-run/staging/scenario_data/<id>/`, and waits for the developer to run `promote` to copy to `ready/`. The audit auto-renders at the end of `download`.
-- **Manual path**. The developer uploads the ZIP (and any peers) directly through the AWS console (drag-and-drop) or with `etl/ingestion/manual_ingest.py upload`. The sidecar is optional at upload time, but Batch requires one to run, so the developer follows up with `manual_ingest.py sidecar --retrigger-batch` if they did not include one.
+- **Manual path**. The developer uploads the ZIP (and any peers) directly through the AWS console (drag-and-drop) or with `etl/ingestion/tools/manual_ingest.py upload`. The sidecar is optional at upload time, but Batch requires one to run, so the developer follows up with `tools/manual_ingest.py sidecar --retrigger-batch` if they did not include one.
 
 Both paths land at the same key shape in S3, so downstream stages do not branch on path.
 
@@ -284,22 +324,23 @@ Multiple scenarios share the same SV (input state-variable) DSS file on purpose.
 
 Two artifacts surface what happened. They have different jobs.
 
-- **Audit** (`etl/ingestion/audit.md`, regenerated by `etl/ingestion/audit.py` or auto-rendered at the end of `gdrive_bulk_download.py download`). A digestible state snapshot. One file, in git, structured. Tells the developer what needs their attention with the exact command to fix it. Read this first.
+- **Audit** (`etl/ingestion/audit.md`, regenerated by `etl/ingestion/tools/audit.py` or auto-rendered at the end of `gdrive_bulk_download.py download`). A digestible state snapshot. One file, in git, structured. Tells the developer what needs their attention with the exact command to fix it. Read this first.
 - **Logs** (CloudWatch, console output from each script). The chronological narrative of a specific run. Verbose, transient, not in git. Read these only when you have a specific question about a specific run that the audit referenced.
 
 If you find yourself reading logs to figure out what to do next, the audit is missing a row.
 
-### The JSON trio per scenario in S3
+### Per-scenario JSONs in S3
 
-Each scenario directory `s3://coeqwal-model-run/scenario/<id>/run/` ends up holding three small JSON files plus the ZIP and (optional) trend CSV. The trio represents the three stages of the lifecycle:
+Each scenario ends up with two small JSON files alongside its ZIP. Each names one side of the handoff.
 
-| File | Written by | Records |
-|---|---|---|
-| `sidecar.json` | ingestion (`gdrive_bulk_download.py` or `manual_ingest.py`) | What the developer believes is in the ZIP. Basenames, hashes, sizes, provenance. |
-| `lambda_status.json` | Lambda (Pass 2b) | Whether the Lambda saw the sidecar, whether it submitted a Batch job, and why if not. |
-| `classification.json` | Batch container (Pass 2b) | What the container actually extracted. Selected DV/SV, hashes, and whether they matched the sidecar. |
+| File | Location | Written by | Records |
+|---|---|---|---|
+| `sidecar.json` | `scenario/<id>/run/sidecar.json` | ingestion (`gdrive_bulk_download.py` or `tools/manual_ingest.py`) | What the developer believes is in the ZIP. Basenames, hashes, sizes, provenance. |
+| `<id>_manifest.json` | `scenario/<id>/<id>_manifest.json` | Batch container | What the container did. Status, status_summary, validation result and mismatch counts inlined, processed_at, job_id, output keys. |
 
-`audit.py` walks all three across the bucket and produces `audit.md`. Together they answer the questions "did the developer know what they were uploading?", "did the Lambda do its job?", and "did the container extract the right files?"
+`tools/audit.py` reads both per scenario and cross-references them in `audit.md`. Together they answer "did the developer know what they were uploading?" and "did the container extract a valid result?"
+
+Pass 2b will add a third JSON, `lambda_status.json` written by the trigger Lambda, recording dispatch decisions (sidecar present, dedup, Batch submission). Audit will pick it up alongside the other two when it lands.
 
 ### Skip-not-abort
 
@@ -364,12 +405,12 @@ curl https://rclone.org/install.sh | sudo bash
 rclone version
 ```
 
-The rclone config (with the `gdrive` remote pointing at the COEQWAL Shared Drive) must be authenticated on a machine with a web browser, because Google OAuth requires a browser redirect. So you authenticate once on your Mac and copy the config to Cloud9.
+The rclone config (with the `gdrive` remote pointing at the COEQWAL Shared Drive) must be authenticated on a machine with a web browser, because Google OAuth requires a browser redirect. So you authenticate once on a local machine (macOS, Linux, or Windows -- any OS with a browser and rclone installed) and copy the config to Cloud9.
 
-If you already authenticated on your Mac, copy the config:
+If you already authenticated on a local machine, copy the config:
 
 ```bash
-# On your Mac:
+# On your local machine:
 cat ~/.config/rclone/rclone.conf
 
 # On Cloud9:
@@ -378,7 +419,7 @@ nano ~/.config/rclone/rclone.conf
 # Paste, save with Ctrl+O, exit with Ctrl+X
 ```
 
-If you need to set up rclone from scratch on the Mac first:
+If you need to set up rclone from scratch on a local machine first:
 
 ```bash
 rclone config
@@ -403,7 +444,22 @@ Verify on Cloud9:
 rclone lsd gdrive:   # should list top-level Shared Drive folders
 ```
 
-The rclone refresh token typically auto-renews. If you get `401 Unauthorized` after weeks of inactivity, run `rclone config reconnect gdrive:` on your Mac and re-copy the config.
+The rclone refresh token typically auto-renews. If you get `401 Unauthorized` after weeks of inactivity, run `rclone config reconnect gdrive:` on a local machine and re-copy the config.
+
+**Security note - what is actually in `rclone.conf` and why this setup is safe.**
+
+The file you are copying around contains an OAuth **refresh token**, not a Google password. A refresh token is a Google-issued credential that the rclone client app can exchange for a short-lived access token whenever it needs to make a Drive API call. Some properties worth knowing:
+
+- **Scoped to Drive only.** The token can read and write Google Drive on behalf of the UC Berkeley account that authenticated. It cannot read Gmail, log in to anything, change the account password, or touch any other Google service.
+- **Revocable in seconds.** Visit [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions), find "rclone", click Remove access. The token is dead within a few minutes. No password rotation, no SSO ticket.
+- **Bound to the rclone OAuth client app.** A leaked token can only be used by something pretending to be rclone. The Google account owner still sees activity attributed to "rclone" in their account audit log, not "unknown".
+- **Lives outside the repo.** The file is at `~/.config/rclone/rclone.conf` on macOS or Linux (or `%APPDATA%\rclone\rclone.conf` on Windows), well outside the working tree. `git status` will never see it.
+- **Never read by our code.** The Python in this repo only ever shells out to `rclone`; it does not `open()` the config file. There is no code path that could accidentally log or print the token.
+- **Gitignored as belt-and-suspenders.** `rclone.conf` and `*.rclone.conf` are in `.gitignore`, so even if you accidentally copied the file into the repo, `git add` would skip it.
+
+If you suspect a token leak: revoke at the URL above, then `rclone config reconnect gdrive:` on a local machine and re-distribute the new config to anyone who needs it.
+
+The `~/.config/rclone/rclone.conf` format is identical across operating systems, only the path differs (run `rclone config file` to print it on whichever machine you are on).
 
 **3. Python venv.** The ingestion scripts depend on `boto3`. Create the venv once:
 
@@ -459,12 +515,12 @@ python etl/ingestion/gdrive_bulk_download.py scan --all
 
 #### Running scan locally (from your local)
 
-`scan` is the only step in this flow that does not need AWS. You can run it from your Mac to iterate on the working CSV without spinning up Cloud9.
+`scan` is the only step in this flow that does not need AWS. You can run it from your local machine to iterate on the working CSV without spinning up Cloud9.
 
 Local prereqs:
 
-- **`rclone`** with the `gdrive` remote configured. You already have this on your Mac because that is where the original Google OAuth happened.
-- **Python 3.9+** with a venv. Almost certainly already on your Mac.
+- **`rclone`** with the `gdrive` remote configured. You already have this on your local machine because that is where the original Google OAuth happened.
+- **Python 3.9+** with a venv. Almost certainly already on your local machine.
 - **`boto3`** installed in the venv. `boto3` is imported by `gdrive_bulk_download.py` even though `scan` itself does not call it, so it has to be on the path:
   ```bash
   cd path/to/coeqwal-backend
@@ -528,13 +584,13 @@ Or pass explicit IDs: `--scenarios s0107 s0108 …`.
 5. **statistics** — `etl/statistics/run_all.py --scenario <id>` per scenario that succeeded extraction.
 6. **verify** — `etl/statistics/verify_all_sections.py --scenario <id> --report-dir <run>/verify`.
 
-**Outputs:** default report directory `etl/ingestion/output/pipeline_runs/<UTC>/` with stage logs (`scan.log`, `download.log`, …), `pipeline_state.json` (resume), `pipeline_summary.csv`, and `pipeline_summary.json`. The process exits non-zero if any scenario failed any stage.
+**Outputs:** default report directory `etl/ingestion/audit_reports/pipeline_runs/<UTC>/` with stage logs (`scan.log`, `download.log`, …), `pipeline_state.json` (resume), `pipeline_summary.csv`, and `pipeline_summary.json`. The process exits non-zero if any scenario failed any stage.
 
 **Resume:** reuse the same directory and loaded state:
 
 ```bash
 python etl/run_full_pipeline.py --resume \
-  --report-dir etl/ingestion/output/pipeline_runs/<timestamp> \
+  --report-dir etl/ingestion/audit_reports/pipeline_runs/<timestamp> \
   --start-stage batch
 ```
 
@@ -544,10 +600,10 @@ Earlier stages are left as recorded in `pipeline_state.json`; only stages from `
 
 ### Step 2: refresh the audit after Batch finishes
 
-The auto-render at the end of `download` captures pre-promote state. Once Batch finishes (one to two minutes per scenario after promote), the container writes `classification.json` to each scenario's run prefix. To pick that up:
+The auto-render at the end of `download` captures pre-promote state. Once Batch finishes (one to two minutes per scenario after promote), the container writes `<id>_manifest.json` to each scenario's prefix. To pick that up:
 
 ```bash
-python etl/ingestion/audit.py
+python etl/ingestion/tools/audit.py
 ```
 
 Open `etl/ingestion/audit.md` again. The "What needs your attention" section is empty when everything succeeded.
@@ -563,12 +619,12 @@ Use this when the automated path cannot pick up a scenario (no Drive access, cus
 There are two flavors. Pick whichever fits the situation:
 
 - **AWS console drag-and-drop**: deliberate, click-by-click, fine for one or two scenarios. The developer is responsible for upload order.
-- **`manual_ingest.py`**: scripted, enforces upload order, builds the sidecar for you (including SHA-256 hashes computed by streaming the ZIP). Prefer this when you have any choice.
+- **`tools/manual_ingest.py`**: scripted, enforces upload order, builds the sidecar for you (including SHA-256 hashes computed by streaming the ZIP). Prefer this when you have any choice.
 
 ### Upload a new scenario from a local ZIP
 
 ```bash
-python etl/ingestion/manual_ingest.py upload \
+python etl/ingestion/tools/manual_ingest.py upload \
     --short-code s0042 \
     --zip-path /path/to/s0042.zip \
     --trend-csv-path /path/to/s0042_trend.csv \
@@ -597,7 +653,7 @@ If you already uploaded the ZIP first by mistake and Batch failed because there 
 ### Recover from NO_SIDECAR
 
 ```bash
-python etl/ingestion/manual_ingest.py sidecar \
+python etl/ingestion/tools/manual_ingest.py sidecar \
     --short-code s0030 \
     --dv-basename s0030_dcradjhist_2020lu_noflowreqt_dv_20260126v02.dss \
     --sv-basename coeqwal_s9999_sv_v0.1.4.dss \
@@ -612,8 +668,8 @@ This locates the existing ZIP in `scenario/<id>/run/`, streams it to compute SHA
 The 72 scenarios listed at the top of this README were ingested before the sidecar contract existed. Run this once after Pass 2a is deployed:
 
 ```bash
-python etl/ingestion/backfill_sidecars.py --dry-run  # plan
-python etl/ingestion/backfill_sidecars.py            # execute
+python etl/ingestion/tools/backfill_sidecars.py --dry-run  # plan
+python etl/ingestion/tools/backfill_sidecars.py            # execute
 ```
 
 Reads the working CSV, locates each scenario's ZIP in `scenario/<id>/run/`, computes hashes by streaming the existing S3 ZIP, and writes `sidecar.json`. Use `--overwrite` to replace an existing sidecar.
@@ -622,18 +678,37 @@ Reads the working CSV, locates each scenario's ZIP in `scenario/<id>/run/`, comp
 
 A quick reference. Each script has its own `--help`.
 
+### Main command (top level)
+
 | Script | What it does |
 |---|---|
 | [`gdrive_bulk_download.py`](ingestion/gdrive_bulk_download.py) | The main developer tool. Subcommands `scan`, `download`, `promote`. |
-| [`audit.py`](ingestion/audit.py) | Projects S3 state + `audit_state.json` into `etl/ingestion/audit.md`. Auto-runs at the end of `download`. Re-run manually after Batch finishes. |
-| [`manual_ingest.py`](ingestion/manual_ingest.py) | Developer helper for the manual upload path. Subcommands `upload` (with safe upload order) and `sidecar` (build a sidecar for an existing ZIP, optionally retrigger Batch). |
-| [`backfill_sidecars.py`](ingestion/backfill_sidecars.py) | One-time helper to write `sidecar.json` for scenarios that landed in S3 before the sidecar contract existed. |
-| [`check_extraction_results.py`](ingestion/check_extraction_results.py) | Post-extraction audit. Reads every scenario's manifest and validation summary from S3 and produces a console table plus a CSV. Use to confirm a batch of scenarios extracted cleanly. |
-| [`reextract_all_scenarios.py`](ingestion/reextract_all_scenarios.py) | Re-submit Batch jobs against ZIPs already in `scenario/<id>/run/`. Use when the ETL container code changed and you want to regenerate CSVs without re-downloading from Drive. |
-| [`retrigger_extraction.sh`](ingestion/retrigger_extraction.sh) | Re-upload one ZIP to `ready/` to force the Lambda to fire again. One-off recovery tool. |
-| [`inspect_sv_dss.py`](ingestion/inspect_sv_dss.py) | Diagnostic for inspecting state-variable DSS files. Used when SV pathing is suspect. |
-| [`refresh_active_scenarios.py`](ingestion/refresh_active_scenarios.py) | Rewrites the active-scenarios block at the top of this README from the live API. |
+
+### Auxiliary tools (`ingestion/tools/`)
+
+The audit, recovery, verification, maintenance, and the manual upload path. See [`tools/README.md`](ingestion/tools/README.md) for a use-case-keyed index.
+
+| Script | What it does |
+|---|---|
+| [`tools/audit.py`](ingestion/tools/audit.py) | Projects S3 state (sidecar + manifest per scenario) plus the local `audit_state.json` into `etl/ingestion/audit.md`. Auto-runs at the end of `download`. Re-run manually after Batch finishes. |
+| [`tools/manual_ingest.py`](ingestion/tools/manual_ingest.py) | Developer helper for the manual upload path. Subcommands `upload` (with safe upload order) and `sidecar` (build a sidecar for an existing ZIP, optionally retrigger Batch). |
+| [`tools/show_last_run.py`](ingestion/tools/show_last_run.py) | Print a one-screen summary of the last `gdrive_bulk_download` run. |
+| [`tools/retrigger_extraction.sh`](ingestion/tools/retrigger_extraction.sh) | Re-upload one ZIP to `ready/` to force the Lambda to fire again. Default recovery tool. |
+| [`tools/reextract_all_scenarios.py`](ingestion/tools/reextract_all_scenarios.py) | Submit Batch jobs directly against ZIPs already in `scenario/<id>/run/`, bypassing the Lambda. Surgical alternative to `retrigger_extraction.sh`. Supports `--validate`, `--memory`/`--vcpus`, and `--sv-only`/`--dv-only`. |
+| [`tools/backfill_sidecars.py`](ingestion/tools/backfill_sidecars.py) | One-time helper to write `sidecar.json` for scenarios that landed in S3 before the sidecar contract existed. |
+| [`tools/refresh_active_scenarios.py`](ingestion/tools/refresh_active_scenarios.py) | Rewrites the active-scenarios block at the top of this README from the live API. |
+
+### Library modules (`ingestion/lib/`)
+
+Imported by the CLIs above; not run directly. Each file has a one-line docstring at the top describing its role: `config`, `errors`, `utils`, `rclone`, `preflight`, `csv_reader`, `zip_validation`, `worker`, `commands`.
+
+### Other
+
+| File | What it does |
+|---|---|
 | [`requirements.txt`](ingestion/requirements.txt) | `boto3`. Install once during Cloud9 setup. |
+| [`scenario_listing/`](ingestion/scenario_listing/) | The WAM source CSV + operator-editable working CSV. Tracked in git. |
+| `audit_reports/` | Per-run audit CSVs and `audit_state.json`. Gitignored. |
 
 ## Troubleshooting
 
@@ -642,9 +717,9 @@ Most developer-facing failures surface in `audit.md` with an `error_code` and an
 | Code or symptom | Where it shows up | Fix |
 |---|---|---|
 | `rclone: command not found` | `download` startup | Install rclone (see "Cloud9 setup" above). |
-| `Failed to create file system: google drive: didn't find section in config file` | `download` startup | rclone config is missing. Copy from the Mac, see "Cloud9 setup". |
+| `Failed to create file system: google drive: didn't find section in config file` | `download` startup | rclone config is missing. Copy from a local machine, see "Cloud9 setup". |
 | `rclone lsjson` returns empty | `scan` audit | Check the Drive folder URL in the working CSV. Try manually: `rclone lsjson --drive-root-folder-id=<ID> gdrive:`. |
-| `401 Unauthorized` from rclone | `scan` or `download` | Token expired. Re-authenticate on Mac: `rclone config reconnect gdrive:` and re-copy the config to Cloud9. |
+| `401 Unauthorized` from rclone | `scan` or `download` | Token expired. Re-authenticate on a local machine: `rclone config reconnect gdrive:` and re-copy the config to Cloud9. |
 | `MISSING_ZIP` | scan audit, ingest audit | `Model_Files/` in the Drive folder has no ZIP. Check the Drive folder URL. |
 | `MULTIPLE_ZIPS_NO_PIN` | scan audit, ingest audit | `Model_Files/` has more than one ZIP. Set `pinned_model_run_zip` on the row in the working CSV. |
 | `PINNED_ZIP_NOT_FOUND` | scan audit, ingest audit | `pinned_model_run_zip` does not match any file in `Model_Files/`. Fix the pin, or upload the named file. |
@@ -658,59 +733,55 @@ Most developer-facing failures surface in `audit.md` with an `error_code` and an
 
 ## Recovery and re-extraction
 
-When something went wrong at extraction time and you want to retry without re-downloading from Drive.
+When something went wrong at extraction time and you want to retry without re-downloading from Drive. Two tools cover this:
 
-### Re-extract one or more scenarios (no Drive round-trip)
+- **Default**: `tools/retrigger_extraction.sh` re-fires the full production Lambda + Batch path. Reach for this first.
+- **Surgical**: `tools/reextract_all_scenarios.py` submits to Batch directly, bypassing the Lambda. Use when you need an override knob (`--validate`, `--memory`/`--vcpus`, `--sv-only`/`--dv-only`).
 
-`reextract_all_scenarios.py` submits Batch jobs directly against ZIPs already in `s3://coeqwal-model-run/scenario/<id>/run/`. It bypasses the Lambda. Use this when the container code changed, or when a Batch job ran out of memory and needs a larger allocation.
+### Re-extract one or more scenarios with overrides
+
+`tools/reextract_all_scenarios.py` submits Batch jobs directly against ZIPs already in `s3://coeqwal-model-run/scenario/<id>/run/`. It bypasses the Lambda. Use this when the container code changed, when a Batch job ran out of memory and needs a larger allocation, or when you only need one of the two CSV sides.
 
 ```bash
 # Plan only
-python etl/ingestion/reextract_all_scenarios.py --dry-run
+python etl/ingestion/tools/reextract_all_scenarios.py --dry-run
 
 # Re-extract everything
-python etl/ingestion/reextract_all_scenarios.py
+python etl/ingestion/tools/reextract_all_scenarios.py
 
 # Re-extract specific scenarios
-python etl/ingestion/reextract_all_scenarios.py --scenarios s0020,s0028
+python etl/ingestion/tools/reextract_all_scenarios.py --scenarios s0020,s0028
 
 # Re-extract only the SV input (skip the CalSim DV output)
-python etl/ingestion/reextract_all_scenarios.py --sv-only
+python etl/ingestion/tools/reextract_all_scenarios.py --sv-only
+
+# Re-extract only the CalSim (DV) output (skip the SV input)
+python etl/ingestion/tools/reextract_all_scenarios.py --dv-only
 
 # Validate against reference CSVs in scenario/<id>/verify/
-python etl/ingestion/reextract_all_scenarios.py --validate
+python etl/ingestion/tools/reextract_all_scenarios.py --validate
 
 # Override per-job memory (default 8 GB, raise for DCP scenarios)
-python etl/ingestion/reextract_all_scenarios.py --scenarios s0065 --memory 32768
+python etl/ingestion/tools/reextract_all_scenarios.py --scenarios s0065 --memory 32768
 ```
 
-### Re-trigger one scenario by re-upload
+### Re-trigger one scenario through the production Lambda path
 
-If you want the Lambda to fire again on a single scenario as if its ZIP were freshly uploaded, use [`retrigger_extraction.sh`](ingestion/retrigger_extraction.sh). It copies the ZIP back to `ready/` from `scenario/<id>/run/`. The Lambda picks it up as a new event.
+The default recovery tool. [`tools/retrigger_extraction.sh`](ingestion/tools/retrigger_extraction.sh) copies the ZIP from `scenario/<id>/run/` back to `ready/`. The S3 PUT fires the Lambda, which dispatches Batch through the same path as a fresh upload. Use this unless you need one of `reextract_all_scenarios.py`'s override knobs (`--validate`, `--memory`/`--vcpus`, `--sv-only`/`--dv-only`).
+
+```bash
+bash etl/ingestion/tools/retrigger_extraction.sh --go s0020
+```
 
 ### Confirm extraction outcomes across all scenarios
 
-After Batch jobs finish, run `check_extraction_results.py` to produce a single audit across every scenario in S3. It auto-discovers scenario folders, reads each manifest and validation summary, and outputs a console table plus a CSV.
+`tools/audit.py` is the single audit tool. After Batch jobs finish, re-run it to pick up the new manifests and refresh `etl/ingestion/audit.md`:
 
 ```bash
-# All scenarios
-python etl/ingestion/check_extraction_results.py --bucket coeqwal-model-run
-
-# Specific scenarios
-python etl/ingestion/check_extraction_results.py --bucket coeqwal-model-run \
-    --scenarios s0021,s0022
-
-# Cross-scenario pattern analysis for failed validations
-python etl/ingestion/check_extraction_results.py --bucket coeqwal-model-run \
-    --mismatches --mismatch-output mismatches.csv
+python etl/ingestion/tools/audit.py
 ```
 
-Fields to look at in the output:
-
-- `extraction_status`: `SUCCEEDED` (both SV and DV), `SUCCEEDED_PARTIAL`, or `NO_MANIFEST` (Batch did not finish or did not write the manifest).
-- `validation_result`: `passed`, `failed`, or `skipped`. `skipped` means no trend CSV to compare against.
-- `unit_verification.calsim_unit_mismatches`: should be `0`. Any other value means the CalSim CSV had a unit that disagrees with the DSS, which is worth investigating.
-- `SCENARIOS REQUIRING ATTENTION` section: scenarios that need a follow-up.
+`audit.md`'s "Active scenarios" table shows per-scenario extraction status, validation result, and mismatch cell count. "What needs your attention" surfaces extraction failures (the container ran but did not produce every requested CSV) and validation failures (the extracted CSV diverged from the trend report), each with an actionable command.
 
 To inspect one scenario manually:
 
@@ -779,13 +850,12 @@ Every script that produces an artifact writes it into a module-local `output/` d
 
 | Stage | File | Purpose | Default location | Generator | Override |
 |---|---|---|---|---|---|
-| Pre-download (Drive scan) | `scan_audit.csv` | Are all the expected ZIPs and trend CSVs actually present on Google Drive? Should be all `OK` before downloading. | `etl/ingestion/output/` | `gdrive_bulk_download.py scan` | `--output-dir` |
-| Post-download | `audit_report.csv` | Did each scenario download cleanly from Drive and stage to S3? Per-scenario validation flags. Also uploaded to `s3://coeqwal-model-run/staging/scenario_data/audit_report.csv`. | `etl/ingestion/output/` | `gdrive_bulk_download.py download` | `--output-dir` |
-| Post-download (state) | `audit_state.json` | Per-row JSON projection consumed by `etl/ingestion/audit.py`. Gitignored under `etl/**/output/`, regenerated each run. | `etl/ingestion/output/` | `gdrive_bulk_download.py download` | `--output-dir` |
-| Audit | `audit.md` | The digestible summary of the state of the system. Tracked in git. Auto-renders at the end of `gdrive_bulk_download.py download`. Re-renders standalone via `etl/ingestion/audit.py` (use after Batch finishes). | `etl/ingestion/` | `etl/ingestion/audit.py` (and auto-call from `download`) | `--out` |
-| Post-extraction | `extraction_audit.csv` | After Batch ran on staged ZIPs, did each scenario produce valid CSVs? | `etl/ingestion/output/` | `check_extraction_results.py` | `-o` / `--output` |
-| Statistics ETL | `stats_audit_<ts>.csv` | Per-run scorecard: which `(scenario, module)` pairs succeeded and how long each took. One file per run, timestamped. | `etl/statistics/output/` | `run_all.py` | `--audit-dir` |
-| Data-quality scan | `duplicate_scan_results.csv` (+ sibling `_units.csv`) | Which CalSim variables show up twice with the same column name in the same scenario CSV. Cross-scenario diagnostic. | `etl/statistics/output/` | `scan_dupes.py` | `-o` / `--output` |
+| Pre-download (Drive scan) | `scan_audit.csv` | Are all the expected ZIPs and trend CSVs actually present on Google Drive? Should be all `OK` before downloading. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py scan` | `--output-dir` |
+| Post-download | `audit_report.csv` | Did each scenario download cleanly from Drive and stage to S3? Per-scenario validation flags. Also uploaded to `s3://coeqwal-model-run/staging/scenario_data/audit_report.csv`. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py download` | `--output-dir` |
+| Post-download (state) | `audit_state.json` | Per-row JSON projection consumed by `etl/ingestion/tools/audit.py`. Gitignored under `etl/**/audit_reports/`, regenerated each run. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py download` | `--output-dir` |
+| Audit | `audit.md` | The digestible summary of the state of the system. Tracked in git. Includes extraction status, validation result, and mismatch counts for every active scenario. Auto-renders at the end of `gdrive_bulk_download.py download`. Re-renders standalone via `etl/ingestion/tools/audit.py` (use after Batch finishes). | `etl/ingestion/` | `etl/ingestion/tools/audit.py` (and auto-call from `download`) | `--out` |
+| Statistics ETL | `stats_audit_<ts>.csv` | Per-run scorecard: which `(scenario, module)` pairs succeeded and how long each took. One file per run, timestamped. | `etl/statistics/audit_reports/` | `run_all.py` | `--audit-dir` |
+| Data-quality scan | `duplicate_scan_results.csv` (+ sibling `_units.csv`) | Which CalSim variables show up twice with the same column name in the same scenario CSV. Cross-scenario diagnostic. | `etl/statistics/audit_reports/` | `scan_dupes.py` | `-o` / `--output` |
 | Tier loader | `all_tiers.sql` | The big idempotent UPSERT script that loads tier results into `tier_result` and `tier_location_result`. Fed to `psql -f`. Working artifact: once `psql` succeeds, the data is in the DB and the file is no longer needed. | `etl/tier_data/output/` | `load_all_tier_results.py` | `--output-sql`. Bare filenames are auto-routed into `output/`. Paths with `/` are respected |
 
 ### Why most of these files are not in git
@@ -798,18 +868,11 @@ They are all generated from inputs that already live in git or S3. `all_tiers.sq
 
 The ETL pipeline runs on Cloud9 because that is where the credentials and access live: AWS SSO for S3, `rclone gdrive` for Google Drive, and `DATABASE_URL` pointing at the RDS instance. You do not run the pipeline on your local, so you do not need its outputs there. If you want to inspect a file, copy it over with `aws s3 cp ...` or `scp`.
 
-## Developer scratch directories (gitignored)
+## Notes on local scratch directories
 
-Two directories under `etl/` are developer-local working space and never go into git:
+The two gitignored scratch directories listed in [Repository layout](#repository-layout) (`etl/staging/` and `etl/reference/`) are wiped freely. If they get large, `rm -rf` them. The bulk loader regrows `etl/staging/` on demand, and `etl/reference/` is repopulated by hand from S3 (`aws s3 cp ...`) when you need to test against a specific reference CSV.
 
-| Directory | Purpose |
-|---|---|
-| `etl/staging/` | Where the bulk loader writes downloaded ZIPs and intermediate CSVs before they go to S3. Wiped freely. Gitignored by `etl/staging/` rule in [.gitignore](../.gitignore). |
-| `etl/reference/` | Large reference CSVs (full-scenario DV/SV outputs) used for local testing only. Gitignored. |
-
-These are operationally useful but locally regrowable. If they get out of hand, `rm -rf` them.
-
-`etl/tier_data/staging/` is a separate concept: it is local-disk only and tracked in git (the raw team-delivered CSVs sit there as inputs to the tier loader, which generates SQL locally). Tier data does not go through S3 staging.
+`etl/tier_data/staging/` is a different concept that easily confuses new developers: despite the name, it is **tracked in git**. The raw team-delivered CSVs sit there as inputs to the tier loader, which generates SQL locally. Tier data does not go through S3 staging, so the loader needs its inputs on disk.
 
 ## AWS cheatsheet
 
@@ -852,7 +915,7 @@ IAM console: https://us-west-2.console.aws.amazon.com/iam/home#/roles/details/AW
 |---|---|---|
 | CloudWatchLogsRead | Read Batch, Lambda, and RDS logs | Debugging failed extractions |
 | ECRRead | Check Docker image push timestamps | Confirming GitHub Actions built the image |
-| BatchOperations | Submit, monitor, cancel, and update Batch jobs | Running `reextract_all_scenarios.py`, managing jobs, updating job definitions |
+| BatchOperations | Submit, monitor, cancel, and update Batch jobs | Running `tools/reextract_all_scenarios.py`, managing jobs, updating job definitions |
 | PassBatchRoles | Pass the two Batch IAM roles when registering job definitions | Required by `batch:RegisterJobDefinition` |
 
 Full JSON policy is in [docs/INFRASTRUCTURE.md](../docs/INFRASTRUCTURE.md) under the IAM section.

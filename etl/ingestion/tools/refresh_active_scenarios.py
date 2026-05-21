@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 refresh_active_scenarios.py - rewrite the active-scenarios block at the
-top of etl/README.md from the live API.
+top of etl/README.md from the API.
 
 Calls GET https://api.coeqwal.org/api/scenarios, extracts every short_code
 where `is_active` is true, sorts them, and rewrites the block in
@@ -16,9 +16,9 @@ the script errors out rather than guessing where to insert. The script
 never edits anything else in the README and never commits to git.
 
 Usage:
-  python etl/ingestion/refresh_active_scenarios.py
-  python etl/ingestion/refresh_active_scenarios.py --api-url https://api.coeqwal.org
-  python etl/ingestion/refresh_active_scenarios.py --dry-run
+  python etl/ingestion/tools/refresh_active_scenarios.py
+  python etl/ingestion/tools/refresh_active_scenarios.py --api-url https://api.coeqwal.org
+  python etl/ingestion/tools/refresh_active_scenarios.py --dry-run
 """
 
 from __future__ import annotations
@@ -33,7 +33,8 @@ from pathlib import Path
 from typing import List
 
 DEFAULT_API_URL = "https://api.coeqwal.org"
-README_PATH = Path(__file__).resolve().parent.parent / "README.md"
+# Path is `etl/README.md` relative to this script in `etl/ingestion/tools/`.
+README_PATH = Path(__file__).resolve().parents[2] / "README.md"
 
 BEGIN_MARKER = "<!-- ACTIVE_SCENARIOS:BEGIN -->"
 END_MARKER = "<!-- ACTIVE_SCENARIOS:END -->"
@@ -70,7 +71,7 @@ def _build_block(short_codes: List[str], api_url: str) -> str:
         f"**Active scenarios ({len(short_codes)})**: {inline}\n"
         f"\n"
         f"_Last refreshed {now} from `{api_url}/api/scenarios`. "
-        f"Regenerate with `python etl/ingestion/refresh_active_scenarios.py`._\n"
+        f"Regenerate with `python etl/ingestion/tools/refresh_active_scenarios.py`._\n"
         f"\n"
         f"{END_MARKER}"
     )

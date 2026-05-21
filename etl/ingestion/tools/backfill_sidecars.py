@@ -14,18 +14,15 @@ This is intended for the one-time backfill of the 72 active scenarios that
 were ingested before the sidecar contract existed. After backfill, every
 scenario in S3 has a sidecar and the Pass 2b container can run strictly.
 
-This script never edits the working CSV, never commits to git, and never
-modifies any object other than the named `sidecar.json` per scenario.
-
 Usage:
   # Dry-run plan
-  python etl/ingestion/backfill_sidecars.py --dry-run
+  python etl/ingestion/tools/backfill_sidecars.py --dry-run
 
   # Backfill all ready scenarios
-  python etl/ingestion/backfill_sidecars.py
+  python etl/ingestion/tools/backfill_sidecars.py
 
   # Backfill a single scenario, overwriting any existing sidecar
-  python etl/ingestion/backfill_sidecars.py --scenarios s0030 --overwrite
+  python etl/ingestion/tools/backfill_sidecars.py --scenarios s0030 --overwrite
 """
 
 from __future__ import annotations
@@ -39,35 +36,38 @@ from typing import Any, Dict, List, Optional
 
 import boto3
 
-INGEST_DIR = Path(__file__).parent
+TOOLS_DIR = Path(__file__).parent
+REPO_ROOT = TOOLS_DIR.parent.parent.parent
 
-# Shared bucket / S3 prefix constants live in etl/common.
-sys.path.insert(0, str(INGEST_DIR.parent.parent))
+# Make `from etl.X import Y` work when this script is invoked as
+# `python etl/ingestion/tools/backfill_sidecars.py` from the repo root.
+sys.path.insert(0, str(REPO_ROOT))
 from etl.common import (  # noqa: E402
     DEFAULT_S3_BUCKET,
     SCENARIO_PREFIX as SCENARIO_RUN_PREFIX,
 )
-
-# Ingestion-specific helpers (CSV reader, working CSV guard, provenance
-# tags) live in gdrive_bulk_download.py.
-sys.path.insert(0, str(INGEST_DIR))
-from gdrive_bulk_download import (  # noqa: E402
+from etl.ingestion.lib.config import (  # noqa: E402, F401
+    SCRIPT_VERSION,
+    SIDECAR_SCHEMA_VERSION,
     SPREADSHEET_URL,
     WORKING_CSV_PATH,
-    _operator_tag,  # noqa: F401
-    _now_iso_utc,  # noqa: F401
-    read_scenario_source_csv,
+)
+from etl.ingestion.lib.csv_reader import (  # noqa: E402
     _require_working_csv,
+    read_scenario_source_csv,
+)
+from etl.ingestion.lib.utils import (  # noqa: E402, F401
+    _now_iso_utc,
+    _operator_tag,
+    _sha256_of_bytes,
 )
 
-# Re-use the sidecar builder and S3 hashing helpers from manual_ingest.py.
-from manual_ingest import (  # noqa: E402
-    SIDECAR_SCHEMA_VERSION,  # noqa: F401
-    SCRIPT_VERSION,  # noqa: F401
+# Sidecar builder and S3 ZIP hashing live in manual_ingest (the canonical
+# manual-upload tool); reuse them here so backfill writes identical sidecars.
+from etl.ingestion.tools.manual_ingest import (  # noqa: E402
     _build_sidecar,
     _find_trend_in_run,
     _find_zip_in_run,
-    _sha256_of_bytes,
     _stream_sha_from_s3_zip,
 )
 

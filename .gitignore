@@ -41,6 +41,13 @@ pip-wheel-metadata/
 .env.*
 !.env.example  # Keep a template
 
+# rclone configs (contain OAuth refresh tokens for Google Drive).
+# These normally live in ~/.config/rclone/rclone.conf, not the repo,
+# but this is a belt-and-suspenders guard against an accidental copy
+# into the working tree.
+rclone.conf
+*.rclone.conf
+
 # Local data and processing directories
 /CalSim3_schematic
 
@@ -71,6 +78,7 @@ etl/statistics/charts/
 etl/batch-container/dss_processing/output/
 
 etl/**/output/
+etl/**/audit_reports/
 response.json
 **/response.json
 etl/statistics/echo

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-manual_ingest.py - operator helper for manual ingestion paths.
+manual_ingest.py - helper for manual ingestion paths.
 
 Pure drag-and-drop in the AWS console is the simplest manual path and does
 not require this script. Reach for `manual_ingest.py` when one of these is
@@ -23,7 +23,7 @@ Two subcommands:
 Examples:
 
   # Fix a missing sidecar for a scenario whose ZIP already exists in S3
-  python etl/ingestion/manual_ingest.py sidecar \\
+  python etl/ingestion/tools/manual_ingest.py sidecar \\
       --short-code s0030 \\
       --dv-basename s0030_dcradjhist_2020lu_noflowreqt_dv_20260126v02.dss \\
       --sv-basename coeqwal_s9999_sv_v0.1.4.dss \\
@@ -32,7 +32,7 @@ Examples:
       --retrigger-batch
 
   # Manual full upload (operator already has a local ZIP)
-  python etl/ingestion/manual_ingest.py upload \\
+  python etl/ingestion/tools/manual_ingest.py upload \\
       --short-code s0042 \\
       --zip-path ./s0042.zip \\
       --trend-csv-path ./s0042_trend.csv \\
@@ -48,20 +48,20 @@ import hashlib
 import json
 import logging
 import os
-import socket
 import sys
 import time
 import zipfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import boto3
 
-INGEST_DIR = Path(__file__).parent
+TOOLS_DIR = Path(__file__).parent
+REPO_ROOT = TOOLS_DIR.parent.parent.parent
 
-# Shared AWS / S3 constants live in etl/common (one source of truth).
-sys.path.insert(0, str(INGEST_DIR.parent.parent))
+# Make `from etl.X import Y` work when this script is invoked as
+# `python etl/ingestion/tools/manual_ingest.py` from the repo root.
+sys.path.insert(0, str(REPO_ROOT))
 from etl.common import (  # noqa: E402
     AWS_REGION,
     DEFAULT_S3_BUCKET,
@@ -71,12 +71,15 @@ from etl.common import (  # noqa: E402
     SCENARIO_PREFIX as SCENARIO_RUN_PREFIX,
     STAGING_PREFIX,
 )
-
-# Ingestion-specific constants live in gdrive_bulk_download.py.
-sys.path.insert(0, str(INGEST_DIR))
-from gdrive_bulk_download import (  # noqa: E402
+from etl.ingestion.lib.config import (  # noqa: E402
     SCRIPT_VERSION,
     SIDECAR_SCHEMA_VERSION,
+)
+from etl.ingestion.lib.utils import (  # noqa: E402
+    _now_iso_utc,
+    _operator_tag,
+    _sha256_of_bytes,
+    _sha256_of_file,
 )
 
 log = logging.getLogger("manual_ingest")
@@ -85,31 +88,6 @@ log = logging.getLogger("manual_ingest")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _now_iso_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _operator_tag() -> str:
-    user = os.environ.get("USER") or os.environ.get("LOGNAME") or "unknown"
-    try:
-        host = socket.gethostname()
-    except OSError:
-        host = "unknown"
-    return f"{user}@{host}"
-
-
-def _sha256_of_file(path: str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _sha256_of_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def _sha256_of_local_zip_entry(zip_path: str, basename: str) -> Tuple[str, int, str]:
     """Find a basename inside a local ZIP and return (sha, size, path_in_zip)."""
     with zipfile.ZipFile(zip_path, "r") as zf:

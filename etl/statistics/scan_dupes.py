@@ -33,8 +33,8 @@ import pandas as pd
 
 from scenarios import SCENARIOS
 
-# Default output directory for scan results. Gitignored via etl/**/output/.
-DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"
+# Default directory for scan results. Gitignored via etl/**/audit_reports/.
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "audit_reports"
 
 logging.basicConfig(
     level=logging.INFO,

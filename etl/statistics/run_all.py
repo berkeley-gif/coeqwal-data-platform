@@ -55,8 +55,8 @@ log = logging.getLogger("run_all")
 SCRIPT_DIR = Path(__file__).parent
 
 # Default directory for the per-run stats_audit_*.csv. Gitignored via
-# etl/**/output/. Override with --audit-dir.
-DEFAULT_AUDIT_DIR = SCRIPT_DIR / "output"
+# etl/**/audit_reports/. Override with --audit-dir.
+DEFAULT_AUDIT_DIR = SCRIPT_DIR / "audit_reports"
 
 # Available ETL modules and their entry points
 ETL_MODULES = {

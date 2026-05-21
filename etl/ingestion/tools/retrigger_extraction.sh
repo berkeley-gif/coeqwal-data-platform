@@ -4,9 +4,9 @@
 # The S3 event fires the Lambda, which submits the Batch job.
 #
 # Usage:
-#   bash retrigger_extraction.sh              # list what would be copied
-#   bash retrigger_extraction.sh --go         # actually do it
-#   bash retrigger_extraction.sh --go s0020   # single scenario
+#   bash etl/ingestion/tools/retrigger_extraction.sh              # list what would be copied
+#   bash etl/ingestion/tools/retrigger_extraction.sh --go         # actually do it
+#   bash etl/ingestion/tools/retrigger_extraction.sh --go s0020   # single scenario
 
 set -euo pipefail
 

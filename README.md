@@ -19,11 +19,11 @@ This pipeline:
 - **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files, preserves the DSS unit metadata as a row-6 CSV header, and writes a `.units.json` sidecar.
 - **Verifies units** that every CSV column's unit matches the DSS file's ground truth, and detects duplicate B-part pathnames within the same DSS.
 - **Validates content** by comparing each extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits a per-scenario validation summary and a manifest JSON.
-- **Audits extraction** across all scenarios into a single console table and audit CSV (manifest status, validation result, unit mismatches).
+- **Audits ingestion and extraction** across all scenarios into one in-git report (`etl/ingestion/audit.md`) covering sidecar coverage, Batch manifest status, validation result, and per-scenario mismatch counts.
 - **Computes statistics** from the extracted CSVs (reservoir storage, urban delivery, agricultural demand and shortage, M&I contractor reliability, environmental flow alteration, refuge delivery, delta salinity / NDO / X2, climate and operational sensitivity) and loads them into the layer 10+ tables in PostgreSQL.
 - **Loads tier outcomes** delivered by the data team (CWS deliveries, AG revenue, env flows, reservoir storage, groundwater storage, delta ecology, salmon abundance, freshwater salinity) into `tier_result` and `tier_location_result` via idempotent UPSERT SQL.
 - **Verifies accuracy** end-to-end at four layers: DSS extraction (Layer 1), DSS-vs-CSV units (Layer 1b), CSV-to-DB statistics (Layer 2), DB-to-API responses (Layer 3), and surfaces results on the public `/verification` page (Layer 4).
-- **Produces audit artifacts** at every stage (`scan_audit.csv`, `audit_report.csv`, `extraction_audit.csv`, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
+- **Produces audit artifacts** at every stage (`scan_audit.csv`, `audit_report.csv`, the single-file `audit.md` covering ingestion + extraction + validation, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
 
 Three of those stages run automatically, the rest are operator-driven. All are laid out as siblings under `etl/`:
 

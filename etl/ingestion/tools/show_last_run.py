@@ -5,7 +5,8 @@ import json
 import sys
 from pathlib import Path
 
-STATE_PATH = Path(__file__).parent / "output" / "audit_state.json"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from etl.ingestion.lib.config import AUDIT_STATE_PATH as STATE_PATH  # noqa: E402
 
 
 def main() -> int:

@@ -58,7 +58,7 @@ flowchart LR
   DV["DV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_calsim_output.csv"]
   SV["SV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_sv_input.csv"]
   Units["*.units.json sidecar"]
-  Valid["scenario/sXXXX/validation/<br/>*.csv + *.json"]
+  Valid["scenario/sXXXX/validation/<br/>sXXXX_validation_mismatches.csv (on failure)"]
   Man["scenario/sXXXX/sXXXX_manifest.json"]
 
   In --> Container
@@ -70,7 +70,17 @@ flowchart LR
   Container --> Man
 ```
 
-The manifest is the per-scenario summary. `check_extraction_results.py` (see [../README.md](../README.md) "Recovery and re-extraction") reads it across all scenarios.
+The manifest is the per-scenario summary. Validation pass/fail and mismatch counts (`mismatch_columns`, `mismatch_cells`) are inlined into the manifest's `validation` block. The per-row mismatches CSV is the only artifact rich enough to debug a failure and is written separately under `validation/` only when mismatches were found. `etl/ingestion/tools/audit.py` reads the manifest across every scenario and projects it into `etl/ingestion/audit.md`.
+
+### Runtime env vars
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `ZIP_BUCKET`, `ZIP_KEY` | required | S3 location of the input scenario ZIP. |
+| `SCENARIO_ID` | inferred | Overrides the short_code parsed from the ZIP basename. |
+| `VALIDATION_REF_CSV_KEY` | empty | When set, the container downloads this reference CSV and runs `validate_csvs.py` against the produced output. |
+| `EXTRACT_TARGETS` | `sv,calsim` | Which DSS sides to extract. Set to `sv` to skip CalSim output, `calsim` to skip SV input. `reextract_all_scenarios.py --sv-only`/`--dv-only` flips this. |
+| `ABS_TOL`, `REL_TOL` | `1e-06` | Validation tolerances. |
 
 ## Local development (build and run on your laptop)
 
@@ -182,7 +192,7 @@ python scan_dupes.py --compare-values --audit-units --workers 4
 ## Operating notes
 
 - **Job definition revisions:** Only revision 3 is ACTIVE as of 2026-05-11 (Fargate, 2 vCPU, 16 GiB, image `coeqwal-etl:latest`). Revisions 1 and 2 (8 GiB each) were deregistered. The Lambda submits the bare name `coeqwal-dss-jobdef`, so Batch resolves to revision 3 automatically. Do not deregister revision 3 without updating the Lambda.
-- **OOM:** ~326 MB CalSim output CSVs from the DWRadapt25 / DCP group (e.g. `s0065`, `s0085`, `s0105`) used to OOM-kill the 8 GiB revisions. With 16 GiB they pass. If they ever start failing again, re-extract those specific scenarios with `etl/ingestion/reextract_all_scenarios.py --scenarios s0065 --memory 32768`.
+- **OOM:** ~326 MB CalSim output CSVs from the DWRadapt25 / DCP group (e.g. `s0065`, `s0085`, `s0105`) used to OOM-kill the 8 GiB revisions. With 16 GiB they pass. If they ever start failing again, re-extract those specific scenarios with `etl/ingestion/tools/reextract_all_scenarios.py --scenarios s0065 --memory 32768`.
 - **Spend:** `minvCpus=0` on the compute env means $0 idle. Cost is purely Fargate Spot time during jobs.
 - **Verifying a successful build landed:** see the `aws ecr describe-images` snippet above.
 

@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 """
-audit.py - renders `etl/ingestion/audit.md` from `gdrive_bulk_download.py download`
-and the S3 state.
+audit.py - renders `etl/ingestion/audit.md` from the local ingestion state
+and S3.
 
 What this script does:
   1. Reads `<DEFAULT_OUTPUT_DIR>/audit_state.json` (the per-run record
      written by `gdrive_bulk_download.py download`).
-  2. Walks `s3://<bucket>/scenario/*/run/` and collects `sidecar.json`,
-     `lambda_status.json`, `classification.json` for every scenario.
+  2. Walks `s3://<bucket>/scenario/*/` and reads two JSON files per
+     scenario: `run/sidecar.json` (what was uploaded) and
+     `<id>_manifest.json` (what the Batch container did).
   3. Cross-references the two to produce a single Markdown report at
      `etl/ingestion/audit.md`.
 
 Report sections:
   - Run summary
-  - What needs your attention
+  - What needs your attention (ingest skips, no-sidecar, extraction
+    failures, validation failures)
   - Unverified scenarios (informational, e.g. missing trend report)
-  - Per-scenario status row
-  - Per-scenario details
+  - Active scenarios table
+  - Per-scenario details (expanded for non-OK rows)
 
 This script never modifies S3. It is safe to run anytime. It is also
 called automatically at the end of `gdrive_bulk_download.py download`
 (pass `--skip-audit` there to defer).
 
 Usage:
-  python etl/ingestion/audit.py [--s3-bucket coeqwal-model-run] [--all]
+  python etl/ingestion/tools/audit.py [--s3-bucket coeqwal-model-run] [--all]
 """
 
 from __future__ import annotations
@@ -38,17 +40,21 @@ from typing import Any, Dict, List, Optional
 
 import boto3
 
-INGEST_DIR = Path(__file__).parent
+THIS_FILE = Path(__file__).resolve()
+INGESTION_DIR = THIS_FILE.parent.parent   # etl/ingestion/
+REPO_ROOT = THIS_FILE.parents[3]          # repo root
 
-# When this script is invoked directly (`python etl/ingestion/audit.py`),
+# When this script is invoked directly (`python etl/ingestion/tools/audit.py`),
 # Python does not know where to find the `etl` package, so the imports
 # below would fail with ModuleNotFoundError. Adding the repo root to
 # `sys.path` tells Python where the `etl/` folder lives.
-sys.path.insert(0, str(INGEST_DIR.parent.parent))
-from etl.common import DEFAULT_S3_BUCKET  # noqa: E402
+sys.path.insert(0, str(REPO_ROOT))
+from etl.common import DEFAULT_S3_BUCKET, read_json_from_s3  # noqa: E402
 from etl.ingestion.lib.config import AUDIT_STATE_PATH  # noqa: E402
 
-AUDIT_MD_PATH = INGEST_DIR / "audit.md"
+# audit.md stays at etl/ingestion/audit.md (tracked in git, referenced by
+# the README) regardless of where this script lives.
+AUDIT_MD_PATH = INGESTION_DIR / "audit.md"
 
 log = logging.getLogger("audit")
 
@@ -70,36 +76,19 @@ def _list_scenario_ids(s3, bucket: str) -> List[str]:
     return sorted(ids)
 
 
-def _fetch_json(s3, bucket: str, key: str) -> Optional[Dict[str, Any]]:
-    """Return parsed JSON at key, or None if the object doesn't exist."""
-    try:
-        obj = s3.get_object(Bucket=bucket, Key=key)
-    except s3.exceptions.NoSuchKey:
-        return None
-    except s3.exceptions.ClientError as e:
-        # 404 surfaces as ClientError on some boto3 versions
-        code = e.response.get("Error", {}).get("Code", "")
-        if code in ("NoSuchKey", "404"):
-            return None
-        raise
-    try:
-        return json.loads(obj["Body"].read())
-    except json.JSONDecodeError:
-        log.warning("Object at s3://%s/%s is not valid JSON", bucket, key)
-        return None
-
-
 def _collect_scenario_state(s3, bucket: str, short_code: str) -> Dict[str, Any]:
-    """Pull the three sidecar artifacts for one scenario."""
-    base = f"scenario/{short_code}/run"
-    sidecar = _fetch_json(s3, bucket, f"{base}/sidecar.json")
-    lambda_status = _fetch_json(s3, bucket, f"{base}/lambda_status.json")
-    classification = _fetch_json(s3, bucket, f"{base}/classification.json")
+    """Pull the per-scenario JSON files: sidecar (dev side) + manifest
+    (container side)."""
+    sidecar = read_json_from_s3(
+        s3, bucket, f"scenario/{short_code}/run/sidecar.json",
+    )
+    manifest = read_json_from_s3(
+        s3, bucket, f"scenario/{short_code}/{short_code}_manifest.json",
+    )
     return {
         "short_code": short_code,
         "sidecar": sidecar,
-        "lambda_status": lambda_status,
-        "classification": classification,
+        "manifest": manifest,
     }
 
 
@@ -118,7 +107,7 @@ def _read_local_state() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Failure classification
+# Failure classification (actionable text per failure kind)
 # ---------------------------------------------------------------------------
 def _action_for_local_skip(row: Dict[str, Any]) -> str:
     """Return an actionable message for a scenario skipped during ingest."""
@@ -210,6 +199,80 @@ def _action_for_unverified(row: Dict[str, Any]) -> str:
     return f"{sc} marked unverified ({status})."
 
 
+def _action_for_extraction_failure(short_code: str, manifest: Dict[str, Any]) -> str:
+    """Actionable message for a scenario whose Batch run failed or partially
+    failed."""
+    status = manifest.get("status", "UNKNOWN")
+    targets = manifest.get("extract_targets", "sv,calsim")
+    ss = manifest.get("status_summary", {}) or {}
+    parts: List[str] = []
+    if status == "SUCCEEDED_PARTIAL":
+        missing = []
+        if not ss.get("sv_csv_written"):
+            missing.append("SV")
+        if not ss.get("calsim_csv_written"):
+            missing.append("CalSim")
+        parts.append(
+            f"{short_code}: partial extract (targets={targets}). "
+            f"Missing CSV(s): {', '.join(missing) or 'unknown'}."
+        )
+    else:
+        parts.append(f"{short_code}: Batch job ended in status {status}.")
+    parts.append(
+        "Inspect the CloudWatch logs for the job id below, then re-run:\n"
+        f"  bash etl/ingestion/tools/retrigger_extraction.sh --go {short_code}"
+    )
+    job_id = manifest.get("job_id")
+    if job_id:
+        parts.append(f"Batch job id: {job_id}")
+    return "\n".join(parts)
+
+
+def _action_for_validation_failure(short_code: str, manifest: Dict[str, Any]) -> str:
+    """Actionable message for a scenario whose extracted CSV diverged from
+    the trend report reference."""
+    val = manifest.get("validation", {}) or {}
+    target = val.get("target", "?")
+    cells = val.get("mismatch_cells", 0)
+    cols = val.get("mismatch_columns", 0)
+    csv_key = val.get("mismatches_csv_key", "")
+    parts = [
+        f"{short_code}: validation failed against the trend report "
+        f"({cells} cell(s) across {cols} column(s) diverged in {target})."
+    ]
+    if csv_key:
+        parts.append(
+            f"Per-row debug data: s3://{DEFAULT_S3_BUCKET}/{csv_key}"
+        )
+    parts.append(
+        "Either the trend report or the extracted CSV is wrong. "
+        "Compare the two and update whichever is stale, then re-extract:\n"
+        f"  bash etl/ingestion/tools/retrigger_extraction.sh --go {short_code}"
+    )
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Per-scenario status decision
+# ---------------------------------------------------------------------------
+def _scenario_status(state: Dict[str, Any]) -> str:
+    """One-word status for the active-scenarios table."""
+    sidecar = state.get("sidecar")
+    manifest = state.get("manifest")
+    if not sidecar:
+        return "NO_SIDECAR"
+    if not manifest:
+        return "AWAITING_EXTRACTION"
+    mstatus = manifest.get("status", "")
+    if mstatus == "FAILED":
+        return "FAILED"
+    if mstatus == "SUCCEEDED_PARTIAL":
+        return "PARTIAL"
+    if (manifest.get("validation", {}) or {}).get("result") == "failed":
+        return "VALIDATION_FAILED"
+    return "OK"
+
+
 # ---------------------------------------------------------------------------
 # Markdown rendering
 # ---------------------------------------------------------------------------
@@ -224,7 +287,8 @@ def _render_summary(
     scenario_states: List[Dict[str, Any]],
     attention_count: int,
     cross_dupes: List[str],
-    hash_drift_count: int,
+    extraction_failure_count: int,
+    validation_failure_count: int,
     convention_warn_count: int,
 ) -> str:
     return (
@@ -236,7 +300,8 @@ def _render_summary(
         f"| Active scenarios in S3 | {len(scenario_states)} |\n"
         f"| Scenarios needing operator action | {attention_count} |\n"
         f"| Cross-scenario duplicate DV basenames | {len(cross_dupes)} |\n"
-        f"| Hash drift count | {hash_drift_count} |\n"
+        f"| Extraction failures or partials | {extraction_failure_count} |\n"
+        f"| Validation failures | {validation_failure_count} |\n"
         f"| Convention warnings | {convention_warn_count} |\n"
     )
 
@@ -244,6 +309,8 @@ def _render_summary(
 def _render_attention(
     local_skips: List[Dict[str, Any]],
     s3_no_sidecar: List[str],
+    extraction_failures: List[Dict[str, Any]],
+    validation_failures: List[Dict[str, Any]],
 ) -> str:
     out: List[str] = ["## What needs your attention\n"]
     nothing = True
@@ -272,6 +339,32 @@ def _render_attention(
         )
         for sc in s3_no_sidecar:
             out.append(f"\n#### {sc} - NO_SIDECAR\n\n```\n{_action_for_no_sidecar(sc)}\n```\n")
+
+    if extraction_failures:
+        nothing = False
+        out.append(
+            "\n### Batch extraction failed or partial\n\n"
+            "The Batch container ran but did not produce every CSV that was "
+            "requested. Re-trigger after fixing whatever caused the failure.\n"
+        )
+        for st in extraction_failures:
+            sc = st["short_code"]
+            mstatus = (st.get("manifest") or {}).get("status", "?")
+            out.append(f"\n#### {sc} - {mstatus}\n\n```\n"
+                       f"{_action_for_extraction_failure(sc, st['manifest'])}\n```\n")
+
+    if validation_failures:
+        nothing = False
+        out.append(
+            "\n### Validation failed (extracted CSV does not match trend report)\n\n"
+            "Container extraction succeeded but the produced CSV diverged "
+            "from the trend report reference. One of them is wrong. The per-row "
+            "mismatches CSV in S3 shows which cells diverged.\n"
+        )
+        for st in validation_failures:
+            sc = st["short_code"]
+            out.append(f"\n#### {sc} - VALIDATION_FAILED\n\n```\n"
+                       f"{_action_for_validation_failure(sc, st['manifest'])}\n```\n")
 
     if nothing:
         out.append("\nNothing to do. All scenarios are in a healthy state.\n")
@@ -315,56 +408,49 @@ def _render_active_table(scenario_states: List[Dict[str, Any]]) -> str:
     lines = [
         "## Active scenarios",
         "",
-        "| short_code | path | sidecar | trend | dv sha vs sidecar | sv sha vs sidecar | convention | last extracted (UTC) | status |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| short_code | path | sidecar | trend | convention | extraction | validation | mismatches | last extracted (UTC) | status |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for st in scenario_states:
         sc = st["short_code"]
         sidecar = st.get("sidecar")
-        classification = st.get("classification")
-        lambda_status = st.get("lambda_status")
+        manifest = st.get("manifest")
 
         path = (sidecar or {}).get("ingestion", {}).get("path", "?") if sidecar else "?"
         sidecar_cell = "yes" if sidecar else "MISSING"
-        trend_cell = "yes" if (lambda_status or {}).get("trend_csv_present") else \
-            ("yes" if (sidecar or {}).get("trend_csv_basename") else "no")
-
-        # SHA match versus sidecar
-        if classification and sidecar:
-            dv_match = "match" if classification.get("dv_sha256") == sidecar.get("dv_sha256") and sidecar.get("dv_sha256") else \
-                ("drift" if classification.get("dv_sha256") and sidecar.get("dv_sha256") else "?")
-            sv_match = "match" if classification.get("sv_sha256") == sidecar.get("sv_sha256") and sidecar.get("sv_sha256") else \
-                ("drift" if classification.get("sv_sha256") and sidecar.get("sv_sha256") else "?")
-        else:
-            dv_match = "?"
-            sv_match = "?"
+        trend_cell = "yes" if (sidecar or {}).get("trend_csv_basename") else "no"
 
         if sidecar:
-            conv = sidecar.get("convention_check", {})
-            conv_cell_parts = []
+            conv = sidecar.get("convention_check", {}) or {}
+            conv_parts = []
             if not conv.get("short_code_in_dv_basename", True):
-                conv_cell_parts.append("dv warn")
+                conv_parts.append("dv warn")
             if not conv.get("short_code_in_sv_basename", True):
-                conv_cell_parts.append("sv warn")
-            conv_cell = ", ".join(conv_cell_parts) if conv_cell_parts else "OK"
+                conv_parts.append("sv warn")
+            conv_cell = ", ".join(conv_parts) if conv_parts else "OK"
         else:
             conv_cell = "?"
 
-        last_extracted = (classification or {}).get("extracted_at_utc", "")
-
-        # Status
-        if not sidecar:
-            status = "NO_SIDECAR"
-        elif classification is None:
-            status = "AWAITING_EXTRACTION"
-        elif dv_match == "drift" or sv_match == "drift":
-            status = "HASH_DRIFT"
+        if manifest:
+            extraction_cell = manifest.get("status", "?")
+            validation = manifest.get("validation", {}) or {}
+            val_result = validation.get("result", "")
+            validation_cell = val_result if val_result else "-"
+            cells = validation.get("mismatch_cells", 0) or 0
+            mismatch_cell = str(cells) if cells else "-"
+            last_extracted = manifest.get("processed_at", "")
         else:
-            status = "OK"
+            extraction_cell = "-"
+            validation_cell = "-"
+            mismatch_cell = "-"
+            last_extracted = ""
+
+        status = _scenario_status(st)
 
         lines.append(
-            f"| {sc} | {path} | {sidecar_cell} | {trend_cell} | {dv_match} | "
-            f"{sv_match} | {conv_cell} | {last_extracted} | {status} |"
+            f"| {sc} | {path} | {sidecar_cell} | {trend_cell} | {conv_cell} | "
+            f"{extraction_cell} | {validation_cell} | {mismatch_cell} | "
+            f"{last_extracted} | {status} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -380,21 +466,12 @@ def _render_details(
     for st in scenario_states:
         sc = st["short_code"]
         sidecar = st.get("sidecar")
-        classification = st.get("classification")
-        lambda_status = st.get("lambda_status")
+        manifest = st.get("manifest")
+        status = _scenario_status(st)
 
-        # Decide whether to expand
-        expand = show_all
-        if not expand and not sidecar:
-            expand = True
-        if not expand and sidecar and classification:
-            if (classification.get("dv_sha256") and
-                    classification["dv_sha256"] != sidecar.get("dv_sha256")):
-                expand = True
-            if (classification.get("sv_sha256") and
-                    classification["sv_sha256"] != sidecar.get("sv_sha256")):
-                expand = True
-            conv = sidecar.get("convention_check", {})
+        expand = show_all or status != "OK"
+        if not expand and sidecar:
+            conv = sidecar.get("convention_check", {}) or {}
             if (not conv.get("short_code_in_dv_basename", True)) or \
                     (not conv.get("short_code_in_sv_basename", True)):
                 expand = True
@@ -419,26 +496,25 @@ def _render_details(
         else:
             lines.append("\n- Sidecar present: NO\n- Action: see 'What needs your attention' above")
 
-        if lambda_status:
+        if manifest:
+            ss = manifest.get("status_summary", {}) or {}
+            val = manifest.get("validation", {}) or {}
             lines.append(
-                f"\n- Lambda invoked at: {lambda_status.get('lambda_invoked_at_utc') or lambda_status.get('lambda_invoked_at') or '?'}"
-                f"\n- Lambda saw sidecar: {lambda_status.get('sidecar_present')}"
-                f"\n- Lambda saw trend CSV: {lambda_status.get('trend_csv_present')}"
-                f"\n- Batch submitted: {lambda_status.get('batch_submitted')}"
+                f"\n- Batch status: {manifest.get('status', '?')}"
+                f"\n- Extract targets: {manifest.get('extract_targets', 'sv,calsim')}"
+                f"\n- Processed at (UTC): {manifest.get('processed_at', '?')}"
+                f"\n- Batch job id: {manifest.get('job_id', '?')}"
+                f"\n- SV CSV written: {ss.get('sv_csv_written')}"
+                f"\n- CalSim CSV written: {ss.get('calsim_csv_written')}"
+                f"\n- Validation: {val.get('result', '-')} "
+                f"(target={val.get('target', '-')}, "
+                f"mismatch_cells={val.get('mismatch_cells', 0)})"
             )
-            if lambda_status.get("reason_if_not_submitted"):
-                lines.append(f"\n- Batch not submitted because: {lambda_status['reason_if_not_submitted']}")
-
-        if classification:
-            lines.append(
-                f"\n- Container selection method: {classification.get('selection_method', '?')}"
-                f"\n- Container selected DV: `{classification.get('selected_dv_basename')}` "
-                f"(sha256={_short(classification.get('dv_sha256'))}, "
-                f"match sidecar = {classification.get('dv_sha_matches_sidecar')})"
-                f"\n- Container selected SV: `{classification.get('selected_sv_basename')}` "
-                f"(sha256={_short(classification.get('sv_sha256'))}, "
-                f"match sidecar = {classification.get('sv_sha_matches_sidecar')})"
-            )
+            csv_key = val.get("mismatches_csv_key")
+            if csv_key:
+                lines.append(
+                    f"\n- Mismatches CSV: s3://{DEFAULT_S3_BUCKET}/{csv_key}"
+                )
 
         lines.append("\n")
 
@@ -468,7 +544,18 @@ def _render(
     s3_no_trend = [st["short_code"] for st in scenario_states
                    if st.get("sidecar") and not st["sidecar"].get("trend_csv_basename")]
 
-    # Cross-scenario DV duplicates
+    extraction_failures = [
+        st for st in scenario_states
+        if st.get("sidecar") and st.get("manifest")
+        and st["manifest"].get("status") in ("FAILED", "SUCCEEDED_PARTIAL")
+    ]
+    validation_failures = [
+        st for st in scenario_states
+        if st.get("sidecar") and st.get("manifest")
+        and (st["manifest"].get("validation", {}) or {}).get("result") == "failed"
+    ]
+
+    # Cross-scenario DV duplicates (sourced from the sidecars).
     dv_basename_to_scenarios: Dict[str, List[str]] = {}
     for st in scenario_states:
         sc = st["short_code"]
@@ -484,41 +571,39 @@ def _render(
         if len(scs) > 1
     ]
 
-    # Hash drift
-    hash_drift_count = 0
     convention_warn_count = 0
     for st in scenario_states:
         sidecar = st.get("sidecar")
-        classification = st.get("classification")
-        if sidecar and classification:
-            if classification.get("dv_sha256") and \
-                    classification["dv_sha256"] != sidecar.get("dv_sha256"):
-                hash_drift_count += 1
-            if classification.get("sv_sha256") and \
-                    classification["sv_sha256"] != sidecar.get("sv_sha256"):
-                hash_drift_count += 1
-        if sidecar:
-            conv = sidecar.get("convention_check", {})
-            if not conv.get("short_code_in_dv_basename", True):
-                convention_warn_count += 1
-            if not conv.get("short_code_in_sv_basename", True):
-                convention_warn_count += 1
+        if not sidecar:
+            continue
+        conv = sidecar.get("convention_check", {}) or {}
+        if not conv.get("short_code_in_dv_basename", True):
+            convention_warn_count += 1
+        if not conv.get("short_code_in_sv_basename", True):
+            convention_warn_count += 1
 
-    attention_count = len(local_skips) + len(s3_no_sidecar)
+    attention_count = (
+        len(local_skips)
+        + len(s3_no_sidecar)
+        + len(extraction_failures)
+        + len(validation_failures)
+    )
 
     parts: List[str] = []
     parts.append("# COEQWAL ETL audit\n")
     parts.append(
-        "\n_Regenerated by `python etl/ingestion/audit.py`. Open this for the "
+        "\n_Regenerated by `python etl/ingestion/tools/audit.py`. Open this for the "
         "state of the system. Open the logs (paths under each failure) only "
         "when you have a question about a specific run._\n\n"
     )
     parts.append(_render_summary(
         local_state, scenario_states, attention_count, cross_dupes,
-        hash_drift_count, convention_warn_count,
+        len(extraction_failures), len(validation_failures), convention_warn_count,
     ))
     parts.append("\n")
-    parts.append(_render_attention(local_skips, s3_no_sidecar))
+    parts.append(_render_attention(
+        local_skips, s3_no_sidecar, extraction_failures, validation_failures,
+    ))
     parts.append("\n")
     unverified_block = _render_unverified(local_unverified, s3_no_trend)
     if unverified_block:

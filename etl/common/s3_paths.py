@@ -4,11 +4,11 @@ Bucket layout (under `etl.common.aws.S3_BUCKET`):
 
     staging/scenario_data/<short_code>/   model run ZIP, trend report csv, sidecar.json
     ready/<short_code>/                   promote target, ZIP PUT triggers Lambda
-    scenario/<short_code>/run/            ZIP, sidecar, classification.json
+    scenario/<short_code>/run/            ZIP, sidecar.json (plus lambda_status.json after Pass 2b)
     scenario/<short_code>/verify/         trend report CSV
-    scenario/<short_code>/csv/            extracted CSVs
-    scenario/<short_code>/<id>_manifest.json
-    scenario/<short_code>/validation/     Batch validation reports
+    scenario/<short_code>/csv/            extracted CSVs + .units.json sidecars
+    scenario/<short_code>/<id>_manifest.json    Batch container's per-run record (validation counts inlined)
+    scenario/<short_code>/validation/     <id>_validation_mismatches.csv (per-row debug, only when mismatches found)
 """
 
 from __future__ import annotations

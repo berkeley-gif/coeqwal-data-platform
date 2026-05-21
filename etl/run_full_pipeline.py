@@ -15,7 +15,7 @@ Usage:
 
 Resume after partial failure:
   python etl/run_full_pipeline.py --resume \\
-      --report-dir etl/ingestion/output/pipeline_runs/<timestamp> \\
+      --report-dir etl/ingestion/audit_reports/pipeline_runs/<timestamp> \\
       --start-stage batch
 
 Requires Cloud9 / IAM: S3 read on coeqwal-model-run, batch:ListJobs, batch:DescribeJobs,
@@ -45,14 +45,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 INGEST_SCRIPT = REPO_ROOT / "etl" / "ingestion" / "gdrive_bulk_download.py"
 STATS_SCRIPT = REPO_ROOT / "etl" / "statistics" / "run_all.py"
 VERIFY_SCRIPT = REPO_ROOT / "etl" / "statistics" / "verify_all_sections.py"
-SCAN_AUDIT_CSV = REPO_ROOT / "etl" / "ingestion" / "output" / "scan_audit.csv"
-AUDIT_REPORT_CSV = REPO_ROOT / "etl" / "ingestion" / "output" / "audit_report.csv"
+SCAN_AUDIT_CSV = REPO_ROOT / "etl" / "ingestion" / "audit_reports" / "scan_audit.csv"
+AUDIT_REPORT_CSV = REPO_ROOT / "etl" / "ingestion" / "audit_reports" / "audit_report.csv"
 
 DEFAULT_LISTING_CSV = (
     "etl/ingestion/scenario_listing/model_run_file_source_working.csv"
 )
 
-INGEST_OUTPUT_PREFIX = Path("etl/ingestion/output")
+INGEST_OUTPUT_PREFIX = Path("etl/ingestion/audit_reports")
 
 # Shared constants from etl/common/. Make `from etl.common import X` work
 # when this script is invoked as `python etl/run_full_pipeline.py`.
@@ -61,16 +61,8 @@ if str(REPO_ROOT) not in sys.path:
 from etl.common import (  # noqa: E402
     S3_BUCKET as DEFAULT_S3_BUCKET,
     BATCH_QUEUE as DEFAULT_BATCH_QUEUE,
+    read_json_from_s3,
 )
-
-# Import manifest reader from ingestion helpers (avoid duplicating S3 JSON IO).
-_INGEST_DIR = str(REPO_ROOT / "etl" / "ingestion")
-if _INGEST_DIR not in sys.path:
-    sys.path.insert(0, _INGEST_DIR)
-try:
-    from check_extraction_results import read_json_from_s3  # noqa: E402
-except ImportError:
-    read_json_from_s3 = None  # type: ignore
 
 log = logging.getLogger("run_full_pipeline")
 
@@ -291,7 +283,7 @@ def main() -> int:
     parser.add_argument(
         "--report-dir",
         default=None,
-        help="Directory for logs + pipeline_state.json (default: timestamp under ingestion/output/pipeline_runs)",
+        help="Directory for logs + pipeline_state.json (default: timestamp under ingestion/audit_reports/pipeline_runs)",
     )
     parser.add_argument(
         "--start-stage",
@@ -571,9 +563,6 @@ def main() -> int:
 
     # ----- WAIT BATCH -----
     if should_run_stage("batch", args.start_stage, skip):
-        if read_json_from_s3 is None:
-            raise SystemExit("check_extraction_results.read_json_from_s3 unavailable")
-
         banner(f"STAGE 4/{len(STAGES_ORDER)}: wait-for-Batch ({len(ok_after_promote)} scenarios)")
         if args.dry_run:
             log.warning("Skipping Batch wait (--dry-run ingest)")

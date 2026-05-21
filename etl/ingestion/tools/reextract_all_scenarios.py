@@ -8,19 +8,22 @@ ones at scenario/{id}/csv/.
 
 Usage:
     # Dry run.list what would be submitted
-    python reextract_all_scenarios.py --dry-run
+    python etl/ingestion/tools/reextract_all_scenarios.py --dry-run
 
     # Re-extract all scenarios
-    python reextract_all_scenarios.py
+    python etl/ingestion/tools/reextract_all_scenarios.py
 
     # Re-extract specific scenarios
-    python reextract_all_scenarios.py --scenarios s0020,s0028
+    python etl/ingestion/tools/reextract_all_scenarios.py --scenarios s0020,s0028
 
     # Re-extract only the SV input (skip CalSim output)
-    python reextract_all_scenarios.py --sv-only
+    python etl/ingestion/tools/reextract_all_scenarios.py --sv-only
+
+    # Re-extract only the CalSim (DV) output (skip SV input)
+    python etl/ingestion/tools/reextract_all_scenarios.py --dv-only
 
     # Include validation against reference CSVs in scenario/{id}/verify/
-    python reextract_all_scenarios.py --validate
+    python etl/ingestion/tools/reextract_all_scenarios.py --validate
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ from pathlib import Path
 
 import boto3
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import (  # noqa: E402
     AWS_REGION as REGION,
     BATCH_JOB_DEFINITION as JOB_DEFINITION,
@@ -86,7 +89,8 @@ def find_validation_csv(s3, bucket: str, scenario_id: str) -> str:
 
 
 def submit_job(batch_client, scenario_id: str, zip_key: str,
-               validation_csv_key: str = "", sv_only: bool = False,
+               validation_csv_key: str = "",
+               extract_targets: str = "sv,calsim",
                memory_mb: int | None = None, vcpus: int | None = None):
     """Submit an AWS Batch job matching the Lambda's format."""
     job_name = f"reextract-{scenario_id}-{int(time.time())}"
@@ -96,6 +100,7 @@ def submit_job(batch_client, scenario_id: str, zip_key: str,
         {"name": "ZIP_BUCKET", "value": S3_BUCKET},
         {"name": "ZIP_KEY", "value": zip_key},
         {"name": "VALIDATION_REF_CSV_KEY", "value": validation_csv_key},
+        {"name": "EXTRACT_TARGETS", "value": extract_targets},
         {"name": "ABS_TOL", "value": "1e-6"},
         {"name": "REL_TOL", "value": "1e-6"},
     ]
@@ -143,9 +148,14 @@ def main():
         "--validate", action="store_true",
         help="Include validation against reference CSVs in scenario/{id}/verify/"
     )
-    parser.add_argument(
+    targets_group = parser.add_mutually_exclusive_group()
+    targets_group.add_argument(
         "--sv-only", action="store_true",
-        help="(Not yet implemented) Re-extract only SV input files"
+        help="Re-extract only the SV input (skip CalSim output)"
+    )
+    targets_group.add_argument(
+        "--dv-only", action="store_true",
+        help="Re-extract only the CalSim (DV) output (skip SV input)"
     )
     parser.add_argument(
         "--memory", type=int, default=None,
@@ -206,6 +216,12 @@ def main():
         print("Aborted.")
         return
 
+    extract_targets = (
+        "sv" if args.sv_only
+        else "calsim" if args.dv_only
+        else "sv,calsim"
+    )
+
     print()
     for job in jobs:
         job_id = submit_job(
@@ -213,6 +229,7 @@ def main():
             job["scenario_id"],
             job["zip_key"],
             job["validation_csv_key"],
+            extract_targets=extract_targets,
             memory_mb=args.memory,
             vcpus=args.vcpus,
         )

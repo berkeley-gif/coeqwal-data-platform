@@ -21,6 +21,11 @@ VALIDATION_REF_CSV_KEY="${VALIDATION_REF_CSV_KEY:-}"  # e.g. scenario/s0020/veri
 ABS_TOL="${VALIDATION_ABS_TOL:-1e-06}"
 REL_TOL="${VALIDATION_REL_TOL:-1e-06}"
 
+# Which DSS sides to extract. Default is both; set to "sv" or "calsim" to
+# extract only one. Used by `reextract_all_scenarios.py --sv-only` /
+# `--dv-only` to skip the side the operator does not need.
+EXTRACT_TARGETS="${EXTRACT_TARGETS:-sv,calsim}"
+
 WORKDIR=/tmp/work
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
@@ -55,6 +60,30 @@ cat "${CLASSIFY_ENV}"
 
 # shellcheck disable=SC1090
 source "${CLASSIFY_ENV}"   # exports: SCENARIO_ID, SV_PATH, CALSIM_OUTPUT_PATH
+
+# Apply EXTRACT_TARGETS gating: blank out the path for any side the operator
+# asked us to skip. The downstream `if [[ -n "${SV_PATH}" ]]` / `if [[ -n
+# "${CALSIM_OUTPUT_PATH}" ]]` guards then skip that side cleanly. We also
+# remember the original detection state so the manifest can distinguish
+# "intentionally skipped" from "DSS not found in the ZIP".
+SV_DETECTED_RAW=$([[ -n "${SV_PATH}" ]] && echo true || echo false)
+CAL_DETECTED_RAW=$([[ -n "${CALSIM_OUTPUT_PATH}" ]] && echo true || echo false)
+WANT_SV=true
+WANT_CAL=true
+if [[ ",${EXTRACT_TARGETS}," != *",sv,"* ]]; then
+  WANT_SV=false
+  SV_PATH=""
+  echo "[INFO] EXTRACT_TARGETS=${EXTRACT_TARGETS}: skipping SV extraction."
+fi
+if [[ ",${EXTRACT_TARGETS}," != *",calsim,"* ]]; then
+  WANT_CAL=false
+  CALSIM_OUTPUT_PATH=""
+  echo "[INFO] EXTRACT_TARGETS=${EXTRACT_TARGETS}: skipping CalSim extraction."
+fi
+if [[ "${WANT_SV}" != true && "${WANT_CAL}" != true ]]; then
+  echo "[ERROR] EXTRACT_TARGETS=${EXTRACT_TARGETS}: nothing to do." >&2
+  exit 1
+fi
 
 # ----------------------------- Convert DSS -> CSV ------------------------
 SV_CSV_LOCAL="${WORKDIR}/${SCENARIO_ID}_coeqwal_sv_input.csv"
@@ -217,6 +246,23 @@ fi
 # --- right before you write the manifest: JSON-escape the summary text ---
 VALIDATION_SUMMARY_JSON=$(python -c 'import json,sys; print(json.dumps(sys.stdin.read()))' <<< "$VALIDATION_SUMMARY")
 
+# Inline the two interesting counts from validate_csvs.py's local summary
+# file so we can drop the separate <id>_validation_summary.json S3 object.
+# Per-row debug data still goes out as <id>_validation_mismatches.csv below.
+MISMATCH_COLUMNS=0
+MISMATCH_CELLS=0
+if [[ -f "${VALIDATION_JSON_LOCAL:-}" ]]; then
+  read -r MISMATCH_COLUMNS MISMATCH_CELLS <<< "$(python -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    print(int(d.get("mismatch_columns", 0)), int(d.get("mismatch_cells", 0)))
+except Exception:
+    print("0 0")
+' "${VALIDATION_JSON_LOCAL}")"
+fi
+
 # ----------------------------- Upload outputs ----------------------------
 CSV_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/csv/"
 VALIDATION_DIR="${OUTPUT_PREFIX}${SCENARIO_ID}/validation/"
@@ -241,14 +287,12 @@ if [[ -f "${CAL_CSV_LOCAL}.units.json" ]]; then
   echo "[INFO] Uploaded CalSim unit map: s3://${ZIP_BUCKET}/${CAL_UNITS_KEY}"
 fi
 
-# Upload validation reports
-VALIDATION_JSON_KEY=""
+# Upload validation reports. The per-column summary (mismatch_columns,
+# mismatch_cells) is inlined into the manifest above, so we no longer
+# upload validation_summary.json as a separate S3 object. The per-row
+# mismatches CSV is the only artifact rich enough to debug a failure and
+# stays on its own key.
 VALIDATION_CSV_KEY=""
-if [[ -f "${VALIDATION_JSON_LOCAL:-}" ]]; then
-  VALIDATION_JSON_KEY="${VALIDATION_DIR}${SCENARIO_ID}_validation_summary.json"
-  aws s3 cp "${VALIDATION_JSON_LOCAL}" "s3://${ZIP_BUCKET}/${VALIDATION_JSON_KEY}"
-  echo "[INFO] Uploaded validation summary: s3://${ZIP_BUCKET}/${VALIDATION_JSON_KEY}"
-fi
 if [[ -f "${VALIDATION_CSV_LOCAL:-}" ]]; then
   VALIDATION_CSV_KEY="${VALIDATION_DIR}${SCENARIO_ID}_validation_mismatches.csv"
   aws s3 cp "${VALIDATION_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${VALIDATION_CSV_KEY}"
@@ -256,31 +300,48 @@ if [[ -f "${VALIDATION_CSV_LOCAL:-}" ]]; then
 fi
 
 # ----------------------------- Compute final status ----------------------
-SV_DETECTED=$([[ -n "${SV_PATH}" ]] && echo true || echo false)
-CAL_DETECTED=$([[ -n "${CALSIM_OUTPUT_PATH}" ]] && echo true || echo false)
+# SV_DETECTED / CAL_DETECTED reflect what the ZIP actually contained, taken
+# before EXTRACT_TARGETS gating blanked the paths. Use the *_RAW values so
+# the manifest tells the truth about the upload, and a separate
+# WANT_SV / WANT_CAL pair tells the truth about what we asked to extract.
+SV_DETECTED="${SV_DETECTED_RAW}"
+CAL_DETECTED="${CAL_DETECTED_RAW}"
 SV_CSV_WRITTEN=$([[ -f "${SV_CSV_LOCAL}" ]] && echo true || echo false)
 CAL_CSV_WRITTEN=$([[ -f "${CAL_CSV_LOCAL}" ]] && echo true || echo false)
 
-# Status is based on what was actually produced, not just what was detected.
-# If a DSS was detected but its CSV was not written, that's a failure.
-if [[ -z "${SV_PATH}" && -z "${CALSIM_OUTPUT_PATH}" ]]; then
+# Refuse to run if the ZIP yielded no DSS candidates at all. EXTRACT_TARGETS
+# is already enforced higher up, so reaching here with both raw flags false
+# means the upload itself was empty.
+if [[ "${SV_DETECTED_RAW}" != true && "${CAL_DETECTED_RAW}" != true ]]; then
   echo "[ERROR] No DSS candidates in expected folders; failing." >&2
   exit 1
 fi
 
+# A failure means: we asked to extract this side, the DSS was present, and
+# the CSV did not get written. Intentional skips via EXTRACT_TARGETS are
+# not failures.
 FAILURES=0
-if [[ -n "${SV_PATH}" && ! -f "${SV_CSV_LOCAL}" ]]; then
+if [[ "${WANT_SV}" == true && -n "${SV_PATH}" && ! -f "${SV_CSV_LOCAL}" ]]; then
   echo "[ERROR] SV DSS detected but CSV was not produced."
   FAILURES=$((FAILURES + 1))
 fi
-if [[ -n "${CALSIM_OUTPUT_PATH}" && ! -f "${CAL_CSV_LOCAL}" ]]; then
+if [[ "${WANT_CAL}" == true && -n "${CALSIM_OUTPUT_PATH}" && ! -f "${CAL_CSV_LOCAL}" ]]; then
   echo "[ERROR] CalSim output DSS detected but CSV was not produced."
   FAILURES=$((FAILURES + 1))
 fi
 
+# SUCCEEDED only when every requested side produced its CSV. A partial
+# extract by design (--sv-only / --dv-only) is therefore SUCCEEDED, not
+# SUCCEEDED_PARTIAL. SUCCEEDED_PARTIAL is reserved for the case where both
+# sides were requested but only one produced a CSV.
+SV_OK=true
+CAL_OK=true
+[[ "${WANT_SV}" == true && ! -f "${SV_CSV_LOCAL}" ]] && SV_OK=false
+[[ "${WANT_CAL}" == true && ! -f "${CAL_CSV_LOCAL}" ]] && CAL_OK=false
+
 if [[ ${FAILURES} -gt 0 ]]; then
   FINAL_STATUS="FAILED"
-elif [[ -n "${SV_PATH}" && -n "${CALSIM_OUTPUT_PATH}" ]]; then
+elif [[ "${SV_OK}" == true && "${CAL_OK}" == true ]]; then
   FINAL_STATUS="SUCCEEDED"
 else
   FINAL_STATUS="SUCCEEDED_PARTIAL"
@@ -293,6 +354,7 @@ cat > "${WORKDIR}/manifest.json" <<MF
   "processed_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
   "job_id": "${JOB_ID}",
   "status": "${FINAL_STATUS}",
+  "extract_targets": "${EXTRACT_TARGETS}",
   "original_upload_key": "${ZIP_KEY}",
   "dss_files_detected": {
     "sv_input": "${SV_PATH}",
@@ -309,10 +371,9 @@ cat > "${WORKDIR}/manifest.json" <<MF
     "target": "${VALIDATION_TARGET}",
     "result": "${VALIDATION_RESULT}",
     "summary": ${VALIDATION_SUMMARY_JSON},
-    "detailed_reports": {
-      "summary_json_key": "${VALIDATION_JSON_KEY}",
-      "mismatches_csv_key": "${VALIDATION_CSV_KEY}"
-    }
+    "mismatch_columns": ${MISMATCH_COLUMNS},
+    "mismatch_cells": ${MISMATCH_CELLS},
+    "mismatches_csv_key": "${VALIDATION_CSV_KEY}"
   },
   "unit_verification": {
     "sv_unit_mismatches": ${SV_UNIT_MISMATCHES},

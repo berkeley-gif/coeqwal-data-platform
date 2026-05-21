@@ -27,6 +27,7 @@ from etl.common.aws import (
     JOB_QUEUE,
     LAMBDA_NAME,
     S3_BUCKET,
+    read_json_from_s3,
 )
 from etl.common.db import (
     DATABASE_URL_ENV,
@@ -67,6 +68,8 @@ __all__ = [
     "DEFAULT_S3_BUCKET",
     "JOB_DEFINITION",
     "JOB_QUEUE",
+    # aws helpers
+    "read_json_from_s3",
     # db
     "DATABASE_URL_ENV",
     "DatabaseUrlMissing",
