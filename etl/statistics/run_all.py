@@ -133,11 +133,14 @@ ETL_MODULES = {
 
 from scenarios import SCENARIOS  # noqa: E402
 
+# Make `from etl.common import X` work when invoked as
+# `python etl/statistics/run_all.py` from the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import S3_BUCKET as BUCKET  # noqa: E402
+
 # Track failures in real time for the running tally
 _failure_count = 0
 _failure_log: List[str] = []
-
-BUCKET = "coeqwal-model-run"
 
 
 def preflight_check_duplicates(scenario_id: str, csv_path: Optional[str] = None) -> int:

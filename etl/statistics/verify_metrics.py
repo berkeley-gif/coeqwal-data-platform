@@ -35,6 +35,10 @@ import pandas as pd
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Make `from etl.common import X` work when invoked from repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import S3_BUCKET, calsim_output_csv_key, s3_url  # noqa: E402
+
 from reservoirs.reservoir_metrics import (
     calculate_flood_pool_probability,
     calculate_dead_pool_probability,
@@ -63,7 +67,7 @@ NOTEBOOK_RESERVOIRS = [
 ]
 
 # Default S3 path for notebook reference output
-DEFAULT_REFERENCE_S3 = "s3://coeqwal-model-run/reference/all_metrics_output.csv"
+DEFAULT_REFERENCE_S3 = s3_url(S3_BUCKET, "reference/all_metrics_output.csv")
 
 
 def calculate_notebook_metrics(df: pd.DataFrame, reservoir_code: str) -> dict:
@@ -313,7 +317,7 @@ def main():
     else:
         # Fall back to S3
         use_s3 = True
-        csv_source = f"s3://coeqwal-model-run/scenario/{args.scenario}/csv/{args.scenario}_coeqwal_calsim_output.csv"
+        csv_source = s3_url(S3_BUCKET, calsim_output_csv_key(args.scenario))
 
     print(f"CSV Source: {csv_source}")
     print("Loading data...")

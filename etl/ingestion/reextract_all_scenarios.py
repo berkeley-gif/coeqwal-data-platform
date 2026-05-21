@@ -26,13 +26,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import sys
 import time
+from pathlib import Path
+
 import boto3
 
-S3_BUCKET = "coeqwal-model-run"
-JOB_QUEUE = "coeqwal-dss-queue"
-JOB_DEFINITION = "coeqwal-dss-jobdef"
-REGION = "us-west-2"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import (  # noqa: E402
+    AWS_REGION as REGION,
+    BATCH_JOB_DEFINITION as JOB_DEFINITION,
+    BATCH_QUEUE as JOB_QUEUE,
+    S3_BUCKET,
+)
 
 
 def find_scenario_zips(s3, bucket: str, scenario_ids: list[str] | None = None):

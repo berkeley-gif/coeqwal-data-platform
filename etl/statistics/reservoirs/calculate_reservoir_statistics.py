@@ -67,7 +67,10 @@ log = logging.getLogger("reservoir_statistics")
 from scenarios import SCENARIOS  # noqa: E402
 
 # S3 bucket configuration
-S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from etl.common import S3_BUCKET  # noqa: E402
 
 # Path to reservoir_entity.csv (relative to project root)
 # From reservoirs/ -> statistics/ -> etl/ -> coeqwal-backend/ -> database/...

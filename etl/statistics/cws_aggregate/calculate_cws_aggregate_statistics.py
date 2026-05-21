@@ -65,7 +65,10 @@ log = logging.getLogger("cws_aggregate_statistics")
 
 # Known scenarios
 # S3 bucket configuration
-S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from etl.common import S3_BUCKET  # noqa: E402
 
 # Percentiles for statistics
 DELIVERY_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]

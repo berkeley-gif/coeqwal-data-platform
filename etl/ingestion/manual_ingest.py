@@ -58,20 +58,25 @@ from typing import Any, Dict, Optional, Tuple
 
 import boto3
 
-# Share constants with gdrive_bulk_download.py.
 INGEST_DIR = Path(__file__).parent
-sys.path.insert(0, str(INGEST_DIR))
 
-from gdrive_bulk_download import (  # noqa: E402
+# Shared AWS / S3 constants live in etl/common (one source of truth).
+sys.path.insert(0, str(INGEST_DIR.parent.parent))
+from etl.common import (  # noqa: E402
     AWS_REGION,
     DEFAULT_S3_BUCKET,
     JOB_DEFINITION,
     JOB_QUEUE,
     READY_PREFIX,
-    SCENARIO_RUN_PREFIX,
-    SIDECAR_SCHEMA_VERSION,
-    SCRIPT_VERSION,
+    SCENARIO_PREFIX as SCENARIO_RUN_PREFIX,
     STAGING_PREFIX,
+)
+
+# Ingestion-specific constants live in gdrive_bulk_download.py.
+sys.path.insert(0, str(INGEST_DIR))
+from gdrive_bulk_download import (  # noqa: E402
+    SCRIPT_VERSION,
+    SIDECAR_SCHEMA_VERSION,
 )
 
 log = logging.getLogger("manual_ingest")

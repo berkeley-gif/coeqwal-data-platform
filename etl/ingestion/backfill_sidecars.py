@@ -40,12 +40,18 @@ from typing import Any, Dict, List, Optional
 import boto3
 
 INGEST_DIR = Path(__file__).parent
-sys.path.insert(0, str(INGEST_DIR))
 
-# Re-use the canonical reader and constants from gdrive_bulk_download.py.
-from gdrive_bulk_download import (  # noqa: E402
+# Shared bucket / S3 prefix constants live in etl/common.
+sys.path.insert(0, str(INGEST_DIR.parent.parent))
+from etl.common import (  # noqa: E402
     DEFAULT_S3_BUCKET,
-    SCENARIO_RUN_PREFIX,
+    SCENARIO_PREFIX as SCENARIO_RUN_PREFIX,
+)
+
+# Ingestion-specific helpers (CSV reader, working CSV guard, provenance
+# tags) live in gdrive_bulk_download.py.
+sys.path.insert(0, str(INGEST_DIR))
+from gdrive_bulk_download import (  # noqa: E402
     SPREADSHEET_URL,
     WORKING_CSV_PATH,
     _operator_tag,  # noqa: F401

@@ -4,13 +4,33 @@
 
 <!-- ACTIVE_SCENARIOS:BEGIN -->
 
-**List of active scenarios (72)**: s0011, s0020, s0021, s0023, s0024, s0025, s0026, s0027, s0028, s0030, s0031, s0032, s0033, s0035, s0036, s0037, s0039, s0040, s0041, s0042, s0044, s0045, s0046, s0047, s0048, s0049, s0050, s0051, s0056, s0057, s0058, s0059, s0060, s0062, s0063, s0065, s0067, s0068, s0069, s0071, s0072, s0073, s0074, s0075, s0076, s0077, s0078, s0079, s0080, s0081, s0082, s0083, s0084, s0085, s0087, s0088, s0089, s0091, s0092, s0093, s0094, s0095, s0096, s0097, s0098, s0099, s0100, s0101, s0102, s0103, s0104, s0105
+**List of active scenarios (72, as of May 21, 2026)**: s0011, s0020, s0021, s0023, s0024, s0025, s0026, s0027, s0028, s0030, s0031, s0032, s0033, s0035, s0036, s0037, s0039, s0040, s0041, s0042, s0044, s0045, s0046, s0047, s0048, s0049, s0050, s0051, s0056, s0057, s0058, s0059, s0060, s0062, s0063, s0065, s0067, s0068, s0069, s0071, s0072, s0073, s0074, s0075, s0076, s0077, s0078, s0079, s0080, s0081, s0082, s0083, s0084, s0085, s0087, s0088, s0089, s0091, s0092, s0093, s0094, s0095, s0096, s0097, s0098, s0099, s0100, s0101, s0102, s0103, s0104, s0105
 
-_Run `python etl/ingestion/refresh_active_scenarios.py` to pull the current `is_active` set from the API into this README._
+_Run `python etl/ingestion/refresh_active_scenarios.py` to pull the current `is_active` set from the API into this README.
 
 <!-- ACTIVE_SCENARIOS:END -->
 
 ## What do we use the COEQWAL ETL for?
+
+We use the COEQWAL ETL to run two parallel pipelines, with the first pipeline having two sub-pipelines.
+
+I. The first pipeline is the scenario model run data pipeline. This processes data for:
+
+1. model run data statistics inserted into the database tables, following the [COEQWAL Platform Content Summary spreadsheet, outcomes tab](https://docs.google.com/spreadsheets/d/1xcQIR_J96-cs7BuCrXjznwkinLgxl-Pf9tA3mJ2GiyA/edit?gid=1094338461#gid=1094338461). This data is used in the Data in Depth section of the COEQWAL website.
+
+2. full, original, model run zip file as is + csv extractions of the full input (SV) and full output (DV) data stored in the s3 bucket. This data is available for download in the Get Data section of the website.
+
+II. The second pipeline is the tier data pipeline. This pipeline extracts the integral tier data (1 - 4*) and inserts it into database tables. This data used in the visualizations in the Tools section of the COEQWAL website.
+
+* During the third tier data run, after the third batch of scenario data was released (hydroclimate cc 95) salmon data appeared on a scale of 1-5. This needs to be resolved. It is an item in the ROADMAP below.
+
+Each pipeline has its own associated python files and stages. 
+
+
+## How do we run the COEQWAL ETL?
+
+Pipeline I.2 (dss-to-csv) reads CalSim DSS with `pydsstools` (see [COEQWAL-pydsstools](https://github.com/berkeley-gif/COEQWAL-pydsstools)), which depends on the native HEC library built into our image as `heclib.a`. The [batch container](batch-container/) Dockerfile produces a single Linux `linux/amd64` image. AWS Batch runs it on Fargate Spot after pulling it from ECR. The repo is set up so that you can run that same image locally.
+
 
 We use the ETL to process the model run scenario data for two purposes:
 1. to store the model run zip file and the extracted input and output csvs in an s3 bucket for direct download via the website's Get data page.
@@ -838,3 +858,11 @@ IAM console: https://us-west-2.console.aws.amazon.com/iam/home#/roles/details/AW
 Full JSON policy is in [docs/INFRASTRUCTURE.md](../docs/INFRASTRUCTURE.md) under the IAM section.
 
 The Cloud9 IAM role credentials never expire. Long-running jobs in `tmux` keep running even when your SSO session drops. SSO expiring only locks you out of the Cloud9 browser UI until you re-authenticate.
+
+## ROADMAP
+
+- Currently we are using "Dino's spreadsheet" as a listing of the paths to the model run data. This process needs to be hardened.
+- Tier teams need to be regularly reminded of the row/column format of the csv's they place in the dropbox.
+- Tier teams have been asked by the project to submit continuous data.
+- During the third tier data run, after the third batch of scenario data was released (hydroclimate cc 95) salmon data appeared on a scale of 1-5. This needs to be resolved.
+- (Related) We need to set a LICENSE on [COEQWAL-pydsstools](https://github.com/berkeley-gif/COEQWAL-pydsstools). I'm noticing that `pydsstools` is undergoing updates, so we may (or may not) decide to update our library.

@@ -93,8 +93,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("ag_statistics")
 
-# S3 bucket configuration
-S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
+# Shared S3 bucket constant. Make `from etl.common import X` work when
+# invoked as `python etl/statistics/ag/...py` from the repo root.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from etl.common import S3_BUCKET  # noqa: E402
 
 DV_OUTPUT_S3_KEYS = [
     "scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",

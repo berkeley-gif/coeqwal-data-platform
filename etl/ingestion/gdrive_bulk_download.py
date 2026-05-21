@@ -116,6 +116,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import zipfile
@@ -126,28 +127,25 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 
-# ---------------------------------------------------------------------------
-# Operator-tweakable constants
-# ---------------------------------------------------------------------------
-# Everything an operator might want to change without reading the rest of
-# the script lives in this block. The helper scripts in this directory
-# (manual_ingest.py, backfill_sidecars.py, audit.py) import from here so
-# there is a single source of truth.
+# Make `from etl.common import X` work when this script is invoked as
+# `python etl/ingestion/gdrive_bulk_download.py` from the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-# AWS
-DEFAULT_S3_BUCKET = "coeqwal-model-run"
-AWS_REGION = "us-west-2"
-JOB_QUEUE = "coeqwal-dss-queue"
-JOB_DEFINITION = "coeqwal-dss-jobdef"
+from etl.common import (  # noqa: E402
+    AWS_REGION,
+    BATCH_JOB_DEFINITION as JOB_DEFINITION,
+    BATCH_QUEUE as JOB_QUEUE,
+    DEFAULT_S3_BUCKET,
+    READY_PREFIX,
+    SCENARIO_PREFIX as SCENARIO_RUN_PREFIX,
+    STAGING_PREFIX,
+)
 
-# S3 key layout. Each `*_PREFIX` is the directory under the bucket root.
-# scenario_data lives under staging/ alongside tier_data/ so that tier
-# uploads do not collide with scenario ingestion. ZIPs land in
-# READY_PREFIX/<id>/ as the Lambda trigger; the container then moves
-# each scenario under SCENARIO_RUN_PREFIX/<id>/run/.
-STAGING_PREFIX = "staging/scenario_data"
-READY_PREFIX = "ready"
-SCENARIO_RUN_PREFIX = "scenario"
+# ---------------------------------------------------------------------------
+# Operator-tweakable constants (script-local, not shared with other ETL code)
+# ---------------------------------------------------------------------------
+# Shared constants now live in `etl/common/aws.py` and `etl/common/s3_paths.py`
+# and are imported above. Everything below is specific to this script.
 
 # COEQWAL Shared Drive layout: scenario folders live four levels deep under
 # the rclone remote root. id-mode rows bypass this entirely (the folder URL

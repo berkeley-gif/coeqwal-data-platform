@@ -17,7 +17,10 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CHANNEL_CSV = PROJECT_ROOT / "database/seed_tables/04_calsim_data/channel_entity.csv"
-S3_BUCKET = os.getenv("S3_BUCKET", "coeqwal-model-run")
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from etl.common import S3_BUCKET  # noqa: E402
 
 ALL_SCENARIOS = [
     "s0011",

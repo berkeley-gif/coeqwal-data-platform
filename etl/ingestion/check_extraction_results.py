@@ -30,8 +30,8 @@ from typing import Optional
 
 import boto3
 
-S3_BUCKET = "coeqwal-model-run"
-REGION = "us-west-2"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import S3_BUCKET, AWS_REGION as REGION  # noqa: E402
 
 # Default output directory for audit CSVs. Gitignored via etl/**/output/.
 DEFAULT_OUTPUT_DIR = Path(__file__).parent / "output"

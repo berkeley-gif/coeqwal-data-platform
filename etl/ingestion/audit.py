@@ -38,15 +38,15 @@ from typing import Any, Dict, List, Optional
 
 import boto3
 
-# Share the constants with gdrive_bulk_download.py so there is one source
-# of truth for bucket, prefix, and output dir.
 INGEST_DIR = Path(__file__).parent
-sys.path.insert(0, str(INGEST_DIR))
 
-from gdrive_bulk_download import (  # noqa: E402
-    AUDIT_STATE_PATH,
-    DEFAULT_S3_BUCKET,
-)
+# Shared bucket constant lives in etl/common (one source of truth).
+sys.path.insert(0, str(INGEST_DIR.parent.parent))
+from etl.common import DEFAULT_S3_BUCKET  # noqa: E402
+
+# Ingestion-specific paths live in gdrive_bulk_download.py.
+sys.path.insert(0, str(INGEST_DIR))
+from gdrive_bulk_download import AUDIT_STATE_PATH  # noqa: E402
 
 AUDIT_MD_PATH = INGEST_DIR / "audit.md"
 

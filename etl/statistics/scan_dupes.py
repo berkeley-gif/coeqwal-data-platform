@@ -43,7 +43,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("scan_dupes")
 
-BUCKET = "coeqwal-model-run"
+import sys
+from pathlib import Path as _Path
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from etl.common import S3_BUCKET as BUCKET  # noqa: E402
 
 
 def _csv_key(scenario_id: str) -> str:
