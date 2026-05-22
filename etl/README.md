@@ -55,6 +55,8 @@ Runs in order. Each stage feeds the next via S3.
 | [`common/`](common/) | Shared Python helpers used by both pipelines: AWS resource names (`S3_BUCKET`, `BATCH_QUEUE`, ...), S3 path builders (`staging_prefix`, `ingest_record_key`, `extract_record_key`, ...), and a `DATABASE_URL`-aware `get_conn()`. Import from `etl.common`. |
 | [`verification/`](verification/) | End-to-end verification scripts spanning Layers 1-4 (extraction -> statistics -> DB -> API). Each layer's verifier lives next to the code it verifies; this directory holds the cross-layer runner and reference PDFs. |
 
+Scripts under `etl/` are invoked directly (`python etl/path/to/script.py`) from Cloud9, the Batch container, or a local shell, so each script adjusts `sys.path` to make `etl.common` importable. This is the intentional pattern, not a workaround for a missing package install. See the module docstring in [`etl/common/__init__.py`](common/__init__.py) for the rationale.
+
 ### Local-only working space (gitignored)
 
 These directories exist on the developer's machine but never enter git. They are regrowable from S3 or from team-supplied source files.

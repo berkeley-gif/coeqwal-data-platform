@@ -35,7 +35,8 @@ import pandas as pd
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Make `from etl.common import X` work when invoked from repo root.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from etl.common import S3_BUCKET, calsim_output_csv_key, s3_url  # noqa: E402
 

@@ -1,18 +1,46 @@
-"""Shared constants and helpers for the COEQWAL ETL like AWS resource names, S3 key layout, database connection helpers.
+"""Shared constants and helpers for the COEQWAL ETL: AWS resource names,
+S3 key layout, database connection helpers.
 
 Import everything from this package directly:
 
     from etl.common import S3_BUCKET, calsim_output_csv_key, get_db_connection
 
-Scripts invoked as `python etl/foo/bar.py` from the repo root need this
-preamble first so the `etl` package is importable:
+The sys.path preamble (and why every script has one)
+----------------------------------------------------
+
+Scripts under `etl/` are designed to be invoked directly as
+`python etl/path/to/script.py` from the repo root, on Cloud9, in a local
+venv, in the Batch container, or anywhere else. To make `etl.common`
+importable in that context, each script starts with:
 
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[N]))
+    from etl.common import S3_BUCKET  # noqa: E402
 
-`N` is the depth from the script to the repo root (2 for
-`etl/ingestion/foo.py`, 3 for `etl/statistics/ag/foo.py`).
+`N` is the depth from the script to the repo root. 2 for
+`etl/ingestion/foo.py`, 3 for `etl/statistics/ag/foo.py`.
+
+This is the intentional design, not a workaround. The alternative was to
+declare `etl` as an installable package and add `-e .` to
+`requirements.txt`. We picked the path manipulation because:
+
+1. It is self-documenting at the call site. A reader opening any script
+   sees the `sys.path.insert(...)` line and immediately understands the
+   script's relationship to the rest of the codebase. The mechanism is
+   local information, not an invisible side effect of a package install.
+2. It matches how the production runtimes load this code. The Batch
+   container and Lambda zip ship the code with their own packaging. They
+   do not run `pip install -e .`. Cloud9 dev environments do not either.
+   Keeping the dev pattern identical to the prod pattern reduces
+   "works on my machine" surface area.
+3. There is no setup-state to drift. Every run computes the repo root
+   fresh from `__file__`. No re-install required after `git pull`. No
+   stale `.pth` file when a Cloud9 environment is rebuilt or a venv is
+   moved.
+
+The `# noqa: E402` on the `from etl.common import ...` line acknowledges
+the trade. It is not an apology.
 """
 
 from etl.common.aws import (

@@ -17,6 +17,9 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CHANNEL_CSV = PROJECT_ROOT / "database/seed_tables/04_calsim_data/channel_entity.csv"
+
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
 

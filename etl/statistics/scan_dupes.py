@@ -43,9 +43,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("scan_dupes")
 
-import sys
-from pathlib import Path as _Path
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from etl.common import S3_BUCKET as BUCKET  # noqa: E402
 
 

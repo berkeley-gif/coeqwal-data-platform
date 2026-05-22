@@ -93,8 +93,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("ag_statistics")
 
-# Shared S3 bucket constant. Make `from etl.common import X` work when
-# invoked as `python etl/statistics/ag/...py` from the repo root.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
 

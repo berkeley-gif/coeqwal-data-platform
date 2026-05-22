@@ -69,6 +69,8 @@ logging.basicConfig(
 )
 log = logging.getLogger("delta_statistics")
 
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent

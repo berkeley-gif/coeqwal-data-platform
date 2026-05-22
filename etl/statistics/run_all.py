@@ -133,8 +133,8 @@ ETL_MODULES = {
 
 from scenarios import SCENARIOS  # noqa: E402
 
-# Make `from etl.common import X` work when invoked as
-# `python etl/statistics/run_all.py` from the repo root.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from etl.common import S3_BUCKET as BUCKET  # noqa: E402
 
