@@ -35,9 +35,9 @@ The COEQWAL database has three concrete jobs:
 **The database lives in AWS**, in the `us-west-2` (Oregon) region:
 
 - AWS RDS PostgreSQL 17.4 + PostGIS: Multi-AZ across two availability zones for automatic failover.
-- Placed in a private VPC subnet. Not reachable from the public Internet. The only paths in are (a) workloads inside the same VPC (the API on Fargate, the audit Lambda), or (b) operator entry through our current bastion, AWS Cloud9, an AWS-managed EC2 inside the VPC, identified per-user via AWS IAM. *(Roadmap alternative: AWS Systems Manager Session Manager, the planned post-Cloud9 path, see below.)*
+- Placed in a private VPC subnet. Not reachable from the public Internet. The only paths in are (a) workloads inside the same VPC (the API on Fargate, the audit Lambda), or (b) developer entry through our current bastion, AWS Cloud9, an AWS-managed EC2 inside the VPC, identified per-user via AWS IAM. *(Roadmap alternative: AWS Systems Manager Session Manager, the planned post-Cloud9 path, see below.)*
 
-*Cloud9 as our bastion.* A bastion in a castle is a structure projecting outward from a castle wall, intentionally exposed, narrowly used, guarded. Cloud9 plays that role here: it is the only operator-facing door into the VPC, identified per-user via AWS IAM, narrowly scoped and audited (every `psql` command runs as a registered developer). It is the one exposed entry point, on purpose.
+*Cloud9 as our bastion.* A bastion in a castle is a structure projecting outward from a castle wall, intentionally exposed, narrowly used, guarded. Cloud9 plays that role here: it is the only developer-facing door into the VPC, identified per-user via AWS IAM, narrowly scoped and audited (every `psql` command runs as a registered developer). It is the one exposed entry point, on purpose.
 
 **Why run commands in Cloud9**
 

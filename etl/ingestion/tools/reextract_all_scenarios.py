@@ -16,10 +16,10 @@ Usage:
     # Re-extract specific scenarios
     python etl/ingestion/tools/reextract_all_scenarios.py --scenarios s0020,s0028
 
-    # Re-extract only the SV input (skip CalSim output)
+    # Re-extract only the SV input (skip DV output)
     python etl/ingestion/tools/reextract_all_scenarios.py --sv-only
 
-    # Re-extract only the CalSim (DV) output (skip SV input)
+    # Re-extract only the DV (CalSim decision-variable) output (skip SV input)
     python etl/ingestion/tools/reextract_all_scenarios.py --dv-only
 
     # Include validation against reference CSVs in scenario/{id}/verify/
@@ -90,7 +90,7 @@ def find_validation_csv(s3, bucket: str, scenario_id: str) -> str:
 
 def submit_job(batch_client, scenario_id: str, zip_key: str,
                validation_csv_key: str = "",
-               extract_targets: str = "sv,calsim",
+               extract_targets: str = "sv,dv",
                memory_mb: int | None = None, vcpus: int | None = None):
     """Submit an AWS Batch job matching the Lambda's format."""
     job_name = f"reextract-{scenario_id}-{int(time.time())}"
@@ -151,11 +151,11 @@ def main():
     targets_group = parser.add_mutually_exclusive_group()
     targets_group.add_argument(
         "--sv-only", action="store_true",
-        help="Re-extract only the SV input (skip CalSim output)"
+        help="Re-extract only the SV input (skip DV output)"
     )
     targets_group.add_argument(
         "--dv-only", action="store_true",
-        help="Re-extract only the CalSim (DV) output (skip SV input)"
+        help="Re-extract only the DV (CalSim decision-variable) output (skip SV input)"
     )
     parser.add_argument(
         "--memory", type=int, default=None,
@@ -218,8 +218,8 @@ def main():
 
     extract_targets = (
         "sv" if args.sv_only
-        else "calsim" if args.dv_only
-        else "sv,calsim"
+        else "dv" if args.dv_only
+        else "sv,dv"
     )
 
     print()

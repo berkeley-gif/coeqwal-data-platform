@@ -2,7 +2,7 @@
 """
 Orchestrator: scenario ingestion -> Batch DSS extraction -> statistics -> verify.
 
-Stages (continue-on-error; exits non-zero if any scenario fails any stage):
+Stages (continue-on-error -- exits non-zero if any scenario fails any stage):
   scan -> download -> promote -> wait-batch -> statistics -> verify
 
 Subprocesses existing tools so their logs stream live (same terminal).
@@ -25,7 +25,6 @@ plus DATABASE_URL for statistics and verify (unless orchestrator --dry-run).
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import logging
 import os
@@ -36,7 +35,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import boto3
 
@@ -45,8 +44,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 INGEST_SCRIPT = REPO_ROOT / "etl" / "ingestion" / "gdrive_bulk_download.py"
 STATS_SCRIPT = REPO_ROOT / "etl" / "statistics" / "run_all.py"
 VERIFY_SCRIPT = REPO_ROOT / "etl" / "statistics" / "verify_all_sections.py"
-SCAN_AUDIT_CSV = REPO_ROOT / "etl" / "ingestion" / "audit_reports" / "scan_audit.csv"
-AUDIT_REPORT_CSV = REPO_ROOT / "etl" / "ingestion" / "audit_reports" / "audit_report.csv"
+INGEST_STATE_JSON = (
+    REPO_ROOT / "etl" / "ingestion" / "audit_reports" / "ingest_state.json"
+)
 
 DEFAULT_LISTING_CSV = (
     "etl/ingestion/scenario_listing/model_run_file_source_working.csv"
@@ -145,17 +145,29 @@ def tee_run(
     return proc.returncode
 
 
-def read_csv_rows(path: Path) -> List[Dict[str, str]]:
+def read_ingest_state(path: Path = INGEST_STATE_JSON) -> Dict[str, Any]:
+    """Load ingest_state.json, or return an empty skeleton if missing/corrupt."""
     if not path.exists():
-        return []
-    with open(path, newline="", encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f))
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        log.warning("ingest_state.json at %s is not valid JSON; treating as empty", path)
+        return {}
 
 
-def rows_by_scenario(rows: List[Dict[str, str]], key: str = "scenario_id") -> Dict[str, Dict[str, str]]:
-    out: Dict[str, Dict[str, str]] = {}
-    for r in rows:
-        sid = (r.get(key) or "").strip().lower()
+def stage_rows_by_scenario(
+    state: Dict[str, Any], stage: str,
+) -> Dict[str, Dict[str, Any]]:
+    """Return `{short_code -> row}` for the named stage block."""
+    block = state.get(stage) or {}
+    scenarios = block.get("scenarios") or {}
+    if isinstance(scenarios, dict):
+        return {sid.lower(): row for sid, row in scenarios.items()}
+    # Fallback for pre-v2 files where scenarios was a list. Re-key.
+    out: Dict[str, Dict[str, Any]] = {}
+    for r in scenarios:
+        sid = (r.get("scenario_id") or "").strip().lower()
         if sid:
             out[sid] = r
     return out
@@ -165,12 +177,14 @@ def scan_ok(status: str) -> bool:
     return status.strip() == "OK"
 
 
-def download_ok(row: Dict[str, str]) -> bool:
+def download_ok(row: Dict[str, Any]) -> bool:
     return (row.get("validation_status") or "").strip() == "OK"
 
 
-def manifest_extraction_ok(manifest: Dict[str, Any]) -> Tuple[bool, str]:
-    st = (manifest.get("status") or "").strip().upper()
+def extract_record_extraction_ok(
+    extract_record: Dict[str, Any],
+) -> Tuple[bool, str]:
+    st = (extract_record.get("status") or "").strip().upper()
     if st in ("SUCCEEDED", "SUCCEEDED_PARTIAL"):
         return True, st
     return False, st or "UNKNOWN"
@@ -240,14 +254,42 @@ def banner(title: str) -> None:
     log.info("%s", "=" * 60)
 
 
-def write_summary_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
-    cols = ["scenario_id"] + STAGES_ORDER + ["notes"]
+def write_summary_md(
+    path: Path,
+    rows: List[Dict[str, Any]],
+    elapsed_s: float,
+    s3_bucket: str,
+) -> None:
+    """Write a single human-readable `pipeline_summary.md` for the run.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
-        w.writeheader()
-        for r in rows:
-            w.writerow({k: r.get(k, "") for k in cols})
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    header = ["scenario_id"] + STAGES_ORDER
+
+    lines: List[str] = [
+        f"# Pipeline run {stamp}",
+        "",
+        f"- Scenarios: {len(rows)}",
+        f"- Elapsed: {elapsed_s:.1f}s",
+        f"- S3 bucket: `{s3_bucket}`",
+        "",
+        "| " + " | ".join(header) + " |",
+        "|" + "|".join("---" for _ in header) + "|",
+    ]
+    for r in rows:
+        cells = [str(r.get(c, "")) for c in header]
+        lines.append("| " + " | ".join(cells) + " |")
+
+    flagged = [r for r in rows if (r.get("notes") or "").strip()]
+    if flagged:
+        lines.extend(["", "## Notes", ""])
+        for r in flagged:
+            sid = r.get("scenario_id", "?")
+            note = (r.get("notes") or "").strip()
+            lines.append(f"- **{sid}**: {note}")
+
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def print_console_table(per_summary: List[Dict[str, Any]]) -> None:
@@ -341,8 +383,7 @@ def main() -> int:
     )
     report_dir = report_dir.resolve()
     state_path = report_dir / "pipeline_state.json"
-    summary_json = report_dir / "pipeline_summary.json"
-    summary_csv = report_dir / "pipeline_summary.csv"
+    summary_md = report_dir / "pipeline_summary.md"
 
     scenario_ids: List[str]
     state: Dict[str, Any]
@@ -412,15 +453,20 @@ def main() -> int:
         rc = tee_run(cmd, report_dir / "scan.log", cwd=cwd)
         log.info("scan finished in %.1fs (exit %d)", time.time() - t0, rc)
 
-        scan_rows = read_csv_rows(SCAN_AUDIT_CSV)
-        by_sid = rows_by_scenario(scan_rows)
+        ingest_state = read_ingest_state()
+        by_sid = stage_rows_by_scenario(ingest_state, "scan")
 
         if args.all:
             scenario_ids = sorted(by_sid.keys())
             if not scenario_ids:
-                raise SystemExit("scan produced no rows in scan_audit.csv")
+                raise SystemExit(
+                    "scan produced no rows in ingest_state.json::scan"
+                )
             state.setdefault("version", 1)
-            log.info("--all: discovered %d scenario(s) from scan audit", len(scenario_ids))
+            log.info(
+                "--all: discovered %d scenario(s) from ingest_state.json::scan",
+                len(scenario_ids),
+            )
 
         per_scenario = init_per_scenario(scenario_ids)
 
@@ -474,8 +520,8 @@ def main() -> int:
             rc = tee_run(cmd, report_dir / "download.log", cwd=cwd)
             log.info("download finished in %.1fs (exit %d)", time.time() - t0, rc)
 
-        audit_rows = read_csv_rows(AUDIT_REPORT_CSV)
-        by_aud = rows_by_scenario(audit_rows)
+        ingest_state = read_ingest_state()
+        by_aud = stage_rows_by_scenario(ingest_state, "download")
 
         for sid in scenario_ids:
             if per_scenario.get(sid, {}).get("scan") != "ok":
@@ -521,8 +567,8 @@ def main() -> int:
             rc = tee_run(cmd, report_dir / "promote.log", cwd=cwd)
             log.info("promote finished in %.1fs (exit %d)", time.time() - t0, rc)
 
-        audit_rows = read_csv_rows(AUDIT_REPORT_CSV)
-        by_aud = rows_by_scenario(audit_rows)
+        ingest_state = read_ingest_state()
+        by_aud = stage_rows_by_scenario(ingest_state, "download")
         s3c = boto3.client("s3")
 
         for sid in scenario_ids:
@@ -641,16 +687,16 @@ def main() -> int:
                                 continue
 
                             if st == "SUCCEEDED":
-                                manifest_key = (
-                                    f"scenario/{sid_j}/{sid_j}_manifest.json"
+                                record_key = (
+                                    f"scenario/{sid_j}/extract_record.json"
                                 )
-                                manifest = read_json_from_s3(
-                                    s3_client, args.s3_bucket, manifest_key
+                                extract_record = read_json_from_s3(
+                                    s3_client, args.s3_bucket, record_key
                                 )
-                                ok_m, mst = (
-                                    manifest_extraction_ok(manifest)
-                                    if manifest
-                                    else (False, "NO_MANIFEST")
+                                ok_m, est = (
+                                    extract_record_extraction_ok(extract_record)
+                                    if extract_record
+                                    else (False, "NO_EXTRACT_RECORD")
                                 )
                                 if ok_m:
                                     per_scenario[sid_j]["batch"] = "ok"
@@ -658,7 +704,7 @@ def main() -> int:
                                     per_scenario[sid_j]["batch"] = "failed"
                                     per_scenario[sid_j]["notes"] = (
                                         (per_scenario[sid_j].get("notes") or "")
-                                        + f" batch_manifest:{mst};"
+                                        + f" batch_extract_record:{est};"
                                     )
                                 batch_done.add(sid_j)
 
@@ -815,24 +861,14 @@ def main() -> int:
                 any_fail = True
         summary_rows.append(row)
 
-    summary_json.write_text(
-        json.dumps(
-            {
-                "scenario_ids": scenario_ids,
-                "rows": summary_rows,
-                "elapsed_s": round(time.time() - t_pipeline0, 1),
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    write_summary_csv(summary_csv, summary_rows)
+    elapsed_s = time.time() - t_pipeline0
+    write_summary_md(summary_md, summary_rows, elapsed_s, args.s3_bucket)
     print_console_table(summary_rows)
 
     log.info(
         "Pipeline finished in %.1fs; summary -> %s",
-        time.time() - t_pipeline0,
-        summary_csv,
+        elapsed_s,
+        summary_md,
     )
 
     return 1 if any_fail else 0

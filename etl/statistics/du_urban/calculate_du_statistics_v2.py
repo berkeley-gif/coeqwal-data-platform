@@ -69,8 +69,6 @@ logging.basicConfig(
 log = logging.getLogger("du_statistics_v2")
 
 # Configuration
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent

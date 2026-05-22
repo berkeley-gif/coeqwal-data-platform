@@ -262,8 +262,8 @@ audits/                             # gitignored — all audit outputs land here
 ├── verification_reports/           #   ETL accuracy reports (Layer 2 + Layer 3)
 │   ├── {scenario_id}_layer2.json
 │   └── {scenario_id}_layer3.json
-└── validation_mismatches/          #   DSS extraction validation manifests (Layer 1)
-    ├── {scenario_id}_manifest.json
+└── validation_mismatches/          #   DSS extraction records (Layer 1)
+    ├── {scenario_id}_extract_record.json
     └── {scenario_id}_validation_mismatches.csv
 
 exports/                            # gitignored — layer table CSV exports
@@ -1457,19 +1457,15 @@ See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md) for Lambd
 
 ### ETL validation
 
-CSV validation scripts for verifying ETL output:
+CSV validation script for verifying ETL output:
 
 ```bash
-# Compare CSVs
 python etl/batch-container/python-code/validate_csvs.py \
-  --reference data/reference/expected.csv \
-  --output data/output/actual.csv
-
-# Enhanced validation with reports
-python etl/batch-container/python-code/validate_csvs_improved.py \
-  --reference data/reference/ \
-  --output data/output/ \
-  --report validation_report.json
+  --ref data/reference/expected.csv \
+  --file data/output/actual.csv \
+  --out-json validation_summary.json \
+  --out-csv validation_mismatches.csv \
+  --show-unmatched
 ```
 
 ### Database constraints

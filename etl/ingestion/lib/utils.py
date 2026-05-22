@@ -61,19 +61,19 @@ def _sha256_of_bytes(data: bytes) -> str:
 
 
 def _sha256_of_row(row: Dict[str, Any]) -> str:
-    """Canonical hash of a spreadsheet row's payload, for the sidecar provenance."""
+    """Hash of a spreadsheet row's payload, for the ingest_record provenance."""
     canonical = json.dumps(row, sort_keys=True, default=str, ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _now_iso_utc() -> str:
-    """Current UTC timestamp in `YYYY-MM-DDTHH:MM:SSZ` form (sidecar fields)."""
+    """Current UTC timestamp in `YYYY-MM-DDTHH:MM:SSZ` form (ingest_record fields)."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _operator_tag() -> str:
-    """`user@host` tag for sidecar provenance. Falls back to `unknown` when
-    the environment is missing the usual variables."""
+    """`user@host` tag for ingest_record provenance. Falls back to `unknown`
+    when the environment is missing the usual variables."""
     user = os.environ.get("USER") or os.environ.get("LOGNAME") or "unknown"
     try:
         host = socket.gethostname()

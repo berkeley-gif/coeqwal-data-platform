@@ -6,33 +6,38 @@ they're meant to be run:
                   download run
 - `cmd_download`: download + validate + stage to S3 (the heavy one)
 - `cmd_promote`:  copy staged files from staging/ to ready/ in the safe
-                  order (sidecar -> CSV -> ZIP) so the ZIP PUT triggers
-                  Lambda only after its dependencies are in place
+                  order (ingest_record -> CSV -> ZIP) so the ZIP PUT
+                  triggers Lambda only after its dependencies are in place
 
 Each cmd_* takes the parsed argparse `args` and orchestrates: preflight,
 load working CSV, filter scenarios, dispatch workers, write the per-run
-report. The per-row work itself lives in `worker.py`. Audit report writers and
-their column lists live here next to the commands that produce them.
+report. The per-row work itself lives in `worker.py`.
+
+Both `cmd_scan` and `cmd_download` persist their per-row results into one
+unified file: `<DEFAULT_OUTPUT_DIR>/ingest_state.json`. The writers in
+this module read-modify-write that file so a fresh scan refreshes its
+`scan` block without disturbing the prior `download` block, and vice
+versa. `tools/audit.py` reads the `download` block; the orchestrator
+(`etl/run_full_pipeline.py`) reads both.
 """
 
 from __future__ import annotations
 
-import csv
-import io
+import json
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 
-from etl.common import READY_PREFIX, STAGING_PREFIX
+from etl.common import INGEST_RECORD_BASENAME, READY_PREFIX, STAGING_PREFIX
 
 from .config import (
-    AUDIT_STATE_PATH,
-    DEFAULT_OUTPUT_DIR,
+    INGEST_STATE_PATH,
+    INGEST_STATE_SCHEMA_VERSION,
     SCRIPT_VERSION,
 )
 from .csv_reader import (
@@ -53,18 +58,79 @@ log = logging.getLogger("gdrive_bulk_download")
 
 
 # ---------------------------------------------------------------------------
-# scan subcommand: CSV + Drive content audit (no S3 writes)
+# Unified ingest state file (ingest_state.json)
 # ---------------------------------------------------------------------------
-SCAN_AUDIT_COLUMNS = [
-    "scenario_id", "drive_folder_name", "drive_folder_id",
-    "folder_name_match", "access_mode",
-    "zip_count", "zip_names", "zip_selected", "zip_size_mb",
-    "trend_csv_count", "trend_csv_names", "trend_csv_selected",
-    "expected_dv_filename", "expected_sv_filename",
-    "dv_root", "status",
-]
+# Layout:
+#
+#   {
+#     "schema_version": 2,
+#     "scan":     {"run_at_utc": ..., "script": ..., "script_version": ...,
+#                  "scenarios": {"<short_code>": {row...}, ...}},
+#     "download": {"run_at_utc": ..., "script": ..., "script_version": ...,
+#                  "scenarios": {"<short_code>": {row...}, ...}}
+#   }
+#
+# Each stage block represents the most recent run of that command. A new
+# run of `scan` replaces only `state["scan"]`. A new run of `download`
+# replaces only `state["download"]`. Scenarios within a block are keyed by
+# `short_code` for O(1) orchestrator lookup.
+def _ingest_state_path(output_dir: Optional[Path] = None) -> Path:
+    """Return the absolute path to ingest_state.json.
+
+    Pass `output_dir` (a Path) to honor the `--output-dir` flag; otherwise
+    use the configured default. The parent directory is created on write.
+    """
+    if output_dir is None:
+        return INGEST_STATE_PATH
+    return Path(output_dir) / "ingest_state.json"
 
 
+def _load_ingest_state(output_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Read `ingest_state.json` or return a fresh skeleton if absent/corrupt."""
+    path = _ingest_state_path(output_dir)
+    if not path.exists():
+        return {"schema_version": INGEST_STATE_SCHEMA_VERSION}
+    try:
+        state = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        log.warning("ingest_state.json is not valid JSON; rewriting from scratch")
+        return {"schema_version": INGEST_STATE_SCHEMA_VERSION}
+    state.setdefault("schema_version", INGEST_STATE_SCHEMA_VERSION)
+    return state
+
+
+def _write_ingest_state(state: Dict[str, Any], output_dir: Optional[Path] = None) -> Path:
+    """Persist the unified state JSON, returning the path written to."""
+    path = _ingest_state_path(output_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, sort_keys=True))
+    return path
+
+
+def _set_stage_block(state: Dict[str, Any], stage: str, rows: List[Dict]) -> None:
+    """Replace `state[stage]` with the given run's rows, keyed by `scenario_id`.
+
+    Rows without a `scenario_id` are dropped. This is the only place that
+    materialises the per-row records into the on-disk dict-by-short_code
+    shape consumers depend on.
+    """
+    scenarios: Dict[str, Dict] = {}
+    for r in rows:
+        sid = r.get("scenario_id")
+        if not sid:
+            continue
+        scenarios[sid] = r
+    state[stage] = {
+        "run_at_utc": _now_iso_utc(),
+        "script": "gdrive_bulk_download.py",
+        "script_version": SCRIPT_VERSION,
+        "scenarios": scenarios,
+    }
+
+
+# ---------------------------------------------------------------------------
+# scan subcommand: CSV + Drive content audit
+# ---------------------------------------------------------------------------
 def scan_scenario(scenario: Dict, rclone_remote: str) -> Dict:
     """List Drive contents for one scenario, report zip/csv counts."""
     sc = scenario["short_code"]
@@ -177,20 +243,14 @@ def scan_scenario(scenario: Dict, rclone_remote: str) -> Dict:
     return row
 
 
-def write_scan_audit(rows: List[Dict], local_path: str):
-    """Write scan audit CSV to disk."""
+def write_scan_audit(rows: List[Dict], output_dir: Optional[Path] = None):
+    """Persist the most recent scan run into `ingest_state.json::scan`.
+    """
     rows.sort(key=lambda r: r.get("scenario_id", ""))
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=SCAN_AUDIT_COLUMNS,
-                            extrasaction="ignore")
-    writer.writeheader()
-    for r in rows:
-        writer.writerow(r)
-    csv_text = buf.getvalue()
-
-    with open(local_path, "w") as f:
-        f.write(csv_text)
-    log.info("Scan audit written to %s", local_path)
+    state = _load_ingest_state(output_dir)
+    _set_stage_block(state, "scan", rows)
+    path = _write_ingest_state(state, output_dir)
+    log.info("Scan state written to %s::scan", path)
 
     print("\n" + "=" * 100)
     print("  SCAN AUDIT SUMMARY")
@@ -247,11 +307,11 @@ def cmd_scan(args):
     """Scan Drive contents using the working CSV.
 
     In order to catch missing folders, missing ZIPs, missing trend CSVs,
-    folder-name mismatches, and pinned-filename-not-found cases BEFORE
+    folder-name mismatches, and pinned-filename-not-found cases before
     spending bandwidth on a real download run, scan walks each scenario's
-    Drive folder and writes `scan_audit.csv`. It never touches S3 and
-    never downloads files. Use it as a pre-flight on a freshly bootstrapped
-    working CSV, or after editing rows.
+    Drive folder and writes the `scan` block of `ingest_state.json`. It
+    never touches S3 and never downloads files. Use it as a pre-flight on
+    a freshly bootstrapped working CSV, or after editing rows.
     """
     rclone_remote = args.rclone_remote
 
@@ -281,7 +341,7 @@ def cmd_scan(args):
         return
 
     if args.local_only:
-        log.info("Local-only mode: writing manifest without Drive access")
+        log.info("Local-only mode: writing scan listing without Drive access")
         results = []
         for sc in scenarios:
             results.append({
@@ -307,10 +367,8 @@ def cmd_scan(args):
                     if sc["dv_root"] and sc["dv_root"] != sc["drive_folder_name"] else "")
                     + ("|NO_FOLDER_ID" if not sc["drive_folder_id"] else ""),
             })
-        output_dir = Path(getattr(args, "output_dir", None) or DEFAULT_OUTPUT_DIR)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        local_path = str(output_dir / "scan_audit.csv")
-        write_scan_audit(results, local_path)
+        output_dir = Path(args.output_dir) if args.output_dir else None
+        write_scan_audit(results, output_dir=output_dir)
         return
 
     results: List[Dict] = []
@@ -338,88 +396,27 @@ def cmd_scan(args):
                         "status": "WORKER_ERROR",
                     })
 
-    output_dir = Path(getattr(args, "output_dir", None) or DEFAULT_OUTPUT_DIR)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    local_path = str(output_dir / "scan_audit.csv")
-    write_scan_audit(results, local_path)
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    write_scan_audit(results, output_dir=output_dir)
 
 
 # ---------------------------------------------------------------------------
 # download subcommand
 # ---------------------------------------------------------------------------
-AUDIT_COLUMNS = [
-    "scenario_id", "drive_folder_id", "drive_folder_name",
-    "expected_dv_filename", "expected_sv_filename",
-    "ingestion_path", "access_mode",
-    "zip_count", "zip_selected", "zip_size_mb", "zip_sha256",
-    "dss_file_count", "classification_method",
-    "sv_selected", "sv_sha256",
-    "dv_selected", "dv_sha256",
-    "trend_csv_count", "trend_csv_selected", "trend_csv_sha256",
-    "convention_dv_ok", "convention_sv_ok",
-    "s3_staging_zip_key", "s3_staging_csv_key", "s3_staging_sidecar_key",
-    "validation_status", "verification_status",
-    "error_code", "error_message", "notes",
-]
+def write_audit_report(rows: List[Dict], output_dir: Optional[Path] = None):
+    """Persist the most recent download run into `ingest_state.json::download`.
 
-
-def write_audit_report(rows: List[Dict], local_path: str,
-                       s3_client, s3_bucket: str):
-    """Write per-run CSV audit, upload to S3, and write the JSON state file.
-
-    Two files come out of this function. They contain the same
-    underlying per-row records, but in different shapes for different
-    consumers:
-
-    1. `audit_report.csv` (at `local_path`, default
-       `etl/ingestion/audit_reports/audit_report.csv`). Flat tabular view,
-       one row per scenario. Open it in a spreadsheet to eyeball a run at
-       a glance. Also uploaded to `s3://<bucket>/<STAGING_PREFIX>/audit_report.csv`.
-
-    2. `audit_state.json` (at `AUDIT_STATE_PATH`, default
-       `etl/ingestion/audit_reports/audit_state.json`). Structured nested JSON,
-       schema-versioned. Consumed by `etl/ingestion/tools/audit.py` to render
-       `etl/ingestion/audit.md`. This is the only handoff between this
-       script (which knows about local-only failures that never reached
-       S3) and audit.py (which walks S3 for sidecar.json and the Batch
-       container's manifest). Without this file, audit.py would have no
-       record of scenarios that were skipped during ingest.
-
-    Both files are gitignored under `etl/**/audit_reports/` and are
-    regeneratable. Re-running `gdrive_bulk_download.py download` (with
-    the same or a different --scenarios filter) rewrites them in place.
-    Long-term history lives in S3 (sidecars + per-scenario manifests)
-    and in the tracked `audit.md` that audit.py renders.
+    Read-modify-write: the existing `scan` block (if any) is preserved.
+    `tools/audit.py` consumes this block to render the local-skips section
+    of `audit.md`. Without it, audit.py has no visibility into scenarios
+    that were skipped during ingest and never reached S3. `--output-dir`
+    overrides the default location for a one-off run.
     """
-    import json  # local import: keeps the module's top imports thin
-
     rows.sort(key=lambda r: r.get("scenario_id", ""))
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=AUDIT_COLUMNS, extrasaction="ignore")
-    writer.writeheader()
-    for r in rows:
-        writer.writerow(r)
-    csv_text = buf.getvalue()
-
-    with open(local_path, "w") as f:
-        f.write(csv_text)
-    log.info("Audit report written to %s", local_path)
-
-    s3_key = f"{STAGING_PREFIX}/audit_report.csv"
-    s3_client.put_object(Bucket=s3_bucket, Key=s3_key,
-                         Body=csv_text.encode("utf-8"))
-    log.info("Audit report uploaded to s3://%s/%s", s3_bucket, s3_key)
-
-    state = {
-        "schema_version": 1,
-        "run_at_utc": _now_iso_utc(),
-        "script": "gdrive_bulk_download.py",
-        "script_version": SCRIPT_VERSION,
-        "scenarios": rows,
-    }
-    AUDIT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    AUDIT_STATE_PATH.write_text(json.dumps(state, indent=2, sort_keys=True))
-    log.info("Audit state written to %s", AUDIT_STATE_PATH)
+    state = _load_ingest_state(output_dir)
+    _set_stage_block(state, "download", rows)
+    path = _write_ingest_state(state, output_dir)
+    log.info("Download state written to %s::download", path)
 
     # Console summary
     print("\n" + "=" * 100)
@@ -529,10 +526,8 @@ def cmd_download(args):
                         "error_message": str(e),
                     })
 
-    output_dir = Path(getattr(args, "output_dir", None) or DEFAULT_OUTPUT_DIR)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    local_report = str(output_dir / "audit_report.csv")
-    write_audit_report(results, local_report, s3_client, args.s3_bucket)
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    write_audit_report(results, output_dir=output_dir)
 
     # Auto-render audit.md. This snapshot reflects what just
     # got staged plus whatever was already in S3.
@@ -549,23 +544,21 @@ def cmd_download(args):
 
 
 # ---------------------------------------------------------------------------
-# promote subcommand (timing fix: upload order)
+# promote subcommand (upload order)
 # ---------------------------------------------------------------------------
 # The ZIP is the Lambda trigger. Anything the Lambda might read must be at
 # rest in ready/<id>/ BEFORE the ZIP arrives. Order is non-negotiable.
-PROMOTE_ORDER_PREFIXES = ("sidecar.json",)
-PROMOTE_ORDER_SUFFIXES = (".csv", ".zip")
 
 
 def _sort_promote_keys(keys: List[str]) -> List[str]:
-    """Sort keys for promote so sidecar -> trend CSV -> ZIP is the upload order.
+    """Sort keys so promote uploads ingest_record -> trend CSV -> ZIP last.
 
-    Anything else (extra docs etc.) lands after the sidecar and before the
-    CSV/ZIP, in alphabetical order.
+    Anything else (extra docs etc.) lands after the ingest record and before
+    the CSV/ZIP, in alphabetical order.
     """
     def rank(k: str) -> Tuple[int, str]:
         fn = k.rsplit("/", 1)[-1].lower()
-        if fn == "sidecar.json":
+        if fn == INGEST_RECORD_BASENAME:
             return (0, fn)
         if fn.endswith(".csv"):
             return (2, fn)
@@ -579,8 +572,8 @@ def _sort_promote_keys(keys: List[str]) -> List[str]:
 def cmd_promote(args):
     """Copy files from staging/scenario_data/<id>/ to ready/<id>/.
 
-    Upload order is enforced: sidecar.json first, trend CSV second, ZIP last.
-    The ZIP PUT under ready/ is the Lambda trigger.
+    Upload order is enforced: ingest_record.json first, trend CSV second,
+    ZIP last. The ZIP PUT under ready/ is the Lambda trigger.
     """
     s3 = boto3.client("s3")
     bucket = args.s3_bucket
@@ -627,7 +620,7 @@ def cmd_promote(args):
         groups[sc] = _sort_promote_keys(groups[sc])
 
     print(f"\nAbout to promote {len(groups)} scenario(s) from {staging_prefix_slash} to {READY_PREFIX}/.")
-    print("Upload order per scenario: sidecar.json -> trend CSV -> ZIP last.")
+    print(f"Upload order per scenario: {INGEST_RECORD_BASENAME} -> trend CSV -> ZIP last.")
     print("The ZIP PUT is the Lambda trigger.\n")
     for sc in sorted(groups):
         files = [k.split("/")[-1] for k in groups[sc]]

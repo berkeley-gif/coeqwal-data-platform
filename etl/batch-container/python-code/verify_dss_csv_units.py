@@ -53,7 +53,7 @@ log = logging.getLogger("verify_units")
 # coeqwal-etl Docker image where `etl/common/` is not on the path. Outside
 # the container, prefer importing from etl.common.aws to stay consistent
 # with the rest of the ETL.
-BUCKET = os.getenv("COEQWAL_S3_BUCKET") or os.getenv("S3_BUCKET", "coeqwal-model-run")
+BUCKET = os.getenv("COEQWAL_S3_BUCKET", "coeqwal-model-run")
 
 _UNIT_STRIP_RE = re.compile(r"[{}\[\]()]+")
 

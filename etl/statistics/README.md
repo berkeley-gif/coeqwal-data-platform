@@ -303,7 +303,7 @@ Lambda function with:
 - **Timeout**: 5 minutes
 - **Environment variables**:
   - `DATABASE_URL`: PostgreSQL connection string
-  - `S3_BUCKET`: `coeqwal-model-run`
+  - `COEQWAL_S3_BUCKET`: `coeqwal-model-run`
 
 ### 2. S3 event trigger
 
@@ -959,7 +959,7 @@ python verify_metrics.py --reservoirs SHSTA OROVL
 
 ### S3 Access Errors
 - Configure AWS credentials: `aws configure`
-- Set bucket: `export S3_BUCKET=coeqwal-model-run`
+- Set bucket: `export COEQWAL_S3_BUCKET=coeqwal-model-run`
 
 ### Skipped Reservoirs
 Two reservoirs are skipped (no storage data in CalSim CSV):

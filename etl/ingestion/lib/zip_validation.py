@@ -1,4 +1,4 @@
-"""ZIP validation: pick the right DSS files, hash them, build the sidecar.
+"""ZIP validation: make sure we pick the right DSS files, hash them, build the ingest record.
 
 Three layers, top to bottom:
 
@@ -8,22 +8,22 @@ Three layers, top to bottom:
    subfolder.
 2. `validate_and_hash_zip` opens the ZIP, runs the classifier, and computes
    SHA-256 plus byte counts for the selected SV/DV and the ZIP itself.
-3. `build_sidecar` assembles the JSON payload that travels with the ZIP to
-   S3 and is later consulted by the Lambda and the batch container.
+3. `build_ingest_record` assembles the JSON payload that travels with the
+   ZIP to S3 and is later consulted by the Lambda and the batch container.
 
 `process_scenario` (in `worker.py`) is the only caller that chains all three.
-The tools under `etl/ingestion/tools/` (`manual_ingest`, `backfill_sidecars`)
-reuse `build_sidecar` on their own ZIP paths.
+The tools under `etl/ingestion/tools/` (`manual_ingest`, `backfill_ingest_records`)
+reuse `build_ingest_record` on their own ZIP paths.
 
 Why we hash:
 
-The sidecar persists in S3 alongside the ZIP and answers one question
+The ingest record persists in S3 alongside the ZIP and answers one question
 months from now: are these bytes the same ones we audited on ingest day?
 Each hash pins a different layer of that answer.
 
 - `zip_sha256`: end-to-end integrity from Drive to Cloud9 to S3 to the
   Batch container. If the container reads a different hash than the
-  sidecar declares, the ZIP was altered or corrupted in transit.
+  ingest record declares, the ZIP was altered or corrupted in transit.
 - `sv_sha256` / `dv_sha256`: per-entry fingerprints inside the ZIP.
   Catches the case where the ZIP is repacked, the filename stays the
   same, but the contents of the chosen DSS file changed.
@@ -31,9 +31,9 @@ Each hash pins a different layer of that answer.
   time. Lets a later run prove it checked against the same trend CSV
   the operator saw, not a re-export with the same name.
 - `source.spreadsheet_row_sha256` (computed upstream by `_sha256_of_row`
-  in `utils.py`): pins the working-CSV row the sidecar was built from.
-  If the row is later edited, the sidecar still records the version
-  that produced it.
+  in `utils.py`): pins the working-CSV row the ingest record was built
+  from. If the row is later edited, the ingest record still records the
+  version that produced it.
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ import zipfile
 from typing import Any, Dict, List, Optional
 
 from .config import (
+    INGEST_RECORD_SCHEMA_VERSION,
     SCRIPT_VERSION,
-    SIDECAR_SCHEMA_VERSION,
     SPREADSHEET_URL,
     WORKING_CSV_PATH,
 )
@@ -66,7 +66,7 @@ def classify_dss_in_zip(
 ) -> Dict[str, Any]:
     """Strict match on the basenames declared in the WAM spreadsheet.
 
-    No heuristics, no fallbacks, no overrides. If either expected basename
+    If either expected basename
     is empty, or the ZIP doesn't contain it, or it appears in multiple
     non-excluded paths, raise IngestionError. The caller wraps in try/except
     and records the failure in the audit.
@@ -191,7 +191,7 @@ def validate_and_hash_zip(
     }
 
 
-def build_sidecar(
+def build_ingest_record(
     scenario: Dict[str, Any],
     zip_basename: str,
     zip_sha256: str,
@@ -206,12 +206,12 @@ def build_sidecar(
     trend_csv_sha256: Optional[str],
     access_mode: str = "id",
 ) -> Dict[str, Any]:
-    """Build the sidecar.json payload that travels with the ZIP."""
+    """Build the `ingest_record.json` payload that travels with the ZIP."""
     sc = scenario["short_code"]
     dv_base = scenario["dv_filename"]
     sv_base = scenario["sv_filename"]
     return {
-        "schema_version": SIDECAR_SCHEMA_VERSION,
+        "schema_version": INGEST_RECORD_SCHEMA_VERSION,
         "short_code": sc,
         "expected_sv_filename": sv_base,
         "expected_dv_filename": dv_base,
@@ -244,8 +244,8 @@ def build_sidecar(
             # How the script reached this row's Drive folder. "id" means the
             # ModelFilesLink URL parsed cleanly. "path" means we fell back to
             # GoogleDriveFolderName / DV_Path root because the URL was missing
-            # or unparseable. Recorded so a future reader of the sidecar can
-            # tell whether ingest used the canonical path.
+            # or unparseable. Recorded so a future reader of the ingest_record
+            # can tell whether ingest used the canonical path.
             "access_mode": access_mode,
         },
     }

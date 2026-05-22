@@ -14,10 +14,9 @@ import json
 import os
 from typing import Any, Optional
 
-S3_BUCKET = os.getenv("COEQWAL_S3_BUCKET") or os.getenv("S3_BUCKET", "coeqwal-model-run")
-"""Primary S3 bucket holding scenario ZIPs, extracted CSVs, sidecars, and
-manifests. Override with `COEQWAL_S3_BUCKET` (preferred) or `S3_BUCKET`
-(legacy, still honored for backwards compatibility with statistics scripts)."""
+S3_BUCKET = os.getenv("COEQWAL_S3_BUCKET", "coeqwal-model-run")
+"""Primary S3 bucket holding scenario ZIPs, extracted CSVs, ingest records,
+and extract records. Override with `COEQWAL_S3_BUCKET`."""
 
 AWS_REGION = os.getenv("AWS_REGION", "us-west-2")
 """AWS region. boto3 picks this up too via standard AWS_REGION, repeated
@@ -30,7 +29,7 @@ jobs to. Fargate Spot compute environment underneath."""
 BATCH_JOB_DEFINITION = os.getenv("COEQWAL_BATCH_JOBDEF", "coeqwal-dss-jobdef")
 """AWS Batch job definition (bare name without revision number).
 Batch automatically resolves to whichever revision is currently active, so
-bumping container memory does NOT require a code change.
+bumping container memory does not require a code change.
 Create a new revision in the AWS console. Only edit this constant if you rename
 the job definition itself."""
 
@@ -64,8 +63,8 @@ def read_json_from_s3(s3_client: Any, bucket: str, key: str) -> Optional[dict]:
     propagate to the caller.
 
     Used by `audit.py`, `run_full_pipeline.py`, and any other reader that
-    needs the contents of one of the small per-scenario JSONs (sidecar,
-    manifest, etc) without having to repeat the boto3 + decode boilerplate.
+    needs the contents of one of the small per-scenario audit JSONs (ingest
+    record, extract record, etc).
     """
     try:
         obj = s3_client.get_object(Bucket=bucket, Key=key)

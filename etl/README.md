@@ -37,9 +37,9 @@ Runs in order. Each stage feeds the next via S3.
 
 | Directory | Stage | What it does |
 |---|---|---|
-| [`ingestion/`](ingestion/) | 0. Drive -> S3 staging | Bulk download of ZIPs and trend CSVs from the WAM team's Google Drive, Layer-1/2 validation against the working CSV, SHA-256 hashing, `sidecar.json` build, and stage to `s3://coeqwal-model-run/staging/scenario_data/<id>/`. The main CLI at the top level is `gdrive_bulk_download.py` (the pipeline). Library modules live in `ingestion/lib/`; auxiliary CLIs (audit report, manual upload, recovery, verification) live in `ingestion/tools/` (see [`tools/README.md`](ingestion/tools/README.md)). |
-| [`lambda/`](lambda/) | 1. S3 PUT trigger | The `coeqwalEtlTrigger` Lambda (Node.js). Fires on a ZIP PUT under `ready/`, waits for the sidecar, deduplicates, moves files into `scenario/<id>/`, and submits a Batch job. |
-| [`batch-container/`](batch-container/) | 2. DSS -> CSV | Docker image that runs in AWS Batch on Fargate Spot. Unzips, classifies SV vs CalSim output, extracts DSS to CSV with `pydsstools`, uploads CSVs + manifest to S3. |
+| [`ingestion/`](ingestion/) | 0. Drive -> S3 staging | Bulk download of ZIPs and trend CSVs from the WAM team's Google Drive, Layer-1/2 validation against the working CSV, SHA-256 hashing, `ingest_record.json` build, and stage to `s3://coeqwal-model-run/staging/scenario_data/<id>/`. The main CLI at the top level is `gdrive_bulk_download.py` (the pipeline). Library modules live in `ingestion/lib/`; auxiliary CLIs (audit report, manual upload, recovery, verification) live in `ingestion/tools/` (see [`tools/README.md`](ingestion/tools/README.md)). |
+| [`lambda/`](lambda/) | 1. S3 PUT trigger | The `coeqwalEtlTrigger` Lambda (Node.js). Fires on a ZIP PUT under `ready/`, waits for the ingest record, deduplicates, moves files into `scenario/<id>/`, and submits a Batch job. |
+| [`batch-container/`](batch-container/) | 2. DSS -> CSV | Docker image that runs in AWS Batch on Fargate Spot. Unzips, classifies SV vs CalSim output, extracts DSS to CSV with `pydsstools`, uploads CSVs + `extract_record.json` to S3. |
 | [`statistics/`](statistics/) | 3. CSV -> DB (statistics) | Per-module statistics calculations against the extracted CSVs, written to PostgreSQL. Modules: reservoirs, deliveries, delta, du_urban, env_flows, refuge, mi, ag, cws_aggregate, sensitivity. |
 
 ### Pipeline II: tier data
@@ -52,7 +52,7 @@ Runs in order. Each stage feeds the next via S3.
 
 | Directory | What it does |
 |---|---|
-| [`common/`](common/) | Shared Python helpers used by both pipelines: AWS resource names (`S3_BUCKET`, `BATCH_QUEUE`, ...), S3 path builders (`staging_prefix`, `sidecar_key`, ...), and a `DATABASE_URL`-aware `get_conn()`. Import from `etl.common`. |
+| [`common/`](common/) | Shared Python helpers used by both pipelines: AWS resource names (`S3_BUCKET`, `BATCH_QUEUE`, ...), S3 path builders (`staging_prefix`, `ingest_record_key`, `extract_record_key`, ...), and a `DATABASE_URL`-aware `get_conn()`. Import from `etl.common`. |
 | [`verification/`](verification/) | End-to-end verification scripts spanning Layers 1-4 (extraction -> statistics -> DB -> API). Each layer's verifier lives next to the code it verifies; this directory holds the cross-layer runner and reference PDFs. |
 
 ### Local-only working space (gitignored)
@@ -143,7 +143,7 @@ python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0042 s0043
 python etl/ingestion/gdrive_bulk_download.py scan --all
 ```
 
-Walks each named Drive folder and writes `etl/ingestion/audit_reports/scan_audit.csv`. Skim it. Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
+Walks each named Drive folder and writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json` (use `python etl/ingestion/tools/show_last_run.py --stage scan` for a quick spreadsheet-style view). Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
 
 `scan` does not touch S3 and does not need AWS credentials. You can run it from your local machine. Local prereqs: `rclone` configured with the `gdrive` remote (you already have this on your local machine from the original Google OAuth), Python 3.9+, and `boto3` (imported at the top of the script even though scan does not use it). One `pip install -r etl/ingestion/requirements.txt` in a venv on the local machine covers `boto3`. If you do not want to set that up locally, run it from Cloud9, which has all three already.
 
@@ -157,7 +157,7 @@ python etl/ingestion/gdrive_bulk_download.py download --all
 
 Either `--scenarios` or `--all` is required. The script will error out if you give neither.
 
-For each named scenario, this downloads the ZIP and trend CSV from Drive, opens the ZIP and confirms the DV and SV basenames declared in the working CSV are present exactly once, computes SHA-256 hashes for the ZIP, the DV, the SV, and the trend CSV, writes a `sidecar.json` with those hashes and the provenance, and uploads everything to `s3://coeqwal-model-run/staging/scenario_data/<short_code>/`. When the run finishes, `etl/ingestion/audit.md` regenerates automatically.
+For each named scenario, this downloads the ZIP and trend CSV from Drive, opens the ZIP and confirms the DV and SV basenames declared in the working CSV are present exactly once, computes SHA-256 hashes for the ZIP, the DV, the SV, and the trend CSV, writes an `ingest_record.json` with those hashes and the provenance, and uploads everything to `s3://coeqwal-model-run/staging/scenario_data/<short_code>/`. When the run finishes, `etl/ingestion/audit.md` regenerates automatically.
 
 Per-scenario failures skip that scenario and the run continues. The audit is where you read what happened.
 
@@ -180,7 +180,7 @@ When "What needs your attention" is empty, you are clear to promote.
 python etl/ingestion/gdrive_bulk_download.py promote
 ```
 
-Copies each staged scenario's files from `staging/scenario_data/<id>/` to `ready/<id>/` in safe order: `sidecar.json` first, trend CSV next, ZIP last. The ZIP PUT under `ready/` is the Lambda trigger, so promoting is the moment of release. Use `--scenarios s0020,s0021` to release a subset, or `--dry-run` to print the planned copies without executing them.
+Copies each staged scenario's files from `staging/scenario_data/<id>/` to `ready/<id>/` in safe order: `ingest_record.json` first, trend CSV next, ZIP last. The ZIP PUT under `ready/` is the Lambda trigger, so promoting is the moment of release. Use `--scenarios s0020,s0021` to release a subset, or `--dry-run` to print the planned copies without executing them.
 
 **6. Watch the Lambda fire and Batch jobs run.**
 
@@ -188,7 +188,7 @@ Copies each staged scenario's files from `staging/scenario_data/<id>/` to `ready
 aws logs tail /aws/lambda/coeqwalEtlTrigger --follow
 ```
 
-Each ZIP PUT triggers the Lambda within a second or two. The Lambda moves the ZIP into `scenario/<id>/run/`, locates the peer trend CSV, and submits a Batch job. Batch takes one to two minutes per scenario in Fargate Spot.
+Each ZIP PUT triggers the Lambda within a second or two. The Lambda moves the ZIP into `scenario/<id>/run/`, places the ingest record at `scenario/<id>/ingest_record.json`, locates the peer trend CSV, and submits a Batch job. Batch takes one to two minutes per scenario in Fargate Spot.
 
 **7. Refresh the audit after Batch finishes.**
 
@@ -196,11 +196,11 @@ Each ZIP PUT triggers the Lambda within a second or two. The Lambda moves the ZI
 python etl/ingestion/tools/audit.py
 ```
 
-Each Batch job writes `<id>_manifest.json` to its scenario's `scenario/<id>/` prefix. Re-rendering reads those alongside the sidecars so the audit reflects extraction outcomes (status, validation result, mismatch counts) next to ingestion outcomes. The CSVs the container produces live at `s3://coeqwal-model-run/scenario/<id>/csv/` and are now ready for the statistics ETL (`etl/statistics/run_all.py`, separate runbook).
+Each Batch job writes `extract_record.json` to its scenario's `scenario/<id>/` prefix. Re-rendering reads those alongside the per-scenario ingest records so the audit reflects extraction outcomes (status, validation result, mismatch counts) next to ingestion outcomes. The CSVs the container produces live at `s3://coeqwal-model-run/scenario/<id>/csv/` and are now ready for the statistics ETL (`etl/statistics/run_all.py`, separate runbook).
 
 ### What is next
 
-Pass 2b will tighten the Batch container to strict-mode-against-sidecar, add Lambda sidecar inference so pure drag-and-drop in the AWS console works without developer follow-up, and add end-to-end API verification. The seven developer steps above do not change.
+Pass 2b will tighten the Batch container to strict-mode-against-ingest-record, add Lambda ingest-record inference so pure drag-and-drop in the AWS console works without developer follow-up, and add end-to-end API verification. The seven developer steps above do not change.
 
 For deeper context (concepts, the six layers of validation, the manual upload path, AWS-side details), see the sections below.
 
@@ -225,11 +225,11 @@ flowchart LR
   CSV -->|"reads (folder IDs,<br/>pinned filenames)"| IngScript
   Drive -->|"rclone copy<br/>(via local temp dir)"| IngScript
   IngScript -->|"boto3 upload"| S3Staging
-  S3Staging -->|"developer: promote<br/>(sidecar -> trend -> ZIP last)"| S3Ready
+  S3Staging -->|"developer: promote<br/>(ingest_record -> trend -> ZIP last)"| S3Ready
   S3Ready -->|"S3 PUT event on ZIP"| Lambda
   Lambda -->|"SubmitJob"| Batch
   Batch --> Container
-  Container -->|"DSS to CSV + manifest"| S3CSV
+  Container -->|"DSS to CSV + extract_record"| S3CSV
   S3CSV -->|"developer: run_all.py"| Stats
   S3CSV -.->|"team-delivered drops"| Tiers
   Stats -->|"INSERT"| RDS
@@ -242,8 +242,8 @@ flowchart LR
 | Stage | Directory | What lives here |
 |---|---|---|
 | 1. Ingestion (developer) | [ingestion/](ingestion/) | The source-of-truth CSV plus the developer scripts that pull model runs from Google Drive, validate them, stage to S3, and promote to `ready/`. Start here when loading a new scenario. |
-| 2. Trigger (automatic) | [lambda/](lambda/) | The `coeqwalEtlTrigger` Lambda. Fires on every `ready/` ZIP PUT, moves the ZIP and its sidecar to the scenario layout, and submits a Batch job. |
-| 3. Extraction (automatic) | [batch-container/](batch-container/) | The Dockerfile and Python code that AWS Batch runs in Fargate Spot. Reads a CalSim ZIP, classifies its DSS files, converts to CSV, verifies units, writes a manifest. Built and pushed by [.github/workflows/etl.yml](../.github/workflows/etl.yml). |
+| 2. Trigger (automatic) | [lambda/](lambda/) | The `coeqwalEtlTrigger` Lambda. Fires on every `ready/` ZIP PUT, moves the ZIP and its ingest record to the scenario layout, and submits a Batch job. |
+| 3. Extraction (automatic) | [batch-container/](batch-container/) | The Dockerfile and Python code that AWS Batch runs in Fargate Spot. Reads a CalSim ZIP, classifies its DSS files, converts to CSV, verifies units, writes an extract record. Built and pushed by [.github/workflows/etl.yml](../.github/workflows/etl.yml). |
 | 4a. Statistics ETL (developer) | [statistics/](statistics/) | `run_all.py` and per-module calculators that read the extracted CSVs out of S3 and load derived metrics into the database. |
 | 4b. Tier data (developer) | [tier_data/](tier_data/) | Loads tier outcome levels from team-delivered CSVs. Independent of the Drive -> Batch path. |
 | Verification | [verification/](verification/) | End-to-end accuracy checks (DSS to CSV to DB to API). |
@@ -259,8 +259,8 @@ A few terms appear over and over in this README and in the code. The shortest de
 
 A scenario's ZIP reaches `s3://coeqwal-model-run/ready/<id>/` one of two ways:
 
-- **Automated path** (default). `gdrive_bulk_download.py download` reads the working CSV, downloads from Google Drive via rclone, validates, hashes, writes a `sidecar.json`, stages everything under `s3://coeqwal-model-run/staging/scenario_data/<id>/`, and waits for the developer to run `promote` to copy to `ready/`. The audit auto-renders at the end of `download`.
-- **Manual path**. The developer uploads the ZIP (and any peers) directly through the AWS console (drag-and-drop) or with `etl/ingestion/tools/manual_ingest.py upload`. The sidecar is optional at upload time, but Batch requires one to run, so the developer follows up with `tools/manual_ingest.py sidecar --retrigger-batch` if they did not include one.
+- **Automated path** (default). `gdrive_bulk_download.py download` reads the working CSV, downloads from Google Drive via rclone, validates, hashes, writes an `ingest_record.json`, stages everything under `s3://coeqwal-model-run/staging/scenario_data/<id>/`, and waits for the developer to run `promote` to copy to `ready/`. The audit auto-renders at the end of `download`.
+- **Manual path**. The developer uploads the ZIP (and any peers) directly through the AWS console (drag-and-drop) or with `etl/ingestion/tools/manual_ingest.py upload`. The ingest record is optional at upload time, but Batch requires one to run, so the developer follows up with `tools/manual_ingest.py ingest-record --retrigger-batch` if they did not include one.
 
 Both paths land at the same key shape in S3, so downstream stages do not branch on path.
 
@@ -268,13 +268,13 @@ The S3 staging prefix is `staging/scenario_data/` (not just `staging/`). Tier-da
 
 ### SHA-256, in plain terms
 
-SHA-256 is a fingerprint of a file's bytes. Two files with the same fingerprint are byte-identical; one different byte changes the fingerprint completely. The script hashes the ZIP, the DV entry inside the ZIP, the SV entry inside the ZIP, and the trend CSV (when present), and writes the hashes into `sidecar.json` at ingest time. Later, the Batch container computes its own hash of what it actually extracted and compares it to the sidecar. A mismatch (`HASH_DRIFT`) means the file changed between ingest and extraction, which should never happen and is worth investigating.
+SHA-256 is a fingerprint of a file's bytes. Two files with the same fingerprint are byte-identical; one different byte changes the fingerprint completely. The script hashes the ZIP, the DV entry inside the ZIP, the SV entry inside the ZIP, and the trend CSV (when present), and writes the hashes into `ingest_record.json` at ingest time. Later, the Batch container computes its own hash of what it actually extracted and compares it to the ingest record. A mismatch (`HASH_DRIFT`) means the file changed between ingest and extraction, which should never happen and is worth investigating.
 
-### sidecar.json
+### ingest_record.json
 
-`sidecar.json` is a short JSON file that travels next to each scenario's ZIP. It pins the exact DV and SV basenames Batch should extract, plus SHA-256 hashes of the ZIP and of the chosen DV/SV entries inside it. The Batch container uses it as its source of truth instead of guessing from filenames. The audit uses it as the contract that container output is checked against.
+`ingest_record.json` is a short JSON file that travels next to each scenario's ZIP. It pins the exact DV and SV basenames Batch should extract, plus SHA-256 hashes of the ZIP and of the chosen DV/SV entries inside it. The Batch container uses it as its source of truth instead of guessing from filenames. The audit uses it as the contract that container output is checked against.
 
-The full schema is documented in [`ingestion/gdrive_bulk_download.py`](ingestion/gdrive_bulk_download.py) under `build_sidecar`. The short version:
+The full schema is documented in [`ingestion/lib/zip_validation.py`](ingestion/lib/zip_validation.py) under `build_ingest_record`. The short version:
 
 - `schema_version`, `short_code`
 - `expected_dv_filename`, `expected_sv_filename`, `dv_sha256`, `sv_sha256`, `dv_filesize_bytes`, `sv_filesize_bytes`, `expected_dv_path_in_zip`, `expected_sv_path_in_zip`
@@ -317,8 +317,8 @@ Multiple scenarios share the same SV (input state-variable) DSS file on purpose.
 ### Required vs optional inputs
 
 - **ZIP**: always required. Without it there is nothing to extract.
-- **sidecar.json**: required to run Batch. Optional at upload time on the manual path, but Batch fails fast without it.
-- **Trend report CSV**: optional everywhere. Used downstream for verification. If a trend report is missing, ambiguous (multiple CSVs with no pin), or the pin does not match anything in the folder, the scenario still stages, gets a sidecar (with `trend_csv_basename` set to `null`), and is marked `verification_status='unverified_*'` in the audit. The audit surfaces unverified scenarios in their own informational section, separate from the actionable failures.
+- **ingest_record.json**: required to run Batch. Optional at upload time on the manual path, but Batch fails fast without it.
+- **Trend report CSV**: optional everywhere. Used downstream for verification. If a trend report is missing, ambiguous (multiple CSVs with no pin), or the pin does not match anything in the folder, the scenario still stages, gets an ingest record (with `trend_csv_basename` set to `null`), and is marked `verification_status='unverified_*'` in the audit. The audit surfaces unverified scenarios in their own informational section, separate from the actionable failures.
 
 ### Audit vs logs
 
@@ -335,12 +335,10 @@ Each scenario ends up with two small JSON files alongside its ZIP. Each names on
 
 | File | Location | Written by | Records |
 |---|---|---|---|
-| `sidecar.json` | `scenario/<id>/run/sidecar.json` | ingestion (`gdrive_bulk_download.py` or `tools/manual_ingest.py`) | What the developer believes is in the ZIP. Basenames, hashes, sizes, provenance. |
-| `<id>_manifest.json` | `scenario/<id>/<id>_manifest.json` | Batch container | What the container did. Status, status_summary, validation result and mismatch counts inlined, processed_at, job_id, output keys. |
+| `ingest_record.json` | `scenario/<id>/ingest_record.json` | ingestion (`gdrive_bulk_download.py` or `tools/manual_ingest.py`) | What the developer believes is in the ZIP. Basenames, hashes, sizes, provenance. |
+| `extract_record.json` | `scenario/<id>/extract_record.json` | Batch container | What the container did. Status, status_summary, validation result and mismatch counts inlined, processed_at, job_id, output keys. |
 
 `tools/audit.py` reads both per scenario and cross-references them in `audit.md`. Together they answer "did the developer know what they were uploading?" and "did the container extract a valid result?"
-
-Pass 2b will add a third JSON, `lambda_status.json` written by the trigger Lambda, recording dispatch decisions (sidecar present, dedup, Batch submission). Audit will pick it up alongside the other two when it lands.
 
 ### Skip-not-abort
 
@@ -352,11 +350,11 @@ If the DV (or SV) basename declared in the working CSV matches more than one non
 
 ### No git in code
 
-The scripts in this directory never call `git`. They write files to disk in tracked locations (`etl/ingestion/audit.md`) and to S3 (sidecars, classification records). The developer commits when they are ready.
+The scripts in this directory never call `git`. They write files to disk in tracked locations (`etl/ingestion/audit.md`) and to S3 (ingest records, classification records). The developer commits when they are ready.
 
 ### Timing and race conditions, in one paragraph
 
-S3 events are at-least-once and per-object. The Lambda is wired to fire on a ZIP PUT under `ready/`, which means the ZIP is the trigger and everything else must already be at rest when it lands. Six defenses protect against the obvious failure modes: (1) the automated `promote` enforces upload order `sidecar.json` -> trend CSV -> ZIP last; (2) Pass 2b adds a 60-second Lambda grace window (HEAD-and-retry, not a fixed sleep) to catch in-flight sidecars without adding latency in the common case where the sidecar is already at rest; (3) Pass 2b adds a Lambda idempotency check that does not submit duplicate Batch jobs; (4) `manual_ingest.py sidecar --retrigger-batch` recovers from a missing sidecar without re-uploading the ZIP; (5) the "Manual upload path" section below tells human uploaders to upload the sidecar (and trend) before the ZIP; (6) Pass 2b adds Lambda-side sidecar inference so that a pure drag-and-drop with no sidecar still produces a strict-mode-compatible sidecar before Batch is submitted.
+S3 events are at-least-once and per-object. The Lambda is wired to fire on a ZIP PUT under `ready/`, which means the ZIP is the trigger and everything else must already be at rest when it lands. Six defenses protect against the obvious failure modes: (1) the automated `promote` enforces upload order `ingest_record.json` -> trend CSV -> ZIP last; (2) Pass 2b adds a 60-second Lambda grace window (HEAD-and-retry, not a fixed sleep) to catch in-flight ingest records without adding latency in the common case where the record is already at rest; (3) Pass 2b adds a Lambda idempotency check that does not submit duplicate Batch jobs; (4) `manual_ingest.py ingest-record --retrigger-batch` recovers from a missing ingest record without re-uploading the ZIP; (5) the "Manual upload path" section below tells human uploaders to upload the ingest record (and trend) before the ZIP; (6) Pass 2b adds Lambda-side inference so that a pure drag-and-drop with no ingest record still produces a strict-mode-compatible ingest record before Batch. is submitted.
 
 ## How to ingest the model run data (step by step)
 
@@ -511,7 +509,7 @@ python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0070 s0080
 python etl/ingestion/gdrive_bulk_download.py scan --all
 ```
 
-`scan` walks each scenario's Drive folder and writes `scan_audit.csv`. It catches missing folders, missing ZIPs, missing trend CSVs, folder-name mismatches, and pinned-filename-not-found cases before you spend bandwidth on a real download run. It never touches S3 and never downloads files. Run it as a pre-flight on a freshly bootstrapped working CSV, or after editing rows.
+`scan` walks each scenario's Drive folder and writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json` (run `python etl/ingestion/tools/show_last_run.py --stage scan` for a tabular view). It catches missing folders, missing ZIPs, missing trend CSVs, folder-name mismatches, and pinned-filename-not-found cases before you spend bandwidth on a real download run. It never touches S3 and never downloads files. Run it as a pre-flight on a freshly bootstrapped working CSV, or after editing rows.
 
 #### Running scan locally (from your local)
 
@@ -547,7 +545,7 @@ python etl/ingestion/gdrive_bulk_download.py download --scenarios s0070 s0080
 python etl/ingestion/gdrive_bulk_download.py download --all
 ```
 
-This is the two-stage validation in action. Layer 1 validates the spreadsheet (essential columns present, paths non-empty, folder IDs parse, short_codes unique, DV basenames unique). Layer 2 then downloads each ZIP into a temp dir and validates its contents (DV and SV basenames present, exactly once, in a non-excluded subfolder). SHA-256 is computed for the ZIP, the DV entry, the SV entry, and the trend CSV when present. Everything lands in `s3://coeqwal-model-run/staging/scenario_data/<id>/` alongside its `sidecar.json`. Per-scenario failures skip that scenario, record an error code, and continue.
+This is the two-stage validation in action. Layer 1 validates the spreadsheet (essential columns present, paths non-empty, folder IDs parse, short_codes unique, DV basenames unique). Layer 2 then downloads each ZIP into a temp dir and validates its contents (DV and SV basenames present, exactly once, in a non-excluded subfolder). SHA-256 is computed for the ZIP, the DV entry, the SV entry, and the trend CSV when present. Everything lands in `s3://coeqwal-model-run/staging/scenario_data/<id>/` alongside its `ingest_record.json`. Per-scenario failures skip that scenario, record an error code, and continue.
 
 When the run finishes, `audit.md` regenerates automatically from the run state and current S3 state. Open it to see what staged cleanly, what skipped, and what marked itself unverified. Pass `--skip-audit` to skip the auto-render if you want to defer.
 
@@ -557,13 +555,13 @@ When the run finishes, `audit.md` regenerates automatically from the run state a
 python etl/ingestion/gdrive_bulk_download.py promote
 ```
 
-`promote` copies each scenario's files to `ready/<id>/` in a fixed order: `sidecar.json` first, trend CSV next, ZIP last. The ZIP PUT triggers the Lambda, so the sidecar and trend are already at rest when the trigger fires.
+`promote` copies each scenario's files to `ready/<id>/` in a fixed order: `ingest_record.json` first, trend CSV next, ZIP last. The ZIP PUT triggers the Lambda, so the ingest record and trend are already at rest when the trigger fires.
 
 Use `--scenarios s0020,s0021` to promote a subset, and `--dry-run` to print the planned copy order without copying.
 
 ### Full pipeline orchestrator
 
-For Cloud9 operators who want **scan → download → promote → wait for AWS Batch → statistics (`run_all.py`) → verification (`verify_all_sections.py`)** in one process, use [`run_full_pipeline.py`](run_full_pipeline.py). It subprocesses the existing tools (their stdout/stderr stream live), continues past per-scenario failures, and writes a consolidated report.
+For Cloud9 developers who want **scan → download → promote → wait for AWS Batch → statistics (`run_all.py`) → verification (`verify_all_sections.py`)** in one process, use [`run_full_pipeline.py`](run_full_pipeline.py). It subprocesses the existing tools (their stdout/stderr stream live), continues past per-scenario failures, and writes a consolidated report.
 
 **Canonical command** for every scenario in the working CSV:
 
@@ -577,14 +575,14 @@ Or pass explicit IDs: `--scenarios s0107 s0108 …`.
 
 **Stages (one line each):**
 
-1. **scan** — Google Drive presence check (`gdrive_bulk_download.py scan`); parses `scan_audit.csv`.
-2. **download** — rclone pull + Layer 2 validation + S3 staging (`download`); parses `audit_report.csv` (`validation_status == OK` continues).
+1. **scan** — Google Drive presence check (`gdrive_bulk_download.py scan`); reads `ingest_state.json::scan` to decide which scenarios move on.
+2. **download** — rclone pull + Layer 2 validation + S3 staging (`download`); reads `ingest_state.json::download` (`validation_status == OK` continues).
 3. **promote** — copies staging → `ready/` (`promote`); confirms each ZIP exists under `ready/<id>/`.
-4. **batch** — discovers Lambda-named jobs `etl-<scenario>-*` on queue `coeqwal-dss-queue`, polls until terminal state, then cross-checks `scenario/<id>/<id>_manifest.json` (`status` must be `SUCCEEDED` or `SUCCEEDED_PARTIAL`).
+4. **batch** — discovers Lambda-named jobs `etl-<scenario>-*` on queue `coeqwal-dss-queue`, polls until terminal state, then cross-checks `scenario/<id>/extract_record.json` (`status` must be `SUCCEEDED` or `SUCCEEDED_PARTIAL`).
 5. **statistics** — `etl/statistics/run_all.py --scenario <id>` per scenario that succeeded extraction.
 6. **verify** — `etl/statistics/verify_all_sections.py --scenario <id> --report-dir <run>/verify`.
 
-**Outputs:** default report directory `etl/ingestion/audit_reports/pipeline_runs/<UTC>/` with stage logs (`scan.log`, `download.log`, …), `pipeline_state.json` (resume), `pipeline_summary.csv`, and `pipeline_summary.json`. The process exits non-zero if any scenario failed any stage.
+**Outputs:** default report directory `etl/ingestion/audit_reports/pipeline_runs/<UTC>/` with stage logs (`scan.log`, `download.log`, …), `pipeline_state.json` (resume), and `pipeline_summary.md` (one human-readable summary table with per-scenario notes). The process exits non-zero if any scenario failed any stage.
 
 **Resume:** reuse the same directory and loaded state:
 
@@ -600,7 +598,7 @@ Earlier stages are left as recorded in `pipeline_state.json`; only stages from `
 
 ### Step 2: refresh the audit after Batch finishes
 
-The auto-render at the end of `download` captures pre-promote state. Once Batch finishes (one to two minutes per scenario after promote), the container writes `<id>_manifest.json` to each scenario's prefix. To pick that up:
+The auto-render at the end of `download` captures pre-promote state. Once Batch finishes (one to two minutes per scenario after promote), the container writes `extract_record.json` to each scenario's prefix. To pick that up:
 
 ```bash
 python etl/ingestion/tools/audit.py
@@ -614,12 +612,12 @@ Coming with Pass 2b. Will run `etl/verification/verify_api.py` and feed its outp
 
 ## Manual upload path
 
-Use this when the automated path cannot pick up a scenario (no Drive access, custom hand-assembled ZIP, one-off backfill) or when an existing scenario in S3 is missing its sidecar.
+Use this when the automated path cannot pick up a scenario (no Drive access, custom hand-assembled ZIP, one-off backfill) or when an existing scenario in S3 is missing its ingest record.
 
 There are two flavors. Pick whichever fits the situation:
 
 - **AWS console drag-and-drop**: deliberate, click-by-click, fine for one or two scenarios. The developer is responsible for upload order.
-- **`tools/manual_ingest.py`**: scripted, enforces upload order, builds the sidecar for you (including SHA-256 hashes computed by streaming the ZIP). Prefer this when you have any choice.
+- **`tools/manual_ingest.py`**: scripted, enforces upload order, builds the ingest record for you (including SHA-256 hashes computed by streaming the ZIP). Prefer this when you have any choice.
 
 ### Upload a new scenario from a local ZIP
 
@@ -632,28 +630,28 @@ python etl/ingestion/tools/manual_ingest.py upload \
     --sv-basename coeqwal_s9999_sv_v0.1.4.dss
 ```
 
-The script hashes the ZIP and the DV/SV entries inside it, builds the sidecar, and uploads in the safe order: `sidecar.json` -> trend CSV -> ZIP last. By default it uploads to `staging/scenario_data/<id>/`. Pass `--dest-prefix ready` to bypass `promote` and trigger Lambda immediately (use with care). `--trend-csv-path` is optional.
+The script hashes the ZIP and the DV/SV entries inside it, builds the ingest record, and uploads in the safe order: `ingest_record.json` -> trend CSV -> ZIP last. By default it uploads to `staging/scenario_data/<id>/`. Pass `--dest-prefix ready` to bypass `promote` and trigger Lambda immediately (use with care). `--trend-csv-path` is optional.
 
 ### Upload through the AWS console
 
-Today (Pass 2a): the Batch container does not require a sidecar. Pure drag-and-drop works because the container falls back to filename heuristics. The upload order below is what makes it work cleanly when you do have a sidecar to attach.
+Today (Pass 2a): the Batch container does not require an ingest record. Pure drag-and-drop works because the container falls back to filename heuristics. The upload order below is what makes it work cleanly when you do have an ingest record to attach.
 
-After Pass 2b: the container becomes strict and requires a sidecar, but the Lambda will infer one from the ZIP when none is present (see "Sidecar policy in Pass 2b" below). Pure drag-and-drop still works, and the audit will flag the inferred row for review.
+After Pass 2b: the container becomes strict and requires an ingest record, but the Lambda will infer one from the ZIP when none is present (see "Ingest record policy in Pass 2b" below). Pure drag-and-drop still works, and the audit will flag the inferred row for review.
 
 When uploading by hand through the S3 console, **upload in this order**:
 
-1. `sidecar.json` first (skip this file entirely if you do not have one and want the Lambda to infer)
+1. `ingest_record.json` first (skip this file entirely if you do not have one and want the Lambda to infer)
 2. The trend CSV (if you have one)
 3. The ZIP last, because the ZIP PUT is the Lambda trigger
 
-Include a sidecar when the ZIP is ambiguous (multiple DV-looking or SV-looking entries) and you want to pin which is canonical. Omit it when the ZIP is simple and you trust the Lambda's pick. The audit will tell you which scenarios used inference.
+Include an ingest record when the ZIP is ambiguous (multiple DV-looking or SV-looking entries) and you want to pin which is canonical. Omit it when the ZIP is simple and you trust the Lambda's pick. The audit will tell you which scenarios used inference.
 
-If you already uploaded the ZIP first by mistake and Batch failed because there was no sidecar, do not re-upload the ZIP. Use the recovery flow below.
+If you already uploaded the ZIP first by mistake and Batch failed because there was no ingest record, do not re-upload the ZIP. Use the recovery flow below.
 
-### Recover from NO_SIDECAR
+### Recover from NO_INGEST_RECORD
 
 ```bash
-python etl/ingestion/tools/manual_ingest.py sidecar \
+python etl/ingestion/tools/manual_ingest.py ingest-record \
     --short-code s0030 \
     --dv-basename s0030_dcradjhist_2020lu_noflowreqt_dv_20260126v02.dss \
     --sv-basename coeqwal_s9999_sv_v0.1.4.dss \
@@ -661,18 +659,18 @@ python etl/ingestion/tools/manual_ingest.py sidecar \
     --retrigger-batch
 ```
 
-This locates the existing ZIP in `scenario/<id>/run/`, streams it to compute SHA-256 for the chosen DV and SV entries (and for the ZIP itself), PUTs `sidecar.json` next to the ZIP, then submits a Batch job directly with the right environment variables. No re-upload required.
+This locates the existing ZIP in `scenario/<id>/run/`, streams it to compute SHA-256 for the chosen DV and SV entries (and for the ZIP itself), PUTs `ingest_record.json` at `scenario/<id>/`, then submits a Batch job directly with the right environment variables. No re-upload required.
 
-### Backfill sidecars for already-loaded scenarios
+### Backfill ingest records for already-loaded scenarios
 
-The 72 scenarios listed at the top of this README were ingested before the sidecar contract existed. Run this once after Pass 2a is deployed:
+The 72 scenarios listed at the top of this README were ingested before the ingest-record contract existed. Run this once after Pass 2a is deployed:
 
 ```bash
-python etl/ingestion/tools/backfill_sidecars.py --dry-run  # plan
-python etl/ingestion/tools/backfill_sidecars.py            # execute
+python etl/ingestion/tools/backfill_ingest_records.py --dry-run  # plan
+python etl/ingestion/tools/backfill_ingest_records.py            # execute
 ```
 
-Reads the working CSV, locates each scenario's ZIP in `scenario/<id>/run/`, computes hashes by streaming the existing S3 ZIP, and writes `sidecar.json`. Use `--overwrite` to replace an existing sidecar.
+Reads the working CSV, locates each scenario's ZIP in `scenario/<id>/run/`, computes hashes by streaming the existing S3 ZIP, and writes `ingest_record.json` to `scenario/<id>/`. Use `--overwrite` to replace an existing record.
 
 ## Developer scripts in `etl/ingestion/`
 
@@ -690,12 +688,12 @@ The audit, recovery, verification, maintenance, and the manual upload path. See 
 
 | Script | What it does |
 |---|---|
-| [`tools/audit.py`](ingestion/tools/audit.py) | Projects S3 state (sidecar + manifest per scenario) plus the local `audit_state.json` into `etl/ingestion/audit.md`. Auto-runs at the end of `download`. Re-run manually after Batch finishes. |
-| [`tools/manual_ingest.py`](ingestion/tools/manual_ingest.py) | Developer helper for the manual upload path. Subcommands `upload` (with safe upload order) and `sidecar` (build a sidecar for an existing ZIP, optionally retrigger Batch). |
-| [`tools/show_last_run.py`](ingestion/tools/show_last_run.py) | Print a one-screen summary of the last `gdrive_bulk_download` run. |
+| [`tools/audit.py`](ingestion/tools/audit.py) | Projects S3 state (ingest record + extract record per scenario) plus the local `ingest_state.json::download` block into `etl/ingestion/audit.md`. Auto-runs at the end of `download`. Re-run manually after Batch finishes. |
+| [`tools/manual_ingest.py`](ingestion/tools/manual_ingest.py) | Developer helper for the manual upload path. Subcommands `upload` (with safe upload order) and `ingest-record` (build an ingest record for an existing ZIP, optionally retrigger Batch). |
+| [`tools/show_last_run.py`](ingestion/tools/show_last_run.py) | Print a one-screen summary of the most recent ingest stage. Default shows `download`; `--stage scan` or `--stage all` switches the view. |
 | [`tools/retrigger_extraction.sh`](ingestion/tools/retrigger_extraction.sh) | Re-upload one ZIP to `ready/` to force the Lambda to fire again. Default recovery tool. |
 | [`tools/reextract_all_scenarios.py`](ingestion/tools/reextract_all_scenarios.py) | Submit Batch jobs directly against ZIPs already in `scenario/<id>/run/`, bypassing the Lambda. Surgical alternative to `retrigger_extraction.sh`. Supports `--validate`, `--memory`/`--vcpus`, and `--sv-only`/`--dv-only`. |
-| [`tools/backfill_sidecars.py`](ingestion/tools/backfill_sidecars.py) | One-time helper to write `sidecar.json` for scenarios that landed in S3 before the sidecar contract existed. |
+| [`tools/backfill_ingest_records.py`](ingestion/tools/backfill_ingest_records.py) | One-time helper to write `ingest_record.json` for scenarios that landed in S3 before the ingest-record contract existed. |
 | [`tools/refresh_active_scenarios.py`](ingestion/tools/refresh_active_scenarios.py) | Rewrites the active-scenarios block at the top of this README from the live API. |
 
 ### Library modules (`ingestion/lib/`)
@@ -707,8 +705,8 @@ Imported by the CLIs above; not run directly. Each file has a one-line docstring
 | File | What it does |
 |---|---|
 | [`requirements.txt`](ingestion/requirements.txt) | `boto3`. Install once during Cloud9 setup. |
-| [`scenario_listing/`](ingestion/scenario_listing/) | The WAM source CSV + operator-editable working CSV. Tracked in git. |
-| `audit_reports/` | Per-run audit CSVs and `audit_state.json`. Gitignored. |
+| [`scenario_listing/`](ingestion/scenario_listing/) | The WAM source CSV + developer-editable working CSV. Tracked in git. |
+| `audit_reports/` | Per-run `ingest_state.json` (scan + download blocks) and `pipeline_runs/<timestamp>/` orchestrator logs. Gitignored. |
 
 ## Troubleshooting
 
@@ -729,7 +727,7 @@ Most developer-facing failures surface in `audit.md` with an `error_code` and an
 | `verification_status: unverified_multi_trend` | audit "Unverified scenarios" | More than one CSV in the trend folder, no pin. Set `pinned_trend_csv` and re-run `download --scenarios <id>` if you want verification. |
 | `verification_status: unverified_pin_missing` | audit "Unverified scenarios" | `pinned_trend_csv` does not match any file in the trend folder. Fix the pin or upload the named file. |
 | `No space left on device` | `download` mid-run | Reduce `--workers` to 1, or resize the EBS volume (see "Cloud9 setup"). |
-| Manifest shows `calsim_csv_written: false`, `OutOfMemoryError` in Batch logs | post-extraction audit | Re-extract with `--memory 16384` (or 32768). Common with the `*_DWRadapt25_*_DCP` group, which produces ~326 MB CSVs vs ~200 MB for typical scenarios. |
+| `extract_record.json` shows `status_summary.dv_csv_written: false`, `OutOfMemoryError` in Batch logs | post-extraction audit | Re-extract with `--memory 16384` (or 32768). Common with the `*_DWRadapt25_*_DCP` group, which produces ~326 MB CSVs vs ~200 MB for typical scenarios. |
 
 ## Recovery and re-extraction
 
@@ -775,7 +773,7 @@ bash etl/ingestion/tools/retrigger_extraction.sh --go s0020
 
 ### Confirm extraction outcomes across all scenarios
 
-`tools/audit.py` is the single audit tool. After Batch jobs finish, re-run it to pick up the new manifests and refresh `etl/ingestion/audit.md`:
+`tools/audit.py` is the single audit tool. After Batch jobs finish, re-run it to pick up the new extract records and refresh `etl/ingestion/audit.md`:
 
 ```bash
 python etl/ingestion/tools/audit.py
@@ -786,13 +784,14 @@ python etl/ingestion/tools/audit.py
 To inspect one scenario manually:
 
 ```bash
-aws s3 cp s3://coeqwal-model-run/scenario/s0021/s0021_manifest.json - | python -m json.tool
+aws s3 cp s3://coeqwal-model-run/scenario/s0021/extract_record.json - | python -m json.tool
+aws s3 cp s3://coeqwal-model-run/scenario/s0021/ingest_record.json - | python -m json.tool
 aws s3 ls s3://coeqwal-model-run/scenario/s0021/validation/
 ```
 
 ## Validation checks
 
-The pipeline runs the same payload through six layers of checks. Whatever caused bad data is caught at the earliest layer that can detect it. Pass 2a covers Layers 1 and 2. Pass 2b extends to Layers 4, 5, and 6. Layer 3 is the sidecar artifact itself.
+The pipeline runs the same payload through six layers of checks. Whatever caused bad data is caught at the earliest layer that can detect it. Pass 2a covers Layers 1 and 2. Pass 2b extends to Layers 4, 5, and 6. Layer 3 is the ingest record artifact itself.
 
 ### Layer 1: spreadsheet (in `read_scenario_source_csv`)
 
@@ -802,7 +801,7 @@ The pipeline runs the same payload through six layers of checks. Whatever caused
 | 2 | Essential values non-empty for every `ready` row | Row is skipped, error recorded. |
 | 3 | `short_code` unique across all rows | Logged as warning. |
 | 4 | `dv_filename` unique across `ready` rows (cross-paste detector) | Logged as warning. |
-| 5 | `drive_folder_url` parses to a folder ID via `/folders/<id>` | Falls back to `path` mode using `GoogleDriveFolderName` (the same fallback `scan` already uses). Ingest only fails (`NO_DRIVE_ACCESS`) when the folder name is also empty. The chosen mode is recorded in the audit's `access_mode` column and in `sidecar.json` under `ingestion.access_mode`. |
+| 5 | `drive_folder_url` parses to a folder ID via `/folders/<id>` | Falls back to `path` mode using `GoogleDriveFolderName` (the same fallback `scan` already uses). Ingest only fails (`NO_DRIVE_ACCESS`) when the folder name is also empty. The chosen mode is recorded in the audit's `access_mode` column and in `ingest_record.json` under `ingestion.access_mode`. |
 | 6 | `short_code` appears in the DV basename | Convention warning only; surfaced in the audit per scenario. |
 
 SV basenames are intentionally NOT checked for uniqueness: SV inputs are reused across scenarios on purpose.
@@ -815,34 +814,34 @@ SV basenames are intentionally NOT checked for uniqueness: SV inputs are reused 
 | 8 | Expected DV basename present in ZIP in a non-excluded subfolder | `EXPECTED_DV_NOT_IN_ZIP`. |
 | 9 | Expected SV basename present in ZIP in a non-excluded subfolder | `EXPECTED_SV_NOT_IN_ZIP`. |
 | 10 | No multi-match: each expected basename matches at most one non-excluded path | `MULTI_MATCH_DV` or `MULTI_MATCH_SV`. |
-| 11 | SHA-256 computed for the selected DV, SV, ZIP, and (when present) trend CSV | Captured in `sidecar.json`. |
+| 11 | SHA-256 computed for the selected DV, SV, ZIP, and (when present) trend CSV | Captured in `ingest_record.json`. |
 | 12 | Trend report folder has exactly one CSV, or `pinned_trend_csv` set | Scenario still stages. `verification_status` is set to `unverified_no_trend`, `unverified_multi_trend`, or `unverified_pin_missing` and the audit lists it under "Unverified scenarios". |
-| 13 | Short code appears in DV basename | Convention warning only. (SV side is recorded in the sidecar but not warned about.) |
-| 14 | `promote` uploads in order: `sidecar.json` -> trend CSV -> ZIP last | Enforced by `cmd_promote`. |
+| 13 | Short code appears in DV basename | Convention warning only. (SV side is recorded in the ingest record but not warned about.) |
+| 14 | `promote` uploads in order: `ingest_record.json` -> trend CSV -> ZIP last | Enforced by `cmd_promote`. |
 
-### Layer 3: sidecar.json (artifact)
+### Layer 3: ingest_record.json (artifact)
 
-Not a check, an artifact. `sidecar.json` is the contract that Layers 4-6 verify against. It is also the only place where the basenames, hashes, sizes, and provenance for a scenario are recorded in a single object.
+Not a check, an artifact. `ingest_record.json` is the contract that Layers 4-6 verify against. It is also the only place where the basenames, hashes, sizes, and provenance for a scenario are recorded in a single object.
 
 ### Layers 4, 5, 6 (Pass 2b)
 
 Container strict mode + audit aggregation + API verification. Documented after Pass 2b.
 
-#### Sidecar policy in Pass 2b (decided 2026-05-15)
+#### Ingest record policy in Pass 2b (decided 2026-05-15)
 
-The Batch container runs strict-mode against `sidecar.json`. No filename heuristics inside the container.
+The Batch container runs strict-mode against `ingest_record.json`. No filename heuristics inside the container.
 
-To keep pure drag-and-drop usable, the Lambda is the inference point. When a ZIP lands in `ready/<id>/` with no peer `sidecar.json`, the Lambda opens the ZIP, picks the obvious DV and SV by basename pattern, computes SHA-256 for the chosen entries and the ZIP, writes `sidecar.json` to `ready/<id>/`, then submits the Batch job. The inferred sidecar records `ingestion.path = "lambda_inferred"` so the audit can flag those scenarios for human review even though they extracted cleanly.
+To keep pure drag-and-drop usable, the Lambda is the inference point. When a ZIP lands in `ready/<id>/` with no peer `ingest_record.json`, the Lambda opens the ZIP, picks the obvious DV and SV by basename pattern, computes SHA-256 for the chosen entries and the ZIP, writes `ingest_record.json` to `scenario/<id>/`, then submits the Batch job. The inferred record sets `ingestion.path = "lambda_inferred"` so the audit can flag those scenarios for human review even though they extracted cleanly.
 
 This makes three paths converge on the same strict container contract:
 
-| Path | Where the sidecar comes from |
+| Path | Where the ingest record comes from |
 |---|---|
 | `gdrive_bulk_download.py download` | Written before the ZIP, uploaded in safe order by `promote`. `ingestion.path = "gdrive_bulk_download"`. |
 | `manual_ingest.py upload` | Built by the script, uploaded in safe order. `ingestion.path = "manual_ingest"`. |
-| Console drag-and-drop, no sidecar | Inferred by the Lambda from the ZIP. `ingestion.path = "lambda_inferred"`. |
+| Console drag-and-drop, no record | Inferred by the Lambda from the ZIP. `ingestion.path = "lambda_inferred"`. |
 
-Console drag-and-drop with an developer-supplied sidecar is the recommended path when the ZIP has multiple DV-looking or SV-looking entries that inference cannot disambiguate. The developer uploads the sidecar first, the ZIP last. The Lambda sees the sidecar already in place and skips inference.
+Console drag-and-drop with a developer-supplied ingest record is the recommended path when the ZIP has multiple DV-looking or SV-looking entries that inference cannot disambiguate. The developer uploads the ingest record first, the ZIP last. The Lambda sees the record already in place and skips inference.
 
 ## Output files (audits, generated SQL)
 
@@ -850,9 +849,7 @@ Every script that produces an artifact writes it into a module-local `output/` d
 
 | Stage | File | Purpose | Default location | Generator | Override |
 |---|---|---|---|---|---|
-| Pre-download (Drive scan) | `scan_audit.csv` | Are all the expected ZIPs and trend CSVs actually present on Google Drive? Should be all `OK` before downloading. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py scan` | `--output-dir` |
-| Post-download | `audit_report.csv` | Did each scenario download cleanly from Drive and stage to S3? Per-scenario validation flags. Also uploaded to `s3://coeqwal-model-run/staging/scenario_data/audit_report.csv`. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py download` | `--output-dir` |
-| Post-download (state) | `audit_state.json` | Per-row JSON projection consumed by `etl/ingestion/tools/audit.py`. Gitignored under `etl/**/audit_reports/`, regenerated each run. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py download` | `--output-dir` |
+| Ingest state (scan + download) | `ingest_state.json` | One unified per-run state file. The `scan` block records what `gdrive_bulk_download.py scan` saw on Drive (all rows should be `OK` before downloading). The `download` block records what `gdrive_bulk_download.py download` did per scenario (selected ZIP/DV/SV, hashes, validation status, error code, S3 keys). Consumed by `etl/ingestion/tools/audit.py` (download block) and by `etl/run_full_pipeline.py` (both blocks). Re-running either subcommand replaces only its own block. Gitignored. Pretty-print one stage with `python etl/ingestion/tools/show_last_run.py --stage {scan,download,all}`. | `etl/ingestion/audit_reports/` | `gdrive_bulk_download.py scan` (writes `scan` block) and `gdrive_bulk_download.py download` (writes `download` block) | `--output-dir` |
 | Audit | `audit.md` | The digestible summary of the state of the system. Tracked in git. Includes extraction status, validation result, and mismatch counts for every active scenario. Auto-renders at the end of `gdrive_bulk_download.py download`. Re-renders standalone via `etl/ingestion/tools/audit.py` (use after Batch finishes). | `etl/ingestion/` | `etl/ingestion/tools/audit.py` (and auto-call from `download`) | `--out` |
 | Statistics ETL | `stats_audit_<ts>.csv` | Per-run scorecard: which `(scenario, module)` pairs succeeded and how long each took. One file per run, timestamped. | `etl/statistics/audit_reports/` | `run_all.py` | `--audit-dir` |
 | Data-quality scan | `duplicate_scan_results.csv` (+ sibling `_units.csv`) | Which CalSim variables show up twice with the same column name in the same scenario CSV. Cross-scenario diagnostic. | `etl/statistics/audit_reports/` | `scan_dupes.py` | `-o` / `--output` |
@@ -902,7 +899,7 @@ aws ecr describe-images --repository-name coeqwal-etl \
 aws s3 ls s3://coeqwal-model-run/scenario/
 aws s3 ls s3://coeqwal-model-run/staging/scenario_data/
 aws s3 ls s3://coeqwal-model-run/scenario/s0021/csv/
-aws s3 cp s3://coeqwal-model-run/scenario/s0021/s0021_manifest.json - | python -m json.tool
+aws s3 cp s3://coeqwal-model-run/scenario/s0021/extract_record.json - | python -m json.tool
 ```
 
 ## Cloud9 IAM permissions

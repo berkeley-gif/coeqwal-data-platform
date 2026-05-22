@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 """
-backfill_sidecars.py - one-time helper to write sidecar.json for scenarios
-already in S3.
+backfill_ingest_records.py - one-time helper to write `ingest_record.json`
+for scenarios already in S3.
 
-Walks `etl/ingestion/scenario_listing/model_run_file_source_working.csv` (the same file that
-gdrive_bulk_download.py reads), takes its run scope from `--scenarios`/`--all`,
-locates each scenario's ZIP in `s3://<bucket>/scenario/<id>/run/`, computes
-SHA-256 for the selected DV and SV entries plus the ZIP, and PUTs a
-sidecar.json at `scenario/<id>/run/sidecar.json`. Existing sidecars are
-left alone unless `--overwrite` is set.
+Walks `etl/ingestion/scenario_listing/model_run_file_source_working.csv`
+(the same file `gdrive_bulk_download.py` reads), takes its run scope from
+`--scenarios` / `--all`, locates each scenario's ZIP in
+`s3://<bucket>/scenario/<id>/run/`, computes SHA-256 for the selected DV
+and SV entries plus the ZIP, and PUTs an `ingest_record.json` at
+`scenario/<id>/ingest_record.json`. Existing records are left alone
+unless `--overwrite` is set.
 
-This is intended for the one-time backfill of the 72 active scenarios that
-were ingested before the sidecar contract existed. After backfill, every
-scenario in S3 has a sidecar and the Pass 2b container can run strictly.
+This is intended for the one-time backfill of the active scenarios that
+were ingested before the ingest-record contract existed. After backfill,
+every scenario in S3 has a record and the Pass 2b container can run
+strictly.
 
 Usage:
   # Dry-run plan
-  python etl/ingestion/tools/backfill_sidecars.py --dry-run
+  python etl/ingestion/tools/backfill_ingest_records.py --dry-run
 
   # Backfill all ready scenarios
-  python etl/ingestion/tools/backfill_sidecars.py
+  python etl/ingestion/tools/backfill_ingest_records.py
 
-  # Backfill a single scenario, overwriting any existing sidecar
-  python etl/ingestion/tools/backfill_sidecars.py --scenarios s0030 --overwrite
+  # Backfill a single scenario, overwriting any existing record
+  python etl/ingestion/tools/backfill_ingest_records.py --scenarios s0030 --overwrite
 """
 
 from __future__ import annotations
@@ -40,15 +42,16 @@ TOOLS_DIR = Path(__file__).parent
 REPO_ROOT = TOOLS_DIR.parent.parent.parent
 
 # Make `from etl.X import Y` work when this script is invoked as
-# `python etl/ingestion/tools/backfill_sidecars.py` from the repo root.
+# `python etl/ingestion/tools/backfill_ingest_records.py` from the repo root.
 sys.path.insert(0, str(REPO_ROOT))
 from etl.common import (  # noqa: E402
     DEFAULT_S3_BUCKET,
-    SCENARIO_PREFIX as SCENARIO_RUN_PREFIX,
+    ingest_record_key,
+    scenario_prefix,
 )
 from etl.ingestion.lib.config import (  # noqa: E402, F401
+    INGEST_RECORD_SCHEMA_VERSION,
     SCRIPT_VERSION,
-    SIDECAR_SCHEMA_VERSION,
     SPREADSHEET_URL,
     WORKING_CSV_PATH,
 )
@@ -62,25 +65,25 @@ from etl.ingestion.lib.utils import (  # noqa: E402, F401
     _sha256_of_bytes,
 )
 
-# Sidecar builder and S3 ZIP hashing live in manual_ingest (the canonical
-# manual-upload tool); reuse them here so backfill writes identical sidecars.
+# Record builder and S3 ZIP hashing live in manual_ingest (the canonical
+# manual-upload tool); reuse them here so backfill writes identical records.
 from etl.ingestion.tools.manual_ingest import (  # noqa: E402
-    _build_sidecar,
+    _build_ingest_record,
     _find_trend_in_run,
     _find_zip_in_run,
     _stream_sha_from_s3_zip,
 )
 
-log = logging.getLogger("backfill_sidecars")
+log = logging.getLogger("backfill_ingest_records")
 
 
-def _existing_sidecar_key(short_code: str) -> str:
-    return f"{SCENARIO_RUN_PREFIX}/{short_code}/run/sidecar.json"
+def _record_key_for(short_code: str) -> str:
+    return ingest_record_key(scenario_prefix(short_code))
 
 
-def _has_sidecar(s3, bucket: str, short_code: str) -> bool:
+def _has_record(s3, bucket: str, short_code: str) -> bool:
     try:
-        s3.head_object(Bucket=bucket, Key=_existing_sidecar_key(short_code))
+        s3.head_object(Bucket=bucket, Key=_record_key_for(short_code))
         return True
     except s3.exceptions.ClientError as e:
         code = e.response.get("Error", {}).get("Code", "")
@@ -92,12 +95,12 @@ def _has_sidecar(s3, bucket: str, short_code: str) -> bool:
 def _backfill_one(
     s3, bucket: str, scenario: Dict[str, Any], overwrite: bool, dry_run: bool,
 ) -> Dict[str, Any]:
-    """Build + PUT one sidecar. Returns a result record."""
+    """Build + PUT one ingest record. Returns a result record."""
     sc = scenario["short_code"]
     result: Dict[str, Any] = {
         "short_code": sc,
         "action": "",
-        "sidecar_key": "",
+        "ingest_record_key": "",
         "zip_key": "",
         "trend_csv_key": "",
         "error": "",
@@ -110,9 +113,9 @@ def _backfill_one(
         return result
     result["zip_key"] = zip_key
 
-    if not overwrite and _has_sidecar(s3, bucket, sc):
+    if not overwrite and _has_record(s3, bucket, sc):
         result["action"] = "skip"
-        result["error"] = "sidecar already exists (use --overwrite to replace)"
+        result["error"] = "ingest record already exists (use --overwrite to replace)"
         return result
 
     dv_basename = scenario["dv_filename"]
@@ -143,7 +146,7 @@ def _backfill_one(
         obj = s3.get_object(Bucket=bucket, Key=existing_trend)
         trend_sha = _sha256_of_bytes(obj["Body"].read())
 
-    sidecar = _build_sidecar(
+    record = _build_ingest_record(
         short_code=sc,
         ingestion_path="backfill",
         expected_dv_filename=dv_basename,
@@ -160,16 +163,16 @@ def _backfill_one(
         spreadsheet_file=WORKING_CSV_PATH,
     )
 
-    sidecar_key = _existing_sidecar_key(sc)
-    result["sidecar_key"] = sidecar_key
-    payload = json.dumps(sidecar, indent=2, sort_keys=True).encode("utf-8")
+    record_key = _record_key_for(sc)
+    result["ingest_record_key"] = record_key
+    payload = json.dumps(record, indent=2, sort_keys=True).encode("utf-8")
 
     if dry_run:
         result["action"] = "would_put"
         return result
 
     s3.put_object(
-        Bucket=bucket, Key=sidecar_key,
+        Bucket=bucket, Key=record_key,
         Body=payload, ContentType="application/json",
     )
     result["action"] = "put"
@@ -183,7 +186,8 @@ def main():
         datefmt="%Y-%m-%dT%H:%M:%SZ",
     )
     parser = argparse.ArgumentParser(
-        description="Backfill sidecar.json into scenario/<id>/run/ for active scenarios."
+        description="Backfill ingest_record.json into scenario/<id>/ "
+                    "for active scenarios."
     )
     parser.add_argument("--listing-csv", default=WORKING_CSV_PATH,
                         help=f"Working CSV (default: {WORKING_CSV_PATH})")
@@ -196,7 +200,7 @@ def main():
                         help="Backfill every row in the working CSV. "
                              "Either --scenarios or --all is required.")
     parser.add_argument("--overwrite", action="store_true",
-                        help="Replace existing sidecars (default: skip if present).")
+                        help="Replace existing ingest records (default: skip if present).")
     parser.add_argument("--dry-run", action="store_true",
                         help="List what would happen without writing to S3.")
     args = parser.parse_args()
@@ -226,9 +230,9 @@ def main():
     if args.dry_run:
         print("DRY RUN: no S3 PUTs will happen.\n")
     elif args.overwrite:
-        print("Mode: OVERWRITE existing sidecars.\n")
+        print("Mode: OVERWRITE existing ingest records.\n")
     else:
-        print("Mode: skip scenarios that already have a sidecar.\n")
+        print("Mode: skip scenarios that already have an ingest record.\n")
 
     results: List[Dict[str, Any]] = []
     for sc in scenarios:
@@ -237,7 +241,8 @@ def main():
         results.append(r)
         action = r["action"]
         if action in ("put", "would_put"):
-            log.info("[%s] %s sidecar -> %s", sc["short_code"], action, r["sidecar_key"])
+            log.info("[%s] %s ingest record -> %s",
+                     sc["short_code"], action, r["ingest_record_key"])
         else:
             log.warning("[%s] %s: %s", sc["short_code"], action, r["error"])
 

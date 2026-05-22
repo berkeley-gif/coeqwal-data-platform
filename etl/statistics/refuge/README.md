@@ -68,9 +68,9 @@ the DV DSS by looking for `_dv` in the filename inside `DSS/output/`:
 
 ```
 DSS/output/s0020_DCRadjBL_2020LU_wTUCP_DV_v0.1.dss   ← this is the DV file
-            └─ classify_dss.py picks this as CALSIM_OUTPUT_PATH (Tier 3: "_dv" in name)
+            └─ classify_dss.py picks this as DV_PATH (Tier 3: "_dv" in name)
             └─ dss_to_csv.py converts it
-            └─ output: s0020_coeqwal_calsim_output.csv
+            └─ output: s0020_coeqwal_calsim_output.csv (CSV basename unchanged for back-compat)
 ```
 
 The name `coeqwal_calsim_output` is a generic convention applied by the ETL script, not a

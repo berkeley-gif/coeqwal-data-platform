@@ -11,21 +11,26 @@ by use case.
 ### After ingestion
 
 - **`audit.py`** -- regenerates `etl/ingestion/audit.md`, the one-file
-  status report for the whole pipeline. Reads `sidecar.json` (ingestion
-  side) and `<id>_manifest.json` (Batch container side) for every active
-  scenario in S3, plus the local `audit_state.json` from the most recent
-  download. Auto-runs at the end of `gdrive_bulk_download.py download`;
-  re-run by hand after Batch finishes.
+  status report for the whole pipeline. Reads `ingest_record.json`
+  (ingestion side) and `extract_record.json` (Batch container side) for
+  every active scenario in S3, plus the `download` block of
+  `ingest_state.json` from the most recent local run. Auto-runs at the
+  end of `gdrive_bulk_download.py download`; re-run by hand after Batch
+  finishes.
 
   ```
   python etl/ingestion/tools/audit.py
   ```
 
-- **`show_last_run.py`** -- prints a quick summary of the last
-  `gdrive_bulk_download` run (rows processed, skipped, errors).
+- **`show_last_run.py`** -- prints a quick summary of the most recent
+  ingest stage(s). Default is the last `download`; pass
+  `--stage scan` or `--stage all` to print the scan block, or both
+  blocks back-to-back.
 
   ```
   python etl/ingestion/tools/show_last_run.py
+  python etl/ingestion/tools/show_last_run.py --stage scan
+  python etl/ingestion/tools/show_last_run.py --stage all
   ```
 
 ### Recovery: re-trigger extraction
@@ -58,20 +63,23 @@ S3 at `scenario/<id>/run/`.
 
 ### Alternative entry path (not from Drive)
 
-- **`manual_ingest.py`** -- upload a ZIP. Builds the sidecar for you.
+- **`manual_ingest.py`** -- upload a ZIP. Builds the ingest record for you.
+  Subcommands: `upload` (ZIP + ingest record + optional trend CSV in safe
+  order) and `ingest-record` (write an ingest record for an existing ZIP
+  and optionally retrigger Batch).
 
   ```
   python etl/ingestion/tools/manual_ingest.py --help
   ```
 
-### Very occassionally 
+### Very occassionally
 
-- **`backfill_sidecars.py`** -- writes `sidecar.json` for scenarios that
-  landed in S3 before the sidecar contract existed. Should not need to
-  run again unless historical data is revived.
+- **`backfill_ingest_records.py`** -- writes `ingest_record.json` for
+  scenarios that landed in S3 before the ingest-record contract existed.
+  Should not need to run again unless historical data is revived.
 
   ```
-  python etl/ingestion/tools/backfill_sidecars.py --dry-run
+  python etl/ingestion/tools/backfill_ingest_records.py --dry-run
   ```
 
 - **`refresh_active_scenarios.py`** -- rewrites the active-scenarios

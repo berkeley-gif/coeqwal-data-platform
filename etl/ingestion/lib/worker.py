@@ -1,5 +1,5 @@
 """Per-scenario worker: take one parsed CSV row through download, validate,
-hash, sidecar build, and staging upload.
+hash, ingest record build, and staging upload.
 """
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ import tempfile
 import threading
 from typing import Any, Dict, Optional
 
-from etl.common import STAGING_PREFIX
+from etl.common import INGEST_RECORD_BASENAME, STAGING_PREFIX
 
 from .config import DRIVE_SCENARIO_PREFIX
 from .errors import IngestionError
 from .rclone import rclone_cat, rclone_copy_file, rclone_lsjson
 from .utils import _sha256_of_bytes
-from .zip_validation import build_sidecar, validate_and_hash_zip
+from .zip_validation import build_ingest_record, validate_and_hash_zip
 
 log = logging.getLogger("gdrive_bulk_download")
 
@@ -100,7 +100,7 @@ def _audit_row_template(scenario: Dict[str, Any]) -> Dict[str, Any]:
         "convention_sv_ok": "",
         "s3_staging_zip_key": "",
         "s3_staging_csv_key": "",
-        "s3_staging_sidecar_key": "",
+        "s3_staging_ingest_record_key": "",
         "validation_status": "",
         "verification_status": "",
         "error_code": "",
@@ -274,8 +274,8 @@ def process_scenario(
                     trend_sha = _sha256_of_bytes(csv_bytes)
                     row["trend_csv_sha256"] = trend_sha
 
-            # Build sidecar.json
-            sidecar = build_sidecar(
+            # Build ingest_record.json
+            ingest_record = build_ingest_record(
                 scenario,
                 zip_basename=zip_filename,
                 zip_sha256=val["zip_sha256"],
@@ -290,14 +290,16 @@ def process_scenario(
                 trend_csv_sha256=trend_sha,
                 access_mode=access_mode,
             )
-            sidecar_bytes = json.dumps(sidecar, indent=2, sort_keys=True).encode("utf-8")
+            ingest_record_bytes = json.dumps(
+                ingest_record, indent=2, sort_keys=True
+            ).encode("utf-8")
 
             # Upload to staging:
             # The Lambda trigger is the ready/<id>/<zip> PUT, which happens
             # during `promote`. Uploads to staging/scenario_data/<id>/ here
             # are just a holding area until the operator decides to promote.
             s3_zip_key = f"{STAGING_PREFIX}/{sc}/{zip_filename}"
-            s3_sidecar_key = f"{STAGING_PREFIX}/{sc}/sidecar.json"
+            s3_ingest_record_key = f"{STAGING_PREFIX}/{sc}/{INGEST_RECORD_BASENAME}"
             s3_csv_key = f"{STAGING_PREFIX}/{sc}/{csv_name}" if csv_name else ""
 
             log.info("[%s] Uploading ZIP to s3://%s/%s ...", sc, s3_bucket, s3_zip_key)
@@ -309,13 +311,14 @@ def process_scenario(
                 s3_client.put_object(Bucket=s3_bucket, Key=s3_csv_key, Body=csv_bytes)
                 row["s3_staging_csv_key"] = s3_csv_key
 
-            log.info("[%s] Uploading sidecar.json to s3://%s/%s ...", sc, s3_bucket, s3_sidecar_key)
+            log.info("[%s] Uploading %s to s3://%s/%s ...",
+                     sc, INGEST_RECORD_BASENAME, s3_bucket, s3_ingest_record_key)
             s3_client.put_object(
-                Bucket=s3_bucket, Key=s3_sidecar_key,
-                Body=sidecar_bytes,
+                Bucket=s3_bucket, Key=s3_ingest_record_key,
+                Body=ingest_record_bytes,
                 ContentType="application/json",
             )
-            row["s3_staging_sidecar_key"] = s3_sidecar_key
+            row["s3_staging_ingest_record_key"] = s3_ingest_record_key
 
             row["validation_status"] = "OK"
 

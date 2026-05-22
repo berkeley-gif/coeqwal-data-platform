@@ -16,7 +16,7 @@ This directory holds visualization scripts and reference PDFs ([`visualize_custo
 
 Validates that `dss_to_csv.py` extracts data correctly from HEC-DSS files. Uses `validate_csvs.py` to compare extracted CSVs against the modeling team's trend report CSVs with configurable tolerances.
 
-Manifests stored in `audits/validation_mismatches/{scenario_id}_manifest.json`.
+Extract records stored in `audits/validation_mismatches/{scenario_id}_extract_record.json`.
 
 Runs automatically inside every Batch job. See [../batch-container/README.md](../batch-container/README.md).
 
@@ -24,7 +24,7 @@ Runs automatically inside every Batch job. See [../batch-container/README.md](..
 
 Independently verifies that the unit metadata in every CSV column header matches what the original DSS file reports. It is a ground-truth check: re-opens the DSS file with `pydsstools` and compares each variable's unit against the CSV header row 6.
 
-Runs automatically inside every Batch job, with results in the manifest at `unit_verification.calsim_unit_mismatches`. Can also be re-run on-demand from Cloud9 via the Docker image. See [../batch-container/README.md](../batch-container/README.md#layer-1b-dss-vs-csv-unit-verification) for details.
+Runs automatically inside every Batch job, with results in the manifest at `unit_verification.dv_unit_mismatches`. Can also be re-run on-demand from Cloud9 via the Docker image. See [../batch-container/README.md](../batch-container/README.md#layer-1b-dss-vs-csv-unit-verification) for details.
 
 ## Layer 2: ETL Statistics (CSV to DB)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DSS file name classifier (robust path matching + sensible fallbacks)
+classify_dss.py - DSS file name classifier (robust path matching + sensible fallbacks)
 
 Expected layout (case-insensitive, works with relative paths):
   .../DSS/input/*.dss   -> SV candidates
@@ -23,7 +23,7 @@ Scenario ID:
 Outputs env-style file:
   SCENARIO_ID=<id>
   SV_PATH=<rel-path-or-blank>
-  CALSIM_OUTPUT_PATH=<rel-path-or-blank>
+  DV_PATH=<rel-path-or-blank>
 """
 
 import argparse
@@ -219,19 +219,19 @@ def main():
         sv_path = pick_simple(sv_candidates, SV_TIER3, SV_TIER2)
 
     if "dv" in overrides:
-        calsim_output_path = pick_by_override(cal_candidates, overrides["dv"])
-        if calsim_output_path:
-            print(f"[INFO] DV override for {scen}: {calsim_output_path}")
+        dv_path = pick_by_override(cal_candidates, overrides["dv"])
+        if dv_path:
+            print(f"[INFO] DV override for {scen}: {dv_path}")
         else:
             print(f"[WARN] DV override '{overrides['dv']}' not found in candidates; falling back to heuristic.")
-            calsim_output_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
+            dv_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
     else:
-        calsim_output_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
+        dv_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
 
     with open(args.out_env, "w") as out:
         out.write(f"SCENARIO_ID={scen}\n")
         out.write(f"SV_PATH={sv_path or ''}\n")
-        out.write(f"CALSIM_OUTPUT_PATH={calsim_output_path or ''}\n")
+        out.write(f"DV_PATH={dv_path or ''}\n")
 
 
 if __name__ == "__main__":

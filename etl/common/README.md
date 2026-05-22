@@ -11,7 +11,7 @@ helpers, and (in later phases) shared logging and IO helpers.
 | File | Purpose |
 |------|---------|
 | [`aws.py`](aws.py) | AWS resource constants (`S3_BUCKET`, `BATCH_QUEUE`, `BATCH_JOB_DEFINITION`, `AWS_REGION`, `LAMBDA_NAME`, `ECR_*`) plus the `read_json_from_s3(s3_client, bucket, key)` helper used by `audit.py` and `run_full_pipeline.py`. Override at runtime via env vars (`COEQWAL_S3_BUCKET`, `COEQWAL_BATCH_QUEUE`, `COEQWAL_BATCH_JOBDEF`). |
-| [`s3_paths.py`](s3_paths.py) | Builders for canonical S3 keys: `staging_prefix(short_code)`, `ready_prefix`, `scenario_run_prefix`, `scenario_csv_prefix`, `calsim_output_csv_key`, `sv_input_csv_key`, `sidecar_key`, `s3_url`. |
+| [`s3_paths.py`](s3_paths.py) | Builders for canonical S3 keys: `staging_prefix(short_code)`, `ready_prefix`, `scenario_prefix`, `scenario_run_prefix`, `scenario_csv_prefix`, `calsim_output_csv_key`, `sv_input_csv_key`, `ingest_record_key`, `extract_record_key`, `s3_url`. |
 | [`db.py`](db.py) | `get_db_connection(required=True)` reading `DATABASE_URL` with actionable errors. Raises `DatabaseUrlMissing` when required but unset. |
 
 Future additions (later phases):

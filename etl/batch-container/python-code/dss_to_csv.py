@@ -58,9 +58,10 @@ class DSSProcessor:
         self.timestamp_adjustment = timestamp_adjustment
         self._verify = verify
 
-        # Default processing configs by DSS type
+        # Default processing configs by DSS type. Keys mirror the --type CLI
+        # choices: "dv" = CalSim decision-variable output, "sv" = state-variable input.
         self.processing_configs = {
-            "calsim_output": {
+            "dv": {
                 "default_start_date": "1921-10-31",
                 "default_end_date": "2021-09-30",
                 "series_key_format": "{b}_{c}",
@@ -68,7 +69,7 @@ class DSSProcessor:
                 "header_mapping": ["a", "b", "c", "e", "f", "type", "units"],
                 "timestamp_adjustment": "end_of_month",
             },
-            "sv_input": {
+            "sv": {
                 "default_start_date": None,  # Use full date range
                 "default_end_date": None,
                 "series_key_format": "{a}_{b}_{c}",
@@ -89,33 +90,29 @@ class DSSProcessor:
 
             sample_pathnames = pathnames[: min(10, len(pathnames))]
 
-            calsim_output_indicators = 0
-            sv_input_indicators = 0
+            dv_indicators = 0
+            sv_indicators = 0
 
             for pathname in sample_pathnames:
                 parts = pathname.split("/")
                 if len(parts) >= 7:
                     a, b, c, d, e, f = parts[1:7]
 
-                    # CalSim output patterns
+                    # CalSim DV output patterns
                     if re.match(r"^[SCDI]$", b):  # Common CalSim variable types
-                        calsim_output_indicators += 1
+                        dv_indicators += 1
                     if re.match(r"^(TAF|CFS|AF)$", f):  # Common units
-                        calsim_output_indicators += 1
+                        dv_indicators += 1
                     if re.match(r"^[A-Z0-9_]+$", c):  # CalSim entity names
-                        calsim_output_indicators += 1
+                        dv_indicators += 1
 
                     # SV input patterns
                     if re.match(r"^SV", a):
-                        sv_input_indicators += 1
+                        sv_indicators += 1
                     if re.match(r"^(INITIAL|INPUT|STATE)$", d):
-                        sv_input_indicators += 1
+                        sv_indicators += 1
 
-            detected_type = (
-                "calsim_output"
-                if calsim_output_indicators > sv_input_indicators
-                else "sv_input"
-            )
+            detected_type = "dv" if dv_indicators > sv_indicators else "sv"
             log.info("Detected DSS type: %s", detected_type)
             return detected_type
         finally:
@@ -137,7 +134,7 @@ class DSSProcessor:
 
         # Config
         config = self.processing_configs.get(
-            self.dss_type, self.processing_configs["calsim_output"]
+            self.dss_type, self.processing_configs["dv"]
         )
         log.info("Processing as: %s", self.dss_type)
 
@@ -431,7 +428,7 @@ class DSSProcessor:
 
 
 def export_all_paths_to_csv(dss_file_path, output_csv_path):
-    processor = DSSProcessor(dss_type="calsim_output")
+    processor = DSSProcessor(dss_type="dv")
     return processor.process_dss_file(dss_file_path, output_csv_path)
 
 
@@ -464,9 +461,10 @@ if __name__ == "__main__":
     parser.add_argument("--csv", type=str, help="Path to output CSV file")
     parser.add_argument(
         "--type",
-        choices=["calsim_output", "sv_input", "auto"],
+        choices=["dv", "sv", "auto"],
         default="auto",
-        help="Type of DSS file (default: auto-detect)",
+        help="DSS file kind. 'dv' = CalSim decision-variable output, "
+        "'sv' = state-variable input, 'auto' = sniff from pathnames (default).",
     )
     parser.add_argument("--start-date", type=str, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD)")

@@ -55,13 +55,6 @@ log = logging.getLogger("statistics_etl")
 # Environment config
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Shared S3 bucket constant. Make `from etl.common import X` work when
-# this script is invoked as `python etl/statistics/main.py`.
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from etl.common import S3_BUCKET  # noqa: E402
-
 
 def sanitize_value(val):
     """

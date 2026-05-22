@@ -16,25 +16,25 @@ This pipeline:
 
 - **Ingests** CalSim 3 model run ZIPs and trend report CSVs from the COEQWAL Shared Drive into S3, validated against [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](etl/ingestion/scenario_listing/model_run_file_source_working.csv) (the canonical scenario -> Drive folder mapping).
 - **Reorganizes** uploaded ZIPs into a per-scenario S3 layout (`scenario/<id>/run/`) and submits a Batch job per ZIP through a Lambda trigger.
-- **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files, preserves the DSS unit metadata as a row-6 CSV header, and writes a `.units.json` sidecar.
+- **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files, preserves the DSS unit metadata as a row-6 CSV header, and writes a `.units.json` unit-map next to each CSV.
 - **Verifies units** that every CSV column's unit matches the DSS file's ground truth, and detects duplicate B-part pathnames within the same DSS.
-- **Validates content** by comparing each extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits a per-scenario validation summary and a manifest JSON.
-- **Audits ingestion and extraction** across all scenarios into one in-git report (`etl/ingestion/audit.md`) covering sidecar coverage, Batch manifest status, validation result, and per-scenario mismatch counts.
+- **Validates content** by comparing each extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits per-scenario validation summary counts inline in `extract_record.json`.
+- **Audits ingestion and extraction** across all scenarios into one in-git report (`etl/ingestion/audit.md`) covering ingest-record coverage, Batch extract-record status, validation result, and per-scenario mismatch counts.
 - **Computes statistics** from the extracted CSVs (reservoir storage, urban delivery, agricultural demand and shortage, M&I contractor reliability, environmental flow alteration, refuge delivery, delta salinity / NDO / X2, climate and operational sensitivity) and loads them into the layer 10+ tables in PostgreSQL.
 - **Loads tier outcomes** delivered by the data team (CWS deliveries, AG revenue, env flows, reservoir storage, groundwater storage, delta ecology, salmon abundance, freshwater salinity) into `tier_result` and `tier_location_result` via idempotent UPSERT SQL.
 - **Verifies accuracy** end-to-end at four layers: DSS extraction (Layer 1), DSS-vs-CSV units (Layer 1b), CSV-to-DB statistics (Layer 2), DB-to-API responses (Layer 3), and surfaces results on the public `/verification` page (Layer 4).
-- **Produces audit artifacts** at every stage (`scan_audit.csv`, `audit_report.csv`, the single-file `audit.md` covering ingestion + extraction + validation, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
+- **Produces audit artifacts** at every stage (`ingest_state.json` covering scan + download, the single-file `audit.md` covering ingestion + extraction + validation, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
 
-Three of those stages run automatically, the rest are operator-driven. All are laid out as siblings under `etl/`:
+Three of those stages run automatically, the rest are developer-driven. All are laid out as siblings under `etl/`:
 
 | Stage | Directory | Trigger |
 |---|---|---|
-| 1. Ingestion | [`etl/ingestion/`](etl/ingestion/) | Operator (`gdrive_bulk_download.py`) |
+| 1. Ingestion | [`etl/ingestion/`](etl/ingestion/) | Developer (`gdrive_bulk_download.py`) |
 | 2. Lambda trigger | [`etl/lambda/`](etl/lambda/) | Automatic (S3 PUT to `ready/`) |
 | 3. Batch extraction | [`etl/batch-container/`](etl/batch-container/) | Automatic (AWS Batch on Fargate Spot) |
-| 4a. Statistics ETL | [`etl/statistics/`](etl/statistics/) | Operator (`run_all.py`) |
-| 4b. Tier data | [`etl/tier_data/`](etl/tier_data/) | Operator (team-delivered drops) |
-| Verification | [`etl/verification/`](etl/verification/) | Operator (end-to-end accuracy checks) |
+| 4a. Statistics ETL | [`etl/statistics/`](etl/statistics/) | Developer (`run_all.py`) |
+| 4b. Tier data | [`etl/tier_data/`](etl/tier_data/) | Developer (team-delivered drops) |
+| Verification | [`etl/verification/`](etl/verification/) | Developer (end-to-end accuracy checks) |
 
 Tech: Python, `boto3`, `pydsstools`, AWS Batch on Fargate Spot, Docker (for the extraction container).
 

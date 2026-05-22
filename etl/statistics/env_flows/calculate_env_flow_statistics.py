@@ -99,8 +99,6 @@ log = logging.getLogger("env_flow_statistics")
 # ─── Constants──────
 
 
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
 

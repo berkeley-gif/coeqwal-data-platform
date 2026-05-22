@@ -65,8 +65,6 @@ log = logging.getLogger("cws_aggregate_statistics")
 
 # Known scenarios
 # S3 bucket configuration
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
 

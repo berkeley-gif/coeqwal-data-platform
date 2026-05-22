@@ -16,7 +16,7 @@ The Docker image AWS Batch runs in Fargate Spot to turn one CalSim ZIP into one 
 | File / dir | Role |
 |---|---|
 | [`Dockerfile`](Dockerfile) | Linux/amd64 image with Python 3.10, `pydsstools` built against `heclib.a`, AWS CLI v2, unzip. |
-| [`batch_entrypoint.sh`](batch_entrypoint.sh) | Runtime entrypoint inside the container. Downloads the ZIP from S3, unzips, runs `dss_to_csv.py`, uploads CSVs + manifest. |
+| [`batch_entrypoint.sh`](batch_entrypoint.sh) | Runtime entrypoint inside the container. Downloads the ZIP from S3, unzips, runs `dss_to_csv.py`, uploads CSVs + `extract_record.json`. |
 | [`heclib/heclib.a`](heclib/) | Linux static library required by `pydsstools`. Built externally and checked in to avoid a long rebuild on every Docker build. |
 | [`python-code/`](python-code/) | The actual extraction code. |
 
@@ -25,9 +25,9 @@ The Docker image AWS Batch runs in Fargate Spot to turn one CalSim ZIP into one 
 | File | Role |
 |---|---|
 | `classify_dss.py` | Walks the DSS files in a ZIP and picks the SV (state-variable / input) and DV (CalSim output) DSS files. Excludes `archive/`, `discard/`, `old/`, `backup/`. Has a small overrides table for hand-fixed scenarios (e.g. `s0023`, `s0024`). |
-| `dss_to_csv.py` | The DSS reader. Opens a DSS file via `pydsstools`, iterates pathnames, writes a CSV with row-6 unit header. Supports `--verify-units` to write a `.units.json` sidecar from DSS ground-truth. |
+| `dss_to_csv.py` | The DSS reader. Opens a DSS file via `pydsstools`, iterates pathnames, writes a CSV with row-6 unit header. Supports `--verify-units` to write a `.units.json` unit-map alongside the CSV from DSS ground-truth. |
 | `verify_dss_csv_units.py` | Standalone verifier. Re-opens any scenario's DSS from S3 and compares every column's unit against the CSV header. Runs inside this Docker image. |
-| `validate_csvs.py`, `validate_csvs_improved.py`, `validation_reporter.py` | Compares the extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits a per-scenario validation summary. |
+| `validate_csvs.py` | Compares the extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits a per-scenario validation summary as nested JSON, plus an optional per-row mismatches CSV for triage. |
 
 ## How it gets built and deployed
 
@@ -57,9 +57,9 @@ flowchart LR
   Container["batch_entrypoint.sh"]
   DV["DV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_calsim_output.csv"]
   SV["SV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_sv_input.csv"]
-  Units["*.units.json sidecar"]
+  Units["*.units.json unit-map"]
   Valid["scenario/sXXXX/validation/<br/>sXXXX_validation_mismatches.csv (on failure)"]
-  Man["scenario/sXXXX/sXXXX_manifest.json"]
+  Rec["scenario/sXXXX/extract_record.json"]
 
   In --> Container
   Trend --> Container
@@ -67,10 +67,10 @@ flowchart LR
   Container --> SV
   Container --> Units
   Container --> Valid
-  Container --> Man
+  Container --> Rec
 ```
 
-The manifest is the per-scenario summary. Validation pass/fail and mismatch counts (`mismatch_columns`, `mismatch_cells`) are inlined into the manifest's `validation` block. The per-row mismatches CSV is the only artifact rich enough to debug a failure and is written separately under `validation/` only when mismatches were found. `etl/ingestion/tools/audit.py` reads the manifest across every scenario and projects it into `etl/ingestion/audit.md`.
+The extract record is the per-scenario summary. Validation pass/fail and mismatch counts (`mismatch_columns`, `mismatch_cells`) are inlined into its `validation` block. The per-row mismatches CSV is the only artifact rich enough to debug a failure and is written separately under `validation/` only when mismatches were found. `etl/ingestion/tools/audit.py` reads the extract record across every scenario and projects it into `etl/ingestion/audit.md` alongside the per-scenario ingest record.
 
 ### Runtime env vars
 
@@ -79,8 +79,33 @@ The manifest is the per-scenario summary. Validation pass/fail and mismatch coun
 | `ZIP_BUCKET`, `ZIP_KEY` | required | S3 location of the input scenario ZIP. |
 | `SCENARIO_ID` | inferred | Overrides the short_code parsed from the ZIP basename. |
 | `VALIDATION_REF_CSV_KEY` | empty | When set, the container downloads this reference CSV and runs `validate_csvs.py` against the produced output. |
-| `EXTRACT_TARGETS` | `sv,calsim` | Which DSS sides to extract. Set to `sv` to skip CalSim output, `calsim` to skip SV input. `reextract_all_scenarios.py --sv-only`/`--dv-only` flips this. |
+| `EXTRACT_TARGETS` | `sv,dv` | Which DSS sides to extract. Set to `sv` to skip the DV (CalSim output), `dv` to skip the SV input. `reextract_all_scenarios.py --sv-only`/`--dv-only` flips this. |
 | `ABS_TOL`, `REL_TOL` | `1e-06` | Validation tolerances. |
+
+### Swapping the validation reference CSV
+
+`VALIDATION_REF_CSV_KEY` points the container at whatever CSV you want validation to compare against. The Lambda sets it from the peer CSV alongside the ZIP (normally the modeling team's trend report), but any DSS-style CSV with a compatible header layout works. Useful for re-exports from the modeling team, hand-curated subset CSVs for debugging, or any one-off reference you stage under `ready/` next to the ZIP.
+
+What the validator (`validate_csvs.py`) requires of the reference:
+
+- **7-row DSS header** (A, B, C, E, F, TYPE, UNITS) with date in column 0 and numeric series in the remaining columns. Anything else raises `ValueError: not enough rows for DSS header` and validation aborts.
+- **Column matching is on the `(B-part, C-part)` tuple**, so renaming A/E/F parts is harmless.
+- **Date matching is on the calendar overlap** between the two files. Non-overlapping rows are ignored.
+
+Behavior when the reference and the extracted CSV diverge:
+
+| Change in the reference | Validator behavior |
+|---|---|
+| Columns added (new `(B, C)` pairs) | Logged in `sample_only_in_ref`, not compared |
+| Columns removed | Logged in `sample_only_in_file`, not compared |
+| Same `(B, C)` keys, different values upstream | Treated as the same column, values compared. `trend_csv_sha256` in `ingest_record.json` is the forensic trail if you suspect the reference itself drifted. |
+| Header structure changes (not 7 rows) | Hard `ValueError`, validation aborts |
+| Date range changes | Clipped to the overlapping window |
+| Zero overlap on `(B, C)` keys | Validation reports `FAILED` (no false PASS). Read `file_comparison.columns_common` in the summary to confirm. |
+
+The `file_comparison.columns_common` and `validation_summary.total_cells_compared` fields in the validation summary are the source of truth for how much was actually compared. A small intersection means partial coverage, even when the top-line status is `PASSED`.
+
+If the reference or the extracted CSV has rows whose first-column timestamp cannot be parsed, the validator drops those rows and prints a `[WARN]` line to stderr that the Batch wrapper captures into the run log. Comparison runs only over the surviving rows. A `PASSED` status alongside a `[WARN]` in the log is the signal to investigate the upstream extractor or the reference exporter.
 
 ## Local development (build and run on your laptop)
 
@@ -103,13 +128,13 @@ cp /path/to/your/file.dss ~/dss_processing/input/
 ### 3. Convert one DSS to CSV
 
 ```bash
-# CalSim output (DV) conversion
+# DV (CalSim decision-variable output) conversion
 docker run \
   -v ~/dss_processing/input:/input \
   -v ~/dss_processing/output:/output \
   --entrypoint python coeqwal-dss \
   /app/python-code/dss_to_csv.py \
-    --dss /input/your_file.dss --csv /output/result.csv --type calsim_output
+    --dss /input/your_file.dss --csv /output/result.csv --type dv
 
 # SV input conversion
 docker run \
@@ -117,7 +142,7 @@ docker run \
   -v ~/dss_processing/output:/output \
   --entrypoint python coeqwal-dss \
   /app/python-code/dss_to_csv.py \
-    --dss /input/your_sv_file.dss --csv /output/sv_result.csv --type sv_input
+    --dss /input/your_sv_file.dss --csv /output/sv_result.csv --type sv
 ```
 
 ### 4. (Optional) Validate against a reference CSV
@@ -142,11 +167,11 @@ Every extraction job runs `verify_dss_csv_units.py` automatically via `--verify-
 1. Re-opens the DSS file with `pydsstools`
 2. Reads the unit from DSS metadata for every pathname
 3. Compares against the CSV header row 6 for the same `(B-part, C-part)`
-4. Writes a `.units.json` sidecar listing DSS unit ground truth per variable
-5. Uploads the sidecar to S3: `scenario/{id}/csv/{id}_coeqwal_calsim_output.csv.units.json`
-6. Records `unit_verification.calsim_unit_mismatches` in the manifest
+4. Writes a `.units.json` unit-map listing DSS unit ground truth per variable
+5. Uploads the unit-map to S3: `scenario/{id}/csv/{id}_coeqwal_calsim_output.csv.units.json` (the CSV file basename is unchanged)
+6. Records `unit_verification.dv_unit_mismatches` in the extract record
 
-Sidecar format:
+Unit-map format:
 
 ```json
 {"AW_01_PA": {"c_part": "APPLIED-WATER", "unit": "CFS"},
@@ -180,7 +205,7 @@ All ~75 scenarios take ~50 minutes with 6 workers. Use `tmux` so SSO drops do no
 
 ## Duplicate B-part detection
 
-`dss_to_csv.py` detects when multiple DSS pathnames share the same B-part but have different C-parts (e.g., `SHRTG_PCWA3/SHORTAGE` vs `SHRTG_PCWA3/DELIVERY-SHORTAGE`). These are logged as warnings and counted in the manifest under `duplicate_b_parts`. The statistics ETL resolves duplicates using C-part-aware deduplication (preferring the expected C-part, e.g., `SHORTAGE` over `DELIVERY-SHORTAGE` for `SHRTG_*` variables).
+`dss_to_csv.py` detects when multiple DSS pathnames share the same B-part but have different C-parts (e.g., `SHRTG_PCWA3/SHORTAGE` vs `SHRTG_PCWA3/DELIVERY-SHORTAGE`). These are logged as warnings and counted in the extract record under `duplicate_b_parts`. The statistics ETL resolves duplicates using C-part-aware deduplication (preferring the expected C-part, e.g., `SHORTAGE` over `DELIVERY-SHORTAGE` for `SHRTG_*` variables).
 
 A non-Docker scan for duplicates across all scenarios:
 
@@ -199,6 +224,6 @@ python scan_dupes.py --compare-values --audit-units --workers 4
 ## Related
 
 - The Lambda that fires extraction jobs: [../lambda/README.md](../lambda/README.md)
-- The operator scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to process raw scenario model run data" and "Operator scripts in `etl/ingestion/`")
+- The developer scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to process raw scenario model run data" and "Developer scripts in `etl/ingestion/`")
 - End-to-end accuracy verification (Layer 1-4): [../verification/README.md](../verification/README.md)
 - AWS-side resource details: [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)
