@@ -22,7 +22,7 @@ to audit and fill geometry gaps related to tier locations and their updates.
 Companion writer for demand-unit polygons:
 [`database/scripts/data_processing/load_du_geometries.py`](../../database/scripts/data_processing/load_du_geometries.py)
 (requires the [`56_add_du_geometry_columns.sql`](../../database/scripts/sql/56_add_du_geometry_columns.sql)
-migration). For the persistent gap roster see
+migration). For data gaps see
 [`docs/du_geometry_gap.md`](../../docs/du_geometry_gap.md).
 
 Usage:
@@ -51,32 +51,14 @@ from etl.common import (  # noqa: E402
     assess_coverage,
     get_db_connection,
 )
-from etl.tier_data.staging_inventory import TIER_LOCATION_TYPE  # noqa: E402
+from etl.tier_data.staging_inventory import (  # noqa: E402
+    TIER_LOCATION_TYPE,
+    build_inventory,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_STAGING_DIR = Path(__file__).parent.parent / "staging"
 ERD_PATH = REPO_ROOT / "database/schema/COEQWAL_SCENARIOS_DB_ERD.md"
-
-
-_RES_STOR_COL_RE = re.compile(r"^S_(?P<short>[A-Z0-9_]+?)_Storage_Tier$")
-
-
-def _res_stor_id(column: str) -> str:
-    m = _RES_STOR_COL_RE.match(column)
-    return m.group("short") if m else column
-
-
-def _wba_id(col: str) -> str:
-    """Mirror of load_all_tier_results.convert_wba_id_to_mapbox_format."""
-    if col == "DETAW":
-        return "DETAW"
-    if col.startswith("WBA"):
-        suffix = col[3:]
-        if suffix and suffix[0].isdigit():
-            if len(suffix) == 1 or (len(suffix) == 2 and suffix[1] in "NS"):
-                return "0" + suffix
-        return suffix
-    return col
 
 
 @dataclass
@@ -89,73 +71,24 @@ class TierIds:
 
 
 def _staging_ids(staging_dir: Path) -> Dict[str, TierIds]:
-    """Extract per-tier location_id sets from the canonical staging CSVs."""
-    import pandas as pd
+    """Per-tier location_id sets from the canonical staging CSVs.
 
+    Thin adapter over `staging_inventory.build_inventory` so this script
+    and `sync_tier_locations_from_staging.py` / `diff_tier_locations.py`
+    all see the same membership extraction. Don't reintroduce a private
+    parser here. Bugs found in one parser would otherwise not be fixed
+    in the others (this happened: ENV_FLOWS was reading the scenario
+    column as locations, fixed in staging_inventory but the audit's
+    duplicate copy kept reporting 0/72).
+    """
     out: Dict[str, TierIds] = {}
-
-    def _add(tier: str, ids: Iterable[str], source: str) -> None:
-        loc_type = TIER_LOCATION_TYPE[tier]
-        entry = out.setdefault(tier, TierIds(tier=tier, location_type=loc_type, source=source))
-        entry.ids.update(i for i in ids if i)
-
-    # ENV_FLOWS: row index across legacy and split files
-    env_files = []
-    legacy = staging_dir / "ENV_FLOWS.csv"
-    if legacy.exists():
-        env_files.append(legacy)
-    env_files.extend(sorted(staging_dir.glob("ENV_FLOWS_*.csv")))
-    for path in env_files:
-        df = pd.read_csv(path, index_col=0)
-        _add("ENV_FLOWS", (str(s).strip() for s in df.index), source=str(path.name))
-
-    # RES_STOR: column headers parsed via S_*_Storage_Tier
-    p = staging_dir / "RES_STOR.csv"
-    if p.exists():
-        df = pd.read_csv(p)
-        _add("RES_STOR", (_res_stor_id(c) for c in df.columns if c != "Scenario"), source=p.name)
-
-    # GW_STOR: WBA columns converted to mapbox format
-    p = staging_dir / "GW_STOR.csv"
-    if p.exists():
-        df = pd.read_csv(p)
-        _add("GW_STOR", (_wba_id(c) for c in df.columns if c != "scenario"), source=p.name)
-
-    # CWS_DEL: column headers are DU ids
-    p = staging_dir / "CWS_DEL.csv"
-    if p.exists():
-        df = pd.read_csv(p)
-        _add("CWS_DEL", (c for c in df.columns[1:]), source=p.name)
-
-    # AG_REV: long or wide; both yield DU ids
-    p = staging_dir / "AG_REV.csv"
-    if p.exists():
-        df = pd.read_csv(p)
-        if "region" in df.columns and "tier" in df.columns:
-            _add("AG_REV", (str(r) for r in df["region"].dropna().unique()), source=p.name)
-        else:
-            _add("AG_REV", (c for c in df.columns[1:]), source=p.name)
-
-    # DELTA_ECO: fixed DETAW
-    p = staging_dir / "DELTA_ECO.csv"
-    if p.exists():
-        _add("DELTA_ECO", ("DETAW",), source=p.name)
-
-    # FW_DELTA_USES: fixed EM, JP
-    p = staging_dir / "FW_DELTA_USES.csv"
-    if p.exists():
-        _add("FW_DELTA_USES", ("EM", "JP"), source=p.name)
-
-    # FW_EXP: fixed Banks/Jones network nodes
-    p = staging_dir / "FW_EXP.csv"
-    if p.exists():
-        _add("FW_EXP", ("CAA003", "DMC000"), source=p.name)
-
-    # WRC_SALMON_AB: fixed SAC299
-    p = staging_dir / "WRC_SALMON_AB.csv"
-    if p.exists():
-        _add("WRC_SALMON_AB", ("SAC299",), source=p.name)
-
+    for tier, inv in build_inventory(staging_dir).items():
+        out[tier] = TierIds(
+            tier=tier,
+            location_type=inv.location_type,
+            ids={m.location_id for m in inv.members if m.location_id},
+            source=", ".join(inv.source_files),
+        )
     return out
 
 
