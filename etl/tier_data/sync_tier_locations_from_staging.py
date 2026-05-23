@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sync_tier_locations_from_staging.py - reconcile the `tier_location` catalog
+sync_tier_locations_from_staging.py - reconcile the `tier_location` catalog/table
 with the tier teams' staging CSVs.
 
 The staging CSVs in `etl/tier_data/staging/` are the source of truth for
