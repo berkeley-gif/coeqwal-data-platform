@@ -54,10 +54,27 @@ and `du_agriculture_entity`); both rows get the same dissolved polygon.
 
 After every update the loader sets:
 
-    geom         = ST_GeomFromWKB(:wkb, 4326)
+    geom         = ST_Multi(ST_CollectionExtract(
+                     ST_MakeValid(ST_GeomFromWKB(:wkb, 4326)),
+                     3
+                   ))
     geom_wkt     = ST_AsText(geom)
     srid         = 4326
     has_gis_data = TRUE
+
+The wrap exists because the dissolved polygons in
+`du_4326.gpkg` fail strict OGC `ST_IsValid` (ring
+self-intersections, duplicated vertices, etc.):
+
+  - `ST_MakeValid` repairs the validity violations in place.
+  - `ST_CollectionExtract(..., 3)` keeps only polygon-typed parts of
+    the result. `ST_MakeValid` can return a `GeometryCollection`
+    containing dangling line segments alongside the repaired
+    polygons. The type-3 filter drops those.
+  - `ST_Multi(...)` guarantees the final geometry is a
+    `MultiPolygon`, matching the column type
+    `geometry(MultiPolygon, 4326)` and the `ST_GeometryType` check
+    in `validate_writes`.
 
 Run the migration `database/scripts/sql/56_add_du_geometry_columns.sql`
 once before the first invocation so the `geom_wkt` / `srid` / `geom`
@@ -294,8 +311,14 @@ def apply_updates(
                 wkb = gpkg_polygons[du_id]
                 cur.execute(
                     f'UPDATE "{table}" SET '
-                    f'  geom         = ST_GeomFromWKB(%s::bytea, 4326), '
-                    f'  geom_wkt     = ST_AsText(ST_GeomFromWKB(%s::bytea, 4326)), '
+                    f'  geom         = ST_Multi(ST_CollectionExtract('
+                    f'                   ST_MakeValid(ST_GeomFromWKB(%s::bytea, 4326)),'
+                    f'                   3'
+                    f'                 )), '
+                    f'  geom_wkt     = ST_AsText(ST_Multi(ST_CollectionExtract('
+                    f'                   ST_MakeValid(ST_GeomFromWKB(%s::bytea, 4326)),'
+                    f'                   3'
+                    f'                 ))), '
                     f'  srid         = 4326, '
                     f'  has_gis_data = TRUE '
                     f'WHERE du_id = %s',
