@@ -26,11 +26,11 @@ migration). For the persistent gap roster see
 [`docs/du_geometry_gap.md`](../../docs/du_geometry_gap.md).
 
 Usage:
-    python etl/tier_data/audit_tier_location_geometry.py
-    python etl/tier_data/audit_tier_location_geometry.py --tier RES_STOR
-    python etl/tier_data/audit_tier_location_geometry.py --staging /custom/path
-    python etl/tier_data/audit_tier_location_geometry.py --skip-drift
-    python etl/tier_data/audit_tier_location_geometry.py --json out/audit.json
+    python etl/tier_data/scripts/audit_tier_location_geometry.py
+    python etl/tier_data/scripts/audit_tier_location_geometry.py --tier RES_STOR
+    python etl/tier_data/scripts/audit_tier_location_geometry.py --staging /custom/path
+    python etl/tier_data/scripts/audit_tier_location_geometry.py --skip-drift
+    python etl/tier_data/scripts/audit_tier_location_geometry.py --json out/audit.json
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from etl.common import (  # noqa: E402
     LOCATION_ENTITY_MAP,
@@ -53,8 +53,8 @@ from etl.common import (  # noqa: E402
 )
 from etl.tier_data.staging_inventory import TIER_LOCATION_TYPE  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STAGING_DIR = Path(__file__).parent / "staging"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_STAGING_DIR = Path(__file__).parent.parent / "staging"
 ERD_PATH = REPO_ROOT / "database/schema/COEQWAL_SCENARIOS_DB_ERD.md"
 
 

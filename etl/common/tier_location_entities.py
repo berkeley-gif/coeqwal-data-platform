@@ -5,13 +5,13 @@ the geometry live", and "what is the join key" for every tier location
 type the public API and ETL consumers need to resolve.
 
 Used by:
-  - `etl/tier_data/audit_tier_location_geometry.py` (coverage scorecard)
-  - `etl/tier_data/sync_tier_locations_from_staging.py` (membership validation)
-  - `etl/tier_data/load_all_tier_results.py` (display-name lookup at load time)
+  - `etl/tier_data/scripts/audit_tier_location_geometry.py` (coverage scorecard)
+  - `etl/tier_data/scripts/sync_tier_locations_from_staging.py` (membership validation)
+  - `etl/tier_data/scripts/load_all_tier_results.py` (display-name lookup at load time)
   - `database/scripts/data_processing/load_du_geometries.py` (one-shot
     DU polygon writer; routes by `du_id` presence in each entity table,
     matching this registry)
-  - `etl/tier_data/verify_tiers.py` (catalog gating)
+  - `etl/tier_data/scripts/verify_tiers.py` (catalog gating)
   - `api/coeqwal-api/routes/tier_map_endpoints.py` mirrors the same map
     in SQL when assembling GeoJSON FeatureCollections
 
@@ -568,7 +568,7 @@ def format_coverage_warnings(
         lines.append(
             f"WARNING: tier_location coverage gap in {tier}: "
             f"{'; '.join(parts)}. "
-            f"Run `python etl/tier_data/audit_tier_location_geometry.py --tier {tier}` for details."
+            f"Run `python etl/tier_data/scripts/audit_tier_location_geometry.py --tier {tier}` for details."
         )
     return lines
 

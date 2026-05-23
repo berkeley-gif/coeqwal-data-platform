@@ -30,7 +30,7 @@ import pandas as pd
 
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import (  # noqa: E402
     assess_coverage,
     format_coverage_warnings,
@@ -45,7 +45,7 @@ from etl.tier_data.staging_inventory import (  # noqa: E402
 # Rebound inside main() when --scenarios-override is passed
 ALLOWED_SCENARIOS: frozenset[str] = ACTIVE_SCENARIOS
 
-STAGING_DIR = Path(__file__).parent / "staging"
+STAGING_DIR = Path(__file__).parent.parent / "staging"
 
 API_URL_DEFAULT = "https://api.coeqwal.org/api"
 
@@ -563,7 +563,7 @@ def main():
     else:
         print("WARNING: DATABASE_URL not set; skipping tier_location coverage scan.")
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
     default_report_dir = repo_root / "audits" / "verification_reports"
     explicit_report_dir = Path(args.report_dir) if args.report_dir else default_report_dir
 

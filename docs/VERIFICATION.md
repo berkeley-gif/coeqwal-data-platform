@@ -50,7 +50,7 @@ Five layers, each independent. Each can run alone; together they answer "is ever
 | **Layer 1b** | Units in CSV header row 6 vs units reported by re-opening the DSS file with `pydsstools` | Inside every Batch job (automatic) | `verify_dss_csv_units.py` in `etl/batch-container/python-code/` |
 | **Layer 2** | Statistics in PostgreSQL vs values recomputed from S3 CSVs | Cloud9 (developer) | `python etl/statistics/verify_all_sections.py --scenario <id>` |
 | **Layer 3** | Public API responses vs direct database queries | Cloud9 (developer) or CI | `python etl/statistics/verify_api.py --scenario <id>` |
-| **Layer 3-tier** | Tier results in DB / API vs the team-supplied staging CSVs | Cloud9 (developer) | `python etl/tier_data/verify_tiers.py` |
+| **Layer 3-tier** | Tier results in DB / API vs the team-supplied staging CSVs | Cloud9 (developer) | `python etl/tier_data/scripts/verify_tiers.py` |
 | **Layer 4** | Frontend status page at `/verification` shows the per-scenario PASS / FAIL grid | Browser | n/a (visualization of layer 2 + 3 reports) |
 
 Default tolerances: `abs_tol = 0.5`, `rel_tol = 0.01` for human-scale magnitudes; `1e-6` for unit-checked passthroughs. See [`etl/verification/README.md`](../etl/verification/README.md#validation-framework) for the tolerance rationale.

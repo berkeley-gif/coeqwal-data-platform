@@ -9,7 +9,7 @@ Loads tier outcome data for all active scenarios into the `tier_result` and
 
 **1. Drop new CSVs into `etl/tier_data/staging/`.** Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`, `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`, `FW_EXP.csv`, `WRC_SALMON_AB.csv`.
 
-**2. If the active scenario list changed**, run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` (the canonical `ACTIVE_SCENARIOS` set this script imports). The refresh script reads `is_active=true` rows from the live API. Add any short codes that need to be deactivated to `DEACTIVATED_SCENARIOS` in `load_all_tier_results.py`.
+**2. If the active scenario list changed**, run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` (the canonical `ACTIVE_SCENARIOS` set this script imports). The refresh script reads `is_active=true` rows from the live API. Add any short codes that need to be deactivated to `DEACTIVATED_SCENARIOS` in `scripts/load_all_tier_results.py`.
 
 **3. Commit and push from Cloud9.** The staging CSVs are git-tracked on purpose.
 
@@ -18,14 +18,13 @@ Loads tier outcome data for all active scenarios into the `tier_result` and
 **5. Dry run to check counts:**
 
 ```bash
-cd etl/tier_data
-python load_all_tier_results.py --dry-run
+python etl/tier_data/scripts/load_all_tier_results.py --dry-run
 ```
 
 **6. Generate the SQL:**
 
 ```bash
-python load_all_tier_results.py --output-sql all_tiers.sql
+python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
 ```
 
 That writes `etl/tier_data/output/all_tiers.sql`.
@@ -47,8 +46,8 @@ Read the two verification tables it prints at the end. Active scenario counts sh
 > full output catalog.
 
 > **Pre-flight a new scenario before flipping `is_active=1`.** Both
-> [`load_all_tier_results.py`](load_all_tier_results.py) and
-> [`verify_tiers.py`](verify_tiers.py) accept `--scenarios-override sXXX,sYYY`
+> [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) and
+> [`scripts/verify_tiers.py`](scripts/verify_tiers.py) accept `--scenarios-override sXXX,sYYY`
 > as a per-invocation replacement for `ACTIVE_SCENARIOS`. Use it to dry-run a
 > tier load (`--scenarios-override sXXX --dry-run`) or verify tier coverage
 > against the live API for a scenario that is not yet public. The override is
@@ -75,7 +74,7 @@ The workflow:
 2. Show the diff between staging and the live catalog:
 
    ```bash
-   python etl/tier_data/diff_tier_locations.py
+   python etl/tier_data/scripts/diff_tier_locations.py
    ```
 
    Optional `--tier RES_STOR` scopes the diff to one tier. The output
@@ -89,7 +88,7 @@ The workflow:
    would carry but the entity table cannot resolve.
 
    ```bash
-   python etl/tier_data/audit_tier_location_geometry.py
+   python etl/tier_data/scripts/audit_tier_location_geometry.py
    ```
 
    Re-run after each gap-fill until the scorecard reports 100% attribute
@@ -98,7 +97,7 @@ The workflow:
 4. Dry-run the sync to see exactly which rows would change:
 
    ```bash
-   python etl/tier_data/sync_tier_locations_from_staging.py --dry-run
+   python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run
    ```
 
    The plan reports inserts, reactivations (rows that returned to
@@ -110,7 +109,7 @@ The workflow:
 5. Apply:
 
    ```bash
-   python etl/tier_data/sync_tier_locations_from_staging.py
+   python etl/tier_data/scripts/sync_tier_locations_from_staging.py
    ```
 
    The script runs in one transaction. Rows that left staging are
@@ -119,7 +118,7 @@ The workflow:
    Re-adding a row to staging flips `is_active` back to TRUE on the
    next sync.
 
-6. Re-run `python etl/tier_data/diff_tier_locations.py`. Gaps should be
+6. Re-run `python etl/tier_data/scripts/diff_tier_locations.py`. Gaps should be
    gone.
 
 ### Coverage alerts in the daily scripts
@@ -129,16 +128,16 @@ prints a one-line WARNING per tier with missing attribute or geometry
 data:
 
 ```
-WARNING: tier_location coverage gap in RES_STOR: 1 missing attribute [ORO]; 1 missing geometry [ORO]. Run `python etl/tier_data/audit_tier_location_geometry.py --tier RES_STOR` for details.
+WARNING: tier_location coverage gap in RES_STOR: 1 missing attribute [ORO]; 1 missing geometry [ORO]. Run `python etl/tier_data/scripts/audit_tier_location_geometry.py --tier RES_STOR` for details.
 ```
 
 | Script | What it does with the alert |
 |---|---|
-| [`sync_tier_locations_from_staging.py`](sync_tier_locations_from_staging.py) | Prints per-tier `coverage: attribute X/Y, geometry A/B` in the plan, then the WARNING block. Attribute gaps still block sync (use `--allow-unresolved` during gap-fill). Geometry gaps warn only. |
-| [`diff_tier_locations.py`](diff_tier_locations.py) | Appends a coverage scorecard across the union of staging and catalog ids, then the WARNING block. Read-only, never exits non-zero. |
-| [`load_all_tier_results.py`](load_all_tier_results.py) | Emits the WARNING block on startup against active catalog rows. Loader continues regardless; the loader falls back to `location_id` for any name that fails to resolve. |
-| [`verify_tiers.py`](verify_tiers.py) | Emits the WARNING block on startup, immediately after the RES_STOR catalog fetch. Verifier pass/fail logic is unchanged. |
-| [`audit_tier_location_geometry.py`](audit_tier_location_geometry.py) | The dedicated tool. Full per-id scorecard plus the ERD-vs-live drift pass. Exits non-zero on any gap so CI / wrappers can branch on it. JSON dump via `--json`. |
+| [`scripts/sync_tier_locations_from_staging.py`](scripts/sync_tier_locations_from_staging.py) | Prints per-tier `coverage: attribute X/Y, geometry A/B` in the plan, then the WARNING block. Attribute gaps still block sync (use `--allow-unresolved` during gap-fill). Geometry gaps warn only. |
+| [`scripts/diff_tier_locations.py`](scripts/diff_tier_locations.py) | Appends a coverage scorecard across the union of staging and catalog ids, then the WARNING block. Read-only, never exits non-zero. |
+| [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) | Emits the WARNING block on startup against active catalog rows. Loader continues regardless; the loader falls back to `location_id` for any name that fails to resolve. |
+| [`scripts/verify_tiers.py`](scripts/verify_tiers.py) | Emits the WARNING block on startup, immediately after the RES_STOR catalog fetch. Verifier pass/fail logic is unchanged. |
+| [`scripts/audit_tier_location_geometry.py`](scripts/audit_tier_location_geometry.py) | The dedicated tool. Full per-id scorecard plus the ERD-vs-live drift pass. Exits non-zero on any gap so CI / wrappers can branch on it. JSON dump via `--json`. |
 
 The four daily scripts only ever warn; only the audit script changes its
 exit code on gaps. Reach for the audit script when you need the full
@@ -170,7 +169,7 @@ Each tier has a CSV file in `staging/` named by its short code. The formats diff
 |------|--------------|
 | `CWS_DEL.csv` | `scenario_id`, then one column per demand unit short code. Values = tier 1-4 or NA |
 | `AG_REV.csv` | Wide: `scenario_id`, then one column per region. Values = tier 1-4. Long `scenario, region, tier` format is also auto-detected for backwards compatibility |
-| `ENV_FLOWS.csv` | First col = station short code (row index). Remaining cols = scenario codes. Values = tier 1-4 |
+| `ENV_FLOWS.csv` | `Scenario`, then one column per station short code (e.g. `AMR004`, `SAC289`). Values = tier 1-4. Upstream eflows drops use `Station` as the column-0 header; `scripts/stage_tier_results.py` rewrites it to `Scenario` on copy so all tier staging CSVs follow the same scenarios-as-rows, locations-as-columns convention |
 | `RES_STOR.csv` | `Scenario`, then one column per reservoir (e.g. `S_SHSTA_Storage_Tier`). Values = tier 1-4 |
 | `GW_STOR.csv` | `scenario`, then one column per WBA (e.g. `WBA2`, `WBA7N`) plus `DETAW`. Values = tier 0-4 |
 | `DELTA_ECO.csv` | `Scenario` (numeric, e.g. `11` for `s0011`), `TierValue` |
@@ -191,11 +190,11 @@ shown above. The staging directory is tracked in git so files can be pushed and 
 
 ### 2. Refresh the scenario allowlist if needed
 
-Run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` from the live API (`/api/scenarios`, `is_active=true` rows). That is the canonical source for `ALLOWED_SCENARIOS` in this script. If any scenarios are being retired, add them to `DEACTIVATED_SCENARIOS` in `load_all_tier_results.py`.
+Run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` from the live API (`/api/scenarios`, `is_active=true` rows). That is the canonical source for `ALLOWED_SCENARIOS` in this script. If any scenarios are being retired, add them to `DEACTIVATED_SCENARIOS` in `scripts/load_all_tier_results.py`.
 
 ### 3. Push from Cloud9
 
-Save `load_all_tier_results.py` and the updated CSVs. They will be committed and
+Save `scripts/load_all_tier_results.py` and the updated CSVs. They will be committed and
 pushed automatically on save (via your git workflow).
 
 ### 4. Pull on Cloud9
@@ -208,8 +207,7 @@ git pull
 ### 5. Dry run, verify counts
 
 ```bash
-cd etl/tier_data
-python load_all_tier_results.py --dry-run
+python etl/tier_data/scripts/load_all_tier_results.py --dry-run
 ```
 
 Expected counts per scenario:
@@ -229,7 +227,7 @@ Expected counts per scenario:
 ### 6. Generate SQL
 
 ```bash
-python load_all_tier_results.py --output-sql all_tiers.sql
+python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
 ```
 
 The bare filename is auto-routed into `etl/tier_data/output/all_tiers.sql`
@@ -299,6 +297,6 @@ Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back to
   script and staging CSVs are tracked.
 - To load only specific tiers (e.g. after a partial data update):
   ```bash
-  python load_all_tier_results.py --only ENV_FLOWS,RES_STOR --output-sql partial.sql
+  python etl/tier_data/scripts/load_all_tier_results.py --only ENV_FLOWS,RES_STOR --output-sql partial.sql
   psql $DATABASE_URL -f etl/tier_data/output/partial.sql
   ```

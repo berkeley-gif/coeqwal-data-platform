@@ -40,6 +40,15 @@ All database operations use one of two connection strings stored in `~/.bashrc` 
 
 See "First-time setup" below for how to set these up. See "When to use which" for the full decision table.
 
+**The two URLs at a glance**
+
+| URL | Who they connect as | What it's for | Audit attribution? |
+|---|---|---|---|
+| `$DATABASE_URL` | Their own named role (e.g. `alice`) | Daily work: SELECTs, INSERTs, UPDATEs, running ETL scripts | Yes - works correctly |
+| `$SUPERUSER_URL` | Shared `postgres` account (everyone uses the same password) | DDL only: `CREATE TABLE`, `ALTER`, `GRANT`, migrations | No - all writes attributed to `id=1` (system). That's fine for migrations because the relevant info is "the migration ran," not "who typed `psql`." |
+
+Practical rule: if you are typing DML, use `$DATABASE_URL` so your name lands in the audit log. If you are typing DDL, use `$SUPERUSER_URL` and don't worry that it shows up as `id=1` - that's the intended trade-off.
+
 ### Turning on the Cloud9 environment
 
 Because most of the backend development is finished, the EC2 instance `aws-cloud9-coeqwal-db-admin-48dc921ad0fd48ea93c2a2e218bd8ace` is normally turned off to save costs. To make database changes:
@@ -106,7 +115,7 @@ If you changed the API endpoint code (anything under `api/`), including query lo
 
 > **Seed CSV `is_active` is bootstrap-only for `scenario.csv`.** [`database/seed_tables/06_scenario/scenario.csv`](seed_tables/06_scenario/scenario.csv) introduces new scenario rows into the DB via [`database/scripts/sql/upsert_scenario_data.sql`](scripts/sql/upsert_scenario_data.sql). Once a row exists, flip `is_active` with [`etl/ingestion/tools/set_scenario_active.py`](../etl/ingestion/tools/set_scenario_active.py), not by editing the CSV and re-upserting. The seed CSV's `is_active` value is allowed to drift from the live `scenario` table by design. The DB is the source of truth for live publication state, exposed by the API as [`/api/scenarios`](../api/coeqwal-api/routes/scenario_endpoints.py) and cached for ETL consumers in [`etl/common/active_scenarios.py`](../etl/common/active_scenarios.py).
 
-> **Tier location membership is owned by the tier-team staging CSVs.** `tier_location` is a narrow database catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The tier teams' staging CSVs in `etl/tier_data/staging/` are the source of truth for membership. There is no seed CSV. To reconcile, run [`etl/tier_data/diff_tier_locations.py`](../etl/tier_data/diff_tier_locations.py) for the diff and [`etl/tier_data/sync_tier_locations_from_staging.py`](../etl/tier_data/sync_tier_locations_from_staging.py) to apply (inserts active rows, soft-deletes rows that left staging). Display names and geometry are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py); the public API uses the same join map for [`/api/tier-map/{scenario}/{tier}`](../api/coeqwal-api/routes/tier_map_endpoints.py) GeoJSON output.
+> **Tier location membership is owned by the tier-team staging CSVs.** `tier_location` is a narrow database catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The tier teams' staging CSVs in `etl/tier_data/staging/` are the source of truth for membership. There is no seed CSV. To reconcile, run [`etl/tier_data/scripts/diff_tier_locations.py`](../etl/tier_data/scripts/diff_tier_locations.py) for the diff and [`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](../etl/tier_data/scripts/sync_tier_locations_from_staging.py) to apply (inserts active rows, soft-deletes rows that left staging). Display names and geometry are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py); the public API uses the same join map for [`/api/tier-map/{scenario}/{tier}`](../api/coeqwal-api/routes/tier_map_endpoints.py) GeoJSON output.
 
 ### Prerequisites
 
@@ -189,6 +198,78 @@ To inspect a specific layer's full table contents:
 psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
 psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
 ```
+
+### Sharing the Cloud9 environment across developers
+
+Cloud9 backs a single EC2 instance that all collaborators share as the OS user `ec2-user`. That means `~/.bashrc`, `~/.gitconfig`, `~/.ssh/`, and shell history are shared. AWS Cloud9 also injects `$C9_USER` into every shell, but it reflects whichever IAM principal most recently attached via the browser IDE - it does not change per concurrent collaborator and cannot be used to identify the current user. The default Cloud9 PS1 renders `$C9_USER`, which is why every collaborator sees the same name in their prompt regardless of who is actually typing.
+
+Two more things to know before onboarding:
+
+- `ec2-user` has passwordless `sudo`. Every collaborator can become root on this EC2. That is acceptable for a small trusted team but it is not a security boundary; treat the EC2 as collectively administered.
+- `aws sts get-caller-identity` from inside the shell returns the EC2's instance profile role (`AWSCloud9SSMAccessRole/<instance-id>`), the same string for every collaborator. It does not identify the human user. The AWS CLI on this EC2 has no `iam:*` perms anyway; for AWS admin commands use CloudShell from the AWS console (see `docs/INFRASTRUCTURE.md` §9.3).
+
+To keep each developer's `DATABASE_URL` (and audit attribution) correct without overwriting each other:
+
+1. **Shared `~/.bashrc`** (set up once by the lead) defines a `become<name>` alias for each collaborator and exports the shared `SUPERUSER_URL`.
+2. **Each developer creates `~/.coeqwal-env-<their_name>`** (mode 600) with their personal `DATABASE_URL`, `COEQWAL_USER`, and a `PS1` that uses their name.
+3. **At the start of each session, the developer runs `become<their_name>`.** That sources their env file and gives them the correct prompt, `DATABASE_URL`, and identity for that shell.
+
+#### A) Shared `~/.bashrc` addition (one-time, by the lead)
+
+Append to `/home/ec2-user/.bashrc` after the existing Cloud9 default block:
+
+```bash
+# --- COEQWAL multi-developer setup ---
+# Each developer runs their own 'become<name>' alias at the start of a session.
+# That sources ~/.coeqwal-env-<name>, which exports their personal DATABASE_URL,
+# sets COEQWAL_USER, and overrides PS1 so the prompt matches the active identity.
+
+export SUPERUSER_URL="postgresql://postgres:PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+
+alias becomemelijimenez='source ~/.coeqwal-env-melijimenez'
+alias becomebkallay='source ~/.coeqwal-env-bkallay'
+alias becomeelehmer='source ~/.coeqwal-env-elehmer'
+alias becomebgaley='source ~/.coeqwal-env-bgaley'
+alias becomejfantauzza='source ~/.coeqwal-env-jfantauzza'
+
+whoami_coeqwal() {
+  echo "OS user:        $(whoami)"
+  echo "Cloud9 C9_USER: ${C9_USER:-<unset>} (last IDE attacher, ignore)"
+  echo "COEQWAL_USER:   ${COEQWAL_USER:-<not set - run becomeXXXX>}"
+  if [ -n "$DATABASE_URL" ]; then
+    echo "DATABASE_URL:   $(echo "$DATABASE_URL" | sed -E 's|^(postgresql://)([^:]+):[^@]*@|\1\2:***@|')"
+  else
+    echo "DATABASE_URL:   <not set>"
+  fi
+}
+# --- end COEQWAL ---
+```
+
+`SUPERUSER_URL` lives in shared `~/.bashrc` because the master password is intentionally shared by all five collaborators (anyone with `sudo` could read it from any per-user file anyway). Personal Postgres passwords stay in each dev's own env file (`mode 600`) to keep them at least notionally compartmented from casual `cat ~/.bashrc` reads.
+
+#### B) Per-user env file (one-time, by each developer)
+
+Each developer creates one file in their home directory on Cloud9. Example for `melijimenez`:
+
+```bash
+# ~/.coeqwal-env-melijimenez
+export COEQWAL_USER="melijimenez"
+export DATABASE_URL="postgresql://melijimenez:HER_PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+export PS1='\[\033[01;32m\]'"${COEQWAL_USER}"'\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1 " (%s)" 2>/dev/null) $ '
+```
+
+Then `chmod 600 ~/.coeqwal-env-melijimenez` so the password is owner-readable only.
+
+#### C) Per-session use (every developer, every Cloud9 session)
+
+Open a Cloud9 terminal tab. The prompt initially shows whoever was the last IDE attacher (currently `elehmer`); ignore it. Run:
+
+```bash
+becomejfantauzza      # or your own become<name>
+whoami_coeqwal        # confirm the identity
+```
+
+After that the prompt switches to your name, `DATABASE_URL` is your role, and `coeqwal_current_operator()` in Postgres will return your developer id. If you forget to run your `become<name>`, `whoami_coeqwal` will say `COEQWAL_USER: <not set - run becomeXXXX>`.
 
 ### Key resources
 

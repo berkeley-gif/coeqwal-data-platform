@@ -58,7 +58,7 @@ from typing import Dict, List, Tuple
 
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import (  # noqa: E402
     assess_coverage,
     fetch_tier_location_names,
@@ -77,7 +77,7 @@ ALLOWED_SCENARIOS: frozenset[str] = ACTIVE_SCENARIOS
 
 DEACTIVATED_SCENARIOS: set = set()
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Populated from the database in main() before any loader runs. Empty at
 # import time so this module can still be imported without DATABASE_URL.
@@ -87,12 +87,12 @@ TIER_LOCATION_NAMES: Dict[str, Dict[str, str]] = {}
 TIER_VERSION_ID = 8
 
 # Staging directory — CSVs named by tier short code
-STAGING_DIR = Path(__file__).parent / 'staging'
+STAGING_DIR = Path(__file__).parent.parent / 'staging'
 
 # Default output directory for generated SQL. Gitignored via etl/**/output/.
 # Bare filenames passed to --output-sql land here; absolute paths or paths
 # with a directory component are respected verbatim.
-OUTPUT_DIR = Path(__file__).parent / 'output'
+OUTPUT_DIR = Path(__file__).parent.parent / 'output'
 
 # =============================================================================
 # HELPERS

@@ -41,11 +41,13 @@
 
 ### **Entities**
 - `reservoir_entity` (92 records)
+- `reservoir` (7 records, geometry table backing `reservoir_entity` polygons)
 - `channel_entity` (669 records)
 - `du_urban_entity` (145 records)
 - `du_agriculture_entity` (144 records)
 - `du_refuge_entity` (18 records)
 - `wba` (42 records)
+- `compliance_station` (2 records, point-geometry table for in-Delta compliance stations)
 - `cws_entity` (planned — ~476 records, see "PLANNED TABLES — community water systems (CWS)" below)
 - `cws_du_link` (planned — ~586 records)
 - `cws_list` + `cws_list_du_member` (planned — list/registry pattern for project vs CalSim DU lists)
@@ -81,7 +83,6 @@
 - `audit_log` (0 records)
 - `calsim_model_variable_type` (8 records)
 - `channel_variable` (1,352 records)
-- `compliance_station` (2 records)
 - `cws_aggregate_entity` (6 records)
 - `cws_aggregate_monthly` (2,160 records)
 - `cws_aggregate_period_summary` (180 records)
@@ -112,7 +113,6 @@
 - `refuge_du_delivery_monthly` (6,048 records)
 - `refuge_du_period_summary` (504 records)
 - `refuge_du_shortage_monthly` (6,048 records)
-- `reservoir` (7 records)
 - `scenario` (77 records)
 - `scenario_author` (3 records)
 - `scenario_backup` (-1 records)
@@ -860,6 +860,68 @@ Columns:
 
 **Indexes**: Present
 
+### **reservoir**
+
+```
+Table: reservoir
+Records: 7
+Columns: 16
+Audit: Full audit trail
+
+Columns:
+  id                             integer              [PK]
+  calsim_short_code              character varying    [UNIQUE]
+  reservoir_name                 character varying   
+  geom_wkt                       text                
+  srid                           integer              DEFAULT 4326
+  geom                           USER-DEFINED        
+  area_sqkm                      numeric             
+  elevation_m                    numeric             
+  gnis_id                        character varying   
+  nhd_permanent_id               character varying   
+  data_source                    character varying    DEFAULT 'NHD'
+  created_at                     timestamp with time zone DEFAULT now()
+  created_by                     integer              FK to developer.id
+  updated_at                     timestamp with time zone DEFAULT now()
+  updated_by                     integer              FK to developer.id
+  source_id                      integer              FK to source.id
+```
+
+**Indexes**: `reservoir_pkey (id)`, `reservoir_calsim_short_code_key (calsim_short_code)` UNIQUE, `idx_reservoir_calsim_code (calsim_short_code)` UNIQUE (duplicate of the key-backed unique index — candidate for cleanup), `idx_reservoir_geom (geom) USING GIST`.
+
+**Notes**: Polygon-geometry table backing the `reservoir` `location_type` resolution path in `tier_location`. The entity-side names live in `reservoir_entity`; this table carries the geometry alone, keyed by `calsim_short_code` (e.g. `SHSTA`, `OROVL`, `SLUIS`). The shared `SLUIS` polygon is referenced by both `SLUIS_CVP` and `SLUIS_SWP` entity rows. Seeded from NHD; one row per CalSim reservoir for which we have a polygon. See [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py).
+
+### **compliance_station**
+
+```
+Table: compliance_station
+Records: 2
+Columns: 16
+Audit: Full audit trail
+
+Columns:
+  id                             integer              [PK]
+  station_code                   character varying    [UNIQUE]
+  station_name                   character varying   
+  latitude                       numeric             
+  longitude                      numeric             
+  srid                           integer              DEFAULT 4326
+  geom_wkt                       text                
+  geom                           USER-DEFINED        
+  tier_use                       character varying   
+  data_source                    character varying   
+  notes                          text                
+  created_at                     timestamp with time zone DEFAULT now()
+  created_by                     integer              FK to developer.id
+  updated_at                     timestamp with time zone DEFAULT now()
+  updated_by                     integer              FK to developer.id
+  source_id                      integer              FK to source.id
+```
+
+**Indexes**: `compliance_station_pkey (id)`, `compliance_station_station_code_key (station_code)` UNIQUE, `idx_compliance_code (station_code)` UNIQUE (duplicate of the key-backed unique index — candidate for cleanup), `idx_compliance_geom (geom) USING GIST`, `idx_compliance_tier (tier_use)`.
+
+**Notes**: Point-geometry table for in-Delta compliance stations, used by the `compliance_station` `location_type` resolution path in `tier_location` (currently `EM` = Emmaton, `JP` = Jersey Point for the `FW_DELTA_USES` tier). Seeded from [`database/seed_tables/03_GIS/compliance_stations.csv`](../seed_tables/03_GIS/compliance_stations.csv). See [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py).
+
 ---
 
 ## TIER SYSTEM TABLES
@@ -916,7 +978,7 @@ Constraints:
 
 **Indexes**: `tier_short_code`, `location_type`, `is_active`
 
-**Source of truth**: The tier teams' staging CSVs in `etl/tier_data/staging/`. Reconciled with [`etl/tier_data/sync_tier_locations_from_staging.py`](../../etl/tier_data/sync_tier_locations_from_staging.py).
+**Source of truth**: The tier teams' staging CSVs in `etl/tier_data/staging/`. Reconciled with [`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](../../etl/tier_data/scripts/sync_tier_locations_from_staging.py).
 
 **Resolution map**: `location_id` joins to entity tables for display name and geometry. See [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py) for the registry. Summary:
 
@@ -1350,14 +1412,6 @@ Records: 1,352
 Columns: 19
 ```
 
-### **compliance_station**
-
-```
-Table: compliance_station
-Records: 2
-Columns: 16
-```
-
 ### **cws_aggregate_entity**
 
 ```
@@ -1596,14 +1650,6 @@ Columns: 32
 Table: refuge_du_shortage_monthly
 Records: 6,048
 Columns: 29
-```
-
-### **reservoir**
-
-```
-Table: reservoir
-Records: 7
-Columns: 16
 ```
 
 ### **scenario**

@@ -12,13 +12,13 @@ Read-only. For each tier with a staging CSV, prints:
   - the count of matching active rows
 
 To reconcile, run:
-    python etl/tier_data/sync_tier_locations_from_staging.py --dry-run
-    python etl/tier_data/sync_tier_locations_from_staging.py
+    python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run
+    python etl/tier_data/scripts/sync_tier_locations_from_staging.py
 
 Usage:
-    python etl/tier_data/diff_tier_locations.py
-    python etl/tier_data/diff_tier_locations.py --tier RES_STOR
-    python etl/tier_data/diff_tier_locations.py --staging /custom/path
+    python etl/tier_data/scripts/diff_tier_locations.py
+    python etl/tier_data/scripts/diff_tier_locations.py --tier RES_STOR
+    python etl/tier_data/scripts/diff_tier_locations.py --staging /custom/path
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from etl.common import (  # noqa: E402
     assess_coverage,
@@ -41,7 +41,7 @@ from etl.tier_data.staging_inventory import (  # noqa: E402
     build_inventory,
 )
 
-DEFAULT_STAGING_DIR = Path(__file__).parent / "staging"
+DEFAULT_STAGING_DIR = Path(__file__).parent.parent / "staging"
 
 
 def _fetch_db_ids(conn) -> Dict[str, Set[str]]:
@@ -175,11 +175,11 @@ def main() -> int:
     print()
     if any_gaps:
         print("Membership gaps detected. To reconcile:")
-        print("  1. python etl/tier_data/sync_tier_locations_from_staging.py --dry-run")
-        print("  2. python etl/tier_data/sync_tier_locations_from_staging.py")
+        print("  1. python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run")
+        print("  2. python etl/tier_data/scripts/sync_tier_locations_from_staging.py")
     elif any_missing_staging:
         print("No membership gaps in tiers with staging CSVs. Tiers without staging were skipped.")
-        print("Run `python etl/tier_data/stage_tier_results.py` first to populate staging.")
+        print("Run `python etl/tier_data/scripts/stage_tier_results.py` first to populate staging.")
     else:
         print("No membership gaps. Staging CSVs and tier_location are in sync.")
 

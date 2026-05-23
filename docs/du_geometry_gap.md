@@ -41,7 +41,48 @@ down. See "Reconciling `has_gis_data`" below.
 
 Geopackage-only IDs (in `du_4326.gpkg` but not in any DB entity table; 3):
 `07S_PA`, `50_NA`, `90_NA`. These are not currently loaded as
-demand-unit entities and the geometry ingest will skip them.
+demand-unit entities and the geometry ingest will skip them. `07S_PA`
+is *also* referenced by the AG_REV tier staging CSV (see "Tier
+staging IDs not in entity tables" below) - adding it to
+`du_agriculture_entity` would close both gaps at once.
+
+## Tier staging IDs not in entity tables (attribute gaps)
+
+The tier-team staging CSVs in `etl/tier_data/staging/` reference
+location_ids that are not in the corresponding entity tables yet.
+Distinct from the "missing geometries" lists below: those `du_id`s
+exist as rows but lack polygons; the IDs here have *no row at all*.
+[`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](../etl/tier_data/scripts/sync_tier_locations_from_staging.py)
+refuses to write them without `--allow-unresolved` because a dangling
+pointer in `tier_location` would surface as a missing tile in the API.
+
+Status: discovered 2026-05-23 via
+[`etl/tier_data/scripts/audit_tier_location_geometry.py`](../etl/tier_data/scripts/audit_tier_location_geometry.py).
+
+### AG_REV -> `du_agriculture_entity` (1)
+
+| `location_id` | Notes |
+|---|---|
+| `07S_PA` | Already exists in `du_4326.gpkg` (one of the three "Geopackage-only IDs" above). Adding the entity row would auto-load geometry on the next loader run. |
+
+### CWS_DEL -> `du_urban_entity` (7)
+
+| `location_id` | Provisional meaning (verify with tier team) |
+|---|---|
+| `ACFC` | Alameda County Flood Control |
+| `KCWA` | Kern County Water Agency |
+| `MHILL_NU` | Morgan Hill (non-utility) |
+| `SBCWD` | Santa Barbara County Water Dept (?) |
+| `SVWRD` | Silicon Valley Water Recharge District (?) |
+| `TLMNE` | Telmnese (?) |
+| `UNION` | Union (?) |
+
+The "provisional meaning" column is best-effort decoding from the
+short codes; the tier team should confirm canonical names and
+attributes (`hydrologic_region_id`, etc.) before the entity rows
+are inserted. None of these have polygons in `du_4326.gpkg` either,
+so adding the entity rows alone fixes the attribute gap but the
+geometry gap will need separate sourcing.
 
 ## `26N_NA` (urban / agriculture overlap)
 

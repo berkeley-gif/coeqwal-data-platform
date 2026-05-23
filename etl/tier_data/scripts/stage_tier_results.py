@@ -36,8 +36,13 @@ import pandas as pd
 
 
 SCRIPT_DIR = Path(__file__).parent
-DEFAULT_SOURCE_DIR = SCRIPT_DIR / "staging" / "tier_results"
-DEFAULT_OUT_DIR = SCRIPT_DIR / "staging"
+STAGING_BASE = SCRIPT_DIR.parent
+DEFAULT_SOURCE_DIR = STAGING_BASE / "staging" / "tier_results"
+DEFAULT_OUT_DIR = STAGING_BASE / "staging"
+
+# Column-0 header aliases accepted on input for ENV_FLOWS upstream CSVs.
+# All are treated as the scenario column.
+ENV_FLOWS_SCENARIO_COL_ALIASES: tuple = ("Scenario", "Station")
 
 
 def _find_single(source_dir: Path, *candidates: str) -> Optional[Path]:
@@ -111,11 +116,17 @@ def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """
-    eflows/*.csv -> ENV_FLOWS_{historical,cc50,cc95}.csv (identity copies).
+    eflows/*.csv -> ENV_FLOWS_{historical,cc50,cc95}.csv.
 
     The loader's _discover_env_flows_files globs ENV_FLOWS_*.csv and sorts
     historical -> cc50 -> cc95 so that later files overwrite earlier ones
     for overlapping scenarios. We preserve the three-file split here.
+
+    Column-0 header on input may be either `Scenario` or `Station` (the
+    eFLOW's team's historical convention). Both are accepted.
+
+    `load_all_tier_results.py:_load_one_env_flows_file` auto-detects
+    row/column orientation.
     """
     eflows_dir = source_dir / "eflows"
 
@@ -135,6 +146,19 @@ def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
             print(f"  ENV_FLOWS_{tag}: no source in eflows/, skipped")
             continue
         df = pd.read_csv(src)
+        if len(df.columns) == 0:
+            print(f"  ENV_FLOWS_{tag}: source {src.name} has no columns, skipped")
+            continue
+        header = df.columns[0]
+        if header not in ENV_FLOWS_SCENARIO_COL_ALIASES:
+            print(
+                f"  ENV_FLOWS_{tag}: WARNING column-0 header {header!r} in "
+                f"{src.name} is not one of "
+                f"{list(ENV_FLOWS_SCENARIO_COL_ALIASES)}; treating it as the "
+                "scenario column and normalizing to 'Scenario'"
+            )
+        if header != "Scenario":
+            df = df.rename(columns={header: "Scenario"})
         _write(df, out_dir / f"ENV_FLOWS_{tag}.csv", dry_run, f"from eflows/{src.name}")
         wrote_any = True
     return wrote_any
@@ -303,7 +327,7 @@ def main() -> int:
     if skipped:
         print(f"Skipped: {', '.join(skipped)}")
     if not args.dry_run:
-        print(f"\nNext: python {SCRIPT_DIR.name}/load_all_tier_results.py --dry-run")
+        print("\nNext: python etl/tier_data/scripts/load_all_tier_results.py --dry-run")
     return 0 if not skipped else 2
 
 

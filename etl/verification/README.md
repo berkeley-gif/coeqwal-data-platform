@@ -142,9 +142,9 @@ After [../README.md](../README.md) (ingestion) and [../statistics/README.md](../
 1. Ensure DSS-to-CSV extraction has run and manifests show PASS in `audits/validation_mismatches/`
 2. Run the ETL statistics: `python etl/statistics/run_all.py --scenario {id}`
 3. Load tier data (see [../tier_data/README.md](../tier_data/README.md) for the full flow):
-   - `python etl/tier_data/stage_tier_results.py` (normalize team drops into flat files)
-   - `python etl/tier_data/load_all_tier_results.py --output-sql all_tiers.sql` then `psql "$DATABASE_URL" -f etl/tier_data/output/all_tiers.sql`
-   - `DATABASE_URL="$DATABASE_URL" python etl/tier_data/load_all_tier_results.py --verify` (mandatory)
+   - `python etl/tier_data/scripts/stage_tier_results.py` (normalize team drops into flat files)
+   - `python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql` then `psql "$DATABASE_URL" -f etl/tier_data/output/all_tiers.sql`
+   - `DATABASE_URL="$DATABASE_URL" python etl/tier_data/scripts/load_all_tier_results.py --verify` (mandatory)
 4. Run Layer 2 verification: `python etl/statistics/verify_all_sections.py --scenario {id}`
 5. Run Layer 3 verification: `python etl/statistics/verify_api.py --scenario {id}`
 6. Check results at `/verification` on the frontend

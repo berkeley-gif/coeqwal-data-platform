@@ -10,7 +10,7 @@
 --
 -- The tier teams' staging CSVs in `etl/tier_data/staging/` are the
 -- source of truth for membership. Reconcile with:
---   python etl/tier_data/sync_tier_locations_from_staging.py
+--   python etl/tier_data/scripts/sync_tier_locations_from_staging.py
 -- which inserts new rows, marks dropped rows is_active = FALSE, and
 -- preserves history. There is no seed CSV for tier_location.
 --
@@ -80,5 +80,5 @@ CREATE INDEX idx_tier_location_active ON tier_location(is_active);
 
 \echo ''
 \echo 'TIER_LOCATION TABLE CREATED.'
-\echo 'Next: python etl/tier_data/sync_tier_locations_from_staging.py'
+\echo 'Next: python etl/tier_data/scripts/sync_tier_locations_from_staging.py'
 \echo '============================'

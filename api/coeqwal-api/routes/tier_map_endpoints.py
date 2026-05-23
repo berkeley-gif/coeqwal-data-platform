@@ -618,7 +618,7 @@ async def get_tier_map_data(
     to `SLUIS`); `wba` through `wba.wba_id`; and `compliance_station`
     through `compliance_station.station_code`. Coverage tracks the
     entity registry in `etl/common/tier_location_entities.py`; run
-    `etl/tier_data/audit_tier_location_geometry.py` for the per-tier
+    `etl/tier_data/scripts/audit_tier_location_geometry.py` for the per-tier
     scorecard. There is no fallback for `demand_unit`s without a
     polygon. They are dropped from the FeatureCollection and listed in
     `docs/du_geometry_gap.md`.

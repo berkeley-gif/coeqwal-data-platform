@@ -81,7 +81,7 @@ once before the first invocation so the `geom_wkt` / `srid` / `geom`
 columns exist.
 
 Read-only companion (audit / drift scorecard):
-`etl/tier_data/audit_tier_location_geometry.py`. Persistent roster of
+`etl/tier_data/scripts/audit_tier_location_geometry.py`. Persistent roster of
 missing polygons: `docs/du_geometry_gap.md`.
 
 Usage:

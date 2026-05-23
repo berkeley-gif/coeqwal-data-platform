@@ -21,16 +21,16 @@ Run as a regular DB user. `DATABASE_URL` must be writable on
 
 Usage:
     # Dry run, full diff scorecard:
-    python etl/tier_data/sync_tier_locations_from_staging.py --dry-run
+    python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run
 
     # Apply changes in a single transaction:
-    python etl/tier_data/sync_tier_locations_from_staging.py
+    python etl/tier_data/scripts/sync_tier_locations_from_staging.py
 
     # Only sync a subset of tiers:
-    python etl/tier_data/sync_tier_locations_from_staging.py --tier RES_STOR,GW_STOR
+    python etl/tier_data/scripts/sync_tier_locations_from_staging.py --tier RES_STOR,GW_STOR
 
     # Skip the validation against entity tables (use during gap-fill only):
-    python etl/tier_data/sync_tier_locations_from_staging.py --allow-unresolved
+    python etl/tier_data/scripts/sync_tier_locations_from_staging.py --allow-unresolved
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from etl.common import (  # noqa: E402
     CoverageReport,
@@ -54,7 +54,7 @@ from etl.tier_data.staging_inventory import (  # noqa: E402
     build_inventory,
 )
 
-DEFAULT_STAGING_DIR = Path(__file__).parent / "staging"
+DEFAULT_STAGING_DIR = Path(__file__).parent.parent / "staging"
 
 
 @dataclass

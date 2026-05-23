@@ -25,9 +25,9 @@ CSVs in [`etl/tier_data/staging/`](../../../etl/tier_data/staging/) are
 the source of truth for membership. Reconcile with:
 
 ```bash
-python etl/tier_data/diff_tier_locations.py
-python etl/tier_data/sync_tier_locations_from_staging.py --dry-run
-python etl/tier_data/sync_tier_locations_from_staging.py
+python etl/tier_data/scripts/diff_tier_locations.py
+python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run
+python etl/tier_data/scripts/sync_tier_locations_from_staging.py
 ```
 
 The DDL is in

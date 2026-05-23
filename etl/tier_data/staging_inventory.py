@@ -1,15 +1,16 @@
-"""staging_inventory.py - Parse the canonical tier staging CSVs into per-tier location inventories.
+"""staging_inventory.py - Parse the tier data staging CSVs into per-tier location inventories.
 
 Used by `audit_tier_location_geometry.py`, `sync_tier_locations_from_staging.py`,
-and `diff_tier_locations.py` so all three see the same membership extraction.
+and `diff_tier_locations.py`.
 
-A staging CSV is the canonical flat output of
-[`stage_tier_results.py`](./stage_tier_results.py), with one of these shapes:
+A staging CSV is the flat output of
+[`stage_tier_results.py`](./scripts/stage_tier_results.py), with one of these shapes:
 
-  - per-location columns keyed by `Scenario` / `scenario`
-    (CWS_DEL, RES_STOR, GW_STOR, AG_REV-wide)
-  - per-location row index (ENV_FLOWS, where each row is a station)
-  - single fixed location (DELTA_ECO -> DETAW, WRC_SALMON_AB -> SAC299, etc.)
+  - wide multi-location: column 0 carries the scenario label and every
+    remaining column header is a location_id
+    (CWS_DEL, RES_STOR, GW_STOR, AG_REV-wide, ENV_FLOWS)
+  - single fixed location: the CSV's presence is the only signal
+    (DELTA_ECO -> DETAW, WRC_SALMON_AB -> SAC299, FW_DELTA_USES, FW_EXP)
 """
 
 from __future__ import annotations
@@ -101,6 +102,13 @@ def _dedupe(members: Iterable[StagingMember]) -> List[StagingMember]:
 
 
 def _env_flows_ids(staging_dir: Path) -> Tuple[List[StagingMember], List[str]]:
+    """Parse ENV_FLOWS staging CSV(s). Same wide format as RES_STOR /
+    GW_STOR / CWS_DEL (column 0 = scenario, remaining columns =
+    network_node short codes like `AMR004`, `SAC289`). Lives in its own
+    function only because ENV_FLOWS additionally supports the per-climate
+    split filenames `ENV_FLOWS_{historical,cc50,cc95}.csv` produced by
+    `scripts/stage_tier_results.py`.
+    """
     import pandas as pd
 
     members: List[StagingMember] = []
@@ -112,9 +120,9 @@ def _env_flows_ids(staging_dir: Path) -> Tuple[List[StagingMember], List[str]]:
     paths.extend(sorted(staging_dir.glob("ENV_FLOWS_*.csv")))
     order = 1
     for path in paths:
-        df = pd.read_csv(path, index_col=0)
-        for station in df.index:
-            members.append(StagingMember(location_id=str(station).strip(), display_order=order))
+        df = pd.read_csv(path)
+        for col in df.columns[1:]:
+            members.append(StagingMember(location_id=str(col).strip(), display_order=order))
             order += 1
         sources.append(path.name)
     return _dedupe(members), sources
