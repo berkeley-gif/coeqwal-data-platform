@@ -6,7 +6,7 @@ geometries from.
 
 ## Source of geometry
 
-`reference/du_4326.gpkg`
+`database/seed_tables/03_GIS/du_4326.gpkg`
 
 - Layer: `demandunits` (236 rows; one row has a NULL `DU_ID` and is ignored)
 - CRS: EPSG:4326
@@ -140,11 +140,11 @@ python database/scripts/data_processing/load_du_geometries.py --dry-run
 It prints per-table `matched` and `missing in gpkg` counts and the
 `du_id` lists they correspond to. The numbers in this doc should
 shrink to zero over time as new polygons are added to
-`reference/du_4326.gpkg` (or a successor table).
+`database/seed_tables/03_GIS/du_4326.gpkg` (or a successor table).
 
 ## Wiring
 
 - Schema: [`database/scripts/sql/56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql) adds `geom_wkt TEXT`, `srid INTEGER`, `geom geometry(MultiPolygon, 4326)`, and `idx_<table>_geom USING GIST` to each of the three `du_*_entity` tables.
-- Loader: [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py) reads `reference/du_4326.gpkg`, strips the GeoPackage GPB header from each `geom` blob, and writes the resulting WKB to whichever entity tables contain the `du_id` via `ST_GeomFromWKB(wkb, 4326)`. `geom_wkt` is materialized server-side from the resulting geometry.
+- Loader: [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py) reads [`database/seed_tables/03_GIS/du_4326.gpkg`](../database/seed_tables/03_GIS/du_4326.gpkg), strips the GeoPackage GPB header from each `geom` blob, and writes the resulting WKB to whichever entity tables contain the `du_id` via `ST_GeomFromWKB(wkb, 4326)`. `geom_wkt` is materialized server-side from the resulting geometry.
 - Registry: [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py) routes the lookup with `TIER_GEOMETRY_OVERRIDES` (mirroring the existing `TIER_ATTRIBUTE_OVERRIDES` pattern): `AG_REV` -> `du_agriculture_entity`, everything else -> `du_urban_entity`.
 - API: [`api/coeqwal-api/routes/tier_map_endpoints.py`](../api/coeqwal-api/routes/tier_map_endpoints.py) mirrors the registry in raw SQL when assembling GeoJSON FeatureCollections. There is no fallback to `network_gis` for missing DUs; they are dropped from the response and surface here.

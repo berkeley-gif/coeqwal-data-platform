@@ -69,7 +69,7 @@ SCENARIO_RUN_IDS = {
 
 # ---------------------------------------------------------------------------
 # Roadmap: the per-section variable lists below are hand-curated. The
-# long-term move is to derive them from `domain_family_map` or the seed
+# long-term goal is to derive them from `domain_family_map` or the seed
 # CSVs (`channel_entity.csv`, `du_urban_entity.csv`,
 # `du_agriculture_entity.csv`, `du_refuge_entity.csv`) so a new aggregate
 # variable added to the ETL is automatically covered here instead of

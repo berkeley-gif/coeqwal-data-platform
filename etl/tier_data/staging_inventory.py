@@ -1,4 +1,4 @@
-"""Parse the canonical tier staging CSVs into per-tier location inventories.
+"""staging_inventory.py - Parse the canonical tier staging CSVs into per-tier location inventories.
 
 Used by `audit_tier_location_geometry.py`, `sync_tier_locations_from_staging.py`,
 and `diff_tier_locations.py` so all three see the same membership extraction.

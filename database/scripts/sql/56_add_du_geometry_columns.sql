@@ -5,7 +5,8 @@
 --     geom_wkt TEXT, srid INTEGER, geom geometry(MultiPolygon, 4326)
 -- plus a standard GiST index named `idx_<table>_geom`.
 --
--- Polygons are dissolved one-per-`du_id` and ship from `reference/du_4326.gpkg`
+-- Polygons are dissolved one-per-`du_id` and ship from
+-- `database/seed_tables/03_GIS/du_4326.gpkg`
 -- (layer `demandunits`, EPSG:4326). Loaded by
 -- `database/scripts/data_processing/load_du_geometries.py`.
 --
@@ -32,7 +33,8 @@ CREATE INDEX IF NOT EXISTS idx_du_urban_entity_geom
 
 COMMENT ON COLUMN du_urban_entity.geom IS
     'Dissolved urban demand-unit footprint (EPSG:4326). '
-    'Loaded by database/scripts/data_processing/load_du_geometries.py from reference/du_4326.gpkg.';
+    'Loaded by database/scripts/data_processing/load_du_geometries.py '
+    'from database/seed_tables/03_GIS/du_4326.gpkg.';
 COMMENT ON COLUMN du_urban_entity.geom_wkt IS
     'WKT mirror of geom. Populated server-side as ST_AsText(geom) by the loader.';
 COMMENT ON COLUMN du_urban_entity.srid IS
@@ -51,7 +53,8 @@ CREATE INDEX IF NOT EXISTS idx_du_agriculture_entity_geom
 
 COMMENT ON COLUMN du_agriculture_entity.geom IS
     'Dissolved agricultural demand-unit footprint (EPSG:4326). '
-    'Loaded by database/scripts/data_processing/load_du_geometries.py from reference/du_4326.gpkg.';
+    'Loaded by database/scripts/data_processing/load_du_geometries.py '
+    'from database/seed_tables/03_GIS/du_4326.gpkg.';
 COMMENT ON COLUMN du_agriculture_entity.geom_wkt IS
     'WKT mirror of geom. Populated server-side as ST_AsText(geom) by the loader.';
 COMMENT ON COLUMN du_agriculture_entity.srid IS
@@ -70,7 +73,8 @@ CREATE INDEX IF NOT EXISTS idx_du_refuge_entity_geom
 
 COMMENT ON COLUMN du_refuge_entity.geom IS
     'Dissolved refuge demand-unit footprint (EPSG:4326). '
-    'Loaded by database/scripts/data_processing/load_du_geometries.py from reference/du_4326.gpkg.';
+    'Loaded by database/scripts/data_processing/load_du_geometries.py '
+    'from database/seed_tables/03_GIS/du_4326.gpkg.';
 COMMENT ON COLUMN du_refuge_entity.geom_wkt IS
     'WKT mirror of geom. Populated server-side as ST_AsText(geom) by the loader.';
 COMMENT ON COLUMN du_refuge_entity.srid IS

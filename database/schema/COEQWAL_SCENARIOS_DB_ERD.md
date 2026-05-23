@@ -925,7 +925,7 @@ Both attribute and geometry lookups are tier-aware. `TIER_ATTRIBUTE_OVERRIDES` a
 | `location_type` (tier) | Attribute table (name) | Geometry table | Notes |
 |---|---|---|---|
 | `network_node` | `network.short_code` -> `network.name` | `network_gis.short_code` -> `geom` (POINT) | `DISTINCT ON (short_code) ORDER BY (precision_level = 'precise') DESC` |
-| `demand_unit` (CWS_DEL) | `du_urban_entity.du_id` (name = id today) | `du_urban_entity.du_id` -> `geom` (MULTIPOLYGON, 4326) | Polygons from `reference/du_4326.gpkg`; 41 urban `du_id`s have no polygon today |
+| `demand_unit` (CWS_DEL) | `du_urban_entity.du_id` (name = id today) | `du_urban_entity.du_id` -> `geom` (MULTIPOLYGON, 4326) | Polygons from `database/seed_tables/03_GIS/du_4326.gpkg`; 41 urban `du_id`s have no polygon today |
 | `demand_unit` (AG_REV) | `du_agriculture_entity.du_id` (name = id today) | `du_agriculture_entity.du_id` -> `geom` (MULTIPOLYGON, 4326) | 12 ag `du_id`s have no polygon today |
 | `reservoir` | `reservoir_entity.short_code` -> `reservoir_entity.name` | `reservoir.calsim_short_code` -> `geom` (POLYGON) | `SLUIS_CVP` and `SLUIS_SWP` both render against the shared `SLUIS` polygon |
 | `wba` | `wba.wba_id` -> `wba.wba_name` | `wba.wba_id` -> `geom` (POLYGON) | Includes the `DETAW` row for the Legal Delta |

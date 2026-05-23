@@ -68,6 +68,31 @@
 - Shape_Area: square degrees (needs conversion)
 - WKT: Polygon geometries in SRID 4326
 
+### **3. Demand-Unit Polygons (du_4326.gpkg)**
+**Source:** `database/seed_tables/03_GIS/du_4326.gpkg` (this directory, 4.2 MB)
+
+**Contains:**
+- Layer `demandunits`, 236 rows (one row has a NULL `DU_ID` and is ignored)
+- 235 dissolved `MULTIPOLYGON` features, one per `DU_ID`
+- CRS: EPSG:4326
+- Columns: `DU_ID`, `OBJECTID`, `Shape_Leng`, `Shape_Area`, `geom`
+
+**Load path:**
+- Schema: `database/scripts/sql/56_add_du_geometry_columns.sql` adds
+  `geom_wkt TEXT`, `srid INTEGER`, `geom geometry(MultiPolygon, 4326)`,
+  and `idx_<table>_geom USING GIST` to each of `du_urban_entity`,
+  `du_agriculture_entity`, and `du_refuge_entity`.
+- Loader: `database/scripts/data_processing/load_du_geometries.py`
+  reads this gpkg, strips the GeoPackage GPB header from each `geom`
+  blob, and writes the resulting WKB to whichever entity tables
+  contain the `du_id` via `ST_GeomFromWKB(wkb, 4326)`. Dry-run with
+  `--dry-run` first.
+
+**Coverage gap:** 232 of 286 distinct `DU_ID`s in the three entity
+tables are covered (81.1%). The 54 missing IDs, the 3 gpkg-only IDs,
+and the `26N_NA` urban / agriculture overlap are enumerated in
+[`docs/du_geometry_gap.md`](../../../docs/du_geometry_gap.md).
+
 ---
 
 ## **📋 FILES TO CREATE:**

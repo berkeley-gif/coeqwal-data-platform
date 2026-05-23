@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-set_scenario_active.py - flip `scenario.is_active` in the database.
+set_scenario_active.py - flips `scenario.is_active` in the database.
 
 The supported way to promote a scenario onto the public website (or take
 one off) once its DB row already exists. Runs a single

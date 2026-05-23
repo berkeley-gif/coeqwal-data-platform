@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 load_du_geometries.py - load dissolved demand-unit polygons into the
-`du_*_entity` tables from `reference/du_4326.gpkg`.
+`du_*_entity` tables from `database/seed_tables/03_GIS/du_4326.gpkg`.
 
 This is a one-shot bootstrap loader for reference data, paired with
 `database/scripts/sql/56_add_du_geometry_columns.sql`. It is not part
@@ -96,7 +96,9 @@ from typing import Dict, Iterable, List, Set, Tuple
 import psycopg2
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_GPKG = REPO_ROOT / "reference" / "du_4326.gpkg"
+DEFAULT_GPKG = (
+    REPO_ROOT / "database" / "seed_tables" / "03_GIS" / "du_4326.gpkg"
+)
 GAP_DOC = "docs/du_geometry_gap.md"
 MIGRATION_SCRIPT = "database/scripts/sql/56_add_du_geometry_columns.sql"
 

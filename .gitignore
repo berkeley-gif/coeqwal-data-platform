@@ -65,14 +65,12 @@ rclone.conf
 # ETL staging and output directories
 etl/staging/
 etl/*/staging/
-# Tier data: keep the team-delivered raw CSVs under tier_results/ tracked,
-# but ignore the flat files at the top of staging/ since those are generated
-# from the raw drops by stage_tier_results.py (and the manifest is generated
-# by load_all_tier_results.py).
+# Tier data: keep both the team-delivered raw drops under tier_results/ and
+# the flat staging CSVs at the top of staging/ tracked. The flat CSVs are
+# the inputs to load_all_tier_results.py.
 !etl/tier_data/staging/
 !etl/tier_data/staging/tier_results/
 !etl/tier_data/staging/tier_results/**
-etl/tier_data/staging/*.csv
 etl/tier_data/staging/tier_upload_manifest.csv
 etl/statistics/charts/
 etl/batch-container/dss_processing/output/
