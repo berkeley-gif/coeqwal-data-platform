@@ -81,19 +81,28 @@ Reference: Migration 45 (`45_baseline_and_sibling_expansion.sql`) added 48 cc50/
 
 ### Adding new tiers (future)
 
-Tier definitions live in the `tier_definition` table. Adding a new tier requires:
+Tier definitions live in the `tier_definition` table (seeded from
+[`database/seed_tables/10_tier/tier_definition.csv`](../database/seed_tables/10_tier/tier_definition.csv)).
+The per-scenario tier values and per-location tier rows are project
+data, populated by the ETL pipeline. Adding a new tier requires:
 
-1. INSERT the tier definition row
-2. Compute tier results for all scenarios and INSERT into `tier_result`
-3. Compute location-level results and INSERT into `tier_location_result`
+1. INSERT the tier definition row (update `tier_definition.csv` and re-seed, or
+   `INSERT` directly)
+2. Add a `staging/<TIER_SHORT_CODE>.csv` file under [`etl/tier_data/staging/`](../etl/tier_data/staging/) and
+   wire a loader function into
+   [`etl/tier_data/scripts/load_all_tier_results.py`](../etl/tier_data/scripts/load_all_tier_results.py)
+3. Run the loader to populate `tier_result` and `tier_location_result`. See
+   [`etl/tier_data/README.md`](../etl/tier_data/README.md) for the full workflow
 4. Update the frontend tier configuration to display the new tier
 
 ### Adding tier data for new scenarios
 
 After new scenarios are loaded into the `scenario` table and their statistics ETL is complete:
 
-1. Compute tier results for the new scenarios using the existing tier definitions
-2. INSERT into `tier_result` and `tier_location_result`
+1. Update the tier-team staging CSVs in [`etl/tier_data/staging/`](../etl/tier_data/staging/) with
+   rows for the new scenarios
+2. Run the loader (see [`etl/tier_data/README.md`](../etl/tier_data/README.md)) to UPSERT into
+   `tier_result` and `tier_location_result`
 3. Verify with the monthly audit's per-scenario ETL coverage check
 
 ### Redeploying the API

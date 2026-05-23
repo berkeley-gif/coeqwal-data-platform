@@ -1,28 +1,43 @@
-# TIER SEED TABLES
+# Tier seed data (lookup only)
 
-## Overview
+This directory holds the lookup CSV for the tier framework. The tier
+result and per-location tables (`tier_result`, `tier_location_result`)
+are project data, not seed data. They live in their respective database
+tables and are populated by the ETL pipeline, not from CSVs in this
+directory.
 
-Tier tables store interpretive framework indicator values for scenario reporting. Tiers represent performance levels (1-4) for various water system indicators, designed for D3.js visualization.
+## What's here
 
-## Table Structure
+### `tier_definition.csv` (lookup)
 
-### tier_definition.csv
-Defines the tier indicators and their characteristics.
+Defines the 9 tier indicators (one row per indicator). This is reference
+data that rarely changes.
 
-**Columns:**
-- `short_code`: Unique identifier (e.g., ENV_FLOWS, DELTA_ECOLOGY)
-- `name`: Display name for reporting
-- `description`: Detailed description of the indicator
-- `tier_type`: 'multi_value' (4 tier values) or 'single_value' (1 tier level)
-- `tier_count`: Number of tier values (1 or 4)
-- `is_active`: Whether indicator is currently used
+| Column | Meaning |
+|---|---|
+| `short_code` | Unique identifier (e.g. `ENV_FLOWS`, `DELTA_ECO`) |
+| `name` | Display name for reporting |
+| `description` | Detailed description |
+| `tier_type` | `multi_value` (4 tier counts per row) or `single_value` (one tier level per row) |
+| `tier_count` | 1 or 4 |
+| `is_active` | Whether the indicator is currently used |
 
-### tier_location (no seed CSV)
+Tier indicators by type:
 
-The tier-location catalog lives in the `tier_location` database table.
-There is no seed CSV in this directory because the tier teams' staging
-CSVs in [`etl/tier_data/staging/`](../../../etl/tier_data/staging/) are
-the source of truth for membership. Reconcile with:
+- **Multi-value** (`tier_1_value` ... `tier_4_value`, plus normalized variants):
+  `ENV_FLOWS`, `RES_STOR`, `GW_STOR`, `CWS_DEL`, `AG_REV`
+- **Single-value** (`single_tier_level` only):
+  `DELTA_ECO`, `FW_DELTA_USES`, `FW_EXP`, `WRC_SALMON_AB`
+
+## What is not here, and why
+
+### `tier_location` (catalog table)
+
+The catalog of which `location_id`s belong to each tier lives in the
+`tier_location` database table. There is no seed CSV because the tier
+teams' staging CSVs in
+[`etl/tier_data/staging/`](../../../etl/tier_data/staging/) are the
+source of truth for membership. Reconcile with:
 
 ```bash
 python etl/tier_data/scripts/diff_tier_locations.py
@@ -30,99 +45,29 @@ python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run
 python etl/tier_data/scripts/sync_tier_locations_from_staging.py
 ```
 
-The DDL is in
-[`database/scripts/sql/create_tier_location_table.sql`](../../scripts/sql/create_tier_location_table.sql)
-(superuser-only, runs once). Display names are not stored in
-`tier_location`; the loader and API resolve them by joining
-`location_id` to the entity tables documented in
+DDL: [`database/scripts/sql/create_tier_location_table.sql`](../../scripts/sql/create_tier_location_table.sql)
+(superuser-only, runs once). Display names are not stored on
+`tier_location`; the loader and API resolve them by joining `location_id`
+to the entity tables documented in
 [`etl/common/tier_location_entities.py`](../../../etl/common/tier_location_entities.py).
-
 Rows that drop out of staging are soft-deleted (`is_active = FALSE`)
-rather than removed so historical `tier_location_result` rows still
-resolve to a catalog row.
+so historical `tier_location_result` rows still resolve to a catalog
+row.
 
-### tier_result.csv
-Stores actual tier values for each scenario.
+### `tier_result` and `tier_location_result` (project data)
 
-**Columns:**
-- `scenario_short_code`: Scenario identifier (s0011, s0020, s0021)
-- `tier_short_code`: Links to tier_definition.short_code
-- `tier_1_value` through `tier_4_value`: Individual tier counts (NULL for single-value tiers)
-- `norm_tier_1` through `norm_tier_4`: Normalized values (0-1 scale) for D3 charts
-- `total_value`: Sum of all tier values (for multi-value normalization)
-- `single_tier_level`: Single tier level 1-4 (for single-value tiers)
+The actual tier values per scenario are project data, not reference
+data. They change every time the data team produces a new round of
+scenarios or revises tier thresholds, and the canonical source is the
+staging CSVs in [`etl/tier_data/staging/`](../../../etl/tier_data/staging/).
 
-## Tier Types
+A from-scratch DB rebuild loads them by running the ETL loader after
+the DDLs and seeds:
 
-### Multi-Value Tiers
-Have 4 separate values representing counts/amounts in each tier level:
-- Environmental flows: Count of locations in each tier
-- Reservoir storage: Count of reservoirs in each tier
-- Groundwater storage: Count of areas in each tier
-- Community water system deliveries: (future)
-- Agricultural revenue: (future)
-
-### Single-Value Tiers
-Have one value representing the overall tier level (1-4):
-- Delta ecology: Overall tier level
-- Freshwater for in-Delta uses: Overall tier level
-- Freshwater for Delta exports: Overall tier level
-- Salmon abundance: Overall tier level
-
-## D3 Bar Chart Comparability
-
-### Multi-Value Tiers
-- **Raw counts**: tier_1_value through tier_4_value (e.g., [0, 5, 12, 0])
-- **Normalized values**: norm_tier_1 through norm_tier_4 (e.g., [0, 0.294, 0.706, 0])
-- **Pre-calculated**: No client-side normalization needed
-- **Example**: ENV_FLOWS raw [0,5,12,0] → normalized [0, 0.294, 0.706, 0]
-- **Visualization**: Direct use in D3 stacked bars or lollipops
-
-### Single-Value Tiers
-- **Single level**: single_tier_level (1-4)
-- **Example**: DELTA_ECOLOGY = 4 (Tier 4 performance)
-- **Visualization**: Single bar at tier level or color indicator
-
-### Pre-Calculated Normalization
-Multi-value tiers include pre-calculated normalized values for D3 efficiency:
-```
-norm_tier_1 = tier_1_value / total_value
-norm_tier_2 = tier_2_value / total_value
-norm_tier_3 = tier_3_value / total_value
-norm_tier_4 = tier_4_value / total_value
+```bash
+python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
+psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
 ```
 
-**Benefits:**
-- No client-side calculation needed
-- Direct use in D3 bar width/height
-- All multi-value tiers on same 0-1 scale
-- Faster chart rendering
-
-## Current Data
-
-**Scenarios:** s0011, s0020, s0021
-**Indicators:** 9 total (7 with data, 2 future)
-**Results:** 21 scenario-indicator combinations
-
-## Usage Examples
-
-### Query all tier results for a scenario:
-```sql
-SELECT td.name, tr.weighted_score, tr.total_value
-FROM tier_result tr
-JOIN tier_definition td ON tr.tier_short_code = td.short_code
-WHERE tr.scenario_short_code = 's0011'
-ORDER BY tr.weighted_score DESC;
-```
-
-### Compare scenarios on weighted scores:
-```sql
-SELECT tr.tier_short_code, td.name,
-       AVG(tr.weighted_score) as avg_score,
-       MIN(tr.weighted_score) as min_score,
-       MAX(tr.weighted_score) as max_score
-FROM tier_result tr
-JOIN tier_definition td ON tr.tier_short_code = td.short_code
-GROUP BY tr.tier_short_code, td.name
-ORDER BY avg_score DESC;
-```
+The full workflow (dry-run, validate, etc.) lives in
+[`etl/tier_data/README.md`](../../../etl/tier_data/README.md).

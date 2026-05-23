@@ -134,29 +134,12 @@ belt-and-suspenders. It should always return zero rows.
    python etl/tier_data/scripts/verify_tiers.py
    ```
 
-**9. Export back into seed CSVs.**
-   So the DB can be rebuilt from scratch. From `psql $DATABASE_URL`:
-   ```sql
-   \COPY (
-     SELECT scenario_short_code, tier_short_code,
-            tier_1_value, tier_2_value, tier_3_value, tier_4_value,
-            norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4,
-            total_value, single_tier_level
-     FROM tier_result
-     WHERE tier_version_id = 8
-     ORDER BY scenario_short_code, tier_short_code
-   ) TO '/tmp/tier_result.csv' CSV HEADER;
-
-   \COPY (
-     SELECT scenario_short_code, tier_short_code, location_type, location_id,
-            location_name, tier_level, tier_value, display_order
-     FROM tier_location_result
-     WHERE tier_version_id = 8
-     ORDER BY scenario_short_code, tier_short_code, display_order
-   ) TO '/tmp/tier_location_result.csv' CSV HEADER;
-   ```
-   Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back
-   to `database/seed_tables/10_tier/`.
+> **No seed CSV step.** `tier_result` and `tier_location_result` are
+> project data, not reference data, so they are not mirrored into
+> `database/seed_tables/10_tier/`. The staging CSVs in `staging/` plus
+> this loader are the canonical source of truth. A from-scratch DB
+> rebuild populates these tables by running the loader after the DDLs,
+> exactly the same command as a routine load (steps 5-7 above).
 
 > **Pre-flight a new scenario before flipping `is_active=1`.**
 > Both [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) and

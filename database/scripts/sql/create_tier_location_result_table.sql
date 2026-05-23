@@ -93,101 +93,12 @@ CREATE INDEX idx_tier_location_level
 CREATE INDEX idx_tier_location_combined 
     ON tier_location_result(scenario_short_code, tier_short_code);
 
-\echo '✅ Indexes created'
-
--- Load data from S3
-\echo ''
-\echo '📥 Loading tier_location_result from S3...'
-
-SELECT aws_s3.table_import_from_s3(
-    'tier_location_result',
-    'scenario_short_code, tier_short_code, location_type, location_id, location_name, tier_level, tier_value, display_order',
-    '(format csv, header true)',
-    'coeqwal-seeds-dev',
-    '10_tier/tier_location_result.csv',
-    'us-west-2'
-);
-
-\echo '✅ tier_location_result data loaded'
-
--- Verification
-\echo ''
-\echo '🔍 VERIFYING TIER_LOCATION_RESULT DATA'
-\echo '======================================'
+\echo 'Indexes created'
 
 \echo ''
-\echo '📊 Total location records:'
-SELECT COUNT(*) as total_locations FROM tier_location_result;
-
-\echo ''
-\echo '📊 By tier:'
-SELECT 
-    tier_short_code,
-    COUNT(*) as location_count,
-    COUNT(DISTINCT scenario_short_code) as scenario_count
-FROM tier_location_result
-GROUP BY tier_short_code
-ORDER BY tier_short_code;
-
-\echo ''
-\echo '📊 By location type:'
-SELECT 
-    location_type,
-    COUNT(*) as count
-FROM tier_location_result
-GROUP BY location_type
-ORDER BY count DESC;
-
-\echo ''
-\echo '📊 ENV_FLOWS example (17 locations expected):'
-SELECT 
-    scenario_short_code,
-    location_id,
-    location_name,
-    tier_level
-FROM tier_location_result
-WHERE tier_short_code = 'ENV_FLOWS'
-  AND scenario_short_code = 's0011'
-ORDER BY display_order;
-
-\echo ''
-\echo '📊 RES_STOR example (7 reservoirs expected):'
-SELECT 
-    scenario_short_code,
-    location_id,
-    location_name,
-    tier_level
-FROM tier_location_result
-WHERE tier_short_code = 'RES_STOR'
-  AND scenario_short_code = 's0011'
-ORDER BY display_order;
-
-\echo ''
-\echo '📊 Validation - Compare with tier_result aggregates:'
-SELECT 
-    tlr.scenario_short_code,
-    tlr.tier_short_code,
-    COUNT(*) FILTER (WHERE tlr.tier_level = 1) as tier_1_locations,
-    tr.tier_1_value as tier_1_aggregate,
-    COUNT(*) FILTER (WHERE tlr.tier_level = 2) as tier_2_locations,
-    tr.tier_2_value as tier_2_aggregate,
-    COUNT(*) FILTER (WHERE tlr.tier_level = 3) as tier_3_locations,
-    tr.tier_3_value as tier_3_aggregate,
-    COUNT(*) FILTER (WHERE tlr.tier_level = 4) as tier_4_locations,
-    tr.tier_4_value as tier_4_aggregate,
-    COUNT(*) as total_locations,
-    tr.total_value as total_aggregate
-FROM tier_location_result tlr
-LEFT JOIN tier_result tr 
-    ON tlr.scenario_short_code = tr.scenario_short_code 
-    AND tlr.tier_short_code = tr.tier_short_code
-WHERE tr.tier_1_value IS NOT NULL  -- Multi-value tiers only
-GROUP BY tlr.scenario_short_code, tlr.tier_short_code, 
-         tr.tier_1_value, tr.tier_2_value, tr.tier_3_value, tr.tier_4_value, tr.total_value
-ORDER BY tlr.scenario_short_code, tlr.tier_short_code;
-
-\echo ''
-\echo '🎉 TIER_LOCATION_RESULT TABLE SUCCESSFULLY CREATED!'
-\echo '==================================================='
-\echo 'Ready for tier map visualization API integration!'
+\echo 'tier_location_result table is now ready for the ETL loader.'
+\echo 'Populate it by running:'
+\echo '  python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql'
+\echo '  psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql'
+\echo 'See etl/tier_data/README.md for the full workflow.'
 

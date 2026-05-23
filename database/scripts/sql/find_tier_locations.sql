@@ -135,7 +135,9 @@ WHERE n.type_id = 18
 \echo '2. Find Banks and Jones pump stations in pump list'
 \echo '3. Get ENV_FLOWS evaluation point list from CalSim documentation'
 \echo '4. For GW_STOR: Need WBA boundary shapefile or centroid coordinates'
-\echo '5. Create tier_location_result.csv with location IDs and tier assignments'
+\echo '5. Add location IDs to the per-tier staging CSV in etl/tier_data/staging/'
+\echo '   and run etl/tier_data/scripts/load_all_tier_results.py to populate'
+\echo '   tier_location_result (see etl/tier_data/README.md for the full workflow)'
 
 
 

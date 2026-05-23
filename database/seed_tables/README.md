@@ -20,7 +20,9 @@ seed_tables/
 ├── 06_scenario/             scenario definitions, authors, source links, key assumption/op links
 ├── 07_hydroclimate/         hydroclimate definitions, sea level rise (slr) table
 ├── 08_theme/                research themes, theme-scenario links, theme focus/priority tables
-└── 10_tier/                 tier definitions and results
+└── 10_tier/                 tier definitions only (lookup). tier_result and
+                             tier_location_result are project data, populated
+                             by etl/tier_data/scripts/load_all_tier_results.py
 ```
 
 ## Loading seed data into the database
