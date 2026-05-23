@@ -139,6 +139,7 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
 
     df = pd.read_csv(csv_path)
     df.columns = [c.strip().replace('\n', '') for c in df.columns]
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
@@ -195,6 +196,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
         return [], []
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
@@ -466,6 +468,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
         return [], []
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
     res_columns = [c for c in df.columns if c != 'Scenario']
 
     location_results = []
@@ -522,6 +525,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
         return [], []
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
     wba_columns = [c for c in df.columns if c != 'scenario']
 
     location_results = []
@@ -601,6 +605,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
         return [], []
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
@@ -641,6 +646,7 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
         return [], []
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
@@ -685,6 +691,7 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
         return [], []
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
@@ -759,6 +766,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
         )
 
     df = pd.read_csv(csv_path)
+    df = _ensure_unique_axes(df, csv_path)
     missing_cols = [c for c in ('scenario', 'Tier_range') if c not in df.columns]
     if missing_cols:
         raise ValueError(

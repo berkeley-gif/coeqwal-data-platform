@@ -1049,32 +1049,73 @@ psql $DATABASE_URL
 
 ### Setting up a new developer
 
-Use the `register_developer()` function (run as postgres):
+Run as postgres (`$SUPERUSER_URL`). Two SQL steps, then one EC2 step.
 
 ```sql
--- Register a new developer
+-- (1) Create the PostgreSQL login role + register them in the developer table.
 SELECT register_developer(
-    'jdoe',                    -- database username
+    'jdoe',                    -- database username (matches their EC2 alias)
     'jdoe@berkeley.edu',       -- email
     'Jane Doe',                -- display name
-    'secure_password_here',    -- password (change immediately!)
+    'secure_password_here',    -- temp password (they ALTER USER on first login)
     'developer'                -- role: 'admin' or 'developer'
 );
 
--- List all registered developers
-SELECT * FROM list_developers();
+-- (2) Add them to the coeqwal_developer group so they inherit RW on every
+--     table, including future ones (via the ALTER DEFAULT PRIVILEGES installed
+--     by 57_install_coeqwal_developer_role.sql). Skip this and they will hit
+--     "permission denied" on tables created after their registration.
+GRANT coeqwal_developer TO jdoe;
 
--- Change password after first login
-ALTER USER jdoe WITH PASSWORD 'new_secure_password';
+-- Verify
+SELECT * FROM list_developers();
 ```
 
-**After registration, connect as your user** (not postgres):
+> **About the `role` value:** `'admin'` vs `'developer'` is a **placeholder
+> label only**. The `developer.role` column has no `CHECK` constraint and is
+> not read by any SQL function, RLS policy, or application code today. Actual
+> privileges come from three independent things:
+>
+> 1. The PostgreSQL `LOGIN` role created by `register_developer()`
+> 2. Membership in `coeqwal_developer` (granted in step 2 above) -- this is
+>    what gates table reads and writes
+> 3. Knowledge of the shared `postgres` password used by `$SUPERUSER_URL`
+>    for DDL / migrations (exported globally on the Cloud9 EC2)
+>
+> So setting `role='admin'` today is purely informational. Use it to flag
+> developers who are intended to be power users, on the assumption that a
+> future role-based check (e.g. `WHERE role='admin'`) may be added. Switching
+> between `'admin'` and `'developer'` changes no current behavior.
+
+Then on the Cloud9 EC2, as `ec2-user`, create their personal env file so the
+`becomejdoe` alias (already wired into `/home/ec2-user/.bashrc`) points at
+their connection string:
 
 ```bash
-psql -h <rds-endpoint> -U jdoe -d coeqwal_scenario
+cat > /home/ec2-user/.coeqwal-env-jdoe <<'COEQWAL_ENV_EOF'
+export COEQWAL_USER="jdoe"
+export DATABASE_URL="postgresql://jdoe:secure_password_here@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+export PS1='\[\033[01;32m\]'"${COEQWAL_USER}"'\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1 " (%s)" 2>/dev/null) $ '
+COEQWAL_ENV_EOF
+chmod 600 /home/ec2-user/.coeqwal-env-jdoe
 ```
 
-**Important:** Unregistered users cannot make database changes. The `coeqwal_current_operator()` function will raise an exception.
+On first login they should rotate the temp password and update their env file:
+
+```bash
+becomejdoe
+psql $DATABASE_URL -c "ALTER USER jdoe WITH PASSWORD 'their_new_password';"
+# then edit /home/ec2-user/.coeqwal-env-jdoe to use the new password
+
+# Sanity check: their writes will land in audit logs as their developer.id, not 1
+psql $DATABASE_URL -c "SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id;"
+```
+
+**Important:** Unregistered users cannot make database changes. The
+`coeqwal_current_operator()` function will raise an exception. Users who are
+registered (step 1) but not granted `coeqwal_developer` (step 2) will be able
+to connect but will hit "permission denied" on tables created after their
+registration.
 
 ### Cloud9 cheatsheet
 
@@ -1695,6 +1736,6 @@ Source data is in `reference/community_water_systems/`. See the entity-pattern s
 ### Developer access and authentication
 
 - **SSO user attribution** — currently developers connect to the database using a named PostgreSQL role (e.g. `jfantauzza`). The long-term goal is to use AWS SSO identity for authentication so that the `aws_sso_username` field in the `developer` table is used automatically, without requiring a separate PostgreSQL password per developer.
-- **Role-based table permissions** — instead of granting permissions individually to each developer, create a `coeqwal_developer` role with `SELECT, INSERT, UPDATE, DELETE` on all tables (including future ones via `ALTER DEFAULT PRIVILEGES`), and have `register_developer()` grant that role. This prevents permission gaps like the `variable_type` issue encountered during auditing. See the "Connecting as yourself" section for background.
+- **Role-based table permissions** — shipped in [`database/scripts/sql/57_install_coeqwal_developer_role.sql`](scripts/sql/57_install_coeqwal_developer_role.sql). The `coeqwal_developer` group role holds `SELECT, INSERT, UPDATE, DELETE` on every table in `public`, and `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` makes that grant auto-extend to any future table created via `$SUPERUSER_URL`. New developers get RW on everything via `GRANT coeqwal_developer TO <username>` (see "Setting up a new developer" above). This closed the permission-gap class of bugs surfaced by the `variable_type` issue during auditing.
 
 ### Review indices and compare to API
