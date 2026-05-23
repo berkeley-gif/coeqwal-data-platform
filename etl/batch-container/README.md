@@ -107,9 +107,9 @@ The `file_comparison.columns_common` and `validation_summary.total_cells_compare
 
 If the reference or the extracted CSV has rows whose first-column timestamp cannot be parsed, the validator drops those rows and prints a `[WARN]` line to stderr that the Batch wrapper captures into the run log. Comparison runs only over the surviving rows. A `PASSED` status alongside a `[WARN]` in the log is the signal to investigate the upstream extractor or the reference exporter.
 
-## Local development (build and run on your laptop)
+## Local container build (Linux / Cloud9)
 
-Useful for one-off DSS conversions or debugging `dss_to_csv.py` without the AWS round trip. Requires Docker.
+Useful for one-off DSS conversions or debugging `dss_to_csv.py` without the AWS round trip. Requires Docker on a Linux host (or Cloud9).
 
 ### 1. Build the image
 

@@ -44,8 +44,8 @@ import logging
 import sys
 from pathlib import Path
 
-# Make `from etl.X import Y` work when this script is invoked as
-# `python etl/ingestion/gdrive_bulk_download.py` from the repo root.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from etl.common import (  # noqa: E402
@@ -105,10 +105,9 @@ def _add_scenarios_filter(parser: argparse.ArgumentParser, verb: str) -> None:
     """
     parser.add_argument("--scenarios", nargs="*",
                         help=f"Scenario short codes to {verb}. "
-                             "Whitespace or comma-separated; newlines from a "
+                             "Whitespace or comma-separated. Newlines from a "
                              "spreadsheet column paste also work. "
-                             "Example: --scenarios s0042 s0043, or "
-                             "--scenarios \"$(pbpaste)\" on macOS. "
+                             "Example: --scenarios s0042 s0043. "
                              "Either --scenarios or --all is required.")
     parser.add_argument("--all", action="store_true",
                         help=f"{verb.capitalize()} every row in the working CSV. "

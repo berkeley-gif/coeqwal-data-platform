@@ -1,4 +1,4 @@
-"""Read the working CSV and turn it into scenario dicts.
+"""csv_reader.py - Read the working CSV and turn it into scenario dicts.
 
 The working CSV (`etl/ingestion/scenario_listing/model_run_file_source_working.csv`)
 is a copy of the WAM team's spreadsheet with extra operator columns
@@ -17,6 +17,8 @@ import logging
 import os
 from typing import Any, Dict, List
 
+from etl.common.scenarios import parse_scenarios as _parse_scenarios  # noqa: F401
+
 from .config import (
     COLUMN_MAP,
     ESSENTIAL_FIELDS,
@@ -27,35 +29,6 @@ from .config import (
 from .utils import _basename_of, _sha256_of_row
 
 log = logging.getLogger("gdrive_bulk_download")
-
-
-def _parse_scenarios(values) -> set:
-    """Normalize a `--scenarios` argument into a set of lowercase short codes.
-
-    Accepts whatever the operator pasted into the shell. Splits on whitespace
-    and commas in any combination. Useful when copying a column straight
-    from a spreadsheet (newline-separated) or a comma-separated string from
-    elsewhere.
-
-    Examples (all yield {"s0070", "s0071", "s0072"}):
-      ["s0070", "s0071", "s0072"]           # nargs="*" with spaces
-      ["s0070,s0071,s0072"]                 # comma-pasted into one shell token
-      ["s0070, s0071, s0072"]               # comma-and-space
-      ["s0070\\ns0071\\ns0072"]             # newline-pasted from a spreadsheet
-    """
-    if not values:
-        return set()
-    if isinstance(values, str):
-        values = [values]
-    out: set = set()
-    for v in values:
-        if v is None:
-            continue
-        for token in str(v).replace(",", " ").split():
-            t = token.strip().lower()
-            if t:
-                out.add(t)
-    return out
 
 
 def _bootstrap_error_message(path: str) -> str:

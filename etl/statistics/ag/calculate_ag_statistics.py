@@ -66,7 +66,6 @@ from units import (  # noqa: E402
     validate_water_balance,
     check_post_conversion_magnitude,
 )
-from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -97,6 +96,7 @@ log = logging.getLogger("ag_statistics")
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 DV_OUTPUT_S3_KEYS = [
     "scenario/{scenario}/csv/{scenario}_coeqwal_calsim_output.csv",

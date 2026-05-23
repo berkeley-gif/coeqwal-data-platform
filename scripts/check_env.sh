@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # check_env.sh
 #
-# Read-only smoke test for the local developer environment. Prints PASS or
-# FAIL for each prerequisite, with a one-line remediation hint per FAIL.
+# UNSUPPORTED: best-effort Linux smoke test for the local developer
+# environment (API + local Postgres). Production ETL belongs on Cloud9,
+# see etl/README.md. Not maintained for macOS or Windows.
+#
+# Prints PASS or FAIL for each prerequisite, with a one-line remediation
+# hint per FAIL.
 #
 # Usage:
 #   bash scripts/check_env.sh             # quick checks only
@@ -85,7 +89,7 @@ if command -v rclone >/dev/null 2>&1; then
     fail "rclone gdrive: remote" "run: rclone config (add a 'drive' remote named 'gdrive')"
   fi
 else
-  fail "rclone installed" "brew install rclone   or   curl https://rclone.org/install.sh | sudo bash"
+  fail "rclone installed" "curl https://rclone.org/install.sh | sudo bash"
 fi
 
 # ---------------------------------------------------------------------------
@@ -98,7 +102,7 @@ if command -v aws >/dev/null 2>&1; then
     fail "aws credentials" "run: aws configure sso   (COEQWAL account, region us-west-2)"
   fi
 else
-  fail "aws CLI installed" "brew install awscli   (mac)   or   see AWS docs (linux)"
+  fail "aws CLI installed" "see https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
 fi
 
 # ---------------------------------------------------------------------------
@@ -108,10 +112,10 @@ if command -v docker >/dev/null 2>&1; then
   if docker info >/dev/null 2>&1; then
     pass "docker daemon running"
   else
-    fail "docker daemon" "start Docker Desktop (mac) or 'sudo systemctl start docker' (linux)"
+    fail "docker daemon" "sudo systemctl start docker"
   fi
 else
-  fail "docker installed" "install Docker Desktop (mac) or Docker Engine (linux)"
+  fail "docker installed" "install Docker Engine (https://docs.docker.com/engine/install/)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -139,7 +143,7 @@ if command -v psql >/dev/null 2>&1; then
     fail "psql connects" "bring DB up: docker compose up -d postgres   (or set DATABASE_URL)"
   fi
 else
-  fail "psql installed" "brew install libpq && brew link --force libpq   (mac)   or   apt-get install postgresql-client (linux)"
+  fail "psql installed" "sudo apt-get install -y postgresql-client"
 fi
 
 # ---------------------------------------------------------------------------

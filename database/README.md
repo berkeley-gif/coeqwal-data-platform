@@ -100,9 +100,13 @@ If you changed the API endpoint code (anything under `api/`), including query lo
 | Path | Use it for | Connection |
 |---|---|---|
 | **Cloud9 / VPN -> production RDS** | Developer work, monthly audits, real seed loads, DDL migrations on the live DB | `DATABASE_URL` set per "First-time setup" below |
-| **Laptop -> local Postgres** | Schema work, query development, running scripts that need a DB, iterating on migrations before they touch RDS | `DATABASE_URL=postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario` |
+| **Linux dev host -> local Postgres** _(unsupported)_ | Offline schema work, query development, iterating on migrations before they touch RDS | `DATABASE_URL=postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario` |
 
-The laptop path is bootstrapped by the top-level [`scripts/setup_dev_env.sh`](../scripts/setup_dev_env.sh), which brings up the local DB via [`docker-compose.yml`](../docker-compose.yml) and applies every schema and seed file via [`scripts/load_local_seeds.sh`](../scripts/load_local_seeds.sh). See the [top-level Developer setup](../README.md#developer-setup) for the full flow.
+> **Local Postgres is unsupported.** The bootstrapper at [`scripts/setup_dev_env.sh`](../scripts/setup_dev_env.sh) (which brings up the local DB via [`docker-compose.yml`](../docker-compose.yml) and applies schema + seeds via [`scripts/load_local_seeds.sh`](../scripts/load_local_seeds.sh)) is best-effort on Linux and not maintained for macOS or Windows. Cloud9 is the supported environment for everything that touches production data.
+
+> **Seed CSV `is_active` is bootstrap-only for `scenario.csv`.** [`database/seed_tables/06_scenario/scenario.csv`](seed_tables/06_scenario/scenario.csv) introduces new scenario rows into the DB via [`database/scripts/sql/upsert_scenario_data.sql`](scripts/sql/upsert_scenario_data.sql). Once a row exists, flip `is_active` with [`etl/ingestion/tools/set_scenario_active.py`](../etl/ingestion/tools/set_scenario_active.py), not by editing the CSV and re-upserting. The seed CSV's `is_active` value is allowed to drift from the live `scenario` table by design. The DB is the source of truth for live publication state, exposed by the API as [`/api/scenarios`](../api/coeqwal-api/routes/scenario_endpoints.py) and cached for ETL consumers in [`etl/common/active_scenarios.py`](../etl/common/active_scenarios.py).
+
+> **Tier location membership is owned by the tier-team staging CSVs.** `tier_location` is a narrow database catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The tier teams' staging CSVs in `etl/tier_data/staging/` are the source of truth for membership. There is no seed CSV. To reconcile, run [`etl/tier_data/diff_tier_locations.py`](../etl/tier_data/diff_tier_locations.py) for the diff and [`etl/tier_data/sync_tier_locations_from_staging.py`](../etl/tier_data/sync_tier_locations_from_staging.py) to apply (inserts active rows, soft-deletes rows that left staging). Display names and geometry are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py); the public API uses the same join map for [`/api/tier-map/{scenario}/{tier}`](../api/coeqwal-api/routes/tier_map_endpoints.py) GeoJSON output.
 
 ### Prerequisites
 
@@ -1188,7 +1192,7 @@ See [audit/README.md](audit/README.md) for more detail on these tools.
 
 Answers: "Do the foundational tables contain the correct records — the right scenarios, entities, variables, assumptions, and themes?"
 
-This is distinct from schema structure: the tables can have all the right columns and triggers while still containing incorrect, missing, or stale data. The seed CSVs in `database/seed_tables/` are the source of truth for layers 00–08.
+This is distinct from schema structure: the tables can have all the right columns and triggers while still containing incorrect, missing, or stale data. The seed CSVs in `database/seed_tables/` are the source of truth for layers 00–08, with one carve-out: `scenario.is_active` is owned by the live DB after a row's initial bootstrap (see the "Seed CSV `is_active` is bootstrap-only" callout in [Getting started](#getting-started)).
 
 **Export all layer 00–08 tables to CSV:**
 

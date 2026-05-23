@@ -35,6 +35,8 @@ from pathlib import Path
 
 import boto3
 
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import (  # noqa: E402
     AWS_REGION as REGION,

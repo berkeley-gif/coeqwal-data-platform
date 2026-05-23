@@ -42,7 +42,6 @@ from units import (  # noqa: E402
     apply_columns_and_dedup,
     compute_cv,
 )
-from scenarios import SCENARIOS  # noqa: E402
 
 # Optional imports
 try:
@@ -72,6 +71,8 @@ log = logging.getLogger("du_statistics_v2")
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 # Local paths

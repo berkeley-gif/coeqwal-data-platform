@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # load_local_seeds.sh
 #
-# Bootstraps a local Postgres instance with the COEQWAL schema and seed data.
-# Walks `database/scripts/sql/` in a deterministic order and pipes each .sql
-# file through `psql "$DATABASE_URL"`. Each file is its own transaction
-# (--single-transaction with ON_ERROR_STOP=1), so a failure is loud and
-# rolls back cleanly.
+# UNSUPPORTED: best-effort Linux bootstrapper for a local Postgres
+# instance with the COEQWAL schema and seed data. Production RDS is
+# bootstrapped through the Cloud9 developer workflow, see
+# database/README.md. Not maintained for macOS or Windows.
+#
+# Walks `database/scripts/sql/` in a deterministic order and pipes each
+# .sql file through `psql "$DATABASE_URL"`. Each file is its own
+# transaction (--single-transaction with ON_ERROR_STOP=1), so a failure
+# is loud and rolls back cleanly.
 #
 # Usage (from repo root, after `docker compose up -d postgres`):
 #   export DATABASE_URL="postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario"
@@ -14,9 +18,6 @@
 # Flags:
 #   --dry-run   Print the files that would be applied, but do not run them.
 #   --skip-verify   Skip 09_verify_levelXX.sql checks at the end.
-#
-# Not intended for production. Production RDS is bootstrapped through the
-# operator workflow on Cloud9. See database/README.md for details.
 
 set -euo pipefail
 
@@ -40,8 +41,7 @@ fi
 
 if ! command -v psql >/dev/null 2>&1; then
   echo "psql not found on PATH. Install PostgreSQL client tools." >&2
-  echo "  macOS:   brew install libpq && brew link --force libpq" >&2
-  echo "  Linux:   sudo apt-get install -y postgresql-client" >&2
+  echo "  sudo apt-get install -y postgresql-client" >&2
   exit 1
 fi
 
@@ -66,7 +66,7 @@ SQL_ROOT="$REPO_ROOT/database/scripts/sql"
 #
 # Where a file has a `_local` / `_cloud9` / `_from_s3` variant, the loader
 # prefers `_local`. The other variants reach for AWS-side state and would
-# fail on a laptop with no AWS credentials.
+# fail on a host with no AWS credentials.
 # ---------------------------------------------------------------------------
 
 is_verify_file() {

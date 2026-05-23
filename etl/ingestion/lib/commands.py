@@ -465,9 +465,9 @@ def cmd_download(args):
     # Pre-flight: rclone installed, remote configured, S3 bucket reachable.
     # Fails fast (SystemExit) with an actionable message before we open the
     # CSV or build the per-row plan, so an unconfigured Cloud9 doesn't waste
-    # an operator's time discovering the same error N times. `--dry-run` skips
-    # the S3 head_bucket so a local machine iterating on the working CSV
-    # without prod AWS creds can still exercise the full Drive-listing path.
+    # a developer's time discovering the same error N times. `--dry-run`
+    # skips the S3 head_bucket so a Cloud9 session without prod S3 access
+    # can still exercise the full Drive-listing path.
     _preflight(rclone_remote, args.s3_bucket, include_s3=not args.dry_run)
 
     _require_working_csv(args.listing_csv)

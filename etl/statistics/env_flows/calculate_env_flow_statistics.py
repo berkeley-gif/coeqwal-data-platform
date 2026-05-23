@@ -64,7 +64,6 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from units import CFS_TO_TAF_PER_DAY, CV_MIN_MEAN_TAF, MAX_CV  # noqa: E402
-from scenarios import SCENARIOS  # noqa: E402
 
 try:
     from scipy.stats import pearsonr
@@ -103,6 +102,7 @@ log = logging.getLogger("env_flow_statistics")
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 SV_INPUT_S3_KEY = "scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
 DV_OUTPUT_S3_KEYS = [

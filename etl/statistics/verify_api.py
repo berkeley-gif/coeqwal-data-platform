@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Layer 3: API verification for the COEQWAL data explorer.
+verify_api.py - API verification for the COEQWAL data explorer.
 
 Queries API endpoints and compares responses against direct database queries
 to confirm the API layer is not introducing data errors.
@@ -9,6 +9,7 @@ Usage:
     python verify_api.py --scenario s0020
     python verify_api.py --scenario s0020 --api-url http://localhost:8000
     python verify_api.py --all-scenarios --report-dir audits/verification_reports
+    python verify_api.py --scenarios-override s0070,s0072
 
 Requires:
     - DATABASE_URL env var
@@ -51,10 +52,17 @@ DEFAULT_API_URL = "https://api.coeqwal.org"
 ABS_TOL = 0.01
 REL_TOL = 0.001
 
-from scenarios import SCENARIOS as ALL_SCENARIOS  # noqa: E402
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import resolve_active_scenarios  # noqa: E402
+from etl.common.active_scenarios import ACTIVE_SCENARIOS  # noqa: E402
+
+# Rebound inside main() when --scenarios-override is passed
+ALL_SCENARIOS: frozenset[str] = ACTIVE_SCENARIOS
 
 
-# ── Data Classes───
+# Data Classes───
 
 
 @dataclass
@@ -157,7 +165,7 @@ class APIReport:
                 )
 
 
-# ── Helpers────────
+# Helpers────────
 
 
 def _sf(val) -> Optional[float]:
@@ -199,7 +207,7 @@ def api_get(base_url: str, path: str, params: dict = None) -> Optional[dict]:
         return None
 
 
-# ── Verify: Batch Statistics ────────────────────────────────────────────────
+# Verify: Batch statistics
 
 
 def verify_batch_storage(report: APIReport, conn, api_url: str, sid: str):
@@ -354,7 +362,7 @@ def verify_delta(report: APIReport, conn, api_url: str, sid: str):
         report.add("data_present", section, "all", 1.0, 0.0)
 
 
-# ── Verify: Tiers─
+# Verify: Tiers─
 
 TIER_CODES = [
     "CWS_DEL",
@@ -419,7 +427,7 @@ def verify_tiers(report: APIReport, conn, api_url: str, sid: str):
             report.add("weighted_score_present", section, tier_code, None, api_score)
 
 
-# ── Verify: Env Flow Period ─────────────────────────────────────────────────
+# Verify: Env Flow Period
 
 
 def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
@@ -459,7 +467,7 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
         report.add("avg_pct_unimpaired", section, code, db_unimp, api_unimp)
 
 
-# ── Main───────────
+# Main
 
 
 def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIReport:
@@ -491,44 +499,140 @@ def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIRepor
     return report
 
 
+def render_scorecard(
+    reports: List["APIReport"],
+    json_paths: List[Path],
+    file_obj=sys.stdout,
+) -> None:
+    """One-screen PASS / FAIL summary aggregated by section across scenarios.
+
+    Each row is an API verifier section (storage, cws, ag, delta, tiers, env_flow).
+    Counts sum across every scenario. Up to three failure examples are listed per
+    failing section as `scenario/entity`. `Detail: <path>` points at the last
+    JSON report written (if any).
+    """
+    if not reports:
+        print("No reports to render.", file=file_obj)
+        return
+
+    scenarios = [r.scenario_id for r in reports]
+    if len(scenarios) > 1:
+        title = f"verify_api.py {scenarios[0]}..{scenarios[-1]} ({len(scenarios)} scenarios)"
+    else:
+        title = f"verify_api.py {scenarios[0]}"
+    print(f"\n{title}", file=file_obj)
+    print("=" * len(title), file=file_obj)
+
+    # `fail` and `mismatch` both indicate a problem. Group them under one bucket.
+    by_section: Dict[str, Dict[str, object]] = {}
+    for r in reports:
+        for c in r.checks:
+            entry = by_section.setdefault(
+                c.section, {"total": 0, "bad": 0, "bad_examples": []}
+            )
+            entry["total"] = int(entry["total"]) + 1  # type: ignore[arg-type]
+            if c.status in ("fail", "mismatch"):
+                entry["bad"] = int(entry["bad"]) + 1  # type: ignore[arg-type]
+                examples: List[str] = entry["bad_examples"]  # type: ignore[assignment]
+                if len(examples) < 3:
+                    examples.append(f"{r.scenario_id}/{c.entity}")
+
+    overall_pass = 0
+    overall_total = 0
+    for sec in sorted(by_section.keys()):
+        e = by_section[sec]
+        total = int(e["total"])
+        n_bad = int(e["bad"])
+        overall_total += 1
+        if n_bad == 0:
+            overall_pass += 1
+            print(f"PASS {sec:<18} ({total} checks, 0 mismatches)", file=file_obj)
+        else:
+            examples = ", ".join(e["bad_examples"])  # type: ignore[arg-type]
+            ellipsis = ", ..." if n_bad > 3 else ""
+            print(
+                f"FAIL {sec:<18} ({total} checks, {n_bad} mismatches: {examples}{ellipsis})",
+                file=file_obj,
+            )
+
+    n_fail_sections = overall_total - overall_pass
+    print(file=file_obj)
+    if n_fail_sections == 0:
+        print(f"Overall: {overall_pass}/{overall_total} sections PASS.", file=file_obj)
+    else:
+        print(
+            f"Overall: {overall_pass}/{overall_total} sections PASS, {n_fail_sections} FAIL.",
+            file=file_obj,
+        )
+    if json_paths:
+        print(f"Detail: {json_paths[-1]}", file=file_obj)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Verify API responses against database for COEQWAL data explorer"
     )
-    parser.add_argument("--scenario", default=None)
-    parser.add_argument("--all-scenarios", action="store_true")
+    scenario_group = parser.add_mutually_exclusive_group()
+    scenario_group.add_argument("--scenario", default=None)
+    scenario_group.add_argument("--all-scenarios", action="store_true")
+    scenario_group.add_argument(
+        "--scenarios-override", nargs="*", default=[],
+        help="Per-invocation replacement for ACTIVE_SCENARIOS when iterating. "
+             "Comma/whitespace/newline separated. Use to pre-flight a scenario "
+             "before flipping is_active=1. Logs a WARNING when active.",
+    )
     parser.add_argument("--api-url", default=DEFAULT_API_URL)
     parser.add_argument("--report-dir", default=None)
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
+        "--no-json",
+        action="store_true",
+        help="Skip the per-scenario JSON file write. Use for ad-hoc local runs.",
+    )
+    output_group.add_argument(
+        "--json-stdout",
+        action="store_true",
+        help="Dump combined JSON to stdout instead of the scorecard. Useful for CI or piping to jq.",
+    )
     args = parser.parse_args()
 
+    global ALL_SCENARIOS  # noqa: PLW0603
+    ALL_SCENARIOS = resolve_active_scenarios(args.scenarios_override)
+
     repo_root = Path(__file__).parent.parent.parent
-    report_dir = (
-        Path(args.report_dir)
-        if args.report_dir
-        else repo_root / "audits" / "verification_reports"
+    default_report_dir = repo_root / "audits" / "verification_reports"
+    explicit_report_dir = Path(args.report_dir) if args.report_dir else default_report_dir
+    report_dir_for_run: Optional[Path] = (
+        None if (args.no_json or args.json_stdout) else explicit_report_dir
     )
 
-    scenarios = ALL_SCENARIOS if args.all_scenarios else [args.scenario or "s0020"]
+    if args.all_scenarios or args.scenarios_override:
+        scenarios = sorted(ALL_SCENARIOS)
+    else:
+        scenarios = [args.scenario or "s0020"]
 
-    all_reports = []
+    all_reports: List[APIReport] = []
     for sid in scenarios:
         log.info(f"\n{'=' * 70}")
         log.info(f"  API VERIFY: {sid}")
         log.info(f"{'=' * 70}")
-        r = run_scenario(sid, args.api_url, report_dir)
+        r = run_scenario(sid, args.api_url, report_dir_for_run)
         all_reports.append(r)
 
-    if len(all_reports) > 1:
-        print(f"\n{'=' * 70}")
-        print("API VERIFICATION OVERALL")
-        print(f"{'=' * 70}")
-        for r in all_reports:
-            s = r.summary
-            status = "PASS" if s["fail"] == 0 and s["mismatch"] == 0 else "FAIL"
-            print(
-                f"  {r.scenario_id}: {status} "
-                f"({s['pass']}P/{s['fail']}F/{s['mismatch']}M)"
-            )
+    if args.json_stdout:
+        json.dump(
+            {"scenarios": [r.to_dict() for r in all_reports]},
+            sys.stdout,
+            indent=2,
+            default=str,
+        )
+        sys.stdout.write("\n")
+    else:
+        json_paths: List[Path] = []
+        if report_dir_for_run:
+            for r in all_reports:
+                json_paths.append(report_dir_for_run / f"{r.scenario_id}_layer3.json")
+        render_scorecard(all_reports, json_paths)
 
     total_fail = sum(r.summary["fail"] + r.summary["mismatch"] for r in all_reports)
     sys.exit(1 if total_fail > 0 else 0)

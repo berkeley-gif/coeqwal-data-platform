@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive data verification for the COEQWAL data explorer.
+verify_all_sections.py - Comprehensive data verification for the COEQWAL data explorer.
 
 Computes expected values from CalSim DV and SV reference CSVs, queries the
 database for actual ETL output, and produces a JSON verification report with
@@ -48,10 +48,14 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
-# ── Constants──────
+# Constants
+
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
-from scenarios import SCENARIOS as ALL_SCENARIOS  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as ALL_SCENARIOS  # noqa: E402
 
 SHORTAGE_THRESHOLD_TAF = 0.1
 
@@ -62,6 +66,17 @@ SCENARIO_RUN_IDS = {
     "s0020": "s0020_DCRadjBL_2020LU_wTUCP",
     "s0028": "s0028_CVgwLimit_SGMALU_wTUCP",
 }
+
+# ---------------------------------------------------------------------------
+# Roadmap: the per-section variable lists below are hand-curated. The
+# long-term move is to derive them from `domain_family_map` or the seed
+# CSVs (`channel_entity.csv`, `du_urban_entity.csv`,
+# `du_agriculture_entity.csv`, `du_refuge_entity.csv`) so a new aggregate
+# variable added to the ETL is automatically covered here instead of
+# silently under-covered. Until then, treat this block as the verifier's
+# scope contract: when the ETL adds or removes a variable, update the
+# matching list here so the JSON report stays meaningful.
+# ---------------------------------------------------------------------------
 
 # Variable lists from COEQWAL_V3/notebooks/variable_groupings.csv
 RESERVOIR_VARS = {
@@ -150,7 +165,7 @@ SAMPLE_CWS_DUS = ["02_PU", "26S_PU1", "71_PU1", "GDPUD_NU", "MWD", "CCWD"]
 SAMPLE_AG_DUS = ["02_PA", "08N_PA", "61_PA1", "71_PA1", "02_NA", "64_PA1"]
 
 
-# ── Data Classes───
+# Data Classes───
 
 
 @dataclass
@@ -264,7 +279,7 @@ class Report:
                 print(f"  ... and {len(failures) - 20} more")
 
 
-# ── CSV Parsing────
+# CSV parsing
 
 
 def parse_calsim_csv(file_path: str) -> Tuple[pd.DataFrame, pd.Series]:
@@ -357,7 +372,7 @@ def monthly_avg(series: pd.Series, months: pd.Series, month: int) -> Optional[fl
     return round(float(vals.mean()), 4)
 
 
-# ── DB Helpers─────
+# DB Helpers─────
 
 
 def connect_db() -> Optional[object]:
@@ -385,7 +400,7 @@ def db_query(conn, sql: str, params: tuple = ()) -> List[dict]:
         return [dict(row) for row in cur.fetchall()]
 
 
-# ── Section: Reservoirs ──────────────────────────────────────────────────────
+# Section: Reservoirs 
 
 
 def verify_reservoirs(
@@ -469,7 +484,7 @@ def verify_reservoirs(
             report.add("spill_frequency_pct", section, short_code, None, act_spill)
 
 
-# ── Section: CWS Aggregates ─────────────────────────────────────────────────
+# Section: CWS aggregates
 
 
 def verify_cws_aggregates(
@@ -513,7 +528,7 @@ def verify_cws_aggregates(
         report.add("annual_shortage_avg_taf", section, var, exp_short_taf, None)
 
 
-# ── Section: M&I Contractors ────────────────────────────────────────────────
+# Section: M&I contractors 
 
 
 def verify_mi_contractors(report: Report, conn) -> None:
@@ -571,7 +586,7 @@ def verify_mi_contractors(report: Report, conn) -> None:
         report.add("data_present", section, "all", 1.0, 0.0)
 
 
-# ── Section: CWS Demand Units ───────────────────────────────────────────────
+# Section: CWS demand units
 
 
 def verify_cws_du(
@@ -619,7 +634,7 @@ def verify_cws_du(
         report.add("annual_demand_avg_taf", section, du, exp_dem_taf, act_dem_taf)
 
 
-# ── Section: AG Demand Units ────────────────────────────────────────────────
+# Section: AG demand units 
 
 
 def verify_ag(
@@ -760,7 +775,7 @@ def verify_ag(
         )
 
 
-# ── Section: Env Flows ──────────────────────────────────────────────────────
+# Section: Env Flows 
 
 
 def verify_env_flows(
@@ -829,7 +844,7 @@ def verify_env_flows(
             report.add("avg_pct_ff", section, var, None, act_pct_ff)
 
 
-# ── Section: Refuge ─────────────────────────────────────────────────────────
+# Section: Refuge
 
 
 def verify_refuge(report: Report, conn) -> None:
@@ -879,7 +894,7 @@ def verify_refuge(report: Report, conn) -> None:
         report.add("data_present", section, "all", 1.0, 0.0)
 
 
-# ── Section: Delta
+# Section: Delta
 
 
 def verify_delta(
@@ -1023,7 +1038,7 @@ def verify_delta(
         )
 
 
-# ── Section: Tiers
+# Section: Tiers
 
 TIER_CODES = [
     "CWS_DEL",
@@ -1143,7 +1158,7 @@ def _verify_tier_staging(report: Report, conn, staging_dir: Path) -> None:
             )
 
 
-# ── Section: Unit Conversion Validation ─────────────────────────────────────
+# Section: Unit conversion validation
 
 
 def verify_unit_conversion(
@@ -1193,7 +1208,7 @@ def verify_unit_conversion(
         )
 
 
-# ── Helpers────────
+# Helpers
 
 
 def _safe_round(val, decimals=4) -> Optional[float]:
@@ -1218,7 +1233,7 @@ def find_file(base_dir: Path, run_id: str, suffix: str) -> Optional[Path]:
     return None
 
 
-# ── Main───────────
+# Mainy mainy main main
 
 
 def run_scenario(
@@ -1291,6 +1306,74 @@ def run_scenario(
     return report
 
 
+def render_scorecard(
+    reports: List[Report],
+    json_paths: List[Path],
+    file_obj=sys.stdout,
+) -> None:
+    """One-screen PASS / FAIL summary aggregated by section across scenarios.
+
+    Each row is a verifier section (reservoirs, cws_aggregate, ag, ...). Counts
+    sum across every scenario in this run. Up to three failure examples are
+    listed per failing section as `scenario/entity`. `Detail: <path>` at the
+    bottom points at the last JSON report written (if any).
+    """
+    if not reports:
+        print("No reports to render.", file=file_obj)
+        return
+
+    scenarios = [r.scenario_id for r in reports]
+    if len(scenarios) > 1:
+        title = f"verify_all_sections.py {scenarios[0]}..{scenarios[-1]} ({len(scenarios)} scenarios)"
+    else:
+        title = f"verify_all_sections.py {scenarios[0]}"
+    print(f"\n{title}", file=file_obj)
+    print("=" * len(title), file=file_obj)
+
+    by_section: Dict[str, Dict[str, object]] = {}
+    for r in reports:
+        for c in r.checks:
+            entry = by_section.setdefault(
+                c.section, {"total": 0, "fail": 0, "fail_examples": []}
+            )
+            entry["total"] = int(entry["total"]) + 1  # type: ignore[arg-type]
+            if c.status == "fail":
+                entry["fail"] = int(entry["fail"]) + 1  # type: ignore[arg-type]
+                examples: List[str] = entry["fail_examples"]  # type: ignore[assignment]
+                if len(examples) < 3:
+                    examples.append(f"{r.scenario_id}/{c.entity}")
+
+    overall_pass = 0
+    overall_total = 0
+    for sec in sorted(by_section.keys()):
+        e = by_section[sec]
+        total = int(e["total"])
+        n_fail = int(e["fail"])
+        overall_total += 1
+        if n_fail == 0:
+            overall_pass += 1
+            print(f"PASS {sec:<18} ({total} checks, 0 mismatches)", file=file_obj)
+        else:
+            examples = ", ".join(e["fail_examples"])  # type: ignore[arg-type]
+            ellipsis = ", ..." if n_fail > 3 else ""
+            print(
+                f"FAIL {sec:<18} ({total} checks, {n_fail} mismatches: {examples}{ellipsis})",
+                file=file_obj,
+            )
+
+    n_fail_sections = overall_total - overall_pass
+    print(file=file_obj)
+    if n_fail_sections == 0:
+        print(f"Overall: {overall_pass}/{overall_total} sections PASS.", file=file_obj)
+    else:
+        print(
+            f"Overall: {overall_pass}/{overall_total} sections PASS, {n_fail_sections} FAIL.",
+            file=file_obj,
+        )
+    if json_paths:
+        print(f"Detail: {json_paths[-1]}", file=file_obj)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Verify data explorer values against reference CSVs and database"
@@ -1311,6 +1394,17 @@ def main():
     parser.add_argument(
         "--tier-staging-dir", default=None, help="Path to tier staging CSVs"
     )
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
+        "--no-json",
+        action="store_true",
+        help="Skip the per-scenario JSON file write. Use for ad-hoc local runs.",
+    )
+    output_group.add_argument(
+        "--json-stdout",
+        action="store_true",
+        help="Dump combined JSON to stdout instead of the scorecard. Useful for CI or piping to jq.",
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
@@ -1320,10 +1414,11 @@ def main():
         if args.ref_dir
         else repo_root / "audits" / "notebooks_reference"
     )
-    report_dir = (
-        Path(args.report_dir)
-        if args.report_dir
-        else repo_root / "audits" / "verification_reports"
+    default_report_dir = repo_root / "audits" / "verification_reports"
+    explicit_report_dir = Path(args.report_dir) if args.report_dir else default_report_dir
+    # Honor --no-json / --json-stdout by suppressing the per-scenario file write.
+    report_dir_for_run: Optional[Path] = (
+        None if (args.no_json or args.json_stdout) else explicit_report_dir
     )
     tier_staging_dir = (
         Path(args.tier_staging_dir)
@@ -1339,26 +1434,28 @@ def main():
     else:
         scenarios = ["s0020"]
 
-    all_reports = []
+    all_reports: List[Report] = []
     for sid in scenarios:
         log.info(f"\n{'=' * 70}")
         log.info(f"  SCENARIO: {sid}")
         log.info(f"{'=' * 70}")
-        r = run_scenario(sid, ref_dir, report_dir, args.csv_only, tier_staging_dir)
+        r = run_scenario(sid, ref_dir, report_dir_for_run, args.csv_only, tier_staging_dir)
         all_reports.append(r)
 
-    if len(all_reports) > 1:
-        print(f"\n{'=' * 70}")
-        print("OVERALL SUMMARY")
-        print(f"{'=' * 70}")
-        for r in all_reports:
-            s = r.summary
-            status = "PASS" if s["fail"] == 0 else "FAIL"
-            print(
-                f"  {r.scenario_id}: {status} "
-                f"({s['pass']} pass, {s['fail']} fail, "
-                f"{s['skip']} skip, {s['no_db']} no_db)"
-            )
+    if args.json_stdout:
+        json.dump(
+            {"scenarios": [r.to_dict() for r in all_reports]},
+            sys.stdout,
+            indent=2,
+            default=str,
+        )
+        sys.stdout.write("\n")
+    else:
+        json_paths: List[Path] = []
+        if report_dir_for_run:
+            for r in all_reports:
+                json_paths.append(report_dir_for_run / f"{r.scenario_id}_layer2.json")
+        render_scorecard(all_reports, json_paths)
 
     total_fail = sum(r.summary["fail"] for r in all_reports)
     sys.exit(1 if total_fail > 0 else 0)

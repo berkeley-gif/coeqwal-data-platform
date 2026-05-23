@@ -131,12 +131,11 @@ ETL_MODULES = {
     },
 }
 
-from scenarios import SCENARIOS  # noqa: E402
-
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from etl.common import S3_BUCKET as BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Track failures in real time for the running tally
 _failure_count = 0

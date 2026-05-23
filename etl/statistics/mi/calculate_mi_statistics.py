@@ -40,7 +40,6 @@ from units import (  # noqa: E402
     safe_pct,
     check_post_conversion_magnitude,
 )
-from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -67,11 +66,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("mi_statistics")
 
-# Known scenarios
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Paths relative to project
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent

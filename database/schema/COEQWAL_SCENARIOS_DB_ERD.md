@@ -52,6 +52,7 @@
 
 ### **Tier System**
 - `tier_definition` (9 records)
+- `tier_location` (67 records, narrow catalog: per-tier location membership; names/geometry resolved via entity joins)
 - `tier_result` (536 records)
 - `tier_location_result` (17,600 records)
 
@@ -708,7 +709,7 @@ Columns:
 ```
 Table: du_urban_entity
 Records: 145
-Columns: 24
+Columns: 27
 Audit: Full audit trail
 
 Columns:
@@ -736,16 +737,19 @@ Columns:
   updated_by                     integer             
   hydrologic_region_id           integer             
   model_source_id                integer             
+  geom_wkt                       text                 -- 56_add_du_geometry_columns.sql
+  srid                           integer              -- 56_add_du_geometry_columns.sql
+  geom                           geometry(MultiPolygon, 4326) -- 56_add_du_geometry_columns.sql
 ```
 
-**Indexes**: Present
+**Indexes**: Present; `idx_du_urban_entity_geom (geom) USING GIST` added by `56_add_du_geometry_columns.sql`
 
 ### **du_agriculture_entity**
 
 ```
 Table: du_agriculture_entity
 Records: 144
-Columns: 33
+Columns: 36
 Audit: Full audit trail
 
 Columns:
@@ -782,16 +786,19 @@ Columns:
   updated_by                     integer             
   hydrologic_region_id           integer             
   model_source_id                integer             
+  geom_wkt                       text                 -- 56_add_du_geometry_columns.sql
+  srid                           integer              -- 56_add_du_geometry_columns.sql
+  geom                           geometry(MultiPolygon, 4326) -- 56_add_du_geometry_columns.sql
 ```
 
-**Indexes**: Present
+**Indexes**: Present; `idx_du_agriculture_entity_geom (geom) USING GIST` added by `56_add_du_geometry_columns.sql`
 
 ### **du_refuge_entity**
 
 ```
 Table: du_refuge_entity
 Records: 18
-Columns: 23
+Columns: 26
 Audit: Full audit trail
 
 Columns:
@@ -818,9 +825,12 @@ Columns:
   created_by                     integer             
   updated_at                     timestamp with time zone
   updated_by                     integer             
+  geom_wkt                       text                 -- 56_add_du_geometry_columns.sql
+  srid                           integer              -- 56_add_du_geometry_columns.sql
+  geom                           geometry(MultiPolygon, 4326) -- 56_add_du_geometry_columns.sql
 ```
 
-**Indexes**: Present
+**Indexes**: Present; `idx_du_refuge_entity_geom (geom) USING GIST` added by `56_add_du_geometry_columns.sql`
 
 ### **wba**
 
@@ -878,6 +888,49 @@ Columns:
 ```
 
 **Indexes**: Present
+
+### **tier_location**
+
+```
+Table: tier_location
+Records: 67 (matches the active members across the 9 tier outcomes)
+Columns: 10
+Audit: Full audit trail
+
+Columns:
+  id                             integer              [PK]
+  tier_short_code                character varying    [FK -> tier_definition.short_code]
+  location_type                  character varying    [enum: network_node, wba, reservoir, compliance_station, region, demand_unit]
+  location_id                    character varying    [natural key; joins to entity tables per location_type]
+  display_order                  integer
+  is_active                      boolean              [soft-delete flag; preserves history]
+  created_at                     timestamp with time zone
+  created_by                     integer
+  updated_at                     timestamp with time zone
+  updated_by                     integer
+
+Constraints:
+  UNIQUE (tier_short_code, location_id)
+  CHECK  (location_type IN ('network_node', 'wba', 'reservoir', 'compliance_station', 'region', 'demand_unit'))
+```
+
+**Indexes**: `tier_short_code`, `location_type`, `is_active`
+
+**Source of truth**: The tier teams' staging CSVs in `etl/tier_data/staging/`. Reconciled with [`etl/tier_data/sync_tier_locations_from_staging.py`](../../etl/tier_data/sync_tier_locations_from_staging.py).
+
+**Resolution map**: `location_id` joins to entity tables for display name and geometry. See [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py) for the registry. Summary:
+
+Both attribute and geometry lookups are tier-aware. `TIER_ATTRIBUTE_OVERRIDES` and `TIER_GEOMETRY_OVERRIDES` in [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py) route AG_REV demand-unit ids to `du_agriculture_entity`, while CWS_DEL (and the default for any other `demand_unit` tier) routes to `du_urban_entity`. DU polygons live in those same entity tables (added by [`56_add_du_geometry_columns.sql`](../scripts/sql/56_add_du_geometry_columns.sql), loaded by [`load_du_geometries.py`](../scripts/data_processing/load_du_geometries.py)). `26N_NA` is the one `du_id` that exists in both urban and ag entity tables; both rows carry the same dissolved polygon, so either resolver returns the same geometry. 54 `du_id`s lack a polygon in the source gpkg today and are listed in [`docs/du_geometry_gap.md`](../../docs/du_geometry_gap.md).
+
+| `location_type` (tier) | Attribute table (name) | Geometry table | Notes |
+|---|---|---|---|
+| `network_node` | `network.short_code` -> `network.name` | `network_gis.short_code` -> `geom` (POINT) | `DISTINCT ON (short_code) ORDER BY (precision_level = 'precise') DESC` |
+| `demand_unit` (CWS_DEL) | `du_urban_entity.du_id` (name = id today) | `du_urban_entity.du_id` -> `geom` (MULTIPOLYGON, 4326) | Polygons from `reference/du_4326.gpkg`; 41 urban `du_id`s have no polygon today |
+| `demand_unit` (AG_REV) | `du_agriculture_entity.du_id` (name = id today) | `du_agriculture_entity.du_id` -> `geom` (MULTIPOLYGON, 4326) | 12 ag `du_id`s have no polygon today |
+| `reservoir` | `reservoir_entity.short_code` -> `reservoir_entity.name` | `reservoir.calsim_short_code` -> `geom` (POLYGON) | `SLUIS_CVP` and `SLUIS_SWP` both render against the shared `SLUIS` polygon |
+| `wba` | `wba.wba_id` -> `wba.wba_name` | `wba.wba_id` -> `geom` (POLYGON) | Includes the `DETAW` row for the Legal Delta |
+| `compliance_station` | `compliance_station.station_code` -> `station_name` | `compliance_station.station_code` -> `geom` (POINT) | `EM`, `JP` |
+| `region` | `hydrologic_region.short_code` -> `label` | (none) | Reserved; no tier outcome uses this today |
 
 ### **tier_result**
 

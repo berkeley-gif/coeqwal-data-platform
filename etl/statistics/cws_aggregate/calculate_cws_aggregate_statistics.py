@@ -36,7 +36,6 @@ from units import (  # noqa: E402
     check_post_conversion_magnitude,
     parse_dss_csv_header,
 )
-from scenarios import SCENARIOS  # noqa: E402
 
 # Optional: boto3 for S3 access
 try:
@@ -63,11 +62,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("cws_aggregate_statistics")
 
-# Known scenarios
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Percentiles for statistics
 DELIVERY_PERCENTILES = [0, 10, 30, 50, 70, 90, 100]

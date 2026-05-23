@@ -5,7 +5,7 @@
 # subsystem. Edit the per-module files when adding new deps. This file
 # only changes when a whole new module is added.
 #
-# Quick setup for a fresh laptop or Cloud9 environment:
+# Quick setup on Cloud9 (or any Linux dev host):
 #   python3.10 -m venv .venv
 #   source .venv/bin/activate
 #   pip install --upgrade pip
@@ -16,6 +16,5 @@
 
 -r etl/ingestion/requirements.txt
 -r etl/tier_data/requirements.txt
--r etl/verification/requirements.txt
 -r database/requirements.txt
 -r api/coeqwal-api/requirements.txt

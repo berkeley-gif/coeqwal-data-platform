@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Load all tier results from staging CSVs into the database.
+load_all_tier_results.py - Load all tier results from staging CSVs into the database.
 
 Processes 9 tier outcomes:
 
@@ -41,6 +41,10 @@ Usage:
 
     # Load directly to database (requires DATABASE_URL env var)
     DATABASE_URL=postgres://... python load_all_tier_results.py
+
+    # Pre-flight a brand-new scenario before flipping is_active=1.
+    # Replaces ACTIVE_SCENARIOS for this invocation only.
+    python load_all_tier_results.py --scenarios-override s0070 --dry-run
 """
 
 import argparse
@@ -52,20 +56,32 @@ from pathlib import Path
 from collections import Counter
 from typing import Dict, List, Tuple
 
-# Canonical 72 active scenarios (matches the scenario table in the DB)
-ALLOWED_SCENARIOS = {
-    's0011', 's0020', 's0021', 's0023', 's0024', 's0025', 's0026', 's0027',
-    's0028', 's0030', 's0031', 's0032', 's0033', 's0035', 's0036', 's0037',
-    's0039', 's0040', 's0041', 's0042', 's0044', 's0045', 's0046', 's0047',
-    's0048', 's0049', 's0050', 's0051', 's0056', 's0057', 's0058', 's0059',
-    's0060', 's0062', 's0063', 's0065', 's0067', 's0068', 's0069', 's0071',
-    's0072', 's0073', 's0074', 's0075', 's0076', 's0077', 's0078', 's0079',
-    's0080', 's0081', 's0082', 's0083', 's0084', 's0085', 's0087', 's0088',
-    's0089', 's0091', 's0092', 's0093', 's0094', 's0095', 's0096', 's0097',
-    's0098', 's0099', 's0100', 's0101', 's0102', 's0103', 's0104', 's0105',
-}
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import (  # noqa: E402
+    assess_coverage,
+    fetch_tier_location_names,
+    format_coverage_warnings,
+    get_db_connection,
+    resolve_active_scenarios,
+)
+from etl.common.active_scenarios import ACTIVE_SCENARIOS  # noqa: E402
+from etl.tier_data.staging_inventory import (  # noqa: E402
+    convert_wba_id_to_mapbox_format,
+    parse_res_stor_column as _res_stor_location_id,
+)
+
+# Rebound inside main() when --scenarios-override is passed
+ALLOWED_SCENARIOS: frozenset[str] = ACTIVE_SCENARIOS
 
 DEACTIVATED_SCENARIOS: set = set()
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Populated from the database in main() before any loader runs. Empty at
+# import time so this module can still be imported without DATABASE_URL.
+TIER_LOCATION_NAMES: Dict[str, Dict[str, str]] = {}
 
 # Tier version ID — do not change without data team sign-off
 TIER_VERSION_ID = 8
@@ -77,86 +93,6 @@ STAGING_DIR = Path(__file__).parent / 'staging'
 # Bare filenames passed to --output-sql land here; absolute paths or paths
 # with a directory component are respected verbatim.
 OUTPUT_DIR = Path(__file__).parent / 'output'
-
-# =============================================================================
-# LOCATION NAME MAPPINGS
-# =============================================================================
-
-ENV_FLOWS_LOCATIONS = {
-    'AMR004': 'American River at I-80 Bridge',
-    'FTR003': 'Feather River',
-    'FTR029': 'Feather River at Yuba City',
-    'MCD005': 'Merced River at Stevinson',
-    'MOK028': 'Mokelumne River',
-    'SAC000': 'Sacramento at confluence',
-    'SAC049': 'Sacramento River at Freeport',
-    'SAC122': 'Sacramento River at Tisdale Weir',
-    'SAC148': 'Sacramento River at Colusa Weir',
-    'SAC257': 'Sacramento River above Bend Bridge',
-    'SAC289': 'Sacramento River (South Bonnieville)',
-    'SJR070': 'San Joaquin near Vernalis',
-    'SJR127': 'San Joaquin at Salt Slough',
-    'STS011': 'Stanislaus River',
-    'TRN111': 'Trinity River at Lewiston',
-    'TUO003': 'Tuolumne River',
-    'YUB002': 'Yuba River at Marysville',
-}
-
-RESERVOIR_LOCATIONS = {
-    'S_SHSTA_Storage_Tier': ('SHSTA', 'Shasta Lake'),
-    'S_TRNTY_Storage_Tier': ('TRNTY', 'Trinity Lake'),
-    'S_OROVL_Storage_Tier': ('OROVL', 'Lake Oroville'),
-    'S_FOLSM_Storage_Tier': ('FOLSM', 'Folsom Lake'),
-    'S_MELON_Storage_Tier': ('MELON', 'New Melones Lake'),
-    'S_MLRTN_Storage_Tier': ('MLRTN', 'Millerton Lake'),
-    'S_SLUIS_CVP_Storage_Tier': ('SLUIS_CVP', 'San Luis CVP'),
-    'S_SLUIS_SWP_Storage_Tier': ('SLUIS_SWP', 'San Luis SWP'),
-}
-
-WBA_NAMES = {
-    'WBA2': 'WBA 2 - Upper Sacramento',
-    'WBA3': 'WBA 3 - Redding',
-    'WBA4': 'WBA 4 - Red Bluff',
-    'WBA5': 'WBA 5 - Corning',
-    'WBA6': 'WBA 6 - Orland',
-    'WBA7N': 'WBA 7N - Chico North',
-    'WBA7S': 'WBA 7S - Chico South',
-    'WBA8N': 'WBA 8N - Colusa North',
-    'WBA8S': 'WBA 8S - Colusa South',
-    'WBA9': 'WBA 9 - Yolo',
-    'WBA10': 'WBA 10 - American',
-    'WBA11': 'WBA 11 - Sutter',
-    'WBA12': 'WBA 12 - Yuba',
-    'WBA13': 'WBA 13 - Bear',
-    'WBA14': 'WBA 14 - Feather',
-    'WBA15N': 'WBA 15N - Butte North',
-    'WBA15S': 'WBA 15S - Butte South',
-    'WBA16': 'WBA 16 - Stony',
-    'WBA17N': 'WBA 17N - Cache North',
-    'WBA17S': 'WBA 17S - Cache South',
-    'WBA18': 'WBA 18 - Putah',
-    'WBA19': 'WBA 19 - Solano',
-    'WBA20': 'WBA 20 - Napa',
-    'WBA21': 'WBA 21 - Suisun',
-    'WBA22': 'WBA 22 - Contra Costa',
-    'WBA23': 'WBA 23 - East Bay',
-    'WBA24': 'WBA 24 - South Bay',
-    'WBA25': 'WBA 25 - Peninsula',
-    'WBA26N': 'WBA 26N - San Joaquin North',
-    'WBA26S': 'WBA 26S - San Joaquin South',
-    'WBA50': 'WBA 50 - Delta',
-    'WBA60N': 'WBA 60N - SJR East North',
-    'WBA60S': 'WBA 60S - SJR East South',
-    'WBA61': 'WBA 61 - Stanislaus',
-    'WBA62': 'WBA 62 - Tuolumne',
-    'WBA63': 'WBA 63 - Merced',
-    'WBA64': 'WBA 64 - Chowchilla',
-    'WBA71': 'WBA 71 - Fresno',
-    'WBA72': 'WBA 72 - Kings',
-    'WBA73': 'WBA 73 - Kaweah',
-    'WBA90': 'WBA 90 - Tulare',
-    'DETAW': 'Delta',
-}
 
 # =============================================================================
 # HELPERS
@@ -185,22 +121,6 @@ def normalize_scenario_id(raw) -> str:
         return f's{int(s):04d}'
     except ValueError:
         return s
-
-
-def convert_wba_id_to_mapbox_format(wba_col: str) -> str:
-    """
-    Convert WBA column names to Mapbox tileset format.
-    WBA2 -> 02, WBA7N -> 07N, WBA10 -> 10, DETAW -> DETAW.
-    """
-    if wba_col == 'DETAW':
-        return 'DETAW'
-    if wba_col.startswith('WBA'):
-        suffix = wba_col[3:]
-        if len(suffix) >= 1 and suffix[0].isdigit():
-            if len(suffix) == 1 or (len(suffix) == 2 and suffix[1] in 'NS'):
-                return '0' + suffix
-        return suffix
-    return wba_col
 
 
 # =============================================================================
@@ -444,7 +364,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                     'tier_short_code': 'ENV_FLOWS',
                     'location_type': 'network_node',
                     'location_id': station,
-                    'location_name': ENV_FLOWS_LOCATIONS.get(station, station),
+                    'location_name': TIER_LOCATION_NAMES.get('ENV_FLOWS', {}).get(station, station),
                     'tier_level': tier,
                     'tier_value': 1,
                     'display_order': display_order,
@@ -514,7 +434,8 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier = int(tier_val)
             tier_counts[tier] += 1
-            res_id, res_name = RESERVOIR_LOCATIONS.get(res_col, (res_col, res_col))
+            res_id = _res_stor_location_id(res_col)
+            res_name = TIER_LOCATION_NAMES.get('RES_STOR', {}).get(res_id, res_id)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'RES_STOR',
@@ -577,7 +498,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 'tier_short_code': 'GW_STOR',
                 'location_type': 'wba',
                 'location_id': mapbox_id,
-                'location_name': WBA_NAMES.get(wba_col, wba_col),
+                'location_name': TIER_LOCATION_NAMES.get('GW_STOR', {}).get(mapbox_id, wba_col),
                 'tier_level': tier,
                 'tier_value': 1,
                 'display_order': display_order,
@@ -646,7 +567,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
             'tier_short_code': 'DELTA_ECO',
             'location_type': 'wba',
             'location_id': 'DETAW',
-            'location_name': 'Sacramento-San Joaquin Delta (DETAW)',
+            'location_name': TIER_LOCATION_NAMES.get('DELTA_ECO', {}).get('DETAW', 'DETAW'),
             'tier_level': tier,
             'tier_value': 1,
             'display_order': 1,
@@ -673,10 +594,8 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
     location_results = []
     tier_results = []
 
-    stations = [
-        ('EM', 'Emmaton', 1),
-        ('JP', 'Jersey Point', 2),
-    ]
+    stations = [('EM', 1), ('JP', 2)]
+    names = TIER_LOCATION_NAMES.get('FW_DELTA_USES', {})
 
     for _, row in df.iterrows():
         scenario = normalize_scenario_id(row['ScenarioID'])
@@ -686,13 +605,13 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
         agg = _single_value_aggregate(scenario, 'FW_DELTA_USES', tier)
         agg['_source_file'] = 'FW_DELTA_USES.csv'
         tier_results.append(agg)
-        for loc_id, loc_name, order in stations:
+        for loc_id, order in stations:
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'FW_DELTA_USES',
                 'location_type': 'compliance_station',
                 'location_id': loc_id,
-                'location_name': loc_name,
+                'location_name': names.get(loc_id, loc_id),
                 'tier_level': tier,
                 'tier_value': 1,
                 'display_order': order,
@@ -719,10 +638,8 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     location_results = []
     tier_results = []
 
-    pumps = [
-        ('CAA003', 'Banks Pumping Plant', 1),
-        ('DMC000', 'Jones Pumping Plant', 2),
-    ]
+    pumps = [('CAA003', 1), ('DMC000', 2)]
+    names = TIER_LOCATION_NAMES.get('FW_EXP', {})
 
     for _, row in df.iterrows():
         scenario = normalize_scenario_id(row['Scenario'])
@@ -732,13 +649,13 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
         agg = _single_value_aggregate(scenario, 'FW_EXP', tier)
         agg['_source_file'] = 'FW_EXP.csv'
         tier_results.append(agg)
-        for loc_id, loc_name, order in pumps:
+        for loc_id, order in pumps:
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'FW_EXP',
                 'location_type': 'network_node',
                 'location_id': loc_id,
-                'location_name': loc_name,
+                'location_name': names.get(loc_id, loc_id),
                 'tier_level': tier,
                 'tier_value': 1,
                 'display_order': order,
@@ -821,7 +738,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             'tier_short_code': 'WRC_SALMON_AB',
             'location_type': 'network_node',
             'location_id': 'SAC299',
-            'location_name': 'Sacramento River at Keswick',
+            'location_name': TIER_LOCATION_NAMES.get('WRC_SALMON_AB', {}).get('SAC299', 'SAC299'),
             'tier_level': tier,
             'tier_value': 1,
             'display_order': 1,
@@ -1161,8 +1078,44 @@ Tier outcomes loaded:
                         help='Comma-separated tier short codes to load (e.g. ENV_FLOWS,RES_STOR)')
     parser.add_argument('--verify', type=str, nargs='?', const='auto',
                         help='Post-upload verification against manifest CSV (optionally specify manifest path)')
+    parser.add_argument('--scenarios-override', nargs='*', default=[],
+                        help='Per-invocation replacement for ACTIVE_SCENARIOS. '
+                             'Comma/whitespace/newline separated. Use to pre-flight a '
+                             'scenario before flipping is_active=1. Logs a WARNING when active.')
 
     args = parser.parse_args()
+
+    global ALLOWED_SCENARIOS, TIER_LOCATION_NAMES  # noqa: PLW0603
+    ALLOWED_SCENARIOS = resolve_active_scenarios(args.scenarios_override)
+
+    # Resolve display names from tier_location joined to the entity tables.
+    # Falls back silently when DATABASE_URL is unset: loaders will then write
+    # location_id as location_name. The dry-run / output-sql UX still works.
+    conn = get_db_connection(required=False)
+    if conn is not None:
+        try:
+            TIER_LOCATION_NAMES = fetch_tier_location_names(conn)
+            print(f"Loaded tier-location names from DB ({sum(len(v) for v in TIER_LOCATION_NAMES.values())} rows across {len(TIER_LOCATION_NAMES)} tiers)")
+
+            # Coverage scan over the active catalog. Warn-only: if an
+            # entity row or geometry is missing, the loader continues
+            # and the location_name falls back to location_id; the
+            # alert tells the developer to run the audit script.
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tier_short_code, location_type, location_id "
+                    "FROM tier_location WHERE is_active = TRUE"
+                )
+                catalog_rows = cur.fetchall()
+            # catalog_rows is already a list of (tier, location_type, location_id)
+            # triples, which is exactly what assess_coverage expects.
+            reports = assess_coverage(conn, catalog_rows)
+            for line in format_coverage_warnings(catalog_rows, reports):
+                print(line)
+        finally:
+            conn.close()
+    else:
+        print("WARNING: DATABASE_URL not set. location_name will fall back to location_id.")
 
     if args.verify:
         manifest_path = (STAGING_DIR / 'tier_upload_manifest.csv'

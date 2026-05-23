@@ -63,6 +63,27 @@ from etl.common.db import (
     get_database_url,
     get_db_connection,
 )
+from etl.common.scenarios import (
+    parse_scenarios,
+    resolve_active_scenarios,
+)
+from etl.common.tier_location_entities import (
+    LOCATION_ENTITY_MAP,
+    TIER_ATTRIBUTE_OVERRIDES,
+    TIER_GEOMETRY_OVERRIDES,
+    AttributeResolver,
+    CoverageReport,
+    GeometryResolver,
+    TierLocationEntity,
+    assess_coverage,
+    attribute_resolver_for,
+    fetch_active_location_ids,
+    fetch_tier_location_names,
+    format_coverage_warnings,
+    geometry_resolver_for,
+    location_types,
+    resolved_location_id,
+)
 from etl.common.s3_paths import (
     EXTRACT_RECORD_BASENAME,
     INGEST_RECORD_BASENAME,
@@ -106,6 +127,25 @@ __all__ = [
     "DatabaseUrlMissing",
     "get_database_url",
     "get_db_connection",
+    # scenarios
+    "parse_scenarios",
+    "resolve_active_scenarios",
+    # tier location entities
+    "AttributeResolver",
+    "CoverageReport",
+    "GeometryResolver",
+    "LOCATION_ENTITY_MAP",
+    "TIER_ATTRIBUTE_OVERRIDES",
+    "TIER_GEOMETRY_OVERRIDES",
+    "TierLocationEntity",
+    "assess_coverage",
+    "attribute_resolver_for",
+    "fetch_active_location_ids",
+    "fetch_tier_location_names",
+    "format_coverage_warnings",
+    "geometry_resolver_for",
+    "location_types",
+    "resolved_location_id",
     # s3_paths constants
     "EXTRACT_RECORD_BASENAME",
     "INGEST_RECORD_BASENAME",

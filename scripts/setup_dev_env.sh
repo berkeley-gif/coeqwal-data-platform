@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 # setup_dev_env.sh
 #
-# One-shot local setup for the COEQWAL backend, targeting macOS and Linux.
-# Idempotent: rerun anytime. Each step prints what it did and why if it
-# skipped. End state matches `docs/CLOUD9_INVENTORY.md` (the parity target),
-# minus direct production-RDS access (Cloud9 keeps that).
+# UNSUPPORTED: best-effort Linux bootstrap for the API + local Postgres
+# development loop. Production ETL runs on Cloud9 only (see etl/README.md).
 #
-# Usage:
-#   bash scripts/setup_dev_env.sh                # full setup
-#   bash scripts/setup_dev_env.sh --skip-postgres  # everything except local DB
-#   bash scripts/setup_dev_env.sh --skip-seeds     # bring DB up, do not load seeds
-#
-# Steps:
+# What it does (idempotent, rerun anytime):
 #   1. Python 3.10+ check / advice
 #   2. Project venv + pip install -r requirements.txt
 #   3. rclone install + remote prompt
@@ -20,6 +13,11 @@
 #   6. docker compose up -d postgres
 #   7. scripts/load_local_seeds.sh
 #   8. scripts/check_env.sh
+#
+# Usage:
+#   bash scripts/setup_dev_env.sh                  # full setup
+#   bash scripts/setup_dev_env.sh --skip-postgres  # everything except local DB
+#   bash scripts/setup_dev_env.sh --skip-seeds     # bring DB up, do not load seeds
 
 set -uo pipefail
 
@@ -38,11 +36,9 @@ done
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-OS_KIND="unknown"
-case "$(uname -s)" in
-  Darwin) OS_KIND="mac" ;;
-  Linux)  OS_KIND="linux" ;;
-esac
+if [ "$(uname -s)" != "Linux" ]; then
+  printf '\033[33mWARN\033[0m  setup_dev_env.sh is only tested on Linux. Detected: %s. Continuing best-effort.\n' "$(uname -s)" >&2
+fi
 
 LOCAL_DATABASE_URL="postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario"
 
@@ -69,11 +65,7 @@ done
 
 if [ -z "$PYTHON_BIN" ]; then
   warn "No Python 3.10+ found."
-  case "$OS_KIND" in
-    mac)   info "Install with: brew install python@3.12   (or use pyenv: brew install pyenv && pyenv install 3.12)" ;;
-    linux) info "Install with: sudo apt-get install -y python3.12 python3.12-venv   (Debian/Ubuntu) or distro equivalent" ;;
-    *)     info "Install Python 3.10+ from https://www.python.org/" ;;
-  esac
+  info "Install with: sudo apt-get install -y python3.12 python3.12-venv (Debian/Ubuntu) or your distro equivalent."
   die "Install Python 3.10+ and rerun."
 fi
 ok "$($PYTHON_BIN --version) at $(command -v $PYTHON_BIN)"
@@ -111,19 +103,7 @@ step "3/8 rclone"
 
 if ! command -v rclone >/dev/null 2>&1; then
   warn "rclone is not installed."
-  case "$OS_KIND" in
-    mac)
-      if command -v brew >/dev/null 2>&1; then
-        info "Installing via: brew install rclone"
-        brew install rclone || warn "brew install rclone failed. Install manually."
-      else
-        info "Install Homebrew (https://brew.sh) and rerun, or run: curl https://rclone.org/install.sh | sudo bash"
-      fi
-      ;;
-    *)
-      info "Run: curl https://rclone.org/install.sh | sudo bash"
-      ;;
-  esac
+  info "Install with: curl https://rclone.org/install.sh | sudo bash"
 fi
 
 if command -v rclone >/dev/null 2>&1; then
@@ -144,10 +124,7 @@ step "4/8 AWS CLI"
 
 if ! command -v aws >/dev/null 2>&1; then
   warn "aws CLI not installed."
-  case "$OS_KIND" in
-    mac)   info "Install with: brew install awscli" ;;
-    linux) info "Install per https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" ;;
-  esac
+  info "Install per https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
 else
   ok "$(aws --version 2>&1)"
   if aws sts get-caller-identity >/dev/null 2>&1; then
@@ -166,13 +143,10 @@ step "5/8 Docker"
 
 if ! command -v docker >/dev/null 2>&1; then
   warn "docker not installed."
-  case "$OS_KIND" in
-    mac)   info "Install Docker Desktop from https://www.docker.com/products/docker-desktop/" ;;
-    linux) info "Install Docker Engine per https://docs.docker.com/engine/install/" ;;
-  esac
+  info "Install Docker Engine per https://docs.docker.com/engine/install/"
 elif ! docker info >/dev/null 2>&1; then
   warn "docker is installed but the daemon is not running."
-  info "Start Docker Desktop (mac) or 'sudo systemctl start docker' (linux), then rerun."
+  info "Start it with: sudo systemctl start docker, then rerun."
 else
   ok "$(docker --version)"
 fi
@@ -188,7 +162,7 @@ elif ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   warn "Docker not ready. Skipping local Postgres bring-up. Fix Docker and rerun."
 else
   if ! docker compose version >/dev/null 2>&1; then
-    warn "'docker compose' v2 plugin not available. Install Docker Desktop or compose v2."
+    warn "'docker compose' v2 plugin not available. Install Docker compose v2."
   else
     info "Starting service 'postgres'..."
     docker compose up -d postgres || warn "docker compose up failed"
@@ -215,10 +189,7 @@ if [ "$SKIP_SEEDS" -eq 1 ]; then
   info "Skipped (--skip-seeds)"
 elif ! command -v psql >/dev/null 2>&1; then
   warn "psql not installed. The seed loader needs it."
-  case "$OS_KIND" in
-    mac)   info "Install with: brew install libpq && brew link --force libpq" ;;
-    linux) info "Install with: sudo apt-get install -y postgresql-client" ;;
-  esac
+  info "Install with: sudo apt-get install -y postgresql-client"
 else
   export DATABASE_URL="$LOCAL_DATABASE_URL"
   info "Using DATABASE_URL=$LOCAL_DATABASE_URL"
@@ -245,12 +216,12 @@ fi
 # ---------------------------------------------------------------------------
 step "Next steps"
 cat <<EOF
-Add this to your shell rc (~/.zshrc on mac, ~/.bashrc on linux) for future sessions:
+Add this to your shell rc (~/.bashrc or ~/.zshrc) for future sessions:
 
   source $REPO_ROOT/.venv/bin/activate
   export DATABASE_URL="$LOCAL_DATABASE_URL"
 
-Operator (Cloud9) tasks like ingestion against production S3 still belong on
+Developer (Cloud9) tasks like ingestion against production S3 still belong on
 Cloud9. See etl/README.md.
 
 If anything above reported WARN or FAIL, fix and rerun:

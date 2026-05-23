@@ -91,10 +91,12 @@ COLUMN_MAP: Dict[str, str] = {
     # `pinned_trend_csv`: same idea for the trend report folder. Set to the
     #   exact CSV filename when the trend folder has more than one.
     #
-    # `download_status`: informational only. Recorded in the audit per row
-    #   so operators can flag rows for themselves (e.g. `needs_review`,
-    #   `skip`), but the script never filters by it. Run scope is set
-    #   explicitly on the CLI via `--scenarios` or `--all`.
+    # `download_status`: informational, with two reserved values.
+    #   `gdrive_bulk_download.py` never filters by it (run scope is set on
+    #   the CLI via `--scenarios` or `--all`). `refresh_etl_scenarios.py`
+    #   excludes a row from `ETL_SCENARIOS` when this column is `skip` or
+    #   `retired`. Anything else (blank, `done`, `needs_review`, ...) is
+    #   included.
     #
     # `notes`: free-text scratch for the operator. Surfaced in the audit.
     "pinned_model_run_zip": "pinned_model_run_zip",

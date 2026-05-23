@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# PDF table scraper installation script
+# PDF table scraper installation script.
+#
+# UNSUPPORTED: best-effort helper for offline PDF scraping work.
+# Not part of the production ETL or API.
+# Used to scrape attribute data from pdf tables in the CalSim manual to seed table csv's for the database.
 
 set -e  # Exit on any error
 
@@ -13,7 +17,7 @@ if [[ "$VIRTUAL_ENV" != "" ]]; then
 else
     echo "  No virtual environment detected. Consider using one:"
     echo "   python -m venv venv"
-    echo "   source venv/bin/activate  # On macOS/Linux"
+    echo "   source venv/bin/activate"
     echo ""
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo

@@ -45,7 +45,7 @@ The COEQWAL database has three concrete jobs:
 | --- | --- |
 | In-VPC `psql` to RDS | An AWS-managed EC2 instance running inside the same VPC as RDS. `psql` connects via the private subnet's local route, no VPN required. |
 | Reproducible environment | Configured with: <ul><li>`psql`</li><li>the AWS CLI</li><li> project virtual environment at `~/environment/coeqwal-backend/venv/` (`source venv/bin/activate` before running any Python script)</li><li>the repo</li><li>`$DATABASE_URL` / `$SUPERUSER_URL` exported in `~/.bashrc`</li></ul> |
-| Heavy model files stay on EC2 | No need to round-trip gigabytes through the developer laptop. |
+| Heavy model files stay on EC2 | No need to round-trip gigabytes through a local dev host. |
 | Cost control | Auto-stops when idle.
 
 **AWS architecture diagram:** [dev.coeqwal.org/aws_architecture.html](https://dev.coeqwal.org/aws_architecture.html)

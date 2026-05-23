@@ -7,16 +7,25 @@ Stages (continue-on-error -- exits non-zero if any scenario fails any stage):
 
 Subprocesses existing tools so their logs stream live (same terminal).
 
-Usage:
-  python etl/run_full_pipeline.py --scenarios s0107 s0108 \\
-      [--workers 4] [--dry-run]
+Common usage:
 
-  python etl/run_full_pipeline.py --all [--workers 4]
+  python etl/run_full_pipeline.py --scenarios s0107 s0108           # default: end-to-end
+  python etl/run_full_pipeline.py --all --workers 4                 # default: end-to-end, every row
+
+  python etl/run_full_pipeline.py --gdrive-to-s3 --scenarios s0107  # stages: scan + download + promote
+  python etl/run_full_pipeline.py --poll-batch-extraction --resume --report-dir <dir>
+  python etl/run_full_pipeline.py --load-statistics --resume --report-dir <dir>
+  python etl/run_full_pipeline.py --verify --resume --report-dir <dir>
 
 Resume after partial failure:
+
   python etl/run_full_pipeline.py --resume \\
       --report-dir etl/ingestion/audit_reports/pipeline_runs/<timestamp> \\
       --start-stage batch
+
+Granular flags --start-stage / --skip-stage stay available. The
+preset flags above are mutually exclusive shorthands that translate to the same
+internal state. See `--help` for the full list of stages.
 
 Requires Cloud9 / IAM: S3 read on coeqwal-model-run, batch:ListJobs, batch:DescribeJobs,
 plus DATABASE_URL for statistics and verify (unless orchestrator --dry-run).
@@ -54,8 +63,8 @@ DEFAULT_LISTING_CSV = (
 
 INGEST_OUTPUT_PREFIX = Path("etl/ingestion/audit_reports")
 
-# Shared constants from etl/common/. Make `from etl.common import X` work
-# when this script is invoked as `python etl/run_full_pipeline.py`.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 from etl.common import (  # noqa: E402
@@ -67,6 +76,17 @@ from etl.common import (  # noqa: E402
 log = logging.getLogger("run_full_pipeline")
 
 STAGES_ORDER = ["scan", "download", "promote", "batch", "stats", "verify"]
+
+# Named presets are mutually-exclusive shorthands that translate to
+# --start-stage + --skip-stage internally. Keys mirror the CLI flag (without
+# the leading --). Each value lists the stages to RUN. Stages not listed are
+# added to --skip-stage; the first listed stage becomes --start-stage.
+PRESETS: Dict[str, List[str]] = {
+    "gdrive-to-s3":          ["scan", "download", "promote"],
+    "poll-batch-extraction": ["batch"],
+    "load-statistics":       ["stats"],
+    "verify":                ["verify"],
+}
 
 TERMINAL_BATCH = frozenset({"SUCCEEDED", "FAILED"})
 ACTIVE_BATCH = frozenset(
@@ -338,6 +358,36 @@ def main() -> int:
         default=None,
         help="Comma-separated stages to skip (scan,download,...)",
     )
+
+    preset_group = parser.add_mutually_exclusive_group()
+    preset_group.add_argument(
+        "--gdrive-to-s3",
+        dest="preset",
+        action="store_const",
+        const="gdrive-to-s3",
+        help="Stages: scan + download + promote. Pull from Drive, validate, stage to S3 ready/. Stops before AWS.",
+    )
+    preset_group.add_argument(
+        "--poll-batch-extraction",
+        dest="preset",
+        action="store_const",
+        const="poll-batch-extraction",
+        help="Stages: batch. Poll AWS Batch until every scenario reaches a terminal state. Requires --resume + --report-dir.",
+    )
+    preset_group.add_argument(
+        "--load-statistics",
+        dest="preset",
+        action="store_const",
+        const="load-statistics",
+        help="Stages: stats. Read CSVs from S3 and write statistics to RDS. Requires --resume + --report-dir.",
+    )
+    preset_group.add_argument(
+        "--verify",
+        dest="preset",
+        action="store_const",
+        const="verify",
+        help="Stages: verify. Run the verification scorecard. Requires --resume + --report-dir.",
+    )
     parser.add_argument("--batch-timeout", type=int, default=7200)
     parser.add_argument("--batch-poll-interval", type=int, default=60)
     parser.add_argument(
@@ -351,6 +401,19 @@ def main() -> int:
         help="Continue using existing --report-dir (loads pipeline_state.json)",
     )
     args = parser.parse_args()
+
+    # Translate a preset into the equivalent --start-stage / --skip-stage state.
+    # Presets are mutually exclusive with each other (enforced by argparse) and
+    # with the granular stage flags (enforced here so the user does not silently
+    # get a preset's defaults overridden by stale stage flags).
+    if args.preset:
+        if args.start_stage != "scan" or args.skip_stage:
+            parser.error(
+                f"--{args.preset} cannot be combined with --start-stage or --skip-stage"
+            )
+        run_stages = PRESETS[args.preset]
+        args.start_stage = run_stages[0]
+        args.skip_stage = ",".join(s for s in STAGES_ORDER if s not in run_stages)
 
     if args.resume and not args.report_dir:
         parser.error("--resume requires explicit --report-dir")

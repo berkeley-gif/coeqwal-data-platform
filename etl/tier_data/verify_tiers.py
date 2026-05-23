@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Verify tier data: compare staging CSVs against live API responses.
+verify_tiers.py - Verify tier data: compare staging CSVs against live API responses.
 
 For each tier outcome and scenario, this script:
   1. Reads the staging CSV and computes expected tier_result values
@@ -13,61 +13,41 @@ Usage:
     python verify_tiers.py --api-url https://api.coeqwal.org/api
     python verify_tiers.py --scenario s0020
     python verify_tiers.py --tier CWS_DEL
+    python verify_tiers.py --scenarios-override s0070,s0072
 """
 
 import argparse
 import json
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, List, Optional
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 import pandas as pd
 
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from etl.common import (  # noqa: E402
+    assess_coverage,
+    format_coverage_warnings,
+    get_db_connection,
+    resolve_active_scenarios,
+)
+from etl.common.active_scenarios import ACTIVE_SCENARIOS  # noqa: E402
+from etl.tier_data.staging_inventory import (  # noqa: E402
+    parse_res_stor_column as _res_stor_location_id,
+)
+
+# Rebound inside main() when --scenarios-override is passed
+ALLOWED_SCENARIOS: frozenset[str] = ACTIVE_SCENARIOS
+
 STAGING_DIR = Path(__file__).parent / "staging"
 
 API_URL_DEFAULT = "https://api.coeqwal.org/api"
-
-ALLOWED_SCENARIOS = {
-    "s0011",
-    "s0020",
-    "s0021",
-    "s0023",
-    "s0024",
-    "s0025",
-    "s0026",
-    "s0027",
-    "s0028",
-    "s0030",
-    "s0031",
-    "s0032",
-    "s0033",
-    "s0035",
-    "s0036",
-    "s0037",
-    "s0039",
-    "s0040",
-    "s0041",
-    "s0042",
-    "s0044",
-    "s0045",
-    "s0046",
-    "s0065",
-}
-
-RESERVOIR_LOCATIONS = {
-    "S_SHSTA_Storage_Tier": ("SHSTA", "Shasta"),
-    "S_TRNTY_Storage_Tier": ("TRNTY", "Trinity"),
-    "S_FOLSM_Storage_Tier": ("FOLSM", "Folsom"),
-    "S_OROVL_Storage_Tier": ("OROVL", "Oroville"),
-    "S_MLRTN_Storage_Tier": ("MLRTN", "Millerton"),
-    "S_MELON_Storage_Tier": ("MELON", "New Melones"),
-    "S_PEDRO_Storage_Tier": ("PEDRO", "New Don Pedro"),
-    "S_MCLRE_Storage_Tier": ("MCLRE", "McClure"),
-    "S_SLUIS_CVP_Storage_Tier": ("SLUIS_CVP", "San Luis CVP"),
-    "S_SLUIS_SWP_Storage_Tier": ("SLUIS_SWP", "San Luis SWP"),
-}
 
 
 def api_get(base_url: str, path: str):
@@ -271,9 +251,10 @@ def parse_res_stor() -> dict:
             continue
         counts = Counter()
         locations = {}
-        for col, (loc_id, _) in RESERVOIR_LOCATIONS.items():
-            if col not in df.columns:
+        for col in df.columns:
+            if col == "Scenario":
                 continue
+            loc_id = _res_stor_location_id(col)
             val = row[col]
             if pd.isna(val):
                 continue
@@ -452,12 +433,139 @@ def verify_single_value(tier_code: str, expected: dict, api_data: dict, report: 
             report.append(f"  OK {tier_code} {sid}: level {exp['level']}")
 
 
+def render_scorecard(
+    per_tier: List[Dict[str, object]],
+    json_path: Optional[Path],
+    file_obj=sys.stdout,
+) -> None:
+    """One-screen PASS / FAIL summary, one row per tier code.
+
+    Each row reports the total number of staging-vs-API comparisons, the
+    count of mismatches plus missing values, and up to three scenario
+    examples for failing tiers.
+    """
+    if not per_tier:
+        print("No tier checks ran.", file=file_obj)
+        return
+
+    print("\nverify_tiers.py", file=file_obj)
+    print("===============", file=file_obj)
+
+    overall_pass = 0
+    overall_total = 0
+    for entry in per_tier:
+        tier_code = entry["tier_code"]
+        n_ok = int(entry["ok"])
+        n_mis = int(entry["mismatch"])
+        n_missing = int(entry["missing"])
+        n_total = n_ok + n_mis + n_missing
+        n_bad = n_mis + n_missing
+        overall_total += 1
+        if n_bad == 0:
+            overall_pass += 1
+            print(
+                f"PASS {tier_code:<14} ({n_total} checks, 0 mismatches)",
+                file=file_obj,
+            )
+        else:
+            examples = ", ".join(entry["bad_examples"])  # type: ignore[arg-type]
+            ellipsis = ", ..." if n_bad > 3 else ""
+            print(
+                f"FAIL {tier_code:<14} ({n_total} checks, {n_bad} issues: {examples}{ellipsis})",
+                file=file_obj,
+            )
+
+    n_fail_sections = overall_total - overall_pass
+    print(file=file_obj)
+    if n_fail_sections == 0:
+        print(
+            f"Overall: {overall_pass}/{overall_total} tiers PASS.",
+            file=file_obj,
+        )
+    else:
+        print(
+            f"Overall: {overall_pass}/{overall_total} tiers PASS, {n_fail_sections} FAIL.",
+            file=file_obj,
+        )
+    if json_path:
+        print(f"Detail: {json_path}", file=file_obj)
+
+
+def _bucket(text: str) -> str:
+    """Classify a single report line into ok / mismatch / missing."""
+    if "MISMATCH" in text:
+        return "mismatch"
+    if "MISSING" in text:
+        return "missing"
+    if " OK " in f" {text} " or text.lstrip().startswith("OK"):
+        return "ok"
+    return "ok"  # default to ok for "  OK <tier>" style lines
+
+
 def main():
     parser = argparse.ArgumentParser(description="Verify tier data against API")
     parser.add_argument("--api-url", default=API_URL_DEFAULT)
-    parser.add_argument("--scenario", help="Verify only this scenario")
+    scenario_group = parser.add_mutually_exclusive_group()
+    scenario_group.add_argument(
+        "--scenario", help="Verify only this scenario (narrows within ACTIVE_SCENARIOS)",
+    )
+    scenario_group.add_argument(
+        "--scenarios-override", nargs="*", default=[],
+        help="Per-invocation replacement for ACTIVE_SCENARIOS. Comma/whitespace/newline "
+             "separated. Use to pre-flight a scenario before flipping is_active=1. "
+             "Logs a WARNING when active.",
+    )
     parser.add_argument("--tier", help="Verify only this tier code")
+    parser.add_argument(
+        "--report-dir",
+        default=None,
+        help="Directory for JSON report (default: <repo>/audits/verification_reports)",
+    )
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
+        "--no-json",
+        action="store_true",
+        help="Skip the JSON file write. Use for ad-hoc local runs.",
+    )
+    output_group.add_argument(
+        "--json-stdout",
+        action="store_true",
+        help="Dump combined JSON to stdout instead of the scorecard. Useful for CI or piping to jq.",
+    )
     args = parser.parse_args()
+
+    global ALLOWED_SCENARIOS  # noqa: PLW0603
+    ALLOWED_SCENARIOS = resolve_active_scenarios(args.scenarios_override)
+
+    # Pull the active tier_location catalog and run a coverage scan so the
+    # verifier emits the same one-line attribute/geometry WARNINGs the
+    # loader does. Skipped silently when DATABASE_URL is unset; the
+    # CSV-vs-API comparison below still runs in that case.
+    conn = get_db_connection(required=False)
+    if conn is not None:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tier_short_code, location_type, location_id "
+                    "FROM tier_location WHERE is_active = TRUE"
+                )
+                catalog_rows = cur.fetchall()
+            reports = assess_coverage(conn, catalog_rows)
+        finally:
+            conn.close()
+        tier_count = len({row[0] for row in catalog_rows})
+        print(
+            f"tier_location catalog: {len(catalog_rows)} active rows across "
+            f"{tier_count} tiers"
+        )
+        for line in format_coverage_warnings(catalog_rows, reports):
+            print(line)
+    else:
+        print("WARNING: DATABASE_URL not set; skipping tier_location coverage scan.")
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    default_report_dir = repo_root / "audits" / "verification_reports"
+    explicit_report_dir = Path(args.report_dir) if args.report_dir else default_report_dir
 
     print(f"API: {args.api_url}")
     print(f"Staging: {STAGING_DIR}")
@@ -465,7 +573,7 @@ def main():
 
     # Fetch all scenario tier data from API
     print("Fetching tier data from API...")
-    api_data = {}
+    api_data: Dict[str, object] = {}
     scenarios = sorted(ALLOWED_SCENARIOS)
     if args.scenario:
         scenarios = [args.scenario]
@@ -506,9 +614,7 @@ def main():
         ("WRC_SALMON_AB", parse_wrc_salmon_ab, "single"),
     ]
 
-    total_ok = 0
-    total_mismatch = 0
-    total_missing = 0
+    per_tier: List[Dict[str, object]] = []
 
     for tier_code, parser_fn, tier_type in tier_checks:
         if args.tier and args.tier != tier_code:
@@ -525,35 +631,76 @@ def main():
         if not expected:
             print("  No staging data found")
             print()
+            per_tier.append({
+                "tier_code": tier_code,
+                "tier_type": tier_type,
+                "ok": 0,
+                "mismatch": 0,
+                "missing": 0,
+                "lines": [],
+                "bad_examples": [],
+            })
             continue
 
-        report = []
+        report: List[str] = []
         if tier_type == "multi":
             verify_multi_value(tier_code, expected, api_data, report)
         else:
             verify_single_value(tier_code, expected, api_data, report)
 
-        for line in report:
-            print(line)
-            if "OK" in line:
-                total_ok += 1
-            elif "MISMATCH" in line:
-                total_mismatch += 1
-            elif "MISSING" in line:
-                total_missing += 1
+        n_ok = 0
+        n_mismatch = 0
+        n_missing = 0
+        bad_examples: List[str] = []
+        for ln in report:
+            print(ln)
+            bucket = _bucket(ln)
+            if bucket == "ok":
+                n_ok += 1
+            elif bucket == "mismatch":
+                n_mismatch += 1
+                if len(bad_examples) < 3:
+                    bad_examples.append(ln.strip().split()[1] if len(ln.strip().split()) > 1 else "?")
+            elif bucket == "missing":
+                n_missing += 1
+                if len(bad_examples) < 3:
+                    bad_examples.append(ln.strip().split()[1] if len(ln.strip().split()) > 1 else "?")
+        per_tier.append({
+            "tier_code": tier_code,
+            "tier_type": tier_type,
+            "ok": n_ok,
+            "mismatch": n_mismatch,
+            "missing": n_missing,
+            "lines": report,
+            "bad_examples": bad_examples,
+        })
         print()
 
-    # Summary
-    print("=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-    print(f"  OK:       {total_ok}")
-    print(f"  MISMATCH: {total_mismatch}")
-    print(f"  MISSING:  {total_missing}")
-    if total_mismatch == 0 and total_missing == 0:
-        print("\n  ALL CHECKS PASSED")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    report_payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "api_url": args.api_url,
+        "scenarios": scenarios,
+        "tier_filter": args.tier,
+        "per_tier": per_tier,
+    }
+
+    json_path: Optional[Path] = None
+    if not args.no_json and not args.json_stdout:
+        explicit_report_dir.mkdir(parents=True, exist_ok=True)
+        json_path = explicit_report_dir / f"tiers_{timestamp}.json"
+        with open(json_path, "w") as f:
+            json.dump(report_payload, f, indent=2, default=str)
+
+    if args.json_stdout:
+        json.dump(report_payload, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
     else:
-        print(f"\n  {total_mismatch + total_missing} ISSUE(S) FOUND")
+        render_scorecard(per_tier, json_path)
+
+    total_mismatch = sum(int(e["mismatch"]) for e in per_tier)
+    total_missing = sum(int(e["missing"]) for e in per_tier)
+    if total_mismatch + total_missing > 0:
         sys.exit(1)
 
 

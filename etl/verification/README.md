@@ -1,5 +1,7 @@
 # Verification
 
+ETL-developer-facing walkthrough of each verification layer, with tolerance numbers, per-section commands, and metric coverage. For the orientation across the whole pipeline (verification vs auditing, hashes, orchestrator, known gaps), see [`docs/VERIFICATION.md`](../../docs/VERIFICATION.md).
+
 End-to-end accuracy checks for the pipeline, from DSS extraction through database statistics to API responses. Verification runs at four layers:
 
 ```

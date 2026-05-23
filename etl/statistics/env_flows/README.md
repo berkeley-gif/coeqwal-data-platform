@@ -437,7 +437,7 @@ EFLOWS targets are SV inputs.they are prescribed constraints, not DV outputs.
 | s0011 | 12 | **None** | Pre-EFLOWS baseline.no functional flow targets prescribed |
 | **s0029, s0030** | **12** | **1 of 17.only `EFLOWS_STS011`** | Unexpected.see open question below |
 
-**s0029/s0030 detail (confirmed via `diagnose_dv_columns.py`):** Both scenarios have all 79 DV
+**s0029/s0030 detail (confirmed by inspecting the CalSim CSV header columns directly):** Both scenarios have all 79 DV
 channel-flow variables (including all 20 MIF), so their channel flow data is complete. However,
 their SV contains only 12 columns: 11 `UNIMP_*` unimpaired flow variables + `EFLOWS_STS011`.
 The other 16 EFLOWS variables (`EFLOWS_AMR004`, `EFLOWS_FTR003`, `EFLOWS_FTR029`, `EFLOWS_MCD005`,
@@ -466,7 +466,7 @@ to `NUMERIC(12,3)` to accommodate these.
 | 5 | `UNIMP_*_UHH` variants | Excluded. `_UHH` suffix = "upper-half hydrology" alternative baseline. Always use base `UNIMP_*` names. |
 | 6 | Channel count discrepancy | Planning estimate was "60 channels." `channel_entity.csv` has 59 rows with `channel_class` set. Whether the DV truly contains 60 or 59 distinct `CHANNEL` variables has **not been independently verified**.see open question 2. |
 | 7 | `C_SAC000_MIF` absence | SAC000 has no MIF in the DV (`has_mif = false`). Metric 1 computed normally using `UNIMP_SRBB`. Metric 2 uses `EFLOWS_SAC000` from SV. No action required unless modeling team adds this variable in a future SV version. |
-| 8 | MIF variable absence in some scenarios | Confirmed expected: different scenarios model different regulatory frameworks. The absent variables reflect a policy choice in those scenario configs, not a data pipeline error (verified via `diagnose_dv_columns.py`). |
+| 8 | MIF variable absence in some scenarios | Confirmed expected: different scenarios model different regulatory frameworks. The absent variables reflect a policy choice in those scenario configs, not a data pipeline error (verified by inspecting the CalSim CSV header columns directly). |
 
 ## Open questions
 

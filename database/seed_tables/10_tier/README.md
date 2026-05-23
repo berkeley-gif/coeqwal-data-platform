@@ -17,6 +17,30 @@ Defines the tier indicators and their characteristics.
 - `tier_count`: Number of tier values (1 or 4)
 - `is_active`: Whether indicator is currently used
 
+### tier_location (no seed CSV)
+
+The tier-location catalog lives in the `tier_location` database table.
+There is no seed CSV in this directory because the tier teams' staging
+CSVs in [`etl/tier_data/staging/`](../../../etl/tier_data/staging/) are
+the source of truth for membership. Reconcile with:
+
+```bash
+python etl/tier_data/diff_tier_locations.py
+python etl/tier_data/sync_tier_locations_from_staging.py --dry-run
+python etl/tier_data/sync_tier_locations_from_staging.py
+```
+
+The DDL is in
+[`database/scripts/sql/create_tier_location_table.sql`](../../scripts/sql/create_tier_location_table.sql)
+(superuser-only, runs once). Display names are not stored in
+`tier_location`; the loader and API resolve them by joining
+`location_id` to the entity tables documented in
+[`etl/common/tier_location_entities.py`](../../../etl/common/tier_location_entities.py).
+
+Rows that drop out of staging are soft-deleted (`is_active = FALSE`)
+rather than removed so historical `tier_location_result` rows still
+resolve to a catalog row.
+
 ### tier_result.csv
 Stores actual tier values for each scenario.
 

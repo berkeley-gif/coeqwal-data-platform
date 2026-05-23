@@ -4,11 +4,46 @@
 
 <!-- ACTIVE_SCENARIOS:BEGIN -->
 
-**List of active scenarios (72, as of May 21, 2026)**: s0011, s0020, s0021, s0023, s0024, s0025, s0026, s0027, s0028, s0030, s0031, s0032, s0033, s0035, s0036, s0037, s0039, s0040, s0041, s0042, s0044, s0045, s0046, s0047, s0048, s0049, s0050, s0051, s0056, s0057, s0058, s0059, s0060, s0062, s0063, s0065, s0067, s0068, s0069, s0071, s0072, s0073, s0074, s0075, s0076, s0077, s0078, s0079, s0080, s0081, s0082, s0083, s0084, s0085, s0087, s0088, s0089, s0091, s0092, s0093, s0094, s0095, s0096, s0097, s0098, s0099, s0100, s0101, s0102, s0103, s0104, s0105
+**Active scenarios (72)**: s0011, s0020, s0021, s0023, s0024, s0025, s0026, s0027, s0028, s0030, s0031, s0032, s0033, s0035, s0036, s0037, s0039, s0040, s0041, s0042, s0044, s0045, s0046, s0047, s0048, s0049, s0050, s0051, s0056, s0057, s0058, s0059, s0060, s0062, s0063, s0065, s0067, s0068, s0069, s0071, s0072, s0073, s0074, s0075, s0076, s0077, s0078, s0079, s0080, s0081, s0082, s0083, s0084, s0085, s0087, s0088, s0089, s0091, s0092, s0093, s0094, s0095, s0096, s0097, s0098, s0099, s0100, s0101, s0102, s0103, s0104, s0105
 
-_Run `python etl/ingestion/tools/refresh_active_scenarios.py` to pull the current `is_active` set from the API into this README.
+_Last refreshed 2026-05-22T16:54:19Z from `https://api.coeqwal.org/api/scenarios`. Regenerate with `python etl/ingestion/tools/refresh_active_scenarios.py`._
 
 <!-- ACTIVE_SCENARIOS:END -->
+
+## Sources of truth
+
+Every piece of shared state in this pipeline has one canonical home. Drift
+surfaces as a PR diff (auto-generated files) or via an explicit diff helper
+(seed CSVs). Consumers always read from the canonical file; they never copy
+the data into their own modules.
+
+The two scenario lists are the worked example.
+
+**Scenario lists (two distinct sets, by design):**
+
+| Source of truth | What it answers | How it gets there | Who reads it |
+|---|---|---|---|
+| `/api/scenarios?is_active=true` -> [`etl/common/active_scenarios.py`](common/active_scenarios.py) (`ACTIVE_SCENARIOS`) | Which scenarios does the public website serve right now? | DB `scenario.is_active` is flipped by [`etl/ingestion/tools/set_scenario_active.py`](ingestion/tools/set_scenario_active.py). [`etl/ingestion/tools/refresh_active_scenarios.py`](ingestion/tools/refresh_active_scenarios.py) pulls the API and regenerates the cached Python file | [`verify_api.py`](statistics/verify_api.py), [`verify_tiers.py`](tier_data/verify_tiers.py), [`load_all_tier_results.py`](tier_data/load_all_tier_results.py) |
+| [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv) -> [`etl/common/etl_scenarios.py`](common/etl_scenarios.py) (`ETL_SCENARIOS`) | Which scenarios does the ETL pipeline know how to process? | The working CSV is edited by hand (WAM team adds rows; developer marks `download_status=skip` for rows we won't process). [`etl/ingestion/tools/refresh_etl_scenarios.py`](ingestion/tools/refresh_etl_scenarios.py) regenerates the cached Python file | [`run_all.py`](ingestion/run_all.py), [`verify_all_sections.py`](statistics/verify_all_sections.py), every `calculate_*.py`, `scan_dupes.py` |
+
+Both Python files are auto-generated and checked into git. Every consumer
+that gates on either set also accepts `--scenario` / `--scenarios` /
+`--scenarios-override` for one-off runs that bypass the default list.
+
+**Tier-location catalog (one set, mirrored DB <- CSV):**
+
+| Source of truth | What it answers | How it gets there | Who reads it |
+|---|---|---|---|
+| `tier_location` DB table (catalog) + tier-team staging CSVs in [`etl/tier_data/staging/`](tier_data/staging/) (source of truth) | Which locations belong to each tier outcome (reservoirs for `RES_STOR`, stream gauges for `ENV_FLOWS`, water-budget areas for `GW_STOR`, demand units for `CWS_DEL` / `AG_REV`)? | Tier team drops a staging CSV. [`etl/tier_data/diff_tier_locations.py`](tier_data/diff_tier_locations.py) shows the diff against the live catalog. [`etl/tier_data/sync_tier_locations_from_staging.py`](tier_data/sync_tier_locations_from_staging.py) upserts active rows and soft-deletes (`is_active = FALSE`) anything that left staging. The entity registry in [`etl/common/tier_location_entities.py`](common/tier_location_entities.py) names the attribute / geometry tables every `location_type` resolves to | [`load_all_tier_results.py`](tier_data/load_all_tier_results.py), [`verify_tiers.py`](tier_data/verify_tiers.py), and the public API ([`tier_map_endpoints.py`](../api/coeqwal-api/routes/tier_map_endpoints.py)) all read the `tier_location` catalog and join `location_id` to entity tables for names + GeoJSON |
+
+**Scenario row bootstrap (one-shot, not a source of truth):**
+
+[`database/seed_tables/06_scenario/scenario.csv`](../database/seed_tables/06_scenario/scenario.csv)
+introduces new `scenario` rows into the DB the first time. After that, the
+DB owns the row, and `scenario.csv`'s `is_active` value is allowed to drift
+(use [`set_scenario_active.py`](ingestion/tools/set_scenario_active.py),
+not a re-upsert, to flip publication state). See the bootstrap-only
+callout in [`database/README.md`](../database/README.md).
 
 ## What do we use the COEQWAL ETL for?
 
@@ -83,7 +118,76 @@ And we use the ETL to insert the tier data into the database for fetching via th
 
 The database also serves as a stable repository for the data, and joins numerical data with attribute data.
 
-**Where this runs.** Developer runs against the live S3 buckets and production RDS belong on Cloud9 (`coeqwal-db-admin`). All the script-level work (developing, dry-runs, smoke tests, schema and seed work against a local Postgres) runs equally well on a local. See the [top-level Developer setup](../README.md#developer-setup) for the one-shot local bring-up (`bash scripts/setup_dev_env.sh`).
+**Where this runs.** The ETL runs on Cloud9 (`coeqwal-db-admin`), which already has AWS credentials, the production `DATABASE_URL`, `rclone` with the `gdrive` remote, and the working CSV. Running ETL off Cloud9 is not supported.
+
+## Adding a new scenario
+
+Lifecycle of a single new scenario from "WAM team published it" to "live on the public website." Steps 1-5 are ETL; the ETL works on whatever you tell it via `--scenarios sXXX`. Steps 6-8 promote the scenario into the public/curated set and only run after you trust the data.
+
+1. **Add a row to the working CSV.** Open `etl/ingestion/scenario_listing/model_run_file_source_working.csv` and add the WAM-sheet row for the new scenario (or `cp` the freshly downloaded reference CSV over the working CSV if more than one new row has landed). Fill the operator columns (`pinned_model_run_zip`, `pinned_trend_csv`, `notes`) as needed. Then regenerate the ETL scenario list:
+   ```bash
+   python etl/ingestion/tools/refresh_etl_scenarios.py
+   ```
+   Commit the resulting diff in `etl/common/etl_scenarios.py`.
+
+2. **Ingest the model run.** Pulls ZIP + trend CSV from Drive, validates, and stages to S3.
+   ```bash
+   python etl/ingestion/gdrive_bulk_download.py download --scenarios sXXX
+   python etl/ingestion/gdrive_bulk_download.py promote  --scenarios sXXX
+   ```
+
+3. **Wait for extraction.** The promote step triggers the S3 Lambda, which submits a Batch job that extracts the DSS files to CSV under `s3://coeqwal-model-run/scenario/sXXX/csv/`. Poll with:
+   ```bash
+   python etl/run_full_pipeline.py --poll-batch-extraction --scenarios sXXX
+   ```
+
+4. **Compute statistics.** Run the per-section calculators against the new scenario, writing rows into the DB.
+   ```bash
+   python etl/statistics/run_all.py --scenario sXXX
+   ```
+
+5. **Verify statistics.** Compare CSV-side expectations vs DB values for this one scenario.
+   ```bash
+   python etl/statistics/verify_all_sections.py --scenario sXXX
+   ```
+
+   At this point the scenario has data in S3 and the DB. It is in `ETL_SCENARIOS` but NOT in `ACTIVE_SCENARIOS`, so the website does not see it yet and `verify_api.py --all-scenarios` skips it.
+
+6. **Bootstrap the scenario row.** Append a row to `database/seed_tables/06_scenario/scenario.csv` with description, narrative, baseline, hydroclimate, and `is_active=0`. The seed CSV is bootstrap-only for the `is_active` column: it introduces new scenario rows into the DB, but ongoing flips happen in the DB directly (step 8). The seed CSV's `is_active` value is allowed to drift after this point.
+
+7. **Upsert the row into the DB.** Loads the new metadata into the `scenario` table.
+   ```bash
+   psql "$DATABASE_URL" -f database/scripts/sql/upsert_scenario_data.sql
+   ```
+
+8. **Flip is_active=1 when you trust the scenario.** Updates the DB directly and regenerates `etl/common/active_scenarios.py` + the README marker block in one step.
+   ```bash
+   python etl/ingestion/tools/set_scenario_active.py --activate sXXX
+   ```
+   Commit the resulting diff in `etl/common/active_scenarios.py` and the `<!-- ACTIVE_SCENARIOS:BEGIN -->` block at the top of this file. The scenario is now in `ACTIVE_SCENARIOS` and reaches the tier loaders, API verification, and tier verification.
+
+If you are bringing in multiple new scenarios, run steps 1-5 against the full list of new short codes (`--scenarios sXXX,sYYY,sZZZ` or `--all` if the working CSV is in the right state), then run steps 6-8 once with `--activate sXXX,sYYY,sZZZ`.
+
+### Pre-flight a scenario before activating it
+
+Between step 5 and step 6, the new scenario has data in S3 and the DB but is not yet in `ACTIVE_SCENARIOS`. Three scripts gate on `ACTIVE_SCENARIOS` and skip anything outside it, which means you cannot test them against the new scenario by default. Each one accepts `--scenarios-override sXXX,sYYY` as a per-invocation replacement:
+
+| Script | Use case |
+|---|---|
+| [`etl/tier_data/verify_tiers.py`](tier_data/verify_tiers.py) | Sanity-check tier-coverage and tier-value diffs for the new scenario against the live API |
+| [`etl/statistics/verify_api.py`](statistics/verify_api.py) | Compare DB rows vs API responses for the new scenario before it goes public |
+| [`etl/tier_data/load_all_tier_results.py`](tier_data/load_all_tier_results.py) | Pre-flight a tier load (typically with `--dry-run` or `--output-sql`) against the new scenario |
+
+```bash
+python etl/tier_data/verify_tiers.py --scenarios-override s0070,s0072
+python etl/statistics/verify_api.py --scenarios-override s0070
+python etl/tier_data/load_all_tier_results.py --scenarios-override s0070 --dry-run
+```
+
+Mechanics:
+- Per-invocation only. The override is never persisted. To change `ACTIVE_SCENARIOS` itself, use [`etl/ingestion/tools/set_scenario_active.py`](ingestion/tools/set_scenario_active.py).
+- Whenever the override is active the script emits a `WARNING` line naming the resolved set, so it is visible in any pipeline log.
+- On the two verifiers, `--scenarios-override` is mutually exclusive with `--scenario` (and on `verify_api.py`, also with `--all-scenarios`). Passing both is a parser error. `--scenarios-override s0020` already covers the "I only want s0020" case.
 
 ## How to process raw scenario model run data
 
@@ -147,7 +251,7 @@ python etl/ingestion/gdrive_bulk_download.py scan --all
 
 Walks each named Drive folder and writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json` (use `python etl/ingestion/tools/show_last_run.py --stage scan` for a quick spreadsheet-style view). Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
 
-`scan` does not touch S3 and does not need AWS credentials. You can run it from your local machine. Local prereqs: `rclone` configured with the `gdrive` remote (you already have this on your local machine from the original Google OAuth), Python 3.9+, and `boto3` (imported at the top of the script even though scan does not use it). One `pip install -r etl/ingestion/requirements.txt` in a venv on the local machine covers `boto3`. If you do not want to set that up locally, run it from Cloud9, which has all three already.
+`scan` does not touch S3 and does not need AWS credentials, but Cloud9 already has every prereq (`rclone` + the `gdrive` remote, Python 3.10, `boto3`), so run it there. Running ETL off Cloud9 is not supported.
 
 **3. Download, validate, stage to S3.**
 
@@ -383,6 +487,15 @@ If the working copy does not exist when you run the script, it errors out with t
 
 The ingestion scripts need three things on the Cloud9 instance: enough disk space, `rclone` configured against the COEQWAL Shared Drive, and a Python venv with `boto3`.
 
+The fastest way to confirm all three are in place is the one-shot preflight script:
+
+```bash
+bash scripts/setup_etl_cloud9.sh           # full preflight + venv install
+bash scripts/setup_etl_cloud9.sh --check   # read-only checks only
+```
+
+It prints PASS / WARN / FAIL per check (AWS creds, rclone + gdrive remote, venv + requirements, `DATABASE_URL`, EBS capacity, `etl.common` import) with a one-line remediation hint for each failure. Exit 0 means you are ready to run `python etl/run_full_pipeline.py`. The manual steps below are the longer explanation of each check.
+
 **1. EBS storage check.** Cloud9 instances default to 10 GB EBS. The script streams files through `/tmp/` and uploads to S3 immediately, so you only need room for one ZIP per worker at a time, but it is worth checking.
 
 ```bash
@@ -405,7 +518,7 @@ curl https://rclone.org/install.sh | sudo bash
 rclone version
 ```
 
-The rclone config (with the `gdrive` remote pointing at the COEQWAL Shared Drive) must be authenticated on a machine with a web browser, because Google OAuth requires a browser redirect. So you authenticate once on a local machine (macOS, Linux, or Windows -- any OS with a browser and rclone installed) and copy the config to Cloud9.
+The rclone config (with the `gdrive` remote pointing at the COEQWAL Shared Drive) must be authenticated on a machine with a web browser, because Google OAuth requires a browser redirect. So you authenticate once on any machine with a browser and rclone installed, then copy the config to Cloud9.
 
 If you already authenticated on a local machine, copy the config:
 
@@ -453,13 +566,13 @@ The file you are copying around contains an OAuth **refresh token**, not a Googl
 - **Scoped to Drive only.** The token can read and write Google Drive on behalf of the UC Berkeley account that authenticated. It cannot read Gmail, log in to anything, change the account password, or touch any other Google service.
 - **Revocable in seconds.** Visit [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions), find "rclone", click Remove access. The token is dead within a few minutes. No password rotation, no SSO ticket.
 - **Bound to the rclone OAuth client app.** A leaked token can only be used by something pretending to be rclone. The Google account owner still sees activity attributed to "rclone" in their account audit log, not "unknown".
-- **Lives outside the repo.** The file is at `~/.config/rclone/rclone.conf` on macOS or Linux (or `%APPDATA%\rclone\rclone.conf` on Windows), well outside the working tree. `git status` will never see it.
+- **Lives outside the repo.** The file is at `~/.config/rclone/rclone.conf`, well outside the working tree. `git status` will never see it.
 - **Never read by our code.** The Python in this repo only ever shells out to `rclone`; it does not `open()` the config file. There is no code path that could accidentally log or print the token.
 - **Gitignored as belt-and-suspenders.** `rclone.conf` and `*.rclone.conf` are in `.gitignore`, so even if you accidentally copied the file into the repo, `git add` would skip it.
 
 If you suspect a token leak: revoke at the URL above, then `rclone config reconnect gdrive:` on a local machine and re-distribute the new config to anyone who needs it.
 
-The `~/.config/rclone/rclone.conf` format is identical across operating systems, only the path differs (run `rclone config file` to print it on whichever machine you are on).
+Run `rclone config file` on any machine to print the exact config path.
 
 **3. Python venv.** The ingestion scripts depend on `boto3`. Create the venv once:
 
@@ -501,7 +614,7 @@ If the scenario belongs to an existing sibling group (same operational configura
 
 If the upstream sheet renames a column, update the right-hand side of `COLUMN_MAP` near the top of `etl/ingestion/gdrive_bulk_download.py`. Internal field names stay the same.
 
-**How the script knows which scenarios to process.** Run scope is set on the CLI. Pass `--scenarios <list>` to process specific short codes, or `--all` to process every row in the working CSV. Without one of these, the script errors out. The list accepts whitespace, commas, or newlines as separators (so a Cmd-C from the spreadsheet's short_code column pastes directly into `--scenarios "$(pbpaste)"`). The `download_status` column is informational only. See "Listing scenarios on the CLI" in the team-facing section above for paste examples.
+**How the script knows which scenarios to process.** Run scope is set on the CLI. Pass `--scenarios <list>` to process specific short codes, or `--all` to process every row in the working CSV. Without one of these, the script errors out. The list accepts whitespace, commas, or newlines as separators, so a column copied from the spreadsheet pastes in cleanly. The `download_status` column is informational only. See "Listing scenarios on the CLI" in the team-facing section above for paste examples.
 
 **Developer (optional pre-flight):** check Drive without touching S3.
 
@@ -513,31 +626,9 @@ python etl/ingestion/gdrive_bulk_download.py scan --all
 
 `scan` walks each scenario's Drive folder and writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json` (run `python etl/ingestion/tools/show_last_run.py --stage scan` for a tabular view). It catches missing folders, missing ZIPs, missing trend CSVs, folder-name mismatches, and pinned-filename-not-found cases before you spend bandwidth on a real download run. It never touches S3 and never downloads files. Run it as a pre-flight on a freshly bootstrapped working CSV, or after editing rows.
 
-#### Running scan locally (from your local)
+#### Where to run scan
 
-`scan` is the only step in this flow that does not need AWS. You can run it from your local machine to iterate on the working CSV without spinning up Cloud9.
-
-Local prereqs:
-
-- **`rclone`** with the `gdrive` remote configured. You already have this on your local machine because that is where the original Google OAuth happened.
-- **Python 3.9+** with a venv. Almost certainly already on your local machine.
-- **`boto3`** installed in the venv. `boto3` is imported by `gdrive_bulk_download.py` even though `scan` itself does not call it, so it has to be on the path:
-  ```bash
-  cd path/to/coeqwal-backend
-  python3 -m venv .venv && source .venv/bin/activate
-  pip install -r etl/ingestion/requirements.txt
-  ```
-- The working CSV at `etl/ingestion/scenario_listing/model_run_file_source_working.csv`. It is tracked in git, so a `git pull` is enough.
-
-If you do not want to set those up locally, run scan on Cloud9 instead. Cloud9 has all of them already.
-
-Run it the same way as on Cloud9:
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0070 s0080
-```
-
-`download` and `promote` are NOT a good fit for the local. They upload ~200 MB ZIPs to S3 per scenario, which is fast over the AWS-internal network from Cloud9 and slow over a home connection. Once scan goes clean locally, commit the working CSV, push, pull on Cloud9, and continue from there.
+Run `scan` on Cloud9. Cloud9 already has `rclone`, the `gdrive` remote, Python 3.10, `boto3`, and the working CSV. `scan` is the only step that does not actually need AWS, but `download` and `promote` push ~200 MB ZIPs to S3 per scenario and are only fast over the AWS-internal network from Cloud9. Running ingestion off Cloud9 is not supported.
 
 **Developer:** run the download. `--s3-bucket` defaults to `coeqwal-model-run`. `--scenarios` or `--all` is required.
 
@@ -608,9 +699,14 @@ python etl/ingestion/tools/audit.py
 
 Open `etl/ingestion/audit.md` again. The "What needs your attention" section is empty when everything succeeded.
 
-### Step 3: verify end-to-end (Pass 2b)
+### Step 3: verify end-to-end
 
-Coming with Pass 2b. Will run `etl/verification/verify_api.py` and feed its output back into the audit.
+```bash
+python etl/statistics/verify_all_sections.py --scenario <id>
+python etl/statistics/verify_api.py --scenario <id>
+```
+
+See [etl/verification/README.md](verification/README.md) for what each layer checks and where output lands. For the stakeholder / new-hire orientation on verification + auditing across the whole pipeline, see [docs/VERIFICATION.md](../docs/VERIFICATION.md).
 
 ## Manual upload path
 
@@ -928,3 +1024,6 @@ The Cloud9 IAM role credentials never expire. Long-running jobs in `tmux` keep r
 - Tier teams have been asked by the project to submit continuous data.
 - During the third tier data run, after the third batch of scenario data was released (hydroclimate cc 95) salmon data appeared on a scale of 1-5. This needs to be resolved.
 - (Related) We need to set a LICENSE on [COEQWAL-pydsstools](https://github.com/berkeley-gif/COEQWAL-pydsstools). I'm noticing that `pydsstools` is undergoing updates, so we may (or may not) decide to update our library.
+- **Reconcile `s0036`, `s0076`, `s0096` between the two scenario lists.** When `etl/common/etl_scenarios.py` was first regenerated from the working CSV (May 22, 2026), three scenarios that are live in the public API (`ACTIVE_SCENARIOS`) turned up missing from the WAM team's scenario listing CSV: `s0036`, `s0076`, `s0096`. They remain `is_active=1` in the database and continue to serve from the website. The WAM team has been emailed for context (intentional retirement, sheet desync, or rename). The two reconciliation surfaces are the two sources of truth: either the WAM team restores them to the listing CSV (then re-run `python etl/ingestion/tools/refresh_etl_scenarios.py`), or we take them off the website with `python etl/ingestion/tools/set_scenario_active.py --deactivate s0036,s0076,s0096`. Until one of those happens, `ACTIVE_SCENARIOS` is not a strict subset of `ETL_SCENARIOS`, which is the invariant we want.
+- **Tier locations live in the database, sourced from tier-team staging CSVs.** The `tier_location` table is a narrow catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The staging CSVs the tier teams drop into `etl/tier_data/staging/` are the source of truth for membership. When a tier team sends a new or renamed column, run [`etl/tier_data/diff_tier_locations.py`](tier_data/diff_tier_locations.py) to see the gaps and [`etl/tier_data/sync_tier_locations_from_staging.py`](tier_data/sync_tier_locations_from_staging.py) to reconcile. Display names and geometry are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](common/tier_location_entities.py). See [`etl/tier_data/README.md`](tier_data/README.md#updating-tier-locations-when-a-tier-team-sends-new-data) for the full workflow and [`etl/tier_data/audit_tier_location_geometry.py`](tier_data/audit_tier_location_geometry.py) for the geometry coverage scorecard.
+- **Demand-unit geometry coverage is partial.** The geopackage at `reference/du_4326.gpkg` (EPSG:4326, layer `demandunits`, 235 dissolved `MULTIPOLYGON`s) covers 232 of the 286 distinct `DU_ID`s in `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity` (81.1%). Polygons load into the three entity tables via [`database/scripts/sql/56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql) and [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py). The 54 missing IDs (41 urban, 12 agriculture, 1 refuge), the 3 gpkg-only IDs (`07S_PA`, `50_NA`, `90_NA`), and the `26N_NA` cross-table case are enumerated in [`docs/du_geometry_gap.md`](../docs/du_geometry_gap.md). When agency-sourced polygons become available, add them to the geopackage (or a successor table) and rerun the loader.

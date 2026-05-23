@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate comprehensive reservoir statistics for all 92 reservoirs.
+calculate_reservoir_statistics.py - Calculate comprehensive reservoir statistics for all 92 reservoirs.
 
 Populates three database tables:
 - reservoir_storage_monthly: Monthly storage statistics (mean, cv, percentiles)
@@ -63,12 +63,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("reservoir_statistics")
 
-from scenarios import SCENARIOS  # noqa: E402
-
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from etl.common import S3_BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Path to reservoir_entity.csv (relative to project root)
 # From reservoirs/ -> statistics/ -> etl/ -> coeqwal-backend/ -> database/...

@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """
-Scan all scenario CSVs in S3 for duplicate B-part (variable name) columns.
+scan_dupes.py - Scan all scenario CSVs in S3 for duplicate B-part (variable name) columns.
+
+Purpose: developer-run audit tool. Not part of any ETL pipeline. Reach for
+it when a CalSim CSV reader returns suspiciously-shaped data (truncated
+columns, mixed series, unexpected NaNs) and you want to confirm whether
+the upstream CSV header itself has duplicate B-part columns before chasing
+the bug in downstream code. Output is written to
+`etl/statistics/audit_reports/` (gitignored).
 
 When two DSS pathnames share the same B-part but differ in their C-part
 (e.g. SHRTG_PCWA3/DELIVERY-SHORTAGE vs SHRTG_PCWA3/SHORTAGE), the CSV
-will contain two columns whose header row 1 is identical.  This script
-detects those duplicates across every scenario and optionally compares the
+will contain two columns whose header row 1 is identical. Code that
+indexes by B-part then silently picks one column; this script surfaces
+those collisions across every scenario and optionally compares the
 underlying data values.
 
 Usage:
@@ -31,8 +39,6 @@ import boto3
 import numpy as np
 import pandas as pd
 
-from scenarios import SCENARIOS
-
 # Default directory for scan results. Gitignored via etl/**/audit_reports/.
 DEFAULT_OUTPUT_DIR = Path(__file__).parent / "audit_reports"
 
@@ -47,6 +53,7 @@ log = logging.getLogger("scan_dupes")
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from etl.common import S3_BUCKET as BUCKET  # noqa: E402
+from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 
 def _csv_key(scenario_id: str) -> str:

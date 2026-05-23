@@ -60,8 +60,8 @@ import boto3
 TOOLS_DIR = Path(__file__).parent
 REPO_ROOT = TOOLS_DIR.parent.parent.parent
 
-# Make `from etl.X import Y` work when this script is invoked as
-# `python etl/ingestion/tools/manual_ingest.py` from the repo root.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(REPO_ROOT))
 from etl.common import (  # noqa: E402
     AWS_REGION,

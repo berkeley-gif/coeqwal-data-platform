@@ -9,9 +9,9 @@ Loads tier outcome data for all active scenarios into the `tier_result` and
 
 **1. Drop new CSVs into `etl/tier_data/staging/`.** Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`, `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`, `FW_EXP.csv`, `WRC_SALMON_AB.csv`.
 
-**2. If the active scenario list changed**, open `etl/tier_data/load_all_tier_results.py` and edit `ALLOWED_SCENARIOS` at the top. Move retired ones into `DEACTIVATED_SCENARIOS`.
+**2. If the active scenario list changed**, run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` (the canonical `ACTIVE_SCENARIOS` set this script imports). The refresh script reads `is_active=true` rows from the live API. Add any short codes that need to be deactivated to `DEACTIVATED_SCENARIOS` in `load_all_tier_results.py`.
 
-**3. Commit and push from your laptop.** The staging CSVs are git-tracked on purpose.
+**3. Commit and push from Cloud9.** The staging CSVs are git-tracked on purpose.
 
 **4. On Cloud9: `git pull`.**
 
@@ -45,6 +45,104 @@ Read the two verification tables it prints at the end. Active scenario counts sh
 > filenames are auto-routed there. Paths with `/` are respected. See
 > [`etl/README.md`](../README.md#output-files-audits-generated-sql) for the
 > full output catalog.
+
+> **Pre-flight a new scenario before flipping `is_active=1`.** Both
+> [`load_all_tier_results.py`](load_all_tier_results.py) and
+> [`verify_tiers.py`](verify_tiers.py) accept `--scenarios-override sXXX,sYYY`
+> as a per-invocation replacement for `ACTIVE_SCENARIOS`. Use it to dry-run a
+> tier load (`--scenarios-override sXXX --dry-run`) or verify tier coverage
+> against the live API for a scenario that is not yet public. The override is
+> never persisted. To change `ACTIVE_SCENARIOS` itself, use
+> [`etl/ingestion/tools/set_scenario_active.py`](../ingestion/tools/set_scenario_active.py).
+> Each run emits a `WARNING` line naming the resolved override set.
+
+---
+
+## Updating tier locations when a tier team sends new data
+
+The tier teams' staging CSVs are the source of truth for tier-location
+membership. The `tier_location` database table is a narrow catalog
+(`tier_short_code`, `location_type`, `location_id`, `display_order`,
+`is_active`); display names and geometry are resolved at query time by
+joining `location_id` to the entity tables documented in
+[`etl/common/tier_location_entities.py`](../common/tier_location_entities.py).
+There is no seed CSV for `tier_location`.
+
+The workflow:
+
+1. Stage the new tier CSVs as usual.
+
+2. Show the diff between staging and the live catalog:
+
+   ```bash
+   python etl/tier_data/diff_tier_locations.py
+   ```
+
+   Optional `--tier RES_STOR` scopes the diff to one tier. The output
+   lists ids the tier team added (`in CSV, not in DB`) and ids that are
+   no longer in staging (`in DB, not in CSV`).
+
+3. Optional but recommended: audit geometry and attribute coverage for
+   the new ids before promoting them. This walks the entity tables
+   (`network`, `network_gis`, `reservoir`, `wba`, `compliance_station`,
+   `du_urban_entity`) and reports any `location_id` that the catalog
+   would carry but the entity table cannot resolve.
+
+   ```bash
+   python etl/tier_data/audit_tier_location_geometry.py
+   ```
+
+   Re-run after each gap-fill until the scorecard reports 100% attribute
+   and geometry coverage.
+
+4. Dry-run the sync to see exactly which rows would change:
+
+   ```bash
+   python etl/tier_data/sync_tier_locations_from_staging.py --dry-run
+   ```
+
+   The plan reports inserts, reactivations (rows that returned to
+   staging after being soft-deleted), display-order updates, and
+   deactivations. The script refuses to write rows whose `location_id`
+   does not resolve in the entity table; pass `--allow-unresolved` only
+   during an active gap-fill.
+
+5. Apply:
+
+   ```bash
+   python etl/tier_data/sync_tier_locations_from_staging.py
+   ```
+
+   The script runs in one transaction. Rows that left staging are
+   soft-deleted (`is_active = FALSE`) so historical
+   `tier_location_result` rows still have a catalog row to point at.
+   Re-adding a row to staging flips `is_active` back to TRUE on the
+   next sync.
+
+6. Re-run `python etl/tier_data/diff_tier_locations.py`. Gaps should be
+   gone.
+
+### Coverage alerts in the daily scripts
+
+Every script that touches `tier_location` now runs a coverage scan and
+prints a one-line WARNING per tier with missing attribute or geometry
+data:
+
+```
+WARNING: tier_location coverage gap in RES_STOR: 1 missing attribute [ORO]; 1 missing geometry [ORO]. Run `python etl/tier_data/audit_tier_location_geometry.py --tier RES_STOR` for details.
+```
+
+| Script | What it does with the alert |
+|---|---|
+| [`sync_tier_locations_from_staging.py`](sync_tier_locations_from_staging.py) | Prints per-tier `coverage: attribute X/Y, geometry A/B` in the plan, then the WARNING block. Attribute gaps still block sync (use `--allow-unresolved` during gap-fill). Geometry gaps warn only. |
+| [`diff_tier_locations.py`](diff_tier_locations.py) | Appends a coverage scorecard across the union of staging and catalog ids, then the WARNING block. Read-only, never exits non-zero. |
+| [`load_all_tier_results.py`](load_all_tier_results.py) | Emits the WARNING block on startup against active catalog rows. Loader continues regardless; the loader falls back to `location_id` for any name that fails to resolve. |
+| [`verify_tiers.py`](verify_tiers.py) | Emits the WARNING block on startup, immediately after the RES_STOR catalog fetch. Verifier pass/fail logic is unchanged. |
+| [`audit_tier_location_geometry.py`](audit_tier_location_geometry.py) | The dedicated tool. Full per-id scorecard plus the ERD-vs-live drift pass. Exits non-zero on any gap so CI / wrappers can branch on it. JSON dump via `--json`. |
+
+The four daily scripts only ever warn; only the audit script changes its
+exit code on gaps. Reach for the audit script when you need the full
+per-id detail or want CI to fail on regressions.
 
 ---
 
@@ -91,12 +189,11 @@ NA cells in any CSV are skipped (no location row generated for that slot).
 Replace the files in `staging/` with the new data. Keep the filenames exactly as
 shown above. The staging directory is tracked in git so files can be pushed and pulled.
 
-### 2. Update the scenario allowlist if needed
+### 2. Refresh the scenario allowlist if needed
 
-Open `load_all_tier_results.py` and update `ALLOWED_SCENARIOS` at the top of the file.
-If any scenarios are being retired, add them to `DEACTIVATED_SCENARIOS`.
+Run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` from the live API (`/api/scenarios`, `is_active=true` rows). That is the canonical source for `ALLOWED_SCENARIOS` in this script. If any scenarios are being retired, add them to `DEACTIVATED_SCENARIOS` in `load_all_tier_results.py`.
 
-### 3. Push from your local machine
+### 3. Push from Cloud9
 
 Save `load_all_tier_results.py` and the updated CSVs. They will be committed and
 pushed automatically on save (via your git workflow).

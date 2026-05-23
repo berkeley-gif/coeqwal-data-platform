@@ -1,5 +1,5 @@
 """
-Tier Map Visualization API Endpoints
+tier_map_endpoints.py - Tier map visualization API endpoints
 
 Provides tier data with geospatial geometries for map-based visualization.
 
@@ -605,11 +605,23 @@ async def get_tier_map_data(
     """
     Get GeoJSON FeatureCollection for map visualization.
 
-    **Status: reserved.** No current frontend callers; the main web app uses
-    Mapbox vector tiles for polygon geometry and pairs them with the lightweight
-    `/locations` endpoint for tier levels. Kept in the API as reserved capacity
-    for future consumers that need server-rendered GeoJSON (e.g. exports,
-    third-party integrations).
+    **Status:** general-purpose. The main web app still pairs the
+    lightweight `/locations` endpoint with Mapbox vector tiles for
+    polygons, but server-rendered GeoJSON is now wired for every tier
+    `location_type` whose entity table carries geometry: `network_node`
+    resolves through `network_gis.short_code`; `demand_unit` resolves
+    through the `du_*_entity.du_id` table picked by the tier
+    (`du_urban_entity` for CWS_DEL, `du_agriculture_entity` for AG_REV,
+    matching `LOCATION_ENTITY_MAP['demand_unit']` plus
+    `TIER_GEOMETRY_OVERRIDES`); `reservoir` through
+    `reservoir.calsim_short_code` (with `SLUIS_CVP`/`SLUIS_SWP` aliased
+    to `SLUIS`); `wba` through `wba.wba_id`; and `compliance_station`
+    through `compliance_station.station_code`. Coverage tracks the
+    entity registry in `etl/common/tier_location_entities.py`; run
+    `etl/tier_data/audit_tier_location_geometry.py` for the per-tier
+    scorecard. There is no fallback for `demand_unit`s without a
+    polygon. They are dropped from the FeatureCollection and listed in
+    `docs/du_geometry_gap.md`.
 
     **Use case:** Render tier outcomes on a map with colored markers/polygons.
 
@@ -690,14 +702,14 @@ async def get_tier_map_data(
         # geometry_map: location_id -> GeoJSON geometry dict
         geometry_map: Dict[str, Any] = {}
 
-        if location_types & {"network_node", "demand_unit"}:
-            # network_gis exists and has a short_code column matching location_id.
+        if "network_node" in location_types:
+            # network_gis carries one short_code column matching location_id.
             # DISTINCT ON deduplicates multiple rows per short_code (e.g. different
             # precision levels), preferring 'precise' entries.
             node_ids = [
                 row["location_id"]
                 for row in base_rows
-                if row["location_type"] in ("network_node", "demand_unit")
+                if row["location_type"] == "network_node"
             ]
             geo_rows = await connection.fetch(
                 """
@@ -715,12 +727,101 @@ async def get_tier_map_data(
             for geo_row in geo_rows:
                 geometry_map[geo_row["short_code"]] = geo_row["geometry"]
 
-        # Geometry tables not yet populated in the database:
-        #   reservoir  → calsim_short_code  (RES_STOR)
-        #   wba        → wba_id             (GW_STOR, DELTA_ECO)
-        #   compliance_station → station_code (FW_DELTA_USES)
-        # When those tables are created, add lookup blocks here following the
-        # same DISTINCT ON pattern used for network_gis above.
+        # Demand-unit polygons. The table is tier-routed: CWS_DEL uses
+        # du_urban_entity, AG_REV uses du_agriculture_entity, matching
+        # `LOCATION_ENTITY_MAP['demand_unit']` plus `TIER_GEOMETRY_OVERRIDES`
+        # in etl/common/tier_location_entities.py. `26N_NA` is the one
+        # du_id present in both urban and ag entity tables. The loader
+        # writes the same polygon to both rows so either resolver returns
+        # the same geometry. 54 du_ids have no polygon in the source
+        # gpkg. They are dropped from the FeatureCollection. See
+        # docs/du_geometry_gap.md.
+        if "demand_unit" in location_types:
+            du_ids = [
+                row["location_id"]
+                for row in base_rows
+                if row["location_type"] == "demand_unit"
+            ]
+            du_table = (
+                "du_agriculture_entity"
+                if tier_short_code == "AG_REV"
+                else "du_urban_entity"
+            )
+            geo_rows = await connection.fetch(
+                f"""
+                SELECT du_id, ST_AsGeoJSON(geom)::jsonb AS geometry
+                FROM {du_table}
+                WHERE du_id = ANY($1::text[])
+                  AND geom IS NOT NULL
+                """,
+                du_ids,
+            )
+            for geo_row in geo_rows:
+                geometry_map[geo_row["du_id"]] = geo_row["geometry"]
+
+        # Reservoir polygons (RES_STOR). The legacy `reservoir` table carries
+        # one polygon row per `calsim_short_code`. SLUIS_CVP and SLUIS_SWP
+        # both render against the shared SLUIS polygon; the alias map below
+        # mirrors `LOCATION_ENTITY_MAP['reservoir'].geometry.id_aliases` in
+        # etl/common/tier_location_entities.py.
+        if "reservoir" in location_types:
+            alias_to_originals: Dict[str, List[str]] = {}
+            for row in base_rows:
+                if row["location_type"] != "reservoir":
+                    continue
+                lid = row["location_id"]
+                target = "SLUIS" if lid in ("SLUIS_CVP", "SLUIS_SWP") else lid
+                alias_to_originals.setdefault(target, []).append(lid)
+            geo_rows = await connection.fetch(
+                """
+                SELECT calsim_short_code, ST_AsGeoJSON(geom)::jsonb AS geometry
+                FROM reservoir
+                WHERE calsim_short_code = ANY($1::text[])
+                  AND geom IS NOT NULL
+                """,
+                list(alias_to_originals),
+            )
+            for geo_row in geo_rows:
+                for original in alias_to_originals.get(geo_row["calsim_short_code"], []):
+                    geometry_map[original] = geo_row["geometry"]
+
+        # WBA polygons (GW_STOR, DELTA_ECO via the DETAW row).
+        if "wba" in location_types:
+            wba_ids = [
+                row["location_id"]
+                for row in base_rows
+                if row["location_type"] == "wba"
+            ]
+            geo_rows = await connection.fetch(
+                """
+                SELECT wba_id, ST_AsGeoJSON(geom)::jsonb AS geometry
+                FROM wba
+                WHERE wba_id = ANY($1::text[])
+                  AND geom IS NOT NULL
+                """,
+                wba_ids,
+            )
+            for geo_row in geo_rows:
+                geometry_map[geo_row["wba_id"]] = geo_row["geometry"]
+
+        # Compliance-station points (FW_DELTA_USES).
+        if "compliance_station" in location_types:
+            station_ids = [
+                row["location_id"]
+                for row in base_rows
+                if row["location_type"] == "compliance_station"
+            ]
+            geo_rows = await connection.fetch(
+                """
+                SELECT station_code, ST_AsGeoJSON(geom)::jsonb AS geometry
+                FROM compliance_station
+                WHERE station_code = ANY($1::text[])
+                  AND geom IS NOT NULL
+                """,
+                station_ids,
+            )
+            for geo_row in geo_rows:
+                geometry_map[geo_row["station_code"]] = geo_row["geometry"]
 
         # Step 3: Assemble GeoJSON features
         _type_display = {

@@ -43,10 +43,8 @@ THIS_FILE = Path(__file__).resolve()
 INGESTION_DIR = THIS_FILE.parent.parent   # etl/ingestion/
 REPO_ROOT = THIS_FILE.parents[3]          # repo root
 
-# When this script is invoked directly (`python etl/ingestion/tools/audit.py`),
-# Python does not know where to find the `etl` package, so the imports
-# below would fail with ModuleNotFoundError. Adding the repo root to
-# `sys.path` tells Python where the `etl/` folder lives.
+# Add the repo root to sys.path so `etl.common` is importable when this
+# script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(REPO_ROOT))
 from etl.common import (  # noqa: E402
     DEFAULT_S3_BUCKET,
