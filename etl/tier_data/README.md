@@ -1,59 +1,208 @@
-# ETL.Tier Outcome Results
+# ETL: Tier Outcome Results
 
 Loads tier outcome data for all active scenarios into the `tier_result` and
 `tier_location_result` database tables.
+
+This README has two distinct workflows. Pick the one you need:
+
+| If the data team sent you... | Go to |
+|---|---|
+| **new tier-result values** (updated tier 1-4 numbers per scenario) | [How to load new tier data](#how-to-load-new-tier-data) (the section below) |
+| **a changed tier-LOCATION list** (added/dropped a location_id from a tier) | [Updating tier locations when a tier team sends new data](#updating-tier-locations-when-a-tier-team-sends-new-data) (further down) |
+
+---
+
+## What gets written, and the uniqueness guarantee
+
+The loader writes two tables, both UPSERT (`ON CONFLICT ... DO UPDATE`):
+
+| Table | One row per | Unique key (DB-enforced) |
+|---|---|---|
+| `tier_result` | scenario × tier | `(scenario_short_code, tier_short_code, tier_version_id)` |
+| `tier_location_result` | scenario × tier × location | `(scenario_short_code, tier_short_code, location_id, tier_version_id)` |
+
+`tier_version_id` is hardcoded to `8` in [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py).
+Don't change without data team sign-off.
+
+The unique constraints make duplicates **structurally impossible**: a
+second UPSERT for the same (scenario, tier, location, version) overwrites
+the row instead of inserting a new one. Re-running the loader is always
+safe. Rows with unchanged values still get an `updated_at` bump, but no
+duplicate row appears.
+
+Step 8 of the workflow below runs an explicit duplicate-check query as
+belt-and-suspenders. It should always return zero rows.
 
 ---
 
 ## How to load new tier data
 
-**1. Drop new CSVs into `etl/tier_data/staging/`.** Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`, `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`, `FW_EXP.csv`, `WRC_SALMON_AB.csv`.
+**1. Drop new CSVs into `etl/tier_data/staging/`.**
+   Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`,
+   `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`,
+   `FW_EXP.csv`, `WRC_SALMON_AB.csv`. Format reference:
+   [Staging CSV format](#staging-csv-format) below.
 
-**2. If the active scenario list changed**, run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` (the canonical `ACTIVE_SCENARIOS` set this script imports). The refresh script reads `is_active=true` rows from the live API. Add any short codes that need to be deactivated to `DEACTIVATED_SCENARIOS` in `scripts/load_all_tier_results.py`.
+   If the team sends pre-staging drops (multiple files per tier, per-climate
+   splits, etc.) under `staging/tier_results/`, normalize them with:
+   ```bash
+   python etl/tier_data/scripts/stage_tier_results.py
+   ```
 
-**3. Commit and push from Cloud9.** The staging CSVs are git-tracked on purpose.
+**2. Refresh the active-scenario allowlist if needed.**
+   ```bash
+   python etl/ingestion/tools/refresh_active_scenarios.py
+   ```
+   That regenerates `etl/common/active_scenarios.py` from the live API
+   (`/api/scenarios`, `is_active=true`). If any scenarios are being
+   retired, add their short codes to `DEACTIVATED_SCENARIOS` in
+   [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py).
+
+**3. Commit and push from Mac.** The staging CSVs are git-tracked on
+   purpose so Cloud9 sees the same bytes.
 
 **4. On Cloud9: `git pull`.**
 
-**5. Dry run to check counts:**
+**5. Dry run, verify counts:**
+   ```bash
+   python etl/tier_data/scripts/load_all_tier_results.py --dry-run
+   ```
+   Expected counts per scenario:
 
-```bash
-python etl/tier_data/scripts/load_all_tier_results.py --dry-run
-```
+   | Tier | Location rows / scenario |
+   |------|--------------------------|
+   | `CWS_DEL` | ~76 (varies, NAs skipped) |
+   | `AG_REV` | ~132 |
+   | `ENV_FLOWS` | 17 |
+   | `RES_STOR` | 8 |
+   | `GW_STOR` | 42 |
+   | `DELTA_ECO` | 1 |
+   | `FW_DELTA_USES` | 2 (but 1 tier value reported) |
+   | `FW_EXP` | 2 (but 1 tier value reported) |
+   | `WRC_SALMON_AB` | 1 (`s0065` excluded by the data team) |
 
 **6. Generate the SQL:**
-
-```bash
-python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
-```
-
-That writes `etl/tier_data/output/all_tiers.sql`.
+   ```bash
+   python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
+   ```
+   Writes `etl/tier_data/output/all_tiers.sql` (the whole `output/` tree
+   is gitignored via `etl/**/output/`). Bare filenames are auto-routed
+   there; paths with `/` are respected verbatim.
 
 **7. Apply it:**
+   ```bash
+   psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
+   ```
+   The SQL ends with two verification queries (one per table) showing
+   row counts grouped by `tier_short_code`. Active scenario counts
+   should match `ALLOWED_SCENARIOS`. Use `$DATABASE_URL` (your personal
+   role) so audit attribution lands on you, not on the shared `postgres`
+   account.
 
-```bash
-psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
-```
+**8. Validate uniqueness and idempotency.**
+   ```bash
+   # Should return zero rows. The DB constraint already guarantees
+   # this, but the explicit check catches any future schema drift.
+   psql $DATABASE_URL <<'SQL'
+     SELECT scenario_short_code, tier_short_code, location_id,
+            tier_version_id, COUNT(*) AS dupe_count
+     FROM tier_location_result
+     GROUP BY scenario_short_code, tier_short_code, location_id, tier_version_id
+     HAVING COUNT(*) > 1;
 
-Read the two verification tables it prints at the end. Active scenario counts should match what's in `ALLOWED_SCENARIOS`.
+     SELECT scenario_short_code, tier_short_code, tier_version_id,
+            COUNT(*) AS dupe_count
+     FROM tier_result
+     GROUP BY scenario_short_code, tier_short_code, tier_version_id
+     HAVING COUNT(*) > 1;
+   SQL
 
-**8. Export back into seed CSVs** so the DB can be rebuilt from scratch. The two `\COPY` blocks below; copy the outputs to `database/seed_tables/10_tier/`.
+   # Idempotency: re-apply the same SQL and confirm zero net row
+   # count change. If the numbers differ, the loader is non-deterministic
+   # for some input row (almost always a CSV with duplicate scenario
+   # columns) and needs investigation.
+   BEFORE=$(psql -tA $DATABASE_URL -c "SELECT COUNT(*) FROM tier_location_result")
+   psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql > /dev/null
+   AFTER=$(psql -tA  $DATABASE_URL -c "SELECT COUNT(*) FROM tier_location_result")
+   echo "tier_location_result: before=$BEFORE after=$AFTER (should be equal)"
+   ```
 
-> **Output files.** `load_all_tier_results.py --output-sql <name>` writes the
-> generated UPSERT script to `etl/tier_data/output/<name>` (gitignored). Bare
-> filenames are auto-routed there. Paths with `/` are respected. See
-> [`etl/README.md`](../README.md#output-files-audits-generated-sql) for the
-> full output catalog.
+   Optional cross-check against the live API (uses tier_result + entity
+   joins via the same code path as the public API). Useful before
+   flipping a new scenario's `is_active`:
+   ```bash
+   python etl/tier_data/scripts/verify_tiers.py
+   ```
 
-> **Pre-flight a new scenario before flipping `is_active=1`.** Both
-> [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) and
-> [`scripts/verify_tiers.py`](scripts/verify_tiers.py) accept `--scenarios-override sXXX,sYYY`
-> as a per-invocation replacement for `ACTIVE_SCENARIOS`. Use it to dry-run a
-> tier load (`--scenarios-override sXXX --dry-run`) or verify tier coverage
-> against the live API for a scenario that is not yet public. The override is
-> never persisted. To change `ACTIVE_SCENARIOS` itself, use
+**9. Export back into seed CSVs.**
+   So the DB can be rebuilt from scratch. From `psql $DATABASE_URL`:
+   ```sql
+   \COPY (
+     SELECT scenario_short_code, tier_short_code,
+            tier_1_value, tier_2_value, tier_3_value, tier_4_value,
+            norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4,
+            total_value, single_tier_level
+     FROM tier_result
+     WHERE tier_version_id = 8
+     ORDER BY scenario_short_code, tier_short_code
+   ) TO '/tmp/tier_result.csv' CSV HEADER;
+
+   \COPY (
+     SELECT scenario_short_code, tier_short_code, location_type, location_id,
+            location_name, tier_level, tier_value, display_order
+     FROM tier_location_result
+     WHERE tier_version_id = 8
+     ORDER BY scenario_short_code, tier_short_code, display_order
+   ) TO '/tmp/tier_location_result.csv' CSV HEADER;
+   ```
+   Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back
+   to `database/seed_tables/10_tier/`.
+
+> **Pre-flight a new scenario before flipping `is_active=1`.**
+> Both [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) and
+> [`scripts/verify_tiers.py`](scripts/verify_tiers.py) accept
+> `--scenarios-override sXXX,sYYY` as a per-invocation replacement for
+> `ACTIVE_SCENARIOS`. Use it to dry-run a tier load
+> (`--scenarios-override sXXX --dry-run`) or verify tier coverage
+> against the live API for a scenario that is not yet public. The
+> override is never persisted. To change `ACTIVE_SCENARIOS` itself, use
 > [`etl/ingestion/tools/set_scenario_active.py`](../ingestion/tools/set_scenario_active.py).
 > Each run emits a `WARNING` line naming the resolved override set.
+
+### Partial loads
+
+To load only a subset of tiers (e.g. after a single-tier data update):
+```bash
+python etl/tier_data/scripts/load_all_tier_results.py \
+    --only ENV_FLOWS,RES_STOR --output-sql partial.sql
+psql $DATABASE_URL -f etl/tier_data/output/partial.sql
+```
+Other tier rows are left alone (the UPSERT only touches the tiers in the
+generated SQL).
+
+### Direct DB apply (skip the SQL file)
+
+If you set `$DATABASE_URL`, the loader can apply directly without writing
+a file. Use this only for one-off backfills, not for routine loads -
+the file path keeps a reviewable record of what hit the DB:
+```bash
+DATABASE_URL=$DATABASE_URL python etl/tier_data/scripts/load_all_tier_results.py
+```
+
+### Notes
+
+- `tier_location_result` has no `is_active` column. Retired-scenario rows
+  stay in the table forever; the API hides them by filtering on
+  `tier_result.is_active`.
+- `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by
+  design - it's the CalSim id for the Legal Delta, which is both a WBA
+  (for groundwater accounting) and the polygon used by `DELTA_ECO`. The
+  composite uniqueness key keeps these rows distinct because the
+  `tier_short_code` differs. API routes that take a tier in the path
+  return only that tier's `DETAW` row; client code keying by
+  `location_id` across tiers should use `(tier_short_code, location_id)`.
+- Generated SQL lands in `etl/tier_data/output/` by default and that
+  whole tree is gitignored. Only the script and staging CSVs are tracked.
 
 ---
 
@@ -178,125 +327,3 @@ Each tier has a CSV file in `staging/` named by its short code. The formats diff
 | `WRC_SALMON_AB.csv` | `scenario`, `Tier_range` (string like `"Tier 4"`). `s0065` is excluded by the data team |
 
 NA cells in any CSV are skipped (no location row generated for that slot).
-
----
-
-## Workflow: loading new tier data
-
-### 1. Update staging CSVs locally
-
-Replace the files in `staging/` with the new data. Keep the filenames exactly as
-shown above. The staging directory is tracked in git so files can be pushed and pulled.
-
-### 2. Refresh the scenario allowlist if needed
-
-Run `python etl/ingestion/tools/refresh_active_scenarios.py` to regenerate `etl/common/active_scenarios.py` from the live API (`/api/scenarios`, `is_active=true` rows). That is the canonical source for `ALLOWED_SCENARIOS` in this script. If any scenarios are being retired, add them to `DEACTIVATED_SCENARIOS` in `scripts/load_all_tier_results.py`.
-
-### 3. Push from Cloud9
-
-Save `scripts/load_all_tier_results.py` and the updated CSVs. They will be committed and
-pushed automatically on save (via your git workflow).
-
-### 4. Pull on Cloud9
-
-```bash
-cd ~/environment/coeqwal-backend
-git pull
-```
-
-### 5. Dry run, verify counts
-
-```bash
-python etl/tier_data/scripts/load_all_tier_results.py --dry-run
-```
-
-Expected counts per scenario:
-
-| Tier | Location rows / scenario |
-|------|--------------------------|
-| CWS_DEL | ~76 (varies, NAs skipped) |
-| AG_REV | ~132 |
-| ENV_FLOWS | 17 |
-| RES_STOR | 8 |
-| GW_STOR | 42 |
-| DELTA_ECO | 1 |
-| FW_DELTA_USES | 2 (but 1 tier value reported) |
-| FW_EXP | 2 (but 1 tier value reported) |
-| WRC_SALMON_AB | 1 (s0065 excluded) |
-
-### 6. Generate SQL
-
-```bash
-python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
-```
-
-The bare filename is auto-routed into `etl/tier_data/output/all_tiers.sql`
-(gitignored). Pass an absolute or relative path containing `/` to write
-elsewhere.
-
-### 7. Apply to the database
-
-```bash
-psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
-```
-
-Check the two verification tables printed at the end:
-
-- `tier_result`: each tier should show `(active scenarios)` = count of non-retired
-  scenarios, and `(total scenarios)` = active + any retired ones.
-- `tier_location_result`: row counts should match `location rows / scenario` x number
-  of active scenarios (plus any legacy rows from retired scenarios, which are harmless).
-
-### 8. Update seed CSVs
-
-After a successful load, export the full tables back to replace the seed files
-so the database can be rebuilt from scratch:
-
-```sql
-\COPY (
-  SELECT scenario_short_code, tier_short_code,
-         tier_1_value, tier_2_value, tier_3_value, tier_4_value,
-         norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4,
-         total_value, single_tier_level
-  FROM tier_result
-  WHERE tier_version_id = 8
-  ORDER BY scenario_short_code, tier_short_code
-) TO '/tmp/tier_result.csv' CSV HEADER;
-
-\COPY (
-  SELECT scenario_short_code, tier_short_code, location_type, location_id,
-         location_name, tier_level, tier_value, display_order
-  FROM tier_location_result
-  WHERE tier_version_id = 8
-  ORDER BY scenario_short_code, tier_short_code, display_order
-) TO '/tmp/tier_location_result.csv' CSV HEADER;
-```
-
-Copy `/tmp/tier_result.csv` and `/tmp/tier_location_result.csv` back to
-`database/seed_tables/10_tier/`.
-
----
-
-## Notes
-
-- `TIER_VERSION_ID = 8` is hardcoded throughout. Do not change without data team sign-off.
-- Both UPSERTs are safe to re-run. They use `ON CONFLICT DO UPDATE`.
-- `tier_location_result` has no `is_active` column. Retired scenario rows remain in
-  the table but are never surfaced because the API filters on `tier_result.is_active`.
-- `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by design. It is the
-  CalSim id for the Legal Delta (from the DWR Delta Evapotranspiration of Applied Water
-  model), which geographically coincides with the Legal Delta polygon used by
-  `DELTA_ECO`. The `tier_location_result` uniqueness constraint is
-  `(scenario_short_code, tier_short_code, location_id, tier_version_id)`, so the same
-  `location_id` under different `tier_short_code` values is not a collision. API routes
-  that take a tier short code in the path (e.g. `/api/tier-map/{scenario}/{tier}/locations`)
-  return only that tier's `DETAW` row. Any client code that keys rows by `location_id`
-  across tiers should use the composite key `(tier_short_code, location_id)`.
-- Generated SQL lands in `etl/tier_data/output/` by default and that whole
-  directory is gitignored (see `etl/**/output/` in `.gitignore`). Only the
-  script and staging CSVs are tracked.
-- To load only specific tiers (e.g. after a partial data update):
-  ```bash
-  python etl/tier_data/scripts/load_all_tier_results.py --only ENV_FLOWS,RES_STOR --output-sql partial.sql
-  psql $DATABASE_URL -f etl/tier_data/output/partial.sql
-  ```
