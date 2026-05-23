@@ -299,6 +299,56 @@ def _discover_env_flows_files() -> List[Tuple[Path, str]]:
     return files
 
 
+def _ensure_unique_axes(df: pd.DataFrame, csv_path: Path) -> pd.DataFrame:
+    """Detect duplicate row or column labels in a tier staging frame.
+
+    Identical duplicates are dropped with a `NOTICE`. Conflicting
+    duplicates raise `ValueError` naming the labels so the upstream CSV
+    can be fixed. Without this, `df.loc[row, col]` silently returns a
+    Series on the duplicated axis and downstream `pd.isna(...)` blows up
+    with the unhelpful "truth value of a Series is ambiguous" error.
+    """
+    def _conflicts(frame: pd.DataFrame) -> bool:
+        # `.fillna('__NA__')` collapses NaN-vs-NaN, which would otherwise
+        # compare unequal under `.eq` and look like a conflict.
+        ref = frame.iloc[0].fillna('__NA__')
+        return not frame.fillna('__NA__').eq(ref).all().all()
+
+    if df.index.has_duplicates:
+        dup_labels = sorted({str(v) for v in df.index[df.index.duplicated()]})
+        conflicts = [d for d in dup_labels if _conflicts(df.loc[[d]])]
+        if conflicts:
+            raise ValueError(
+                f"{csv_path.name}: duplicate row labels with conflicting "
+                f"values: {conflicts}. Resolve in the upstream CSV "
+                f"(one row per scenario)."
+            )
+        print(
+            f"  NOTICE: {csv_path.name} has duplicate but identical rows "
+            f"for {dup_labels}; keeping first occurrence."
+        )
+        df = df[~df.index.duplicated(keep='first')]
+
+    if df.columns.has_duplicates:
+        dup_labels = sorted({str(v) for v in df.columns[df.columns.duplicated()]})
+        # Transpose so each duplicate group becomes consecutive rows; reuse
+        # the same row-conflict check.
+        conflicts = [d for d in dup_labels if _conflicts(df.loc[:, [d]].T)]
+        if conflicts:
+            raise ValueError(
+                f"{csv_path.name}: duplicate column labels with conflicting "
+                f"values: {conflicts}. Resolve in the upstream CSV "
+                f"(one column per location)."
+            )
+        print(
+            f"  NOTICE: {csv_path.name} has duplicate but identical columns "
+            f"for {dup_labels}; keeping first occurrence."
+        )
+        df = df.loc[:, ~df.columns.duplicated(keep='first')]
+
+    return df
+
+
 def _load_one_env_flows_file(csv_path: Path) -> pd.DataFrame:
     """
     Load a single ENV_FLOWS CSV and return a DataFrame with
@@ -308,6 +358,7 @@ def _load_one_env_flows_file(csv_path: Path) -> pd.DataFrame:
     the first-column values.
     """
     df = pd.read_csv(csv_path, index_col=0)
+    df = _ensure_unique_axes(df, csv_path)
     first_vals = [str(v) for v in df.index[:5]]
     rows_are_scenarios = all(v.startswith('s0') for v in first_vals)
     if rows_are_scenarios:
