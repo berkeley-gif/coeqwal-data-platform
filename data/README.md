@@ -11,10 +11,12 @@ Where to find the canonical data the backend depends on. Most of it lives outsid
 | Tier results | Derived scenario data | [COEQWAL Platform Content Summary](https://docs.google.com/spreadsheets/d/1xcQIR_J96-cs7BuCrXjznwkinLgxl-Pf9tA3mJ2GiyA/edit?gid=728051596#gid=728051596), **Tiers** tab, column I |
 | Statistics / outcomes | Derived statistical data. Listing in [COEQWAL Platform Content Summary](https://docs.google.com/spreadsheets/d/1xcQIR_J96-cs7BuCrXjznwkinLgxl-Pf9tA3mJ2GiyA/edit?gid=728051596#gid=728051596), **Outcomes** tab | Database (computed and loaded by the statistics ETL) |
 | Geoschematic | GIS source for nodes, arcs (channels), demand units, water budget areas, and watersheds. Loaded into the database and surfaced by the API as the map layer | [`berkeley-gif/coeqwal-gis-kart`](https://github.com/berkeley-gif/coeqwal-gis-kart) (separate Kart repo) |
+| CWS reference xlsx | Spring-2026 community water system delivery spreadsheets (tracked) | [`data/reference/cws/`](reference/cws/) |
 | Attribute data | Authoritative reference and entity definitions that give the scenario data its meaning: lookups, demand units, reservoirs, scenarios, hydroclimates, themes, tier definitions, and the version metadata that wires them all together | [`database/seed_tables/`](../database/seed_tables/), organized by schema layer (`00_versioning/`, `01_lookup/`, `02_network/`, `03_entity/`, `03_GIS/`, `03_outcome_framework/`, `04_variable/`, `04_calsim_data/`, `05_assumptions_operations/`, `06_scenario/`, `07_hydroclimate/`, `08_theme/`, `10_tier/`). Loaded via `psql \copy` from migrations |
 
 ## Related
 
 - [`etl/`](../etl/) - the production pipeline that pulls model runs and trend reports from Google Drive, extracts them, and computes statistics for the database
 - [`database/seed_tables/`](../database/seed_tables/) - the tracked seed CSVs that hold attribute and reference data
+- [`docs/database_geometry_pattern.md`](../docs/database_geometry_pattern.md) - where geometry columns live in the schema
 - [`docs/INFRASTRUCTURE.md`](../docs/INFRASTRUCTURE.md) - S3 bucket, Drive, and Cloud9 details (local-only)

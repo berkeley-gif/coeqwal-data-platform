@@ -59,6 +59,8 @@ rclone.conf
 !/data/raw/csv_from_CalSim_report_pdf/**
 !/data/raw/pdf_tables_from_CalSim_report/
 !/data/raw/pdf_tables_from_CalSim_report/**
+!/data/reference/
+!/data/reference/**
 /dss_processing
 
 # ETL staging and output directories

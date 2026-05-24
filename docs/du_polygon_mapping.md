@@ -10,6 +10,8 @@ Resolution rules: [`database/scripts/data_processing/du_gpkg_id_resolution.py`](
 
 Coverage scorecard: [`docs/du_geometry_gap.md`](du_geometry_gap.md)
 
+Geometry pattern (why some tables are separate): [`docs/database_geometry_pattern.md`](database_geometry_pattern.md)
+
 ---
 
 ## Source of truth
@@ -123,3 +125,38 @@ python database/scripts/data_processing/load_du_geometries.py --dry-run
 Compare `missing in gpkg` counts against this doc. When new polygons land
 in `du_4326.gpkg`, update or remove the corresponding Pattern C roadmap
 entry.
+
+---
+
+## Open decision: dissolved gpkg geometry (roadmap)
+
+**Current approach:** `du_4326.gpkg` ships one **dissolved** `MULTIPOLYGON`
+per `DU_ID`. The loader writes that footprint onto matching entity rows after
+`ST_MakeValid` / `ST_CollectionExtract` / `ST_Multi`.
+
+**Why this is not settled:**
+
+| Question | Concern |
+|---|---|
+| Dissolved vs multipart | A DU may comprise non-contiguous service areas. Dissolving merges them into one footprint and loses sub-area identity. |
+| gpkg vs entity grain | Entity rows come from CalSim tables. Gpkg labels sometimes differ (Pattern A/B alias/dissolve rules exist because of this). |
+| Tier map use case | Tier choropleths may need "largest system" footprint, union of PWS polygons, or WBA clip instead of CalSim DU dissolve. |
+| `has_gis_data` without `geom` | Entity tables existed for months with a boolean flag but no geometry column until migration 56. |
+
+**Do not run `load_du_geometries.py` on production until the team picks a
+geometry policy.** Acceptable outcomes include:
+
+1. Keep dissolved gpkg as reference footprint (current loader).
+2. Store undissolved multipart geometries (separate column or child table).
+3. Link to PWS/community polygons from the CWS delivery instead of DU dissolve.
+4. Centroid-only for some DU categories (xlsx lat/long path, separate from polygons).
+
+**Work for a future developer:**
+
+1. Document the tier-map rendering requirement (union vs dissolve vs point).
+2. Compare dissolved gpkg area to WBA and PWS coverage for sample DUs.
+3. Decide whether `geom` on entity tables is the long-term home or a staging column.
+4. If policy changes, update migration 56 comments and this doc before loading RDS.
+
+Loader and migration remain in the repo as **optional bootstrap tools**, not
+an approved production default.

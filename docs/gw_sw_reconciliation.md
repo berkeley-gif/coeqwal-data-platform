@@ -1,287 +1,86 @@
-# gw/sw reconciliation walkthrough
+# gw/sw reconciliation (deferred)
 
-Step-by-step guide for urban and agricultural demand-unit groundwater (gw)
-and surface-water (sw) flags. Work case by case until patterns are clear.
+**Resolution (May 2026):** `du_urban_entity.gw` and `.sw` are **BOOLEAN**
+(migration `57_du_urban_gw_sw_boolean.sql`). Seed CSV uses `true`/`false`/empty.
 
-**Reconciliation script:** [`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py)
+**Value reconciliation is deferred.** Do not bulk-change gw/sw to match Kristin
+xlsx until the team picks tier rules per id. This doc and the audit script
+remain reference material.
 
----
-
-## Step 0: What we are comparing
-
-Each urban DU row carries two binary flags:
-
-| Column | Meaning |
-|---|---|
-| `gw` | Demand unit has groundwater-supplied systems |
-| `sw` | Demand unit has surface-water-supplied systems |
-
-Both can be `1` (mixed sources). Values are stored as `'0'`/`'1'` strings in
-seed CSVs today. A planned migration will move them to `BOOLEAN`.
-
-**Sources:**
-
-| Source | File | Notes |
-|---|---|---|
-| Seed (committed) | `database/seed_tables/04_calsim_data/du_urban_entity.csv` | Current DB reference |
-| Team M&I xlsx | `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx` | `gw_su`, `sw_du`, optional `Notes` |
-| CalSim PDF flat | `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_du_calsim_report.csv` | One row per community/system |
-| CalSim PDF rollup | `urban_du_calsim_report_rollup.csv` | DU-level OR rollup (partial) |
-| CalSim PDF text | `urban_du_calsim_report_text.txt` | 9 pages, Table 3-7 layout reference |
-
-Ag gw/sw comes from CalSim Tables 3-3 (SAC) and 3-6 (SJR) only. Tables 3-4
-and 3-5 list diversion arcs and have **no** gw/sw columns.
-
----
-
-## Step 1: Run the reconciliation script
+**Audit script (informational):**
+[`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py)
 
 ```bash
-cd ~/environment/coeqwal-backend   # or local coeqwal-backend root
-
-python etl/tier_data/scripts/reconcile_gw_sw_sources.py
-
-python etl/tier_data/scripts/reconcile_gw_sw_sources.py \
-  --csv-out /tmp/urban_gw_sw_audit.csv
+# Write audit CSV into the repo (not /tmp):
+python etl/tier_data/scripts/reconcile_gw_sw_sources.py --csv-out
 ```
 
-Open `/tmp/urban_gw_sw_audit.csv` in a spreadsheet. Sort by `seed_xlsx_agree`
-and `pattern`.
+Output: `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_gw_sw_audit.csv`
 
-**Expected baseline (May 2026):**
+**Requires current repo** (includes `urban_demand_unit_water_sources.csv`). If
+you see "PDF flat/OR extract covers 14 du_ids", you are on an old revision.
+Run `git pull`.
 
-| Check | Result |
+---
+
+## Sources
+
+| Source | File |
 |---|---|
-| Urban seed vs xlsx overlap | 120 ids |
-| Agree | 88 |
-| Disagree | 32 |
-| Ag SAC 3-3 vs seed | 82/82 agree |
-| Ag SJR 3-6 vs seed | 62/62 agree |
+| Seed | `database/seed_tables/04_calsim_data/du_urban_entity.csv` |
+| CalSim manual (Table 3-7 OR) | `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_demand_unit_water_sources.csv` |
+| Kristin xlsx | `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx` |
+| CWS delivery xlsx | `data/reference/cws/` |
 
-This is **not** a formatting problem. Both sides use clean `'0'`/`'1'`.
+Ag SAC Table 3-3 and SJR Table 3-6 match seed 100%. Tables 3-4 and 3-5 have no
+gw/sw columns.
 
 ---
 
-## Step 2: Understand why urban rows disagree
+## Baseline (when manual CSV and latest script are present)
 
-CalSim Table 3-7 lists **multiple communities per demand unit**. Each
-community row has its own gw/sw dots in the PDF. The seed CSV stores **one**
-gw/sw pair per DU. That pair may have been taken from:
+| Comparison | Agree | Disagree |
+|---|---:|---:|
+| CalSim manual vs seed | 99/107 | 8 |
+| CalSim manual vs Kristin xlsx | 82/110 | 28 |
+| Seed vs Kristin xlsx | 88/120 | 32 |
 
-- a single "primary" community row,
-- a summary interpretation, or
-- geopackage-only ingest with empty gw/sw (4 seed rows).
+Seed mostly tracks **CalSim manual**, not Kristin xlsx.
 
-The team xlsx often applies different rules, for example:
+---
 
-- OR across communities: if any system is gw, mark `gw=1`
-- Tier analysis override: set `sw=0` even when CalSim shows SW delivery
-- Explicit Notes override (see `03_PU3`, `71_NU`, `72_NU`)
+## Kristin spreadsheet vs CalSim manual
 
-**Disagreement patterns among the 32 rows:**
-
-| Pattern | Count | Typical meaning |
+| Pattern | Kristin vs CalSim | Examples |
 |---|---|---|
-| `xlsx_adds_gw` | 8 | xlsx marks GW where seed had GW=0 |
-| `xlsx_clears_sw` | 5 | xlsx sets SW=0 where seed had SW=1 |
-| `seed_empty` | 4 | seed gw/sw blank, xlsx fills values |
-| `mixed` | 15 | both flags change |
+| Adds gw | gw=1 where CalSim gw=0 | `02_PU`, `13_NU1`, `24_NU1` |
+| Clears sw | sw=0 where CalSim sw=1 | `15N_NU`, `71_PU1`, `61_NU1` |
+| Clears gw | gw=0 where CalSim gw=1 | `CLLPT`, `PLMAS`, `NAPA2` |
+| Both change | mixed | `03_PU3`, `60N_PU` |
+| xlsx-only ids | not in Table 3-7 | `ACFC`, `KCWA`, `SBCWD` |
 
 ---
 
-## Step 3: Resolve what we can now (evidence-backed)
+## Roadmap (when reconciliation resumes)
 
-These rows have **partial PDF extract coverage** where xlsx and PDF OR-rollup
-agree and seed differs. Safe candidates to update seed after a quick visual
-check against Table 3-7:
+### PDF-backed seed fixes (candidate)
 
-| du_id | seed | xlsx | PDF OR | Action |
-|---|---|---|---|---|
-| `02_PU` | (0,1) | (1,1) | (1,1) | Set seed gw=1 |
-| `24_NU1` | (0,1) | (1,1) | (1,1) | Set seed gw=1 |
-| `62_NU` | (1,0) | (1,1) | (1,1) | Set seed sw=1 |
+`03_PU1`, `24_NU4`, `26N_NU5`, `26N_PU1`, `26S_PU2` (seed wrong vs CalSim).
 
-**Team Notes override (needs explicit sign-off, not PDF OR alone):**
+Triple disagreement: `60N_NU2`, `90_PU`. Blank in CalSim: `NAPA2`.
 
-| du_id | seed | xlsx | Note |
-|---|---|---|---|
-| `03_PU3` | (0,1) | (1,0) | James: not in CalSim for SW deliveries |
+### Team sign-off
 
-`71_NU` and `72_NU` agree between seed and xlsx but have Notes questioning
-CalSim SW attribution. No seed change needed unless the team revises gw/sw.
+**`03_PU3`:** CalSim/seed `(sw=true)` vs Kristin `(sw=false)`. James note:
+ignore SW for tier analysis. Pending M&I team.
 
-**Ag:** no seed changes needed. SAC and SJR PDF extracts match seed 100%.
+### After decisions
+
+Update seed, reload RDS, re-run audit script.
 
 ---
 
-## Step 4: Complete the urban PDF extract (your manual task)
+## Polygon geometry (separate)
 
-The flat CSV currently covers **14 du_ids** (124 community rows). The text
-extract spans **9 PDF pages** and lists roughly **123 du_ids**. You need a
-complete community-level CSV before most disagreements can be verified.
-
-### 4a. Source PDF
-
-`data/raw/pdf_tables_from_CalSim_report/urban_du.pdf` (Table 3-7 and
-continuation tables in other hydrologic regions if present).
-
-If the PDF is not on your machine, copy it from the shared CalSim report
-bundle or extract from the committed text file layout.
-
-### 4b. Target CSV schema
-
-Match the existing flat extract columns:
-
-```csv
-page,du_id,communities,id_pwsid_like,gw_bool,sw_bool,point_of_diversion
-```
-
-- `page`: PDF page number (1-9 for SAC region start)
-- `du_id`: demand unit id as printed in the PDF (e.g. `02_PU`, `26N_NU4`)
-- `communities`: community / agency label from the row
-- `id_pwsid_like`: numeric id from PDF footnote column (PWSID-like, not verified)
-- `gw_bool`: `1` if GW dot present, else `0`
-- `sw_bool`: `1` if SW dot present, else `0`
-- `point_of_diversion`: text from last column
-
-Save as:
-
-`data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_du_calsim_report.csv`
-
-Overwrite or version the partial file once complete.
-
-### 4c. Optional automated assist
-
-```bash
-cd ~/coeqwal-backend/scripts/pdf_scraper
-source venv/bin/activate
-
-python extract_tables_to_csv.py \
-  --input ../../data/raw/pdf_tables_from_CalSim_report/urban_du.pdf \
-  --pages 1-9 \
-  --headers "Demand Unit,Cities Towns and Communities,ID,GW,SW,Point of Diversion" \
-  --output ../../data/raw/csv_from_CalSim_report_pdf/du+diversion/ \
-  --verbose
-```
-
-Expect manual cleanup. Table 3-7 uses multi-line cells and merged DU id rows.
-Use `urban_du_calsim_report_text.txt` as a line-by-line reference while editing.
-
-### 4d. Build the DU-level OR rollup
-
-For each `du_id`:
-
-```
-gw_or = 1 if ANY community row has gw_bool=1 else 0
-sw_or = 1 if ANY community row has sw_bool=1 else 0
-```
-
-Save rollup as `urban_du_calsim_report_rollup.csv`:
-
-```csv
-du_id,gw_pdf,sw_pdf,n_systems_pdf
-02_PU,1,1,8
-```
-
-The reconcile script computes OR from the flat file automatically and merges
-any pre-built rollup file.
-
-### 4e. Re-run reconcile and fill the audit spreadsheet
-
-```bash
-python etl/tier_data/scripts/reconcile_gw_sw_sources.py \
-  --csv-out /tmp/urban_gw_sw_audit_v2.csv
-```
-
-For each remaining disagreement, add a column `decision` with one of:
-
-| decision | Meaning |
-|---|---|
-| `keep_seed` | Seed matches intended tier rule |
-| `use_xlsx` | Apply team xlsx value |
-| `use_pdf_or` | Apply PDF OR rollup |
-| `override` | Custom value with note (cite xlsx Notes or team thread) |
-| `defer` | Still unclear, stays on roadmap |
-
----
-
-## Step 5: Define rollup rules (document before bulk seed edit)
-
-Write the rule you used for each bucket:
-
-1. **Default for multi-community DUs:** OR across communities (matches
-   CalSim "any system has this source" interpretation).
-2. **Team xlsx overrides:** when `Notes` column documents tier-analysis
-   intent (e.g. ignore SW for units not in CalSim SW delivery).
-3. **Seed empty rows:** prefer PDF OR if present, else xlsx, else leave null
-   until verified.
-
-Special cases to decide explicitly:
-
-- Cryptic ids (`CLLPT`, `NAPA2`, `PLMAS`, `ELDID_NU3`): confirm they appear
-  in Table 3-7 or a continuation table.
-- Rows where xlsx clears SW but PDF OR keeps SW=1: tier rule vs CalSim literal.
-
----
-
-## Step 6: Update seed CSV
-
-Edit `database/seed_tables/04_calsim_data/du_urban_entity.csv` only for rows
-with a recorded `decision`. Keep `source` accurate:
-
-- `calsim_report` when values trace to PDF
-- add `mi_team_xlsx` when xlsx override applies (comma-separated if multiple)
-
-Example change for `02_PU`:
-
-```csv
-"02_PU",...,"1","1",...
-```
-
-Reload seed to RDS using your usual seed refresh path, then re-run monthly
-audit or spot-check `du_urban_entity` gw/sw columns.
-
----
-
-## Step 7: BOOLEAN migration (after seed is stable)
-
-Tracked in [`docs/statistics_roadmap.md`](statistics_roadmap.md) and Section
-1 Phase 1.4a of the finish plan.
-
-1. SQL migration: `VARCHAR(5)` to `BOOLEAN NULL` on `du_urban_entity.gw/sw`
-   (and ag/refuge if applicable).
-2. Update seed CSVs to `true`/`false` or empty.
-3. Reader audit: ETL tier scripts, API serializers, frontend consumers.
-
-Do not start BOOL migration until Step 6 disagreements are resolved or
-explicitly deferred with documented defaults.
-
----
-
-## Roadmap (remaining work)
-
-| Item | Owner | Blocker |
-|---|---|---|
-| Complete urban Table 3-7 flat CSV (111+ missing du_ids) | Manual extract | PDF access + cleanup time |
-| Case-by-case decisions for 29 disagreements without PDF row | Team | Flat CSV |
-| `03_PU3` override sign-off | James / M&I team | Notes already captured |
-| Cryptic urban ids gw/sw (`CLLPT`, `NAPA2`, etc.) | Team | Locate in PDF region tables |
-| `du_urban_entity.csv` seed update | Dev | Decisions spreadsheet |
-| `gw`/`sw` BOOLEAN migration | Dev | Stable seed |
-| xlsx lat/long ingest (separate from gw/sw) | Phase 1.4d | Out of scope here |
-
----
-
-## Polygon loader clarification (separate from gw/sw)
-
-Migration `database/scripts/sql/56_add_du_geometry_columns.sql` adds
-`geom`, `geom_wkt`, and `srid` to the **existing demand-unit entity tables**:
-
-- `du_urban_entity`
-- `du_agriculture_entity`
-- `du_refuge_entity`
-
-Polygons are not a new table. The loader matches `du_id` from
-`database/seed_tables/03_GIS/du_4326.gpkg` and writes the dissolved footprint
-into whichever entity row already exists for that id. See
-[`load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py).
+See [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) and
+[`docs/du_polygon_mapping.md`](du_polygon_mapping.md).

@@ -41,8 +41,8 @@ CREATE TABLE du_urban_entity (
 
     -- Urban-specific attributes
     community_agency TEXT,                       -- Community/agency served
-    gw VARCHAR(5),                               -- Groundwater (0/1)
-    sw VARCHAR(5),                               -- Surface water (0/1)
+    gw BOOLEAN,                                  -- Groundwater (CalSim Table 3-7)
+    sw BOOLEAN,                                  -- Surface water (CalSim Table 3-7)
     point_of_diversion TEXT,                     -- Point of diversion description
 
     -- Source tracking

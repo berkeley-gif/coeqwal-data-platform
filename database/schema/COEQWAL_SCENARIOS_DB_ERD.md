@@ -723,8 +723,8 @@ Columns:
   total_acres                    numeric             
   polygon_count                  integer             
   community_agency               text                
-  gw                             character varying   
-  sw                             character varying   
+  gw                             boolean             
+  sw                             boolean             
   point_of_diversion             text                
   source                         character varying   
   model_source                   character varying   

@@ -57,13 +57,24 @@ and [`docs/VERIFICATION.md`](VERIFICATION.md).
 
 ---
 
-## gw/sw classification reconciliation
+## gw/sw classification reconciliation (deferred)
 
 | | |
 |---|---|
 | **Script** | [`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py) |
 | **Walkthrough** | [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md) |
-| **When** | Before updating `du_urban_entity` gw/sw seed or BOOL migration |
+| **When** | Informational until value reconciliation resumes |
+| **CSV output** | `python etl/tier_data/scripts/reconcile_gw_sw_sources.py --csv-out` (no path = writes under `data/raw/.../urban_gw_sw_audit.csv`). Do not use `/tmp` on Cloud9. |
+| **Type migration** | [`database/scripts/sql/57_du_urban_gw_sw_boolean.sql`](../database/scripts/sql/57_du_urban_gw_sw_boolean.sql) |
+
+---
+
+## Database geometry
+
+| | |
+|---|---|
+| **Doc** | [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) |
+| **DU polygons** | Open decision. Do not load until policy chosen. |
 
 ---
 

@@ -3,11 +3,12 @@
 
 Urban sources:
   - Seed: database/seed_tables/04_calsim_data/du_urban_entity.csv
-  - M&I team xlsx: etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx
+  - M&I team xlsx (Kristin): etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx
     (columns gw_su, sw_du, optional Notes)
-  - CalSim PDF flat extract (partial): data/raw/csv_from_CalSim_report_pdf/du+diversion/
-    urban_du_calsim_report.csv (community rows; OR rollup computed in-script)
-  - CalSim PDF rollup file (partial): urban_du_calsim_report_rollup.csv
+  - CalSim manual OR rollup (Table 3-7):
+    data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_demand_unit_water_sources.csv
+  - Legacy partial extracts (superseded when manual CSV present):
+    urban_du_calsim_report.csv, urban_du_calsim_report_rollup.csv
 
 Ag sources (only PDF tables that include gw/sw columns):
   - Seed: database/seed_tables/04_calsim_data/du_agriculture_entity.csv
@@ -18,11 +19,19 @@ Ag PDF tables 3-4 and 3-5 list diversion arcs only. They have no gw/sw
 columns and are not compared here.
 
 Urban disagreements are usually semantic (rollup rule, team overrides),
-not formatting. Both seed and xlsx use clean '0'/'1' strings.
+not formatting. Seed CSV uses true/false; xlsx still uses 0/1.
+
+This script is informational while gw/sw value reconciliation is deferred.
+See docs/gw_sw_reconciliation.md.
 
 Usage:
     python etl/tier_data/scripts/reconcile_gw_sw_sources.py
-    python etl/tier_data/scripts/reconcile_gw_sw_sources.py --csv-out /tmp/gw_sw_audit.csv
+    python etl/tier_data/scripts/reconcile_gw_sw_sources.py --csv-out
+    python etl/tier_data/scripts/reconcile_gw_sw_sources.py --csv-out \
+      data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_gw_sw_audit.csv
+
+On Cloud9, /tmp is the instance temp directory and is not in the repo. Use a
+path under the repo if you want the CSV to persist or download.
 """
 
 from __future__ import annotations
@@ -38,8 +47,10 @@ SEED_URBAN = REPO / "database/seed_tables/04_calsim_data/du_urban_entity.csv"
 XLSX_URBAN = REPO / "etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx"
 SEED_AG = REPO / "database/seed_tables/04_calsim_data/du_agriculture_entity.csv"
 PDF_DIR = REPO / "data/raw/csv_from_CalSim_report_pdf/du+diversion"
+PDF_URBAN_MANUAL = PDF_DIR / "urban_demand_unit_water_sources.csv"
 PDF_URBAN_FLAT = PDF_DIR / "urban_du_calsim_report.csv"
 PDF_URBAN_ROLLUP = PDF_DIR / "urban_du_calsim_report_rollup.csv"
+DEFAULT_CSV_OUT = PDF_DIR / "urban_gw_sw_audit.csv"
 PDF_AG_SAC = PDF_DIR / "ag_demand_units_sac_calsim_report_Table_3-3.csv"
 PDF_AG_SJR = PDF_DIR / "ag_demand_units_sjr_calsim_report_Table_3-6.csv"
 
@@ -141,6 +152,54 @@ def _load_pdf_rollup(path: Path) -> dict[str, tuple[str, str, int]]:
     return out
 
 
+def _load_pdf_manual(path: Path) -> dict[str, tuple[str, str, int]]:
+    """DU-level OR rollup from Table 3-7 manual extract."""
+    if not path.exists():
+        return {}
+    out: dict[str, tuple[str, str, int]] = {}
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            du_id = row["du_id"].strip()
+            out[du_id] = (
+                _norm_flag(row.get("gw_pdf")),
+                _norm_flag(row.get("sw_pdf")),
+                0,
+            )
+    return out
+
+
+def _load_pdf_or_sources() -> dict[str, tuple[str, str, int]]:
+    """Prefer manual Table 3-7 CSV, then legacy partial extracts."""
+    pdf_or = _load_pdf_manual(PDF_URBAN_MANUAL)
+    source = "manual Table 3-7 CSV" if pdf_or else "legacy partial extract"
+    if not pdf_or:
+        pdf_or = _or_rollup_from_flat(PDF_URBAN_FLAT)
+        for du_id, triple in _load_pdf_rollup(PDF_URBAN_ROLLUP).items():
+            pdf_or.setdefault(du_id, triple)
+    return pdf_or, source
+
+
+def _print_pairwise(
+    label: str,
+    left: dict[str, tuple[str, str, str]] | dict[str, tuple[str, str]],
+    right: dict[str, tuple[str, str, str]] | dict[str, tuple[str, str]],
+    left_name: str,
+    right_name: str,
+) -> None:
+    def flags(d: dict, k: str) -> tuple[str, str]:
+        v = d[k]
+        return (v[0], v[1]) if len(v) >= 2 else ("", "")
+
+    both = sorted(set(left) & set(right))
+    agree = sum(1 for d in both if flags(left, d) == flags(right, d))
+    print(f"\n=== {label} ===")
+    print(f"  {left_name} rows:  {len(left)}")
+    print(f"  {right_name} rows: {len(right)}")
+    print(f"  overlap:       {len(both)}")
+    print(f"  agree:         {agree}")
+    print(f"  disagree:      {len(both) - agree}")
+
+
 def _classify_urban_disagreement(
     seed_gw: str,
     seed_sw: str,
@@ -232,22 +291,39 @@ def _compare_urban(
         for k, v in sorted(patterns.items()):
             print(f"    {k}: {v}")
 
-    resolvable = [
+    seed_pdf_fixes = [
+        r
+        for r in rows
+        if r["in_pdf_extract"]
+        and r["seed_pdf_agree"] is False
+        and r["pdf_or_gw"] != ""
+    ]
+    if seed_pdf_fixes:
+        print("\n  Seed differs from CalSim manual (PDF-backed seed fixes):")
+        for r in seed_pdf_fixes:
+            print(
+                f"    {r['du_id']:14s} seed=({r['seed_gw']},{r['seed_sw']}) "
+                f"pdf=({r['pdf_or_gw']},{r['pdf_or_sw']}) "
+                f"xlsx=({r['xlsx_gw_su']},{r['xlsx_sw_du']})"
+            )
+
+    pdf_seed_xlsx = [
         r
         for r in rows
         if not r["seed_xlsx_agree"]
         and r["in_pdf_extract"]
-        and r["xlsx_pdf_agree"] is True
-        and r["seed_pdf_agree"] is False
+        and r["seed_pdf_agree"] is True
+        and r["xlsx_pdf_agree"] is False
     ]
-    if resolvable:
-        print("\n  Likely seed fixes (xlsx and PDF OR agree, seed differs):")
-        for r in resolvable:
+    if pdf_seed_xlsx:
+        print("\n  Seed matches CalSim manual, Kristin xlsx differs:")
+        for r in pdf_seed_xlsx[:15]:
             print(
-                f"    {r['du_id']:14s} seed=({r['seed_gw']},{r['seed_sw']}) "
-                f"-> ({r['xlsx_gw_su']},{r['xlsx_sw_du']}) "
-                f"[pdf n={r['pdf_n_systems']}]"
+                f"    {r['du_id']:14s} pdf/seed=({r['pdf_or_gw']},{r['pdf_or_sw']}) "
+                f"xlsx=({r['xlsx_gw_su']},{r['xlsx_sw_du']})"
             )
+        if len(pdf_seed_xlsx) > 15:
+            print(f"    ... +{len(pdf_seed_xlsx) - 15} more")
 
     noted = [r for r in rows if r["xlsx_note"] and not r["seed_xlsx_agree"]]
     if noted:
@@ -324,7 +400,13 @@ def main() -> int:
     parser.add_argument(
         "--csv-out",
         type=Path,
-        help="Write full urban reconciliation matrix to CSV",
+        nargs="?",
+        const=DEFAULT_CSV_OUT,
+        default=None,
+        help=(
+            "Write full urban reconciliation matrix to CSV. "
+            f"If flag given with no path, writes {DEFAULT_CSV_OUT.relative_to(REPO)}"
+        ),
     )
     args = parser.parse_args()
 
@@ -338,9 +420,26 @@ def main() -> int:
     seed = _load_seed_urban()
     xlsx, notes = _load_xlsx_urban()
 
-    pdf_or = _or_rollup_from_flat(PDF_URBAN_FLAT)
-    for du_id, (gw, sw, n) in _load_pdf_rollup(PDF_URBAN_ROLLUP).items():
-        pdf_or.setdefault(du_id, (gw, sw, n))
+    pdf_or, pdf_source = _load_pdf_or_sources()
+    print(f"=== CalSim PDF source: {pdf_source} ({len(pdf_or)} du_ids) ===")
+
+    seed_flags = {k: (v[0], v[1]) for k, v in seed.items()}
+    xlsx_flags = xlsx
+    pdf_flags = {k: (v[0], v[1]) for k, v in pdf_or.items()}
+    _print_pairwise(
+        "Urban gw/sw: CalSim manual vs seed",
+        pdf_flags,
+        seed_flags,
+        "PDF",
+        "seed",
+    )
+    _print_pairwise(
+        "Urban gw/sw: CalSim manual vs Kristin xlsx",
+        pdf_flags,
+        xlsx_flags,
+        "PDF",
+        "xlsx",
+    )
 
     urban_rows = _compare_urban(seed, xlsx, notes, pdf_or)
 
@@ -378,8 +477,8 @@ def main() -> int:
         print(f"\nWrote {len(urban_rows)} urban rows to {args.csv_out}")
 
     print(
-        "\nNext: complete urban Table 3-7 PDF extract (see docs/gw_sw_reconciliation.md), "
-        "resolve disagreements case by case, then update seed and run BOOL migration."
+        "\nSee docs/gw_sw_reconciliation.md for Kristin vs CalSim manual patterns "
+        "and case-by-case resolution. BOOL migration waits on stable seed."
     )
     return 0
 

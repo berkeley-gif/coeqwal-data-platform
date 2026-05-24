@@ -75,6 +75,15 @@ self-intersections, duplicated vertices, etc.):
     `geometry(MultiPolygon, 4326)` and the `ST_GeometryType` check
     in `validate_writes`.
 
+Prerequisite (once per database): run
+`database/scripts/sql/56_add_du_geometry_columns.sql` so
+`du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity` each
+have `geom`, `geom_wkt`, and `srid` columns. The original CREATE TABLE
+scripts for these tables (CSV attribute ingest only) predate geometry
+columns. They set `has_gis_data` but not `geom`. Migration 56 is an
+additive step. Whether dissolved gpkg footprints are the right geometry
+choice is an open decision. See `docs/du_polygon_mapping.md` and
+`docs/database_geometry_pattern.md`.
 
 Read-only companion (audit / drift scorecard):
 `etl/tier_data/scripts/audit_tier_location_geometry.py`. Persistent roster of

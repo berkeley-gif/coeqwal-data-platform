@@ -51,44 +51,38 @@ plus NOD/SOD splits. CVP has `cvp_nod` and `cvp_sod` only. No `cvp_total`.
 
 ## `gw` / `sw` BOOLEAN migration
 
-**Current:** `du_urban_entity.gw` and `.sw` are `VARCHAR(5)` with `'0'`/`'1'`.
+**Status:** migration and seed CSV updated (May 2026). Apply on RDS:
 
-**Target:** `BOOLEAN NULL` with reader audit across ETL and API.
+```bash
+psql "$DATABASE_URL" -f database/scripts/sql/57_du_urban_gw_sw_boolean.sql
+```
 
-Tracked in Section 1 Phase 1.4a of the finish plan.
+Then reload `database/seed_tables/04_calsim_data/du_urban_entity.csv` (gw/sw are
+`true`/`false`/empty). Ag and refuge entity tables already used BOOLEAN.
 
----
-
-## Reference data sources for gw/sw
-
-| Source | Location | Role |
-|---|---|---|
-| Seed CSV | `database/seed_tables/04_calsim_data/du_urban_entity.csv` | Current committed reference |
-| CalSim report PDF | `data/raw/pdf_tables_from_CalSim_report/urban_du.pdf` | Upstream source for urban gw/sw |
-| Ag PDF extracts | `data/raw/csv_from_CalSim_report_pdf/du+diversion/*.csv` | Upstream for ag gw/sw |
-| M&I team xlsx | `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx` | Team refresh, may override seed |
-
-Reconciliation script:
-[`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py)
+**Reader audit:** API routes return booleans from DB. ETL statistics scripts
+coerce with `== "1"` when reading CSV. No code change required for DB reads.
 
 ---
 
-## Urban gw/sw reconciliation (in progress)
+## Urban gw/sw value reconciliation (deferred)
+
+**Do not bulk-update seed gw/sw values** until the team resolves CalSim manual
+vs Kristin xlsx vs tier rules. The audit script remains for investigation only.
 
 **Walkthrough:** [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md)
 
-**Status (May 2026):**
-- Urban seed vs M&I xlsx: 88/120 agree, **32 disagree** (semantic, not format)
-- Ag SAC Table 3-3 vs seed: 82/82 agree
-- Ag SJR Table 3-6 vs seed: 62/62 agree
-- Urban PDF flat extract: **14 du_ids** only (need full Table 3-7, ~123 ids)
-- 3 disagreements resolvable now where xlsx and PDF OR agree (`02_PU`, `24_NU1`, `62_NU`)
+**Reference data on disk:**
+- CalSim manual OR rollup: `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_demand_unit_water_sources.csv`
+- Kristin xlsx: `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx`
+- CWS delivery xlsx: [`data/reference/cws/`](../data/reference/cws/) (move from `audits/cws/`)
 
-**Remaining:**
-1. Complete `urban_du_calsim_report.csv` from `urban_du.pdf` (9 pages)
-2. Case-by-case decisions for other 29 disagreements
-3. Update `du_urban_entity.csv` seed
-4. Then `gw`/`sw` BOOLEAN migration (Phase 1.4a)
+**Open items:** `03_PU3` James sign-off, 24 Kristin-vs-CalSim ids, `NAPA2` blank cells.
 
-Ag PDF tables 3-4 and 3-5 have no gw/sw columns (diversion arcs only).
-Do not compare them to seed gw/sw.
+---
+
+## DU polygon geometry (open decision)
+
+Dissolved gpkg footprints on entity tables are **not approved** for
+production loading until the team decides footprint policy. See
+[`docs/du_polygon_mapping.md`](du_polygon_mapping.md) (Open decision section).
