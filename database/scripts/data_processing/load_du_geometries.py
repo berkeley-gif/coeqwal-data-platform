@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-load_du_geometries.py - load dissolved demand-unit polygons into the
-`du_*_entity` tables from `database/seed_tables/03_GIS/du_4326.gpkg`.
+load_du_geometries.py - load dissolved demand-unit polygons from
+`database/seed_tables/03_GIS/du_4326.gpkg`.
+
+DEPRECATED: writes to du_*_entity.geom columns (migration 56 spike). Project
+policy requires dedicated geometry tables instead. See
+docs/database_geometry_pattern.md. Do not run on production until refactored.
 
 This is a bootstrap loader for reference data, paired with
 `database/scripts/sql/56_add_du_geometry_columns.sql`. It is not part
@@ -78,12 +82,9 @@ self-intersections, duplicated vertices, etc.):
 Prerequisite (once per database): run
 `database/scripts/sql/56_add_du_geometry_columns.sql` so
 `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity` each
-have `geom`, `geom_wkt`, and `srid` columns. The original CREATE TABLE
-scripts for these tables (CSV attribute ingest only) predate geometry
-columns. They set `has_gis_data` but not `geom`. Migration 56 is an
-additive step. Whether dissolved gpkg footprints are the right geometry
-choice is an open decision. See `docs/du_polygon_mapping.md` and
-`docs/database_geometry_pattern.md`.
+have `geom`, `geom_wkt`, and `srid` columns. **This prerequisite is part of
+the deprecated spike.** New work should create dedicated geometry tables
+instead. See `docs/database_geometry_pattern.md`.
 
 Read-only companion (audit / drift scorecard):
 `etl/tier_data/scripts/audit_tier_location_geometry.py`. Persistent roster of

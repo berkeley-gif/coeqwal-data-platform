@@ -25,6 +25,10 @@ Geometry pattern (why some tables are separate): [`docs/database_geometry_patter
 The loader writes gpkg polygons into whichever entity table already contains
 the matching `du_id`. It does not create entity rows.
 
+**Deprecated:** geometry must move to dedicated tables (see
+`docs/database_geometry_pattern.md`). Do not run this loader on production
+until it targets those tables instead of entity rows.
+
 ---
 
 ## Pattern A - alias (trailing-digit / name mismatch)
@@ -128,35 +132,34 @@ entry.
 
 ---
 
-## Open decision: dissolved gpkg geometry (roadmap)
+## Action item: dedicated geometry tables (not entity columns)
 
-**Current approach:** `du_4326.gpkg` ships one **dissolved** `MULTIPOLYGON`
-per `DU_ID`. The loader writes that footprint onto matching entity rows after
-`ST_MakeValid` / `ST_CollectionExtract` / `ST_Multi`.
+**Decision:** all geometry belongs in dedicated tables, same pattern as
+`reservoir` + `reservoir_entity`. Entity-table `geom` columns from migration 56
+were a mistake. See [`docs/database_geometry_pattern.md`](database_geometry_pattern.md).
 
-**Why this is not settled:**
+**Do not run `load_du_geometries.py` on production** until dedicated
+`du_urban` / `du_agriculture` / `du_refuge` geometry tables exist and
+[`tier_location_entities.py`](../etl/common/tier_location_entities.py) points at them.
+
+### Footprint source (still open)
+
+`du_4326.gpkg` ships one dissolved `MULTIPOLYGON` per `DU_ID`. Questions for
+the loader that writes the **dedicated** geometry tables:
 
 | Question | Concern |
 |---|---|
-| Dissolved vs multipart | A DU may comprise non-contiguous service areas. Dissolving merges them into one footprint and loses sub-area identity. |
-| gpkg vs entity grain | Entity rows come from CalSim tables. Gpkg labels sometimes differ (Pattern A/B alias/dissolve rules exist because of this). |
-| Tier map use case | Tier choropleths may need "largest system" footprint, union of PWS polygons, or WBA clip instead of CalSim DU dissolve. |
-| `has_gis_data` without `geom` | Entity tables existed for months with a boolean flag but no geometry column until migration 56. |
+| Dissolved vs multipart | Non-contiguous service areas lose sub-area identity when dissolved |
+| gpkg vs entity grain | Pattern A/B alias/dissolve rules exist because gpkg labels differ from entity ids |
+| Tier map use case | Choropleths may need PWS union or WBA clip instead of CalSim DU dissolve |
 
-**Do not run `load_du_geometries.py` on production until the team picks a
-geometry policy.** Acceptable outcomes include:
+### Work checklist
 
-1. Keep dissolved gpkg as reference footprint (current loader).
-2. Store undissolved multipart geometries (separate column or child table).
-3. Link to PWS/community polygons from the CWS delivery instead of DU dissolve.
-4. Centroid-only for some DU categories (xlsx lat/long path, separate from polygons).
+1. SQL: create dedicated DU geometry tables + GiST indexes.
+2. Refactor `load_du_geometries.py` to target those tables.
+3. Update `tier_location_entities.py` geometry resolvers.
+4. Migration: drop `geom` / `geom_wkt` / `srid` from entity tables (reverse 56).
+5. Compare footprint options (gpkg dissolve vs PWS vs centroid) on sample DUs.
 
-**Work for a future developer:**
-
-1. Document the tier-map rendering requirement (union vs dissolve vs point).
-2. Compare dissolved gpkg area to WBA and PWS coverage for sample DUs.
-3. Decide whether `geom` on entity tables is the long-term home or a staging column.
-4. If policy changes, update migration 56 comments and this doc before loading RDS.
-
-Loader and migration remain in the repo as **optional bootstrap tools**, not
-an approved production default.
+Loader and migration 56 remain in the repo as **deprecated spike code** until
+step 4 completes.

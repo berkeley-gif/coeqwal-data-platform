@@ -81,8 +81,23 @@ vs Kristin xlsx vs tier rules. The audit script remains for investigation only.
 
 ---
 
-## DU polygon geometry (open decision)
+## DU polygon geometry (action item)
 
-Dissolved gpkg footprints on entity tables are **not approved** for
-production loading until the team decides footprint policy. See
-[`docs/du_polygon_mapping.md`](du_polygon_mapping.md) (Open decision section).
+**Policy:** geometry belongs in **dedicated tables**, not on `du_*_entity` rows.
+See [`docs/database_geometry_pattern.md`](database_geometry_pattern.md).
+
+**Current drift:** migration 56 added `geom` columns to entity tables. That
+was incorrect. Do not run [`load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py)
+on production.
+
+**Work:**
+
+1. Create dedicated DU geometry tables (`du_urban`, `du_agriculture`, `du_refuge`
+   or equivalent - align with ERD naming).
+2. Refactor loader + [`tier_location_entities.py`](../etl/common/tier_location_entities.py).
+3. Drop entity-table geometry columns (reverse migration 56).
+4. Decide footprint source (dissolved gpkg vs multipart vs PWS). See
+   [`docs/du_polygon_mapping.md`](du_polygon_mapping.md).
+
+Alias/dissolve rules in [`du_gpkg_id_resolution.py`](../database/scripts/data_processing/du_gpkg_id_resolution.py)
+still apply to whichever geometry table receives gpkg polygons.

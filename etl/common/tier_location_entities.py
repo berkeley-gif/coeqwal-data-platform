@@ -112,13 +112,7 @@ LOCATION_ENTITY_MAP: Dict[str, TierLocationEntity] = {
             geom_kind="MULTIPOLYGON",
             notes=(
                 "Default geometry table for `demand_unit` (urban). "
-                "AG_REV polygons resolve through `du_agriculture_entity` via TIER_GEOMETRY_OVERRIDES; "
-                "a future refuge tier would add a `du_refuge_entity` override the same way. "
-                "Polygons load from "
-                "`database/seed_tables/03_GIS/du_4326.gpkg` via "
-                "`database/scripts/data_processing/load_du_geometries.py`. "
-                "54 `du_id`s have no polygon in the source file. "
-                "See `docs/du_geometry_gap.md`."
+                "`du_urban` geometry table"
             ),
         ),
         description="CWS_DEL urban DUs, AG_REV agricultural DUs.",
@@ -207,10 +201,7 @@ TIER_ATTRIBUTE_OVERRIDES: Dict[str, AttributeResolver] = {
 }
 
 
-# Per-tier geometry resolver overrides. Same shape as TIER_ATTRIBUTE_OVERRIDES
-# but for the polygon table. AG_REV polygons live in `du_agriculture_entity.geom`,
-# CWS_DEL polygons live in `du_urban_entity.geom` (the registry default).
-# A future refuge tier would add `"REFUGE_DEL": GeometryResolver(table="du_refuge_entity", ...)`.
+# Per-tier geometry resolver overrides.
 # `26N_NA` is the one `du_id` that exists in both the urban and ag entity
 # tables. The loader writes the same dissolved polygon to both rows, so the
 # tier-routed lookup returns the same geometry regardless of which override fires.

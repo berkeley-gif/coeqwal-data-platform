@@ -1,103 +1,104 @@
 # Database geometry pattern
 
-Where map geometry lives in the COEQWAL schema, and why it looks inconsistent
-at first glance.
+**Rule:** all PostGIS geometry lives in **dedicated geometry tables**. Entity
+tables hold attributes only (`du_id`, acres, gw/sw, agency text, etc.).
 
 Related: [`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`](../database/schema/COEQWAL_SCENARIOS_DB_ERD.md),
 [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py)
 
 ---
 
-## The pattern (two tiers)
+## Canonical pattern
 
-### Tier 1: Dedicated geometry tables
+Every map layer follows the same shape as `reservoir` + `reservoir_entity`:
 
-Geometry is the main reason the table exists. Entity **names** often live in a
-separate `*_entity` table; geometry is keyed by a stable short code.
+| Role | Table kind | Example |
+|---|---|---|
+| Attributes | `*_entity` or lookup row | `du_urban_entity`, `reservoir_entity` |
+| Geometry | dedicated table keyed by stable id | `reservoir`, `wba`, `network_gis` |
 
-| Table | Geometry type | Key | Fed by | Tier map role |
-|---|---|---|---|---|
-| `network_gis` | `POINT` | `short_code` | Kart / geoschematic | Network node locations |
-| `wba` | `POLYGON` | `wba_id` | `database/seed_tables/03_GIS/wba.csv` | Water budget areas |
-| `reservoir` | `POLYGON` | `calsim_short_code` | NHD / seed GIS | Reservoir footprints (`SHSTA`, `OROVL`, `SLUIS`) |
-| `compliance_station` | `POINT` | `station_code` | `compliance_stations.csv` | Delta compliance (`EM`, `JP`) |
-
-Common column triple on these tables:
+Standard geometry column triple:
 
 ```
 geom_wkt  TEXT
-srid      INTEGER  (usually 4326)
+srid      INTEGER  (4326)
 geom      geometry(..., 4326)
 ```
 
-Each has a GiST index on `geom`.
+Plus `CREATE INDEX ... ON <table> USING GIST (geom)`.
 
-### Tier 2: Entity tables with optional footprint columns
+### Geometry tables today (correct)
 
-CalSim **entity** tables hold attributes (acres, agency, gw/sw, etc.). Polygon
-columns were added **later** for demand units only:
+| Table | Geometry type | Key | Tier map |
+|---|---|---|---|
+| `network_gis` | `POINT` | `short_code` | Network nodes |
+| `wba` | `POLYGON` | `wba_id` | Water budget areas |
+| `reservoir` | `POLYGON` | `calsim_short_code` | Reservoir footprints |
+| `compliance_station` | `POINT` | `station_code` | Delta compliance stations |
 
-| Table | Geometry (migration 56) | Status |
+### Tier resolution (target)
+
+| location_type | Attributes from | Geometry from |
 |---|---|---|
-| `du_urban_entity` | `geom`, `geom_wkt`, `srid` | Columns exist; **loading policy not approved** |
-| `du_agriculture_entity` | same | same |
-| `du_refuge_entity` | same | same |
+| `network_node` | `network` | `network_gis` |
+| `demand_unit` (CWS_DEL) | `du_urban_entity` | **`du_urban`** (planned) |
+| `demand_unit` (AG_REV) | `du_agriculture_entity` | **`du_agriculture`** (planned) |
+| `demand_unit` (refuge) | `du_refuge_entity` | **`du_refuge`** (planned) |
+| `reservoir` | `reservoir_entity` | `reservoir` |
+| `wba` | `wba` | `wba` |
+| `compliance_station` | `compliance_station` | `compliance_station` |
 
-These tables also have `has_gis_data BOOLEAN`, which predates the `geom`
-columns and only means "we expect a polygon somewhere," not that `geom IS NOT NULL`.
-
-### Planned (CWS delivery, not yet in DB)
-
-| Table | Geometry type | Notes |
-|---|---|---|
-| `cws_entity` | `geometry(Point, 4326)` | One row per PWSID; see ERD draft |
+Names in the **planned** row follow the `reservoir` precedent: a short
+geometry table name keyed by the same id the entity table uses (`du_id` or
+`calsim_short_code`).
 
 ---
 
-## How tier maps resolve geometry
+## Drift to fix (action item)
 
-`tier_location` stores `(tier_code, location_type, location_id)` only. Display
-name and geometry come from joins documented in
-[`tier_location_entities.py`](../etl/common/tier_location_entities.py):
+Migration [`56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql)
+added `geom` / `geom_wkt` / `srid` directly onto:
 
-| location_type | Name from | Geometry from |
-|---|---|---|
-| `network_node` | `network` | `network_gis.geom` |
-| `demand_unit` (CWS_DEL) | `du_urban_entity` | `du_urban_entity.geom` (when loaded) |
-| `demand_unit` (AG_REV) | `du_agriculture_entity` | `du_agriculture_entity.geom` |
-| `reservoir` | `reservoir_entity` | `reservoir.geom` (separate table) |
-| `wba` | `wba` | `wba.geom` |
-| `compliance_station` | `compliance_station` | `compliance_station.geom` |
+- `du_urban_entity`
+- `du_agriculture_entity`
+- `du_refuge_entity`
 
-**Reservoirs use Tier 1** (geometry table separate from `reservoir_entity`).
-**Demand units use Tier 2** (geometry on the entity row). That split is the
-main source of confusion.
+That contradicts the dedicated-table rule. **`load_du_geometries.py` must not
+be run on production.** Treat migration 56 as a mistaken spike to be reversed.
+
+### Action checklist
+
+1. **Design** three dedicated tables (or one `demand_unit_geometry` with a
+   `du_class` discriminator - pick one approach and document it in the ERD):
+   - Urban footprints keyed by `du_id`
+   - Agriculture footprints keyed by `du_id`
+   - Refuge footprints keyed by `du_id`
+2. **SQL migration** create tables + GiST indexes (mirror `reservoir` DDL style).
+3. **Retire migration 56** drop `geom`, `geom_wkt`, `srid` from the three
+   entity tables once the dedicated tables exist and are loaded.
+4. **Refactor** [`load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py)
+   to write the dedicated geometry tables, not entity rows.
+5. **Refactor** [`tier_location_entities.py`](../etl/common/tier_location_entities.py)
+   `GeometryResolver.table` for `demand_unit` from `du_urban_entity` /
+   `du_agriculture_entity` to the new geometry tables.
+6. **CWS delivery:** when `cws_entity` lands, put PWS **points in a dedicated
+   geometry table** (not on `cws_entity` attribute rows). Same rule as DU.
+7. **Footprint policy** (dissolved gpkg vs multipart vs PWS union) is still
+   open. See [`docs/du_polygon_mapping.md`](du_polygon_mapping.md). Policy
+   affects loader logic, not whether geometry belongs on entity tables.
 
 ---
 
-## Why DU entity tables did not ship with `geom`
+## `has_gis_data` on entity rows
 
-1. M&I/ag/refuge entity tables were created from **CSV attribute ingest**
-   (`12_mi_statistics/01_create_du_urban_entity.sql`, etc.).
-2. `has_gis_data` was added as a flag; polygons lived in the external Kart repo
-   and `du_4326.gpkg`.
-3. Migration [`56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql)
-   added `geom` columns later so footprints could be stored in RDS without a
-   new table.
-4. Whether **dissolved gpkg** footprints belong on those entity rows is still
-   an open decision. See [`docs/du_polygon_mapping.md`](du_polygon_mapping.md).
+Entity tables may keep `has_gis_data BOOLEAN` as a **catalog flag** ("we
+expect a polygon in the geometry table for this id"). It is not a substitute
+for a geometry column on the entity row.
 
 ---
 
-## Rational target (for future developers)
+## For new developers
 
-When adding geometry for a new entity class, pick one home:
-
-1. **Separate geometry table** when many entity rows share one footprint, or
-   when geometry is maintained by a GIS pipeline distinct from attributes
-   (reservoir model).
-2. **Entity row columns** when there is exactly one footprint per entity row
-   and attributes and geometry are loaded together (possible DU path).
-3. **Neither** when a centroid or WBA clip is sufficient for the UI.
-
-Do not load DU polygons to production until the team chooses among those options.
+- **Do** add a dedicated geometry table and point `tier_location_entities.py` at it.
+- **Do not** add `geom` columns to `*_entity` tables.
+- **Do not** load DU polygons until the dedicated-table migration exists.

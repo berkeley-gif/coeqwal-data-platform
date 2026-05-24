@@ -477,8 +477,8 @@ def main() -> int:
         print(f"\nWrote {len(urban_rows)} urban rows to {args.csv_out}")
 
     print(
-        "\nSee docs/gw_sw_reconciliation.md for Kristin vs CalSim manual patterns "
-        "and case-by-case resolution. BOOL migration waits on stable seed."
+        "\nUrban gw/sw column types: BOOLEAN (migration 57). "
+        "Value reconciliation deferred - see docs/gw_sw_reconciliation.md."
     )
     return 0
 

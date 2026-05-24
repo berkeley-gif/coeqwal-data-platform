@@ -74,7 +74,8 @@ and [`docs/VERIFICATION.md`](VERIFICATION.md).
 | | |
 |---|---|
 | **Doc** | [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) |
-| **DU polygons** | Open decision. Do not load until policy chosen. |
+| **Rule** | Dedicated geometry tables only. Entity-table geom (migration 56) is deprecated. |
+| **Action** | Create `du_urban` / `du_agriculture` / `du_refuge` geometry tables, refactor loader + tier resolvers, drop entity geom columns. |
 
 ---
 

@@ -80,7 +80,7 @@ Update seed, reload RDS, re-run audit script.
 
 ---
 
-## Polygon geometry (separate)
+## Polygon geometry (separate, action item)
 
-See [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) and
-[`docs/du_polygon_mapping.md`](du_polygon_mapping.md).
+Dedicated geometry tables only. Entity-table geom (migration 56) is
+deprecated. See [`docs/database_geometry_pattern.md`](database_geometry_pattern.md).
