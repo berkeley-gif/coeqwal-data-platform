@@ -10,8 +10,10 @@ Kristin's urban DU refresh spreadsheet. **CWS delivery xlsx files belong in
 |---|---|
 | `Final_M&Idemandunits_withlatlongs.xlsx` | Centroids, `gw_su`, `sw_du`, optional `Notes` |
 
-gw/sw **column types** are BOOLEAN on `du_urban_entity` (migration 57). **Values**
-reconciliation vs CalSim manual is deferred. See
+gw/sw **column types** on `du_urban_entity` are `VARCHAR(5)` (`'0'` / `'1'` /
+empty) on live RDS. BOOLEAN migration is on the roadmap (see
+[`docs/TEAM_RUNBOOK.md`](../../../docs/TEAM_RUNBOOK.md) thread R1). **Value**
+reconciliation vs CalSim manual is deferred, see
 [`docs/gw_sw_reconciliation.md`](../../../docs/gw_sw_reconciliation.md).
 
 ## Related

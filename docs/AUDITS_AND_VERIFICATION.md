@@ -1,8 +1,6 @@
 # Audits and verification index
 
-Where verification and audit artifacts live, and how they relate to the
-[verification doc wrap plan](../.cursor/plans/finish_etl_+_verification_plans_1bd6e5c0.plan.md)
-(Section 4).
+Where verification and audit artifacts live and how they fit together.
 
 ---
 
@@ -57,25 +55,13 @@ and [`docs/VERIFICATION.md`](VERIFICATION.md).
 
 ---
 
-## gw/sw classification reconciliation (deferred)
+## gw/sw classification reconciliation
 
 | | |
 |---|---|
 | **Script** | [`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py) |
 | **Walkthrough** | [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md) |
-| **When** | Informational until value reconciliation resumes |
-| **CSV output** | `python etl/tier_data/scripts/reconcile_gw_sw_sources.py --csv-out` (no path = writes under `data/raw/.../urban_gw_sw_audit.csv`). Do not use `/tmp` on Cloud9. |
-| **Type migration** | [`database/scripts/sql/57_du_urban_gw_sw_boolean.sql`](../database/scripts/sql/57_du_urban_gw_sw_boolean.sql) |
-
----
-
-## Database geometry
-
-| | |
-|---|---|
-| **Doc** | [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) |
-| **Rule** | Dedicated geometry tables only. Entity-table geom (migration 56) is deprecated. |
-| **Action** | Create `du_urban` / `du_agriculture` / `du_refuge` geometry tables, refactor loader + tier resolvers, drop entity geom columns. |
+| **When** | Before updating `du_urban_entity` gw/sw seed or BOOL migration |
 
 ---
 

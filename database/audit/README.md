@@ -25,6 +25,7 @@ audits/monthly_YYYYMMDD_HHMMSS/
 ├── layer_exports/                  Full CSV exports for layers 00-08
 │   ├── 00_versioning/
 │   │   ├── developer.csv
+│   │   ├── role_memberships.csv    pg_auth_members (e.g. coeqwal_developer)
 │   │   ├── version_family.csv
 │   │   └── ...
 │   ├── 01_lookup/
@@ -44,7 +45,7 @@ audits/monthly_YYYYMMDD_HHMMSS/
 | 1c | Row counts vs. expected | Layers 00-08 counts against known targets |
 | 1d | Reference data downloads | Full CSV export of layers 00-08 |
 | 1e | Results data samples | Head/tail CSV samples of layers 10+ |
-| 2a | Data integrity | NULL audit fields, orphaned rows, invalid values |
+| 2a | Data integrity | NULL audit fields, orphaned rows, invalid values, `coeqwal_developer` group membership |
 | 2b | ETL coverage | Per-scenario row counts across all results tables |
 | 2c | ETL accuracy summary | Reads existing Layer 2/3 verification reports |
 | 3a-d | Database health | Cache hit ratio, connections, dead tuples, bloat |

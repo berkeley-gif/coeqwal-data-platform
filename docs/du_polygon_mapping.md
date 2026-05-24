@@ -10,8 +10,6 @@ Resolution rules: [`database/scripts/data_processing/du_gpkg_id_resolution.py`](
 
 Coverage scorecard: [`docs/du_geometry_gap.md`](du_geometry_gap.md)
 
-Geometry pattern (why some tables are separate): [`docs/database_geometry_pattern.md`](database_geometry_pattern.md)
-
 ---
 
 ## Source of truth
@@ -24,10 +22,6 @@ Geometry pattern (why some tables are separate): [`docs/database_geometry_patter
 
 The loader writes gpkg polygons into whichever entity table already contains
 the matching `du_id`. It does not create entity rows.
-
-**Deprecated:** geometry must move to dedicated tables (see
-`docs/database_geometry_pattern.md`). Do not run this loader on production
-until it targets those tables instead of entity rows.
 
 ---
 
@@ -129,37 +123,3 @@ python database/scripts/data_processing/load_du_geometries.py --dry-run
 Compare `missing in gpkg` counts against this doc. When new polygons land
 in `du_4326.gpkg`, update or remove the corresponding Pattern C roadmap
 entry.
-
----
-
-## Action item: dedicated geometry tables (not entity columns)
-
-**Decision:** all geometry belongs in dedicated tables, same pattern as
-`reservoir` + `reservoir_entity`. Entity-table `geom` columns from migration 56
-were a mistake. See [`docs/database_geometry_pattern.md`](database_geometry_pattern.md).
-
-**Do not run `load_du_geometries.py` on production** until dedicated
-`du_urban` / `du_agriculture` / `du_refuge` geometry tables exist and
-[`tier_location_entities.py`](../etl/common/tier_location_entities.py) points at them.
-
-### Footprint source (still open)
-
-`du_4326.gpkg` ships one dissolved `MULTIPOLYGON` per `DU_ID`. Questions for
-the loader that writes the **dedicated** geometry tables:
-
-| Question | Concern |
-|---|---|
-| Dissolved vs multipart | Non-contiguous service areas lose sub-area identity when dissolved |
-| gpkg vs entity grain | Pattern A/B alias/dissolve rules exist because gpkg labels differ from entity ids |
-| Tier map use case | Choropleths may need PWS union or WBA clip instead of CalSim DU dissolve |
-
-### Work checklist
-
-1. SQL: create dedicated DU geometry tables + GiST indexes.
-2. Refactor `load_du_geometries.py` to target those tables.
-3. Update `tier_location_entities.py` geometry resolvers.
-4. Migration: drop `geom` / `geom_wkt` / `srid` from entity tables (reverse 56).
-5. Compare footprint options (gpkg dissolve vs PWS vs centroid) on sample DUs.
-
-Loader and migration 56 remain in the repo as **deprecated spike code** until
-step 4 completes.

@@ -111,8 +111,7 @@ LOCATION_ENTITY_MAP: Dict[str, TierLocationEntity] = {
             id_column="du_id",
             geom_kind="MULTIPOLYGON",
             notes=(
-                "Default geometry table for `demand_unit` (urban). "
-                "`du_urban` geometry table"
+                "Attribute table for `demand_unit` (urban). "
             ),
         ),
         description="CWS_DEL urban DUs, AG_REV agricultural DUs.",

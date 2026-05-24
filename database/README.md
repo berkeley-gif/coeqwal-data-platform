@@ -1623,7 +1623,7 @@ The recommended workflow for database changes:
 ```
 ┌──────────────┐     git push     ┌──────────────┐     git pull     ┌──────────────┐
 │   Local Dev  │ ───────────────► │    GitHub    │ ◄─────────────── │   Cloud9     │
-│   (Cursor)   │                  │  (main repo) │                  │   (AWS)      │
+│  (your IDE)  │                  │  (main repo) │                  │   (AWS)      │
 └──────────────┘                  └──────────────┘                  └──────┬───────┘
                                                                           │
                                                                           │ psql
@@ -1634,7 +1634,7 @@ The recommended workflow for database changes:
                                                                    └──────────────┘
 ```
 
-1. **Local**: Edit SQL scripts in Cursor
+1. **Local**: Edit SQL scripts in your editor
 2. **GitHub**: Push changes to main branch
 3. **Cloud9**: Pull latest from GitHub
 4. **RDS**: Run SQL scripts via psql

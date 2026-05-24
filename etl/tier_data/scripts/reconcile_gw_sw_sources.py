@@ -477,7 +477,8 @@ def main() -> int:
         print(f"\nWrote {len(urban_rows)} urban rows to {args.csv_out}")
 
     print(
-        "\nUrban gw/sw column types: BOOLEAN (migration 57). "
+        "\nUrban gw/sw column types: VARCHAR(5) on live RDS ('0' / '1' / empty). "
+        "BOOLEAN migration is on the roadmap (see docs/TEAM_RUNBOOK.md thread R1). "
         "Value reconciliation deferred - see docs/gw_sw_reconciliation.md."
     )
     return 0

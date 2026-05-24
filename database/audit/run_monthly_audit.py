@@ -306,6 +306,65 @@ def _get_functions(cursor) -> list[dict]:
     return _rows(cursor)
 
 
+def _get_role_memberships(cursor) -> list[dict]:
+    """All role-to-role grants visible via `pg_auth_members`.
+
+    Captures who is a member of which group/role, with the inherit and
+    admin flags. Skips RDS-internal accounts so the export stays focused
+    on human-facing roles like `coeqwal_developer`.
+    """
+    cursor.execute("""
+        SELECT
+            m.rolname           AS member,
+            r.rolname           AS group_role,
+            am.admin_option     AS with_admin_option,
+            m.rolinherit        AS member_inherits,
+            m.rolcanlogin       AS member_can_login,
+            r.rolcanlogin       AS group_can_login
+        FROM pg_auth_members am
+        JOIN pg_roles m ON am.member = m.oid
+        JOIN pg_roles r ON am.roleid = r.oid
+        WHERE m.rolname NOT LIKE 'rds_%%'
+          AND r.rolname NOT LIKE 'rds_%%'
+          AND m.rolname NOT IN
+              ('rdsadmin', 'rdstopmgr', 'rdsproxyadmin', 'rdsrepladmin')
+          AND r.rolname NOT IN
+              ('rdsadmin', 'rdstopmgr', 'rdsproxyadmin', 'rdsrepladmin')
+        ORDER BY r.rolname, m.rolname;
+    """)
+    return _rows(cursor)
+
+
+def _developers_missing_group(
+    developers: list[dict],
+    memberships: list[dict],
+    group_name: str = "coeqwal_developer",
+) -> list[dict]:
+    """Active developers in `developer` who are not members of `group_name`.
+
+    The developer table records each person's PostgreSQL login under
+    `aws_sso_username`. Rows where that column is blank (the system
+    bootstrap row) are skipped. Returns one entry per missing developer
+    with enough context to act on.
+    """
+    in_group = {
+        m["member"] for m in memberships if m["group_role"] == group_name
+    }
+    missing = []
+    for d in developers:
+        if not d.get("is_active"):
+            continue
+        db_name = d.get("aws_sso_username")
+        if db_name and db_name not in in_group:
+            missing.append({
+                "developer_id": d.get("id"),
+                "display_name": d.get("display_name"),
+                "aws_sso_username": db_name,
+                "missing_group": group_name,
+            })
+    return missing
+
+
 def _check_versioning_system(cursor) -> dict:
     versioning_tables = ["version_family", "version", "domain_family_map", "developer"]
     result = {
@@ -315,11 +374,13 @@ def _check_versioning_system(cursor) -> dict:
         "versions": [],
         "domain_mappings": [],
         "developers": [],
+        "role_memberships": [],
         "validation": {
             "families_without_active_version": [],
             "families_with_multiple_active_versions": [],
             "domain_map_missing_tables": [],
             "domain_map_unexpected_tables": [],
+            "developers_missing_coeqwal_developer_group": [],
         },
     }
 
@@ -390,6 +451,19 @@ def _check_versioning_system(cursor) -> dict:
     except Exception as exc:
         cursor.connection.rollback()
         result["developers_error"] = str(exc)
+
+    try:
+        result["role_memberships"] = _get_role_memberships(cursor)
+    except Exception as exc:
+        cursor.connection.rollback()
+        result["role_memberships_error"] = str(exc)
+
+    result["validation"]["developers_missing_coeqwal_developer_group"] = (
+        _developers_missing_group(
+            result.get("developers", []),
+            result.get("role_memberships", []),
+        )
+    )
 
     return result
 
@@ -1024,6 +1098,31 @@ def main() -> None:
                         "layer": layer_name, "table": table_name,
                         "rows": row_count if row_count is not None else "ERROR",
                     })
+        # `pg_auth_members` is a system catalog, not a public table, so it
+        # cannot ride the LAYERS loop. Write it from the snapshot data so the
+        # CSV lives next to `developer.csv` and tells the same story.
+        if audit_report is not None:
+            membership_rows = (
+                audit_report.get("versioning_system", {})
+                .get("role_memberships") or []
+            )
+            membership_csv = export_dir / "00_versioning" / "role_memberships.csv"
+            membership_csv.parent.mkdir(parents=True, exist_ok=True)
+            membership_cols = [
+                "member", "group_role", "with_admin_option",
+                "member_inherits", "member_can_login", "group_can_login",
+            ]
+            with membership_csv.open("w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(membership_cols)
+                for row in membership_rows:
+                    writer.writerow([row.get(c, "") for c in membership_cols])
+            export_summary.append({
+                "layer": "00_versioning",
+                "table": "role_memberships (pg_auth_members)",
+                "rows": len(membership_rows),
+            })
+
         lines.append(md_table(export_summary, ["layer", "table", "rows"]))
         p(f"_CSVs written to `{export_dir.relative_to(run_dir)}/`._")
 
@@ -1078,6 +1177,35 @@ def main() -> None:
                     p(f"Every row has `created_by = 1` (system). Likely mis-attributed bulk loads: "
                       f"{', '.join(system_only)}")
 
+                ver_val = (
+                    audit_report.get("versioning_system", {})
+                    .get("validation", {})
+                )
+                missing_group = ver_val.get(
+                    "developers_missing_coeqwal_developer_group", []
+                )
+                memberships = (
+                    audit_report.get("versioning_system", {})
+                    .get("role_memberships", []) or []
+                )
+                coeqwal_members = sorted(
+                    m["member"] for m in memberships
+                    if m.get("group_role") == "coeqwal_developer"
+                )
+                h("2a. Role-group membership (pg_auth_members)", 3)
+                p(f"_`coeqwal_developer` members ({len(coeqwal_members)}):_ "
+                  f"{', '.join(coeqwal_members) if coeqwal_members else '(none)'}")
+                if missing_group:
+                    p("**Active developers in `developer` but NOT in `coeqwal_developer`:**")
+                    for d in missing_group:
+                        p(f"  - `{d.get('aws_sso_username')}` "
+                          f"(id={d.get('developer_id')}, "
+                          f"{d.get('display_name')}) - run "
+                          f"`GRANT coeqwal_developer TO {d.get('aws_sso_username')};` "
+                          f"as superuser")
+                else:
+                    p("All active developers are members of `coeqwal_developer`.")
+
             coverage_rows = section(
                 "2b. Per-scenario ETL coverage", cur, SQL_SCENARIO_COVERAGE,
                 "Every active scenario should have non-zero rows in each results table. "
@@ -1090,6 +1218,13 @@ def main() -> None:
                         if row.get(col, 0) == 0:
                             gaps.append(f"{row.get('short_code', '?')}/{col}")
             findings["etl_coverage_gaps"] = gaps
+
+        if audit_report is not None:
+            findings["developers_missing_group"] = (
+                audit_report.get("versioning_system", {})
+                .get("validation", {})
+                .get("developers_missing_coeqwal_developer_group", [])
+            )
 
         h("2c. ETL accuracy status summary", 3)
         reports_dir = _REPO_ROOT / "audits" / "verification_reports"
@@ -1239,6 +1374,11 @@ def main() -> None:
           lambda v: ", ".join(
               f"{r['table_name']}={r['invalid_count']}"
               for r in v if r.get("invalid_count", 0) > 0))
+    check("developers_missing_group",
+          "Versioning: All active developers belong to `coeqwal_developer`",
+          lambda v: len(v) == 0,
+          lambda v: f"{len(v)} developer(s) missing the group: "
+                    + ", ".join(d.get("aws_sso_username", "?") for d in v))
 
     # ── Close connections ─────────────────────────────────────────────────
     conn.close()
