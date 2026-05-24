@@ -1,0 +1,4 @@
+id,short_code,label,description,created_at,created_by,updated_at,updated_by
+1,summary,Summary,"Aggregate summary statistics (mean, median, min, max, cv, stdev)",2026-03-13 23:42:45.379828+00:00,2,2026-03-13 23:42:45.379828+00:00,2
+2,percentile_band,Percentile Band,Standard quantile bands aligned with DWR water year types,2026-03-13 23:42:45.379828+00:00,2,2026-03-13 23:42:45.379828+00:00,2
+3,exceedance,Exceedance,Exceedance percentiles for flow duration and reliability analysis,2026-03-13 23:42:45.379828+00:00,2,2026-03-13 23:42:45.379828+00:00,2

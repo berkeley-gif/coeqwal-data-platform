@@ -1,0 +1,11 @@
+id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
+1,baseline,Baseline,Reference baseline scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+2,groundwater,Groundwater,Groundwater pumping and sustainability scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+3,agriculture,Agriculture,Agricultural land use and irrigation demand scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+4,flows,Flows,Instream flow and minimum flow requirement scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+5,drinking_water,Drinking Water,Community water system delivery prioritization scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+6,infrastructure,Infrastructure,Water infrastructure modification scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+7,delta,Delta,Sacramento-San Joaquin Delta regulation scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+8,reservoir,Reservoir,Reservoir storage and carryover scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+9,salmon,Salmon,Salmon habitat and survival flow scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2
+10,environment,Environment,Environmental and ecological flow scenarios,True,2026-03-16 21:04:44.681860+00:00,2,2026-03-16 21:04:44.681860+00:00,2

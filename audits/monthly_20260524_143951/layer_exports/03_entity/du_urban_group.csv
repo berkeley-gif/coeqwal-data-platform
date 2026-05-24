@@ -1,0 +1,12 @@
+id,short_code,label,description,display_order,is_active,created_at,created_by,updated_at,updated_by
+1,tier,Tier Matrix DUs,Demand units included in the scenario tier matrix for M&I statistics,1,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+2,nod,North of Delta,Demand units located north of the Sacramento-San Joaquin Delta,2,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+3,sod,South of Delta,Demand units located south of the Sacramento-San Joaquin Delta,3,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+4,swp_served,SWP Served,Demand units that receive State Water Project water,4,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+5,cvp_served,CVP Served,Demand units that receive Central Valley Project water,5,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+6,swp_delivery_point,SWP Delivery Points,CalSim3 SWP delivery nodes (ESB* CSB* SBA*),6,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+7,var_wba,WBA Delivery Units,Demand units using WBA-style DL_* total delivery variables. These have pre-calculated total delivery in CalSim output.,10,True,2026-02-03 22:13:47.563705+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+8,var_gw_only,Groundwater Only Units,Demand units with no surface water delivery. Only have GP_* groundwater pumping and GW_SHORT_* restriction shortage variables.,11,True,2026-02-03 22:13:47.563705+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+9,var_swp_contractor,SWP Contractor Units,Demand units receiving water via SWP contractor delivery arcs (D_*_PMI). Shortage tracked via SHORT_D_*_PMI.,12,True,2026-02-03 22:13:47.563705+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+10,var_named_locality,Named Locality Units,Named localities with specific delivery arcs (D_*). Some require summing multiple arcs. Includes water treatment plant deliveries.,13,True,2026-02-03 22:13:47.563705+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+11,var_missing,Missing Variable Units,Demand units in the canonical tier matrix but with no corresponding CalSim output variables found.,14,True,2026-02-03 22:13:47.563705+00:00,2,2026-03-14 22:18:34.503785+00:00,2

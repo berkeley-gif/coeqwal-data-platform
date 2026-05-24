@@ -1,0 +1,338 @@
+page,col1,col2,col3,col4,col5,col6
+1,,"Cities, Towns, and Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,
+1,,,,,GW,SW
+1,,Anderson,City of Anderson,4510001,•,-
+1,,Cottonwood,Cottonwood WD,4510007,•,-
+1,,Lake California,Rio Alto WD,5210005,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Centerville and Redding,Centerville CSD,4510011,-,•
+1,,Happy Valley,Clear Creek CSD,4510016,-,•
+1,,Shasta CSA No. 25,Keswick CSA5,4500001,-,•
+1,,Shasta,Shasta CSD,4510013,-,•
+1,,"Redding – Foothill, Hill 900 and Cascade",City of Redding,4510005,•,•
+1,,Redding – Buckeye and Hilltop,,,-,•
+1,,Redding – Hilltop and Enterprise,,,•,•
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Shasta CSA No. 6,Jones Valley CSA2,4510004,-,•
+1,,Shasta Lake,City of Shasta Lake,4510006,-,•
+1,,Mountain Gate,Mountain Gate CSD,4510002,•,•
+1,,"Stillwater Valley, Bella Vista, Palo Cedro,",,,,•
+1,03_PU2,,Bella Vista WD,4510014,•,
+1,,Redding,,,,
+1,,,,,,
+1,,Red Bluff,City of Red Bluff,5210004,•,-
+1,,Corning,City of Corning,,•,-
+1,,Gerber,Gerber-Las Flores CSD,5210002,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Red Bluff,City of Red Bluff,5210004,•,-
+1,,Los Molinos,Los Molinos CSD,5210003,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Orland,City of Orland,1110001,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Willows,California Water Service Company,1110003,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Arbuckle,Arbuckle PUD,610001,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Hamilton City,California Water Service Company,1110002,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+1,,Colusa,City of Colusa,610002,•,-
+1,,Williams,City of Williams,610004,•,-
+1,,Small communities,Self-supplied,N/A,•,-
+2,"Cities, Towns, and Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,,
+2,,,,GW,SW,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Chico,California Water Service Company,410002,•,-,
+2,Durham,Durham ID,410003,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Oroville,Thermalito ID,410008,•,•,
+2,Biggs,City of Biggs,410001,•,-,
+2,Gridley,City of Gridley,410004,•,-,
+2,Live Oak,Live Oak WD,5110001,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Oroville,California Water Service Company,410005,•,•,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Oroville,South Feather Water and Power Agency,410006,-,•,
+2,Small communities,South Feather Water and Power Agency,,•,•,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Marysville,California Water Service Company,5810001,•,•6,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Olivehurst,Olivehurst PUD,5810003,•,-,
+2,Wheatland,City of Wheatland,5810004,•,-,
+2,Linda,Linda County WD,5810002,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Yuba City,City of Yuba City,5110002,•,•,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Sutter,Sutter CSD,5110007,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+2,"Davis, El Macero, Willowbank",City of Davis,5710001,•,-,
+2,UC Davis,University of California at Davis,5710009,•,-,
+2,Woodland,City of Woodland,5710006,•,-,
+2,Winters,City of Winters,5710005,•,-,
+2,Esparto,Esparto CSD,5710007,•,-,
+2,Madison,Madison CSD,5700571,•,-,
+2,Small communities,Self-supplied,N/A,•,-,
+3,"Cities, Towns, and
+Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,,
+3,,,,GW,SW,
+3,Knights Landing,Knights Landing Service District,5710004,•,-,
+3,Small communities,Self-supplied,N/A,•,-,
+3,West Sacramento (Portion),City of West Sacramento,5710003,-,•,
+3,Sacramento Airport8,(City of Sacramento),3400139,•,-,
+3,Metro Air Park,Sacramento County WA (City of Sacramento),"Non-
+residential",-,-,
+3,Northgate 8809,Sacramento County WA,"Non-
+residential",•,-,
+3,Small communities,Self-supplied,N/A,•,-,
+3,Small communities,Self-supplied,N/A,•,-,
+3,"Auburn, Bowman",Placer County WA – Upper Zone 1,3110005,-,•,
+3,Christian Valley Park,Christian Valley Park CSD,3110034,-,•,
+3,"Loomis, Newcastle, Penryn,
+Rocklin, Granite Bay (Portion),
+Roseville (Portion)",Placer County WA - lower Zone 1,3110025,•8,•7,
+3,Lincoln,City of Lincoln (Placer County WA),3110004,•,•9,
+3,West Placer,Cal-Am WC (Placer County WA),3110150,•,-,
+3,North Auburn,Nevada ID,3110026,-,•,
+3,Small communities,Self-supplied,-,•,-,
+3,Rio Vista,City of Rio Vista,4810004,•,-,
+3,Dixon,California Water Service Company,4810002,•,-,
+3,Small communities,Self-supplied,N/A,•,-,
+3,Vacaville,City of Vacaville,4810008,•,•,
+3,"Northridge, McClellan Business
+Park","Sacramento Suburban WD – NSA13, McClellan
+(Placer County WA)",3410024,•,•,
+3,Arcade – North Highlands,"Sacramento Suburban WD – NSA12
+(Placer County WA)",3410025,•,•,
+3,Antelope,Cal-Am WC (San Juan WD),3410031,•,•,
+3,Lincoln Oaks,Cal-Am WC (San Juan WD),3410013,•,•,
+3,"Rio Linda, Elverta15",Rio Linda Elverta CWD (San Juan WD),3410018,•,-17,
+3,Carmichael,Carmichael WD,3410004,•,•,
+3,City of Sacramento - North,City of Sacramento,3410020,•,•,
+3,Arcade14,"Sacramento Suburban WD – SSA
+(City of Sacramento)",3410001,•,•,
+4,,"Cities, Towns, and
+Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,
+4,,,,,GW,SW
+4,,Arden,Golden State WC,3410003,•,-
+4,,Del Paso Service Area,Del Paso Manor WD,3410007,•,-18
+4,26N_NU513,,,,,
+4,,Arden Park Vista Service Area,Sacramento County WA,3410002,•,-
+4,,,,,,
+4,,Arden,Cal-Am WC,3410045,•,-
+4,26N_PU1,Roseville,City of Roseville,3110008,•13,•10
+4,26N_PU2,San Juan Retail Service Area11,San Juan WD,3410021,-,•
+4,,Orange Vale,Orange Vale WC (San Juan WD),3410016,•,•
+4,,City of Citrus Heights,Citrus Heights WD (San Juan WD),3410006,•,•
+4,26N_PU3,,,,,
+4,,Fair Oaks,Fair Oaks WD (San Juan WD),3410009,•,•
+4,,,,,,
+4,,City of Folsom - Ashland,City of Folsom (San Juan WD ),3410030,-,•
+4,,City of Sacramento - South,City of Sacramento,3410020,•,•
+4,26S_NU1,,,,,
+4,,,,,,
+4,,Parkway,Cal-Am WC (City of Sacramento),3410017,•,•23
+4,26S_NU2,Suburban,Cal-Am WC (City of Sacramento),3410010,•,•23
+4,,Rosemont,Cal-Am WC (City of Sacramento),3410034,•,•23
+4,,Florin,Florin County WD,3410033,•,-
+4,26S_NU3,Fruitridge,Fruitridge Vista WC,3410023,•,-
+4,,Tokay Park,Tokay Park WC (Sacramento County WA),3400172,•,-
+4,,Groundwater remediation,Aerojet,"Non-potable
+water",•,•
+4,26S_NU4,,,,,
+4,,,,,,
+4,,City of Folsom,City of Folsom,3410014,•,•21
+4,26S_PU1,,,,,
+4,,Folsom State Prison,Folsom State Prison,3410032,-,•
+4,,,,,,
+4,26S_PU2,Rancho Cordova,Golden State WC,3410015,•22,•
+4,,Folsom Lake shoreline,California Parks and Recreation,"Non-potable
+water",-,•
+4,26S_PU3,,,,,
+4,,,,,,
+4,26S_PU4,Laguna,Sacramento County WA – SSA,3410029,•,•
+4,,City of Elk Grove,"Elk Grove WD, Tariff Area No.2 (Sacramento
+County WA)",3410008,•,•
+4,26S_PU5,,,,,
+4,,,"Elk Grove WD, Tariff Area No.1",,•,-
+4,,Vineyard,Sacramento County WA – CSA (Zone 40),,•,-20
+4,26S_PU6,Mather-Sunrise,Sacramento County WA – NSA (Zone 40),3410704,•,-20
+4,,Sunrise/Security Park,Cal-Am WC (Sacramento County WA),3410027,•,-20
+5,,"Cities, Towns, and
+Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,
+5,,,,,GW,SW
+5,AMCYN,American Canyon,City of American Canyon,2810005,-,•
+5,ANTOC,Antioch,City of Antioch,710001,-,•
+5,,Benicia,City of Benicia,4810001,-,•
+5,BNCIA,,,,,
+5,,,,,,
+5,CLLPT,Clear Lake communities,19 M&I water purveyors,N/A,•,•
+5,CSPSO,Solano State Prison,California State Prison – Solano,4810800,-,•
+5,ELDID_NU1,El Dorado Eastern Region,El Dorado ID,,-,•
+5,ELDID_NU2,El Dorado Western Region,El Dorado ID,,-,•
+5,ELDID_NU3,El Dorado Hills,El Dorado ID,910001,•,•
+5,,"Berkeley, Oakland, Richmond,
+Walnut Creek25",East Bay Municipal Utility District,11005,-,•
+5,EBMUD,,,,,
+5,,,,,,
+5,,Fairfield,City of Fairfield,4810003,-,•
+5,FRFLD,,,,,
+5,,,,,,
+5,GDPUD_NU,Georgetown,Georgetown Divide PUD,910013,-,•
+5,,"Grass Valley,",Nevada ID,2910001,-,•
+5,GRSVL,,,,,
+5,,Nevada City,Nevada ID,2910002,-,•
+5,,,,,,
+5,,Napa,City of Napa16,2810003,-,•
+5,NAPA,St. Helena,City of Napa,2810004,-,•
+5,,Calistoga,City of Calistoga (City of Napa),2810002,-,•
+5,NAPA2,Lake Berryessa communities,Solano County WA,N/A,,
+5,,"Alta, Dutch Flat, Colfax,
+Applegate, Meadow Vista","Dutch Flat MWC, Weimar WC, Midway
+Heights County WD, Heather Glen CSD,
+Meadow Vista County WD (Placer
+County WA)",N/A,-,•
+5,PCWA3,,,,,
+5,,,,,,
+5,PINES,Lake of Pines,Nevada ID,2910014,-,•
+5,PLMAS,Portola,Plumas FC&WCD,3210003,•,•
+5,SUISN,Suisun,City of Suisun,4810005,-,•
+5,TVAFB,Travis Air Force Base,Travis Air Force Base,4810015,-,•
+5,,Vallejo,City of Vallejo,4810007,-,•
+5,VLLJO,,,,,
+5,,,,,,
+5,WLDWD,Lake Wildwood,Nevada ID,2910023,-,•
+6,Notes:,,,,,
+6,"1 The name of demand units located within a Water Budget Area (WBA) is prefixed with the WBA identification number. Demand units outside of the WBAs, located either in the rim",,,,,
+6,"watersheds or within the Sacramento-San Joaquin Delta or San Francisco Bay hydrologic regions, are identified using a five letter acronym.",,,,,
+6,2 The California Public Water System identification number (ID) is as used in the DWR Public Water Supply Statistics database.,,,,,
+6,3 No ID or population data are given for demand units representing small communities that rely on self-produced water supplies.,,,,,
+6,"4 Population data are covered in Chapter 12, Urban Water Use.",,,,,
+6,"5 Shasta County WA provides water to water purveyors in Shasta County, including Keswick CSA and Jones Valley CSA.",,,,,
+6,6 The City of Marysville diverts water from the lower Yuba River to fill Lake Ellis for recreational and aesthetic purposes.,,,,,
+6,"7 Placer County WA purchases water from the PG&E’s Drum-Spaulding Project, which originates from the upper Yuba River basin, augmented by Bowman Lake and Lake",,,,,
+6,"Spaulding on the South Yuba River and Rollins Reservoir on the Bear River. The water supply is conveyed primarily via the Drum, Bear River, and lower Boardman canals.",,,,,
+6,Nevada ID and Placer County WA share capacity in the canal with agreements that provide for use of any unused capacity by either agency.,,,,,
+6,8 Placer County WA has several wells in the Western Placer County (Sunset Industrial Park) and is considering increasing groundwater capacity for meeting future conjunctive,,,,,
+6,requirements.,,,,,
+6,"9 The City of Lincoln purchases treated surface water from Placer County WA, which is used conjunctively with treated groundwater for urban uses and use of recycled water for",,,,,
+6,agricultural irrigation from its wastewater treatment plant.,,,,,
+6,10 The City of Roseville purchases a small portion of treated Placer County WA water for service to higher elevation developments.,,,,,
+6,11 The Sacramento International Airport is currently on groundwater supplies with poor water quality. It is anticipated that wholesale agreements with the City of Sacramento to treat,,,,,
+6,and deliver Natomas Central Mutual Water Company water will replace groundwater supplies in the near future.,,,,,
+6,12 The Northgate service area of Sacramento County WA may be annexed to the City of Sacramento in the near future and receive water from the city.,,,,,
+6,13 The City of Roseville has been actively pursuing aquifer storage and recovery (ASR) for wells constructed within its retail service area.,,,,,
+6,14 Includes a portion of Granite Bay in Placer County.,,,,,
+6,15 This portion of the Sacramento Suburban WD was formerly served by Arcade WD North Highlands service area and Northridge WD.,,,,,
+6,16 This portion of the Sacramento Suburban WD was formerly served by Arcade WD Town and Country service area.,,,,,
+6,17 The older and much larger portion of Rio Linda Elverta Community WD relies solely on groundwater. The newer development is served surface water through agreements with,,,,,
+6,San Juan WD.,,,,,
+6,18 Del Paso WD has an existing agreement for surface water with the City of Sacramento for American River Place of Use water if groundwater supplies become inadequate to meet,,,,,
+6,"demands. To date, this diversion has not occurred.",,,,,
+6,19 The City of Napa delivers treated water to the City of American Canyon. The City of Napa also delivers water to the Town of Yountville and California Veterans Home.,,,,,
+6,20 Sacramento County WA Vineyard Surface Water Treatment Plant was completion in 2011.,,,,,
+6,"21 Agreements have been made with Natomas Central Mutual Water Company to deliver up 10,000 acre-feet per year to the City of Folsom south of Highway 50 sphere of influence",,,,,
+6,Development Area. Conveyance will likely be through the East Bay Municipal Utility District/Sacramento County WA Freeport diversion to be operational by 2011.,,,,,
+6,"22 Groundwater contamination has reduced groundwater production over the past 10 years, increasing the need for surface water from the Folsom South Canal.",,,,,
+6,23 California American WC and Sacramento County WA are negotiating surface water wholesale agreements with the City of Sacramento for American River Place of Use.,,,,,
+6,"24 Contra Costa Water District also serves parts of Walnut Creek, Pleasant Hill, Martinez, and Brentwood.",,,,,
+6,"25 EBMUD's water system covers a 331-square-mile area extending from Crockett on the north, southward to San Lorenzo, eastward from San Francisco to Walnut Creek, and south",,,,,
+6,through the San Ramon Valley.,,,,,
+6,Key:,GW = groundwater,RCD = Resource Conservation District,,,
+6,Cal-Am = California American,ID = Irrigation District,SSA = South Service Area,,,
+6,CSA = County Service Area/Central Service Area,N/A = not applicable,SW = surface water UC = University of California,,,
+6,CSD = Community Service District,NSA = North Service Area,WA = Water Agency,,,
+6,CWD = Community Water District,PG&E = Pacific Gas and Electric,WC = Water Company,,,
+6,DPH ID = California Department of Health identification number,POU = Place of Use,WD = Water District,,,
+6,FC&WCD = Flood Control and Water Conservation District,PUD = Public Utility District,WSC = Water Service Company,,,
+7,"Cities, Towns, and
+Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,,
+7,,,,GW,SW,
+7,Tracy,City of Tracy (South San Joaquin ID),3910011,•,•,
+7,Mountain House,Mountain House CSD,3910027,-,•,
+7,Galt,City of Galt,3410011,•,-,
+7,Lodi,City of Lodi,3910004,•,-,
+7,Small communities,Self-supplied,N/A,•,-,
+7,Rancho Murieta,Rancho Murieta CSD,3410005,-,•,
+7,"Rancho Seco Power
+Plant",Sacramento Municipal Utility District,Non-potable water use,-,•,
+7,City of Stockton,City of Stockton,3910012,•,•,
+7,,California Water Service Company,3910001,•,•,
+7,Small communities,Self-supplied,N/A,•,-,
+7,Modesto,City of Modesto,5010010,•,•,
+7,Salida,,5010005,•,-,
+7,Waterford,,5010006,•,-,
+7,Hickman,,5010026,•,-,
+7,Grayson,,5010033,•,-,
+7,Lathrop,City of Lathrop (South San Joaquin ID),3910015,•,•,
+7,Escalon,City of Escalon (South San Joaquin ID),3910003,•,•,
+7,Manteca,City of Manteca (South San Joaquin ID),3910005,•,•,
+7,Ripon,City of Ripon,3910007,•,-,
+7,Oakdale,City of Oakdale,5010014,•,-,
+7,Riverbank,City of Riverbank,5010018,•,-,
+7,Small communities,Self-supplied,N/A,•,-,
+7,Turlock,City of Turlock,5010019,•,-,
+7,Ceres,"City of Ceres, City of Modesto",5010028,•,-,
+7,Delhi,Delhi CWD,2410006,•,-,
+7,Hilmar,Hilmar County WD,2410012,•,-,
+7,Hughson,City of Hughson,5010008,•,-,
+7,Keyes,Keyes CSD,5010009,•,-,
+7,Denair,Denair CSD,5010021,•,-,
+7,Small communities,Self-supplied,N/A,•,-,
+8,"Cities, Towns, and
+Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,,
+8,,,,GW,SW,
+8,Merced,City of Merced,2410009,•,-,
+8,Atwater,City of Atwater,2410001,•,-,
+8,Livingston,City of Livingston,2410004,•,-,
+8,Winton,Winton WSD,2410010,•,-,
+8,Planada,Planada CSD,2410007,•,-,
+8,LeGrand,LeGrand CSD,2410011,•,-,
+8,Small communities,Self-supplied,N/A,•,-,
+8,Madera,City of Madera,2010002,•,-,
+8,Chowchilla,City of Chowchilla,2010001,•,-,
+8,Madera Acres,Madera Valley WC,2010010,•,-,
+8,Valley State Prison for Women,California State Prisons,2010801,•,-,
+8,Small communities,Self-supplied,N/A,•,-,
+8,Patterson,City of Patterson,5010017,•,-,
+8,Small communities,Self-supplied,N/A,•,-,
+8,Musco Olive Products,Musco Olive Products,"Non-potable
+water use",-,•,
+8,Veterans Affairs Cemetery,U.S. Department of Veterans Affairs,"Non-potable
+water use",-,•,
+8,Gustine,City of Gustine,2410003,•,-,
+8,Firebaugh,City of Firebaugh,1010005,•,-,
+8,Los Banos,City of Los Banos,2410005,•,-,
+8,Newman,City of Newman,5010013,•,-,
+8,Small communities,Self-supplied,N/A,•,-,
+8,Dos Palos,"North Dos Palos WD, South Dos Palos
+CWD",2410002,•,-,
+8,Small communities,Self-supplied,N/A,•,-,
+8,Avenal,City of Avenal,1610002,-,•,
+8,Coalinga,City of Coalinga,1010004,-,•,
+8,Huron,City of Huron,1010044,-,•,
+9,"Cities, Towns, and
+Communities","Water Agency
+Retail (Wholesale)","ID2,3,4",,,
+9,,,,GW,SW,
+9,Ione Creek,Amador WA,310002,-,•,
+9,Sutter Creek,Amador WA,310003,-,•,
+9,Small communities,Amador WA,N/A,-,•,
+9,"Bay Point, Clayton, Clyde,
+Concord, Oakley, Pittsburg,
+Port Costa24",Contra Costa Water District,710003,-,•,
+9,Murphys,Union PUD,510001,-,•,
+9,"Berkeley, Oakland,
+Richmond, Walnut Creek6",East Bay Municipal Utility District,11005,-,•,
+9,Jenny Lind/Valley Springs,Calaveras County WD,510006,-,•,
+9,Mokelumne Hill,Calaveras PUD,510002,-,•,
+9,City of Angels,Union PUD,510003,-,•,
+9,West Point,Calaveras County WD,510005,-,•,

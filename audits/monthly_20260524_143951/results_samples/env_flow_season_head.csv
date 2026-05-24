@@ -1,0 +1,6 @@
+id,short_code,name,description,wy_months,calendar_months,sort_order,is_active,created_at,updated_at,created_by,updated_by
+1,wet_peak,Wet Season Peak,High-flow wet season pulse — December through February. Creates spawning habitat and flushes fine sediments from gravel beds.,"[3, 4, 5]","December, January, February",1,True,2026-03-02 20:56:02.663529+00:00,2026-03-02 20:56:02.663529+00:00,2,2
+2,wet_base,Wet Season Base,Sustained wet-season baseflow — March through April. Maintains inundated floodplain habitat following peak flows.,"[6, 7]","March, April",2,True,2026-03-02 20:56:02.663529+00:00,2026-03-02 20:56:02.663529+00:00,2,2
+3,spring_recession,Spring Recession,Gradual snowmelt-driven recession — May through June. Supports juvenile salmon and steelhead outmigration.,"[8, 9]","May, June",3,True,2026-03-02 20:56:02.663529+00:00,2026-03-02 20:56:02.663529+00:00,2,2
+4,dry,Dry Season,Summer and early-fall low flows — July through October. Critical thermal stress period for cold-water fish species.,"[10, 11, 12, 1]","July, August, September, October",4,True,2026-03-02 20:56:02.663529+00:00,2026-03-02 20:56:02.663529+00:00,2,2
+5,fall_pulse,Fall Pulse,First-flush storm event — November. Triggers adult salmon migration and opens sand bars at river mouths.,[2],November,5,True,2026-03-02 20:56:02.663529+00:00,2026-03-02 20:56:02.663529+00:00,2,2

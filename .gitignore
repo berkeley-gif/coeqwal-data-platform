@@ -51,15 +51,14 @@ rclone.conf
 # Local data and processing directories
 /CalSim3_schematic
 
-# data/ is local-only scratch with two tracked exceptions:
-# the top-level README (so the directory is self-documenting) and the hand-extracted
-# reference CSVs from the CalSim 3 published report.
 /data/*
 !/data/README.md
 !/data/raw/
 /data/raw/*
 !/data/raw/csv_from_CalSim_report_pdf/
 !/data/raw/csv_from_CalSim_report_pdf/**
+!/data/raw/pdf_tables_from_CalSim_report/
+!/data/raw/pdf_tables_from_CalSim_report/**
 /dss_processing
 
 # ETL staging and output directories
@@ -108,7 +107,6 @@ api/coeqwal-api/routes/_archive/
 
 # Large data/processing folders
 CalSim3_schematic/
-audits/
 database/secrets/
 .github/ISSUES/
 etl/archive/pydsstools/
@@ -130,17 +128,22 @@ database/scripts/sql/**/*_cloud9.sql
 # Seed tables are tracked in the repo AND mirrored to S3 (coeqwal-seeds-dev)
 # database/seed_tables/   (intentionally NOT ignored)
 
-# Local audit outputs
-audits/
+# Local audit outputs (tracked). See docs/AUDITS_AND_VERIFICATION.md.
+# Tarballs result when dat is downloaded directly from EC2/Cloud9 are kept local-only.
+audits/*.tar.gz
 costs/
 
 # Private infrastructure documentation (AWS account IDs, ARNs, runbooks)
 docs/INFRASTRUCTURE.md
 
-# reference/ is fully local-only.
+# /reference/ at the repo root is local-only.
 # Large per-scenario dumps belong in S3 (coeqwal-model-run).
-# Source spreadsheets and crosswalks (scenario listings, community water systems)
-# are kept on developer machines and on the COEQWAL Shared Drive, not in git.
-reference/
+/reference/
+
+**/reference/
+!etl/tier_data/reference/
+!etl/tier_data/reference/**
+!etl/statistics/reference/
+!etl/statistics/reference/**
 
 database/scripts/sql/migrations/

@@ -1,0 +1,5 @@
+id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
+1,arc,Arc,"CalSim network arcs, for example, channels, diversions, and inflows",True,2025-10-02 15:32:22.345542+00:00,2,2025-10-04 18:08:57.302937+00:00,2
+2,node,Node,"CalSim network nodes, for example, junctions, reservoirs, stream gauges, pumping plants, and demands",True,2025-10-02 15:32:22.345542+00:00,2,2025-10-04 18:08:57.306679+00:00,2
+3,null,None,Non-CalSim network,True,2025-10-02 15:32:22.345542+00:00,2,2025-10-04 18:08:57.309657+00:00,2
+5,unimpaired_flows,Unimpaired Flows,Stream unimpaired flow,True,2025-10-04 22:32:03.720846+00:00,2,2025-10-04 22:32:03.720846+00:00,2

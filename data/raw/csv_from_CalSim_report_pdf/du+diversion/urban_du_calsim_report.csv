@@ -1,0 +1,125 @@
+page,du_id,communities,id_pwsid_like,gw_bool,sw_bool,point_of_diversion
+1,02_PU,Anderson City of Anderson,4510001,1,0,N/A
+1,02_PU,Cottonwood Cottonwood WD,4510007,1,0,N/A
+1,02_PU,Lake California Rio Alto WD,5210005,1,0,N/A
+1,02_PU,Small communities Self-supplied,N/A,1,0,N/A
+1,02_PU,Centerville and Redding Centerville CSD,4510011,0,1,Whiskeytown Reservoir
+1,02_PU,Happy Valley Clear Creek CSD,4510016,0,1,Whiskeytown Reservoir
+1,02_PU,Shasta CSA No. 25 Keswick CSA5,4500001,0,1,Whiskeytown Reservoir
+1,02_PU,Shasta Shasta CSD,4510013,0,1,Whiskeytown Reservoir
+1,08N_NU,04_NU2 Gerber Gerber-Las Flores CSD,5210002,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+1,08N_NU,Red Bluff City of Red Bluff,5210004,1,0,N/A
+1,08N_NU,05_NU Los Molinos Los Molinos CSD,5210003,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+1,08N_NU,Orland City of Orland,1110001,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+1,08N_NU,Willows California Water Service Company,1110003,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+1,08N_NU,Arbuckle Arbuckle PUD,610001,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+1,08N_NU,Hamilton City California Water Service Company,1110002,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+1,08N_NU,Colusa City of Colusa,610002,1,0,N/A
+1,08N_NU,08S_NU Williams City of Williams,610004,1,0,N/A
+1,08N_NU,Small communities Self-supplied,N/A,1,0,N/A
+2,11_NU2,09_NU Small communities Self-supplied,N/A,1,0,N/A
+2,11_NU2,10_NU1 Chico California Water Service Company,410002,1,0,N/A
+2,11_NU2,Durham Durham ID,410003,1,0,N/A
+2,11_NU2,Small communities Self-supplied,N/A,1,0,N/A
+2,11_NU2,11_NU1 Oroville Thermalito ID,410008,1,1,West Branch Feather River
+2,11_NU2,Biggs City of Biggs,410001,1,0,N/A
+2,11_NU2,Gridley City of Gridley,410004,1,0,N/A
+2,11_NU2,Live Oak Live Oak WD,5110001,1,0,N/A
+2,11_NU2,Small communities Self-supplied,N/A,1,0,N/A
+2,11_NU2,12_NU1 Oroville California Water Service Company,410005,1,1,Power Canal
+2,11_NU2,12_NU2 Small communities Self-supplied,N/A,1,0,N/A
+2,11_NU2,13_NU1 Oroville South Feather Water and Power Agency,410006,0,1,South Fork Feather River
+2,20_NU2,Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,Olivehurst Olivehurst PUD,5810003,1,0,N/A
+2,20_NU2,Wheatland City of Wheatland,5810004,1,0,N/A
+2,20_NU2,Linda Linda County WD,5810002,1,0,N/A
+2,20_NU2,Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,16_PU Yuba City City of Yuba City,5110002,1,1,Feather River
+2,20_NU2,16_NU Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,17N_NU Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,Sutter Sutter CSD,5110007,1,0,N/A
+2,20_NU2,Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,18_NU Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,19_NU Small communities Self-supplied,N/A,1,0,N/A
+2,20_NU2,"Davis, El Macero, Willowbank City of Davis",5710001,1,0,N/A
+2,20_NU2,20_NU1 UC Davis University of California at Davis,5710009,1,0,N/A
+2,20_NU2,Woodland City of Woodland,5710006,1,0,N/A
+2,20_NU2,Winters City of Winters,5710005,1,0,N/A
+2,20_NU2,Esparto Esparto CSD,5710007,1,0,N/A
+2,20_NU2,Madison Madison CSD,5700571,1,0,N/A
+2,20_NU2,Small communities Self-supplied,N/A,1,0,N/A
+3,21_NU,Knights Landing Knights Landing Service District,5710004,1,0,N/A
+3,21_NU,Small communities Self-supplied,N/A,1,0,N/A
+3,21_NU,21_PU West Sacramento (Portion) City of West Sacramento,5710003,0,1,Sacramento River
+3,21_NU,Sacramento Airport8 (City of Sacramento),3400139,1,0,N/A
+3,24_NU1,Small communities Self-supplied,N/A,1,0,N/A
+3,24_NU1,23_NU Small communities Self-supplied,N/A,1,0,N/A
+3,24_NU1,"Auburn, Bowman Placer County WA – Upper Zone 1",3110005,0,1,Bear River Canal
+3,24_NU1,Christian Valley Park Christian Valley Park CSD,3110034,0,1,Boardman Canal
+4,26N_NU513,Arden Park Vista Service Area Sacramento County WA,3410002,1,0,N/A
+4,26N_NU513,Arden Cal-Am WC,3410045,1,0,N/A
+4,26N_PU3,26N_PU2 San Juan Retail Service Area11 San Juan WD,3410021,0,1,Folsom Lake
+4,26N_PU3,Orange Vale Orange Vale WC (San Juan WD),3410016,1,1,Folsom Lake
+4,26N_PU3,City of Citrus Heights Citrus Heights WD (San Juan WD),3410006,1,1,Folsom Lake
+4,26N_PU3,Fair Oaks Fair Oaks WD (San Juan WD),3410009,1,1,Folsom Lake
+4,26N_PU3,City of Folsom - Ashland City of Folsom (San Juan WD ),3410030,0,1,Folsom Lake
+4,26S_PU1,Folsom State Prison Folsom State Prison,3410032,0,1,Folsom Lake
+5,GRSVL,GDPUD_NU Georgetown Georgetown Divide PUD,910013,0,1,Pilot Creek
+5,GRSVL,"Grass Valley, Nevada ID",2910001,0,1,Deer Creek
+5,GRSVL,Nevada City Nevada ID,2910002,0,1,Deer Creek
+5,GRSVL,Napa City of Napa16,2810003,0,1,North Bay Aqueduct
+5,GRSVL,NAPA St. Helena City of Napa,2810004,0,1,North Bay Aqueduct
+5,GRSVL,Calistoga City of Calistoga (City of Napa),2810002,0,1,North Bay Aqueduct
+7,50_PU,Tracy City of Tracy (South San Joaquin ID),3910011,1,1,"Delta-Mendota Canal, Stanislaus River"
+7,50_PU,Mountain House Mountain House CSD,3910027,0,1,Clifton Court Forebay
+7,50_PU,Galt City of Galt,3410011,1,0,N/A
+7,50_PU,60N_NU1 Lodi City of Lodi,3910004,1,0,N/A
+7,50_PU,Small communities Self-supplied,N/A,1,0,N/A
+7,50_PU,60N_NU2 Rancho Murieta Rancho Murieta CSD,3410005,0,1,N/A
+7,62_NU,California Water Service Company,3910001,1,1,"Calaveras River, Stanislaus River, Delta"
+7,62_NU,60S_NU2 Small communities Self-supplied,N/A,1,0,N/A
+7,62_NU,Modesto,5010010,1,1,Tuolumne River
+7,62_NU,Salida,5010005,1,0,N/A
+7,62_NU,61_NU1 Waterford City of Modesto,5010006,1,0,N/A
+7,62_NU,Hickman,5010026,1,0,N/A
+7,62_NU,Grayson,5010033,1,0,N/A
+7,62_NU,Lathrop City of Lathrop (South San Joaquin ID),3910015,1,1,Stanislaus River
+7,62_NU,61_NU2 Escalon City of Escalon (South San Joaquin ID),3910003,1,1,Stanislaus River
+7,62_NU,Manteca City of Manteca (South San Joaquin ID),3910005,1,1,Stanislaus River
+7,62_NU,Ripon City of Ripon,3910007,1,0,N/A
+7,62_NU,Oakdale City of Oakdale,5010014,1,0,N/A
+7,62_NU,Riverbank City of Riverbank,5010018,1,0,N/A
+7,62_NU,Small communities Self-supplied,N/A,1,0,N/A
+7,62_NU,Turlock City of Turlock,5010019,1,0,N/A
+7,62_NU,"Ceres City of Ceres, City of Modesto",5010028,1,0,N/A
+7,62_NU,Delhi Delhi CWD,2410006,1,0,N/A
+7,62_NU,Hilmar Hilmar County WD,2410012,1,0,N/A
+7,62_NU,Hughson City of Hughson,5010008,1,0,N/A
+7,62_NU,Keyes Keyes CSD,5010009,1,0,N/A
+7,62_NU,Denair Denair CSD,5010021,1,0,N/A
+7,62_NU,Small communities Self-supplied,N/A,1,0,N/A
+8,71_NU,Merced City of Merced,2410009,1,0,N/A
+8,71_NU,Atwater City of Atwater,2410001,1,0,N/A
+8,71_NU,Livingston City of Livingston,2410004,1,0,N/A
+8,71_NU,63_NU Winton Winton WSD,2410010,1,0,N/A
+8,71_NU,Planada Planada CSD,2410007,1,0,N/A
+8,71_NU,LeGrand LeGrand CSD,2410011,1,0,N/A
+8,71_NU,Small communities Self-supplied,N/A,1,0,N/A
+8,71_NU,Madera City of Madera,2010002,1,0,N/A
+8,71_NU,Chowchilla City of Chowchilla,2010001,1,0,N/A
+8,71_NU,64_NU Madera Acres Madera Valley WC,2010010,1,0,N/A
+8,71_NU,Valley State Prison for Women California State Prisons,2010801,1,0,N/A
+8,71_NU,Small communities Self-supplied,N/A,1,0,N/A
+8,71_NU,Patterson City of Patterson,5010017,1,0,N/A
+8,71_NU,Small communities Self-supplied,N/A,1,0,N/A
+8,CWD,72_PU Dos Palos,2410002,1,0,N/A
+8,CWD,73_NU Small communities Self-supplied,N/A,1,0,N/A
+8,CWD,Avenal City of Avenal,1610002,0,1,N/A
+8,CWD,90_PU5 Coalinga City of Coalinga,1010004,0,1,N/A
+8,CWD,Huron City of Huron,1010044,0,1,N/A

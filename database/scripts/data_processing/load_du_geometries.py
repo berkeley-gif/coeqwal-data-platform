@@ -3,9 +3,9 @@
 load_du_geometries.py - load dissolved demand-unit polygons into the
 `du_*_entity` tables from `database/seed_tables/03_GIS/du_4326.gpkg`.
 
-This is a one-shot bootstrap loader for reference data, paired with
+This is a bootstrap loader for reference data, paired with
 `database/scripts/sql/56_add_du_geometry_columns.sql`. It is not part
-of the recurring ETL pipeline; rerun it only when new polygons land
+of the recurring ETL pipeline. Rerun it only when new polygons land
 in the source GeoPackage (or `--gpkg` points at a successor file).
 
 Source layer: `demandunits` in the GeoPackage. One row per `DU_ID`,
@@ -44,8 +44,7 @@ After every batch of writes the loader runs an in-DB validation pass:
     (approximately `-125 to -114 deg lon, 32 to 43 deg lat`).
 
 Any failure of any check aborts the loader with a non-zero exit code,
-so the load is either valid in every row or rolled back loudly. No GDAL,
-geopandas, or shapely is required at any step.
+so the load is either valid in every row or rolled back loudly.
 
 For each `DU_ID` in the geopackage, the loader writes the polygon to
 every `du_*_entity` table that already contains a row with that `du_id`.
@@ -76,13 +75,11 @@ self-intersections, duplicated vertices, etc.):
     `geometry(MultiPolygon, 4326)` and the `ST_GeometryType` check
     in `validate_writes`.
 
-Run the migration `database/scripts/sql/56_add_du_geometry_columns.sql`
-once before the first invocation so the `geom_wkt` / `srid` / `geom`
-columns exist.
 
 Read-only companion (audit / drift scorecard):
 `etl/tier_data/scripts/audit_tier_location_geometry.py`. Persistent roster of
-missing polygons: `docs/du_geometry_gap.md`.
+missing polygons: `docs/du_polygon_mapping.md` (alias/dissolve rules and
+roadmap). Summary counts: `docs/du_geometry_gap.md`.
 
 Usage:
     export DATABASE_URL="postgresql://USER:PASS@HOST:5432/coeqwal_scenario"
@@ -111,6 +108,12 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
 import psycopg2
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from du_gpkg_id_resolution import plan_entity_gpkg_sources
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_GPKG = (
@@ -160,7 +163,7 @@ def _gpb_header_length(flags: int) -> int:
 
     GeoPackage WKB blobs start with 2 bytes magic (`'GP'`), 1 byte
     version, 1 byte flags, then an optional envelope. The envelope
-    type lives in bits 1-3 of the flag byte; 0 means no envelope, 1
+    type lives in bits 1-3 of the flag byte. 0 means no envelope, 1
     means a 32-byte 2D envelope, others are 3D/4D variants. Every
     polygon in `du_4326.gpkg` uses envelope type 1, so the prefix is
     8 + 32 = 40 bytes.
@@ -261,30 +264,41 @@ def _fetch_entity_du_ids(conn) -> Dict[str, Set[str]]:
 def plan_updates(
     gpkg_polygons: Dict[str, bytes],
     entity_ids: Dict[str, Set[str]],
-) -> Tuple[Dict[str, List[str]], List[str], Dict[str, List[str]]]:
+) -> Tuple[
+    Dict[str, List[str]],
+    Dict[Tuple[str, str], List[str]],
+    List[str],
+    Dict[str, List[str]],
+]:
     """Decide which (table, du_id) rows to update.
 
+    Uses alias and dissolve rules from `du_gpkg_id_resolution.py` when an
+    entity `du_id` does not match a gpkg `DU_ID` exactly.
+
     Returns:
-        updates_by_table: {table: [du_id, ...]} - du_ids the loader will
-            write polygons to, grouped by entity table.
+        updates_by_table: {table: [du_id, ...]} - entity rows the loader will
+            write polygons to.
+        source_map: {(table, du_id): [gpkg_du_id, ...]} - gpkg keys consumed
+            per entity row (one for alias/direct match, several for dissolve).
         gpkg_only: du_ids present in the gpkg but absent from every
-            entity table (logged, no DB write).
+            entity table and not consumed by any alias/dissolve rule.
         missing_in_gpkg: {table: [du_id, ...]} - per-table list of
-            du_ids that exist in the entity table but have no polygon
-            in the gpkg (logged, no DB write).
+            entity du_ids with no resolvable polygon in the gpkg.
     """
-    updates_by_table: Dict[str, List[str]] = defaultdict(list)
-    for du_id in sorted(gpkg_polygons):
-        for table in ENTITY_TABLES:
-            if du_id in entity_ids.get(table, set()):
-                updates_by_table[table].append(du_id)
     gpkg_ids = set(gpkg_polygons)
+    updates_by_table, source_map, gpkg_consumed = plan_entity_gpkg_sources(
+        entity_ids, gpkg_ids
+    )
     all_entity_ids: Set[str] = set().union(*entity_ids.values())
-    gpkg_only = sorted(gpkg_ids - all_entity_ids)
-    missing_in_gpkg: Dict[str, List[str]] = {
-        table: sorted(ids - gpkg_ids) for table, ids in entity_ids.items()
+    gpkg_only = sorted(gpkg_ids - all_entity_ids - gpkg_consumed)
+    matched_by_table: Dict[str, Set[str]] = {
+        table: set(ids) for table, ids in updates_by_table.items()
     }
-    return dict(updates_by_table), gpkg_only, missing_in_gpkg
+    missing_in_gpkg: Dict[str, List[str]] = {
+        table: sorted(ids - matched_by_table.get(table, set()))
+        for table, ids in entity_ids.items()
+    }
+    return updates_by_table, source_map, gpkg_only, missing_in_gpkg
 
 
 # ---------------------------------------------------------------------------
@@ -292,9 +306,26 @@ def plan_updates(
 # ---------------------------------------------------------------------------
 
 
+def _geom_sql_from_wkbs(wkb_count: int) -> str:
+    """Build a PostGIS expression that turns 1+ WKB blobs into a MultiPolygon."""
+    if wkb_count == 1:
+        return (
+            "ST_Multi(ST_CollectionExtract("
+            "ST_MakeValid(ST_GeomFromWKB(%s::bytea, 4326)), 3))"
+        )
+    parts = ", ".join(
+        f"ST_MakeValid(ST_GeomFromWKB(%s::bytea, 4326))" for _ in range(wkb_count)
+    )
+    return (
+        f"ST_Multi(ST_CollectionExtract("
+        f"ST_MakeValid(ST_Union(ST_Collect(ARRAY[{parts}]))), 3))"
+    )
+
+
 def apply_updates(
     conn,
     updates_by_table: Dict[str, List[str]],
+    source_map: Dict[Tuple[str, str], List[str]],
     gpkg_polygons: Dict[str, bytes],
     dry_run: bool,
 ) -> Dict[str, int]:
@@ -308,21 +339,18 @@ def apply_updates(
     with conn.cursor() as cur:
         for table, du_ids in updates_by_table.items():
             for du_id in du_ids:
-                wkb = gpkg_polygons[du_id]
+                gpkg_sources = source_map[(table, du_id)]
+                wkbs = [gpkg_polygons[s] for s in gpkg_sources]
+                geom_expr = _geom_sql_from_wkbs(len(wkbs))
+                params = list(wkbs) + list(wkbs) + [du_id]
                 cur.execute(
                     f'UPDATE "{table}" SET '
-                    f'  geom         = ST_Multi(ST_CollectionExtract('
-                    f'                   ST_MakeValid(ST_GeomFromWKB(%s::bytea, 4326)),'
-                    f'                   3'
-                    f'                 )), '
-                    f'  geom_wkt     = ST_AsText(ST_Multi(ST_CollectionExtract('
-                    f'                   ST_MakeValid(ST_GeomFromWKB(%s::bytea, 4326)),'
-                    f'                   3'
-                    f'                 ))), '
-                    f'  srid         = 4326, '
-                    f'  has_gis_data = TRUE '
-                    f'WHERE du_id = %s',
-                    (wkb, wkb, du_id),
+                    f"  geom         = {geom_expr}, "
+                    f"  geom_wkt     = ST_AsText({geom_expr}), "
+                    f"  srid         = 4326, "
+                    f"  has_gis_data = TRUE "
+                    f"WHERE du_id = %s",
+                    params,
                 )
                 written[table] += cur.rowcount
     conn.commit()
@@ -536,10 +564,12 @@ def main() -> int:
                 )
                 return 1
         entity_ids = _fetch_entity_du_ids(conn)
-        updates_by_table, gpkg_only, missing_in_gpkg = plan_updates(
+        updates_by_table, source_map, gpkg_only, missing_in_gpkg = plan_updates(
             gpkg_polygons, entity_ids
         )
-        written = apply_updates(conn, updates_by_table, gpkg_polygons, args.dry_run)
+        written = apply_updates(
+            conn, updates_by_table, source_map, gpkg_polygons, args.dry_run
+        )
         report(
             gpkg_polygons,
             entity_ids,

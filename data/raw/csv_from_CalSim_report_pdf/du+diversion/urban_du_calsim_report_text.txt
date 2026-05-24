@@ -1,0 +1,433 @@
+
+===== PAGE 1 =====
+Chapter 3: Demand Units
+Table 3-7. Urban Demand Units in Sacramento River Hydrologic Region
+Water Source
+Demand Water Agency
+Cities, Towns, and Communities ID2,3,4
+Unit1 Retail (Wholesale)
+GW SW Point of Diversion
+Anderson City of Anderson 4510001 • - N/A
+Cottonwood Cottonwood WD 4510007 • - N/A
+02_NU
+Lake California Rio Alto WD 5210005 • - N/A
+Small communities Self-supplied N/A • - N/A
+Centerville and Redding Centerville CSD 4510011 - • Whiskeytown Reservoir
+Happy Valley Clear Creek CSD 4510016 - • Whiskeytown Reservoir
+02_PU
+Shasta CSA No. 25 Keswick CSA5 4500001 - • Whiskeytown Reservoir
+Shasta Shasta CSD 4510013 - • Whiskeytown Reservoir
+02_SU Redding – Foothill, Hill 900 and Cascade • • Sacramento River
+03_PU3 Redding – Buckeye and Hilltop City of Redding 4510005 - • Whiskeytown Reservoir
+03_SU Redding – Hilltop and Enterprise • • Sacramento River
+03_NU Small communities Self-supplied N/A • - N/A
+Shasta CSA No. 6 Jones Valley CSA2 4510004 - • Shasta Reservoir
+03_PU1 Shasta Lake City of Shasta Lake 4510006 - • Shasta Reservoir
+Mountain Gate Mountain Gate CSD 4510002 • • Shasta Reservoir
+Stillwater Valley, Bella Vista, Palo Cedro,
+03_PU2 Bella Vista WD 4510014 • • Sacramento River
+Redding
+04_NU1 Red Bluff City of Red Bluff 5210004 • - N/A
+Corning City of Corning • - N/A
+04_NU2 Gerber Gerber-Las Flores CSD 5210002 • - N/A
+Small communities Self-supplied N/A • - N/A
+Red Bluff City of Red Bluff 5210004 • - N/A
+05_NU Los Molinos Los Molinos CSD 5210003 • - N/A
+Small communities Self-supplied N/A • - N/A
+Orland City of Orland 1110001 • - N/A
+06_NU
+Small communities Self-supplied N/A • - N/A
+Willows California Water Service Company 1110003 • - N/A
+07N_NU
+Small communities Self-supplied N/A • - N/A
+Arbuckle Arbuckle PUD 610001 • - N/A
+07S_NU
+Small communities Self-supplied N/A • - N/A
+Hamilton City California Water Service Company 1110002 • - N/A
+08N_NU
+Small communities Self-supplied N/A • - N/A
+Colusa City of Colusa 610002 • - N/A
+08S_NU Williams City of Williams 610004 • - N/A
+Small communities Self-supplied N/A • - N/A
+August 2022 – 3-29
+
+===== PAGE 2 =====
+CalSim 3 Main Report
+Table 3-7. Urban Demand Units in Sacramento River Hydrologic Region (contd.)
+Water Source
+Demand Water Agency
+Cities, Towns, and Communities ID2,3,4
+Unit1 Retail (Wholesale)
+GW SW Point of Diversion
+09_NU Small communities Self-supplied N/A • - N/A
+10_NU1 Chico California Water Service Company 410002 • - N/A
+Durham Durham ID 410003 • - N/A
+10_NU2
+Small communities Self-supplied N/A • - N/A
+11_NU1 Oroville Thermalito ID 410008 • • West Branch Feather River
+Biggs City of Biggs 410001 • - N/A
+Gridley City of Gridley 410004 • - N/A
+11_NU2
+Live Oak Live Oak WD 5110001 • - N/A
+Small communities Self-supplied N/A • - N/A
+12_NU1 Oroville California Water Service Company 410005 • • Power Canal
+12_NU2 Small communities Self-supplied N/A • - N/A
+13_NU1 Oroville South Feather Water and Power Agency 410006 - • South Fork Feather River
+13_NU2 Small communities South Feather Water and Power Agency • • Lake Oroville – Palermo Canal
+14_NU Small communities Self-supplied N/A • - N/A
+Marysville California Water Service Company 5810001 • •6 N/A
+15N_NU
+Small communities Self-supplied N/A • - N/A
+Olivehurst Olivehurst PUD 5810003 • - N/A
+Wheatland City of Wheatland 5810004 • - N/A
+15S_NU
+Linda Linda County WD 5810002 • - N/A
+Small communities Self-supplied N/A • - N/A
+16_PU Yuba City City of Yuba City 5110002 • • Feather River
+16_NU Small communities Self-supplied N/A • - N/A
+17N_NU Small communities Self-supplied N/A • - N/A
+Sutter Sutter CSD 5110007 • - N/A
+17S_NU
+Small communities Self-supplied N/A • - N/A
+18_NU Small communities Self-supplied N/A • - N/A
+19_NU Small communities Self-supplied N/A • - N/A
+Davis, El Macero, Willowbank City of Davis 5710001 • - N/A
+20_NU1 UC Davis University of California at Davis 5710009 • - N/A
+Woodland City of Woodland 5710006 • - N/A
+Winters City of Winters 5710005 • - N/A
+Esparto Esparto CSD 5710007 • - N/A
+20_NU2
+Madison Madison CSD 5700571 • - N/A
+Small communities Self-supplied N/A • - N/A
+3-30 – August 2022
+
+===== PAGE 3 =====
+Chapter 3: Demand Units
+Table 3-7. Urban Demand Units in Sacramento River Hydrologic Region (contd.)
+Demand Cities, Towns, and Water Agency Water Source
+ID2,3,4
+Unit1 Communities Retail (Wholesale) GW SW Point of Diversion
+Knights Landing Knights Landing Service District 5710004 • - N/A
+21_NU
+Small communities Self-supplied N/A • - N/A
+21_PU West Sacramento (Portion) City of West Sacramento 5710003 - • Sacramento River
+Sacramento Airport8 (City of Sacramento) 3400139 • - N/A
+Non-
+Metro Air Park Sacramento County WA (City of Sacramento) - - N/A
+residential
+22_NU
+Non-
+Northgate 8809 Sacramento County WA • - N/A
+residential
+Small communities Self-supplied N/A • - N/A
+23_NU Small communities Self-supplied N/A • - N/A
+Auburn, Bowman Placer County WA – Upper Zone 1 3110005 - • Bear River Canal
+24_NU1
+Christian Valley Park Christian Valley Park CSD 3110034 - • Boardman Canal
+Loomis, Newcastle, Penryn,
+Bear River Canal,
+Rocklin, Granite Bay (Portion), Placer County WA - lower Zone 1 3110025 •8 •7
+North Fork American River
+24_NU2 Roseville (Portion)
+Lincoln City of Lincoln (Placer County WA) 3110004 • •9 Bear River Canal
+West Placer Cal-Am WC (Placer County WA) 3110150 • - Bear River Canal
+24_NU3 North Auburn Nevada ID 3110026 - • Bear River Canal
+24_NU4 Small communities Self-supplied - • - N/A
+Rio Vista City of Rio Vista 4810004 • - N/A
+25_NU Dixon California Water Service Company 4810002 • - N/A
+Small communities Self-supplied N/A • - N/A
+South Putah Canal,
+25_PU Vacaville City of Vacaville 4810008 • •
+North Bay Aqueduct
+Northridge, McClellan Business Sacramento Suburban WD – NSA13, McClellan
+3410024 • • Folsom Lake
+Park (Placer County WA)
+Sacramento Suburban WD – NSA12
+Arcade – North Highlands 3410025 • • Folsom Lake
+26N_NU1 (Placer County WA)
+Antelope Cal-Am WC (San Juan WD) 3410031 • • Folsom Lake
+Lincoln Oaks Cal-Am WC (San Juan WD) 3410013 • • Folsom Lake
+Rio Linda, Elverta15 Rio Linda Elverta CWD (San Juan WD) 3410018 • -17 Folsom Lake
+26N_NU2 Carmichael Carmichael WD 3410004 • • Lower American River
+Lower American River,
+26N_NU3 City of Sacramento - North City of Sacramento 3410020 • •
+Sacramento River
+Sacramento Suburban WD – SSA
+26N_NU4 Arcade14 3410001 • • Lower American River
+(City of Sacramento)
+August 2022 – 3-31
+
+===== PAGE 4 =====
+CalSim 3 Main Report
+Table 3-7. Urban Demand Units in Sacramento River Hydrologic Region (contd.)
+Water Source
+Demand Cities, Towns, and Water Agency
+ID2,3,4
+Unit1 Communities Retail (Wholesale)
+GW SW Point of Diversion
+Arden Golden State WC 3410003 • - N/A
+Del Paso Service Area Del Paso Manor WD 3410007 • -18 N/A
+26N_NU513
+Arden Park Vista Service Area Sacramento County WA 3410002 • - N/A
+Arden Cal-Am WC 3410045 • - N/A
+26N_PU1 Roseville City of Roseville 3110008 •13 •10 Folsom Lake
+26N_PU2 San Juan Retail Service Area11 San Juan WD 3410021 - • Folsom Lake
+Orange Vale Orange Vale WC (San Juan WD) 3410016 • • Folsom Lake
+City of Citrus Heights Citrus Heights WD (San Juan WD) 3410006 • • Folsom Lake
+26N_PU3
+Fair Oaks Fair Oaks WD (San Juan WD) 3410009 • • Folsom Lake
+City of Folsom - Ashland City of Folsom (San Juan WD ) 3410030 - • Folsom Lake
+Lower American River,
+26S_NU1 City of Sacramento - South City of Sacramento 3410020 • •
+Sacramento River
+Parkway Cal-Am WC (City of Sacramento) 3410017 • •23 Lower American River
+26S_NU2 Suburban Cal-Am WC (City of Sacramento) 3410010 • •23 Lower American River
+Rosemont Cal-Am WC (City of Sacramento) 3410034 • •23 Lower American River
+Florin Florin County WD 3410033 • - N/A
+26S_NU3 Fruitridge Fruitridge Vista WC 3410023 • - N/A
+Tokay Park Tokay Park WC (Sacramento County WA) 3400172 • - N/A
+Non-potable
+26S_NU4 Groundwater remediation Aerojet • • Folsom Lake
+water
+City of Folsom City of Folsom 3410014 • •21 Folsom Lake
+26S_PU1
+Folsom State Prison Folsom State Prison 3410032 - • Folsom Lake
+26S_PU2 Rancho Cordova Golden State WC 3410015 •22 • Folsom South Canal
+Non-potable
+26S_PU3 Folsom Lake shoreline California Parks and Recreation - • Folsom Lake
+water
+26S_PU4 Laguna Sacramento County WA – SSA 3410029 • • Sacramento River
+Elk Grove WD, Tariff Area No.2 (Sacramento
+• • Sacramento River
+26S_PU5 City of Elk Grove County WA) 3410008
+Elk Grove WD, Tariff Area No.1 • - N/A
+Vineyard Sacramento County WA – CSA (Zone 40) • -20 N/A
+26S_PU6 Mather-Sunrise Sacramento County WA – NSA (Zone 40) 3410704 • -20 N/A
+Sunrise/Security Park Cal-Am WC (Sacramento County WA) 3410027 • -20 N/A
+3-32 – August 2022
+
+===== PAGE 5 =====
+Chapter 3: Demand Units
+Table 3-7. Urban Demand Units in Sacramento River Hydrologic Region (contd.)
+Water Source
+Demand Cities, Towns, and Water Agency
+ID2,3,4
+Unit1 Communities Retail (Wholesale)
+GW SW Point of Diversion
+AMCYN American Canyon City of American Canyon 2810005 - • North Bay Aqueduct
+ANTOC Antioch City of Antioch 710001 - • Delta, Contra Costa Canal
+South Putah Canal,
+BNCIA Benicia City of Benicia 4810001 - •
+North Bay Aqueduct
+CLLPT Clear Lake communities 19 M&I water purveyors N/A • • Clear Lake
+CSPSO Solano State Prison California State Prison – Solano 4810800 - • South Putah Canal
+ELDID_NU1 El Dorado Eastern Region El Dorado ID - • El Dorado Canal, Jenkinson Lake
+ELDID_NU2 El Dorado Western Region El Dorado ID - • El Dorado Canal, Jenkinson Lake
+ELDID_NU3 El Dorado Hills El Dorado ID 910001 • • Folsom Lake, Jenkinson Lake
+Berkeley, Oakland, Richmond, Mokelumne River at Pardee Reservoir;
+EBMUD East Bay Municipal Utility District 11005 - •
+Walnut Creek25 Sacramento River at Freeport
+South Putah Canal,
+FRFLD Fairfield City of Fairfield 4810003 - •
+North Bay Aqueduct
+GDPUD_NU Georgetown Georgetown Divide PUD 910013 - • Pilot Creek
+Grass Valley, Nevada ID 2910001 - • Deer Creek
+GRSVL
+Nevada City Nevada ID 2910002 - • Deer Creek
+Napa City of Napa16 2810003 - • North Bay Aqueduct
+NAPA St. Helena City of Napa 2810004 - • North Bay Aqueduct
+Calistoga City of Calistoga (City of Napa) 2810002 - • North Bay Aqueduct
+NAPA2 Lake Berryessa communities Solano County WA N/A Lake Berryessa
+Dutch Flat MWC, Weimar WC, Midway
+Alta, Dutch Flat, Colfax, Heights County WD, Heather Glen CSD,
+PCWA3 N/A - • Lower Boardman Canal
+Applegate, Meadow Vista Meadow Vista County WD (Placer
+County WA)
+PINES Lake of Pines Nevada ID 2910014 - • Bear River
+PLMAS Portola Plumas FC&WCD 3210003 • • Lake Davis
+SUISN Suisun City of Suisun 4810005 - • North Bay Aqueduct
+TVAFB Travis Air Force Base Travis Air Force Base 4810015 - • North Bay Aqueduct
+South Putah Canal,
+VLLJO Vallejo City of Vallejo 4810007 - •
+North Bay Aqueduct
+WLDWD Lake Wildwood Nevada ID 2910023 - • Deer Creek
+August 2022 – 3-33
+
+===== PAGE 6 =====
+CalSim 3 Main Report
+Table 3-7. Urban Demand Units in Sacramento River Hydrologic Region (contd.)
+Notes:
+1 The name of demand units located within a Water Budget Area (WBA) is prefixed with the WBA identification number. Demand units outside of the WBAs, located either in the rim
+watersheds or within the Sacramento-San Joaquin Delta or San Francisco Bay hydrologic regions, are identified using a five letter acronym.
+2 The California Public Water System identification number (ID) is as used in the DWR Public Water Supply Statistics database.
+3 No ID or population data are given for demand units representing small communities that rely on self-produced water supplies.
+4 Population data are covered in Chapter 12, Urban Water Use.
+5 Shasta County WA provides water to water purveyors in Shasta County, including Keswick CSA and Jones Valley CSA.
+6 The City of Marysville diverts water from the lower Yuba River to fill Lake Ellis for recreational and aesthetic purposes.
+7 Placer County WA purchases water from the PG&E’s Drum-Spaulding Project, which originates from the upper Yuba River basin, augmented by Bowman Lake and Lake
+Spaulding on the South Yuba River and Rollins Reservoir on the Bear River. The water supply is conveyed primarily via the Drum, Bear River, and lower Boardman canals.
+Nevada ID and Placer County WA share capacity in the canal with agreements that provide for use of any unused capacity by either agency.
+8 Placer County WA has several wells in the Western Placer County (Sunset Industrial Park) and is considering increasing groundwater capacity for meeting future conjunctive
+requirements.
+9 The City of Lincoln purchases treated surface water from Placer County WA, which is used conjunctively with treated groundwater for urban uses and use of recycled water for
+agricultural irrigation from its wastewater treatment plant.
+10 The City of Roseville purchases a small portion of treated Placer County WA water for service to higher elevation developments.
+11 The Sacramento International Airport is currently on groundwater supplies with poor water quality. It is anticipated that wholesale agreements with the City of Sacramento to treat
+and deliver Natomas Central Mutual Water Company water will replace groundwater supplies in the near future.
+12 The Northgate service area of Sacramento County WA may be annexed to the City of Sacramento in the near future and receive water from the city.
+13 The City of Roseville has been actively pursuing aquifer storage and recovery (ASR) for wells constructed within its retail service area.
+14 Includes a portion of Granite Bay in Placer County.
+15 This portion of the Sacramento Suburban WD was formerly served by Arcade WD North Highlands service area and Northridge WD.
+16 This portion of the Sacramento Suburban WD was formerly served by Arcade WD Town and Country service area.
+17 The older and much larger portion of Rio Linda Elverta Community WD relies solely on groundwater. The newer development is served surface water through agreements with
+San Juan WD.
+18 Del Paso WD has an existing agreement for surface water with the City of Sacramento for American River Place of Use water if groundwater supplies become inadequate to meet
+demands. To date, this diversion has not occurred.
+19 The City of Napa delivers treated water to the City of American Canyon. The City of Napa also delivers water to the Town of Yountville and California Veterans Home.
+20 Sacramento County WA Vineyard Surface Water Treatment Plant was completion in 2011.
+21 Agreements have been made with Natomas Central Mutual Water Company to deliver up 10,000 acre-feet per year to the City of Folsom south of Highway 50 sphere of influence
+Development Area. Conveyance will likely be through the East Bay Municipal Utility District/Sacramento County WA Freeport diversion to be operational by 2011.
+22 Groundwater contamination has reduced groundwater production over the past 10 years, increasing the need for surface water from the Folsom South Canal.
+23 California American WC and Sacramento County WA are negotiating surface water wholesale agreements with the City of Sacramento for American River Place of Use.
+24 Contra Costa Water District also serves parts of Walnut Creek, Pleasant Hill, Martinez, and Brentwood.
+25 EBMUD's water system covers a 331-square-mile area extending from Crockett on the north, southward to San Lorenzo, eastward from San Francisco to Walnut Creek, and south
+through the San Ramon Valley.
+Key: GW = groundwater RCD = Resource Conservation District
+Cal-Am = California American ID = Irrigation District SSA = South Service Area
+CSA = County Service Area/Central Service Area N/A = not applicable SW = surface water UC = University of California
+CSD = Community Service District NSA = North Service Area WA = Water Agency
+CWD = Community Water District PG&E = Pacific Gas and Electric WC = Water Company
+DPH ID = California Department of Health identification number POU = Place of Use WD = Water District
+FC&WCD = Flood Control and Water Conservation District PUD = Public Utility District WSC = Water Service Company
+3-34 – August 2022
+
+===== PAGE 7 =====
+Chapter 3: Demand Units
+Table 3-8. Urban Demand Units in San Joaquin River and Tulare Lake Hydrologic Regions
+Water Source
+Demand Cities, Towns, and Water Agency
+ID2,3,4
+Unit1 Communities Retail (Wholesale)
+GW SW Point of Diversion
+Tracy City of Tracy (South San Joaquin ID) 3910011 • • Delta-Mendota Canal, Stanislaus River
+50_PU
+Mountain House Mountain House CSD 3910027 - • Clifton Court Forebay
+Galt City of Galt 3410011 • - N/A
+60N_NU1 Lodi City of Lodi 3910004 • - N/A
+Small communities Self-supplied N/A • - N/A
+60N_NU2 Rancho Murieta Rancho Murieta CSD 3410005 - • N/A
+Rancho Seco Power
+60N_PU Sacramento Municipal Utility District Non-potable water use - • Folsom South Canal
+Plant
+City of Stockton 3910012 • • Calaveras River, Stanislaus River, Delta
+60S_NU1 City of Stockton
+California Water Service Company 3910001 • • Calaveras River, Stanislaus River, Delta
+60S_NU2 Small communities Self-supplied N/A • - N/A
+Modesto 5010010 • • Tuolumne River
+Salida 5010005 • - N/A
+61_NU1 Waterford City of Modesto 5010006 • - N/A
+Hickman 5010026 • - N/A
+Grayson 5010033 • - N/A
+Lathrop City of Lathrop (South San Joaquin ID) 3910015 • • Stanislaus River
+61_NU2 Escalon City of Escalon (South San Joaquin ID) 3910003 • • Stanislaus River
+Manteca City of Manteca (South San Joaquin ID) 3910005 • • Stanislaus River
+Ripon City of Ripon 3910007 • - N/A
+Oakdale City of Oakdale 5010014 • - N/A
+61_NU3
+Riverbank City of Riverbank 5010018 • - N/A
+Small communities Self-supplied N/A • - N/A
+Turlock City of Turlock 5010019 • - N/A
+Ceres City of Ceres, City of Modesto 5010028 • - N/A
+Delhi Delhi CWD 2410006 • - N/A
+Hilmar Hilmar County WD 2410012 • - N/A
+62_NU
+Hughson City of Hughson 5010008 • - N/A
+Keyes Keyes CSD 5010009 • - N/A
+Denair Denair CSD 5010021 • - N/A
+Small communities Self-supplied N/A • - N/A
+August 2022 – 3-35
+
+===== PAGE 8 =====
+CalSim 3 Main Report
+Table 3-8. Urban Demand Units in San Joaquin River and Tulare Lake Hydrologic Regions (contd.)
+Water Source
+Demand Cities, Towns, and Water Agency
+ID2,3,4
+Unit1 Communities Retail (Wholesale)
+GW SW Point of Diversion
+Merced City of Merced 2410009 • - N/A
+Atwater City of Atwater 2410001 • - N/A
+Livingston City of Livingston 2410004 • - N/A
+63_NU Winton Winton WSD 2410010 • - N/A
+Planada Planada CSD 2410007 • - N/A
+LeGrand LeGrand CSD 2410011 • - N/A
+Small communities Self-supplied N/A • - N/A
+Madera City of Madera 2010002 • - N/A
+Chowchilla City of Chowchilla 2010001 • - N/A
+64_NU Madera Acres Madera Valley WC 2010010 • - N/A
+Valley State Prison for Women California State Prisons 2010801 • - N/A
+Small communities Self-supplied N/A • - N/A
+Patterson City of Patterson 5010017 • - N/A
+71_NU
+Small communities Self-supplied N/A • - N/A
+Non-potable
+71_PU1 Musco Olive Products Musco Olive Products - • California Aqueduct
+water use
+Non-potable
+71_PU2 Veterans Affairs Cemetery U.S. Department of Veterans Affairs - • California Aqueduct
+water use
+Gustine City of Gustine 2410003 • - N/A
+Firebaugh City of Firebaugh 1010005 • - N/A
+72_NU Los Banos City of Los Banos 2410005 • - N/A
+Newman City of Newman 5010013 • - N/A
+Small communities Self-supplied N/A • - N/A
+North Dos Palos WD, South Dos Palos
+72_PU Dos Palos 2410002 • - N/A
+CWD
+73_NU Small communities Self-supplied N/A • - N/A
+Avenal City of Avenal 1610002 - • N/A
+90_PU5 Coalinga City of Coalinga 1010004 - • N/A
+Huron City of Huron 1010044 - • N/A
+3-36 – August 2022
+
+===== PAGE 9 =====
+Chapter 3: Demand Units
+Table 3-8. Urban Demand Units in San Joaquin River and Tulare Lake Hydrologic Regions (contd.)
+Water Source
+Demand Cities, Towns, and Water Agency
+ID2,3,4
+Unit1 Communities Retail (Wholesale)
+GW SW Point of Diversion
+Ione Creek Amador WA 310002 - • North Fork Mokelumne River
+AMADR_NU Sutter Creek Amador WA 310003 - • North Fork Mokelumne River
+Small communities Amador WA N/A - • North Fork Mokelumne River
+Bay Point, Clayton, Clyde,
+CCWD Concord, Oakley, Pittsburg, Contra Costa Water District 710003 - • Rock Slough, Old River, Middle River
+Port Costa24
+CCWDI Murphys Union PUD 510001 - • North Fork Stanislaus River
+Berkeley, Oakland, Mokelumne River at Pardee Reservoir; Sacramento
+EBMUD East Bay Municipal Utility District 11005 - •
+Richmond, Walnut Creek6 River at Freeport
+JLIND Jenny Lind/Valley Springs Calaveras County WD 510006 - • N/A
+MHILL_NU Mokelumne Hill Calaveras PUD 510002 - • Middle Fork Mokelumne River
+UPANG City of Angels Union PUD 510003 - • North Fork Stanislaus River
+WSPNT_NU West Point Calaveras County WD 510005 - • South Fork Mokelumne River
+Notes:
+1 The name of demand units located within a Water Budget Area (WBA) are prefixed with the WBA identification number. Demand units outside of the WBAs, located either in the
+rim watersheds, or within the Sacramento-San Joaquin Delta or San Francisco Bay hydrologic regions, are identified using a 5-letter acronym.
+2 The California Public Water System identification number (ID) is as used in the DWR Public Water Supply Statistics database.
+3 No ID or population data are given for demand units representing small communities that rely on self-produced water supplies.
+4 Population data are covered in Chapter 12, Urban Water Use.
+5 WBA 90 is located in the Tulare Lake Hydrologic Region but is included here because CVP water is supplied via the joint reach of the California Aqueduct.
+6 EBMUD's water system covers a 331-square-mile area extending from Crockett on the north, southward to San Lorenzo, eastward from San Francisco to Walnut Creek, and south
+through the San Ramon Valley.
+Key:
+CSD = Community Service District
+GW = groundwater (• = access to groundwater, - = no access to groundwater)
+ID = Irrigation District
+N/A = not applicable
+SW = surface water (• = access to surface water, - = no access to surface water)
+WC = Water Company
+WD = Water District,
+WSD = Water Service District
+August 2022 – 3-37

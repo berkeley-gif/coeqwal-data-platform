@@ -1,0 +1,6 @@
+id,short_code,full_name,canonical_group,is_active,created_at,created_by,updated_at,updated_by
+1,TAF,thousand acre-feet,volume,True,2025-09-01 13:36:12.336716+00:00,2,2025-09-01 13:36:12.336716+00:00,2
+2,CFS,cubic feet per second,flow,True,2025-09-01 13:36:12.336716+00:00,2,2025-09-01 13:36:12.336716+00:00,2
+3,acres,acres,area,True,2025-09-01 13:36:12.336716+00:00,2,2025-09-01 13:36:12.336716+00:00,2
+4,mm,millimeters,length,True,2025-09-01 13:36:12.336716+00:00,2,2025-09-01 13:36:12.336716+00:00,2
+5,km,kilometers,length,True,2025-09-01 13:36:12.336716+00:00,2,2025-09-01 13:36:12.336716+00:00,2

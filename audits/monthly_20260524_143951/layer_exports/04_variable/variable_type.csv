@@ -1,0 +1,7 @@
+id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
+1,delivery,delivery,water delivery,True,2026-02-15 19:43:37.156665+00:00,2,2026-02-15 19:43:37.156665+00:00,2
+2,gw_pumping,groundwater pumping,groundwater pumping,True,2026-02-15 19:43:37.156665+00:00,2,2026-02-15 19:43:37.156665+00:00,2
+3,PA,project agricultural,project agricultural water use,True,2026-02-15 19:43:37.156665+00:00,2,2026-02-15 19:43:37.156665+00:00,2
+4,PR,project wildlife refuge,project wildlife refuge water use,True,2026-02-15 19:43:37.156665+00:00,2,2026-02-15 19:43:37.156665+00:00,2
+5,PU,project community water system,project community water system (M&I),True,2026-02-15 19:43:37.156665+00:00,2,2026-02-15 19:43:37.156665+00:00,2
+6,unknown,unknown,unknown or unclassified variable type,True,2026-02-15 19:43:37.156665+00:00,2,2026-02-15 19:43:37.156665+00:00,2

@@ -1,0 +1,4 @@
+id,short_code,name,email,organization,affiliation,is_active,created_at,created_by,updated_at,updated_by
+1,dwr,California Department of Water Resources,,California Department of Water Resources,Official state agency for water resources management,1,2024-01-01 00:00:00+00:00,2,2026-03-02 00:02:38.318333+00:00,2
+2,usbr,US Bureau of Reclamation,,US Bureau of Reclamation,Federal agency for water and power resources,1,2024-01-01 00:00:00+00:00,2,2026-03-02 00:02:38.318333+00:00,2
+3,coeqwal,COEQWAL modeling team based on model files provided by USBR and DWR,,COEQWAL,COEQWAL,1,2024-01-01 00:00:00+00:00,2,2026-03-16 23:11:29.394562+00:00,2

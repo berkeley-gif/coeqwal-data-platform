@@ -1,5 +1,8 @@
 # Demand-unit geometry coverage gap
 
+Summary counts for polygon coverage. For alias/dissolve rules (Pattern A/B)
+and the Pattern C sourcing roadmap, see [`docs/du_polygon_mapping.md`](du_polygon_mapping.md).
+
 Tracks which `DU_ID`s in `du_urban_entity`, `du_agriculture_entity`, and
 `du_refuge_entity` are *not* covered by the demand-unit geopackage we ship
 geometries from.
@@ -45,6 +48,46 @@ demand-unit entities and the geometry ingest will skip them. `07S_PA`
 is *also* referenced by the AG_REV tier staging CSV (see "Tier
 staging IDs not in entity tables" below) - adding it to
 `du_agriculture_entity` would close both gaps at once.
+
+## Impact analysis - what users currently see
+
+Question: do these gaps reach end users on the map and in panels?
+
+Two ways tier results render in the website:
+
+1. **Mapbox tileset path** (`outcomeLayerRegistry.ts` -> `usePolygonTooltip`).
+   Polygons come from the Mapbox vector tile `demand-units` keyed by
+   `DU_ID`. Tier levels come from the API `/api/tier-map/{scenario}/locations`
+   endpoint and are joined client-side by `DU_ID`. CWS_DEL, AG_REV,
+   GW_STOR, RES_STOR, DELTA_ECO all render this way (the registry
+   marks each `geometryType: "polygon"` with `requiresIdMatching: true`
+   for the per-feature outcomes).
+2. **Server-side GeoJSON path** (`tier_map_endpoints.py`
+   `/{scenario}/{tier}`). FastAPI joins `tier_location_result` to the
+   `du_*_entity.geom` and emits a GeoJSON FeatureCollection. CWS_DEL
+   and AG_REV are documented to use the `/locations` endpoint instead.
+   This path is wired and works, but the live frontend does not call
+   it for demand-unit tiers today.
+
+What that means for each gap category:
+
+| Gap                                                                          | User impact today                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Missing entity row** (7 CWS_DEL ids: `ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION`; 1 AG_REV id: `07S_PA`) | The `/locations` response still returns these rows (they exist in `tier_location_result`). Treemaps, tables, equity panels that use `useTierLocationAssignments` show them. On the map, visibility depends entirely on whether the Mapbox tileset carries a feature with that `DU_ID`. If yes, polygon colors by tier; if no, location is invisible on the map. |
+| **Missing geometry (`geom IS NULL`)** (59 urban, 12 ag, 1 refuge)             | Server-side `/{scenario}/{tier}` GeoJSON drops these features (`WHERE geom IS NOT NULL`). Since CWS_DEL and AG_REV don't use that endpoint today, the gap is currently invisible to users. Same Mapbox-tile question as above for map visibility. The gap becomes user-visible only if a future feature migrates to server-side GeoJSON or fetches polygons from the API. |
+| **Mapbox tileset missing `DU_ID`** (unknown count; needs a tileset cross-check) | This is the **actual user-visible gap on the CWS_DEL/AG_REV map**. A tier row exists, the polygon does not. Counted in `/locations`, absent from the map. Requires a separate audit against the deployed tileset.                                                                       |
+| **Tier row uses an ID not in any source**                                     | The API returns the row in `/locations`, but with `requiresIdMatching: true` the polygon tooltip handler returns `null` for it (`tierLevel === 0 ? return null`). Polygon (if present in the tile) renders at default style with no tier color and no tooltip.                            |
+
+Where the DB-side geometry **does** matter for users today:
+
+- `RES_STOR` (server-side GeoJSON from `reservoir.geom`). Audit row counts show full coverage.
+- `GW_STOR` (server-side GeoJSON from `wba.geom`). Audit row counts show full coverage.
+- `ENV_FLOWS` server variant (`network_gis.geom`). Live frontend uses React markers instead, so the gap would only surface if a server-side variant ships.
+- `compliance_station` (FW_DELTA_USES). Same React-marker story.
+
+Bottom line: closing the 59 urban polygon gaps will not light up new polygons on the website until either (a) the Mapbox tileset is regenerated from the dataset that includes the new geometries, or (b) the frontend switches CWS_DEL/AG_REV from Mapbox tile rendering to server-side GeoJSON. The DB-side fix is still worth doing because it is the source of truth for any future re-tile or migration and because the tier-level reconciliation work requires the entity rows to exist.
+
+Recommended next step (separate work item, not in this section's scope): audit the deployed `coeqwal.demand-units` Mapbox tileset to enumerate which `DU_ID`s it actually carries, then compare against the `tier_location_result` `location_id` set. The intersection of "in tier_location_result but not in Mapbox tile" is the real user-visible CWS_DEL/AG_REV gap.
 
 ## Tier staging IDs not in entity tables (attribute gaps)
 

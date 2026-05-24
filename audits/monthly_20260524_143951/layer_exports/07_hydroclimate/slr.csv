@@ -1,0 +1,5 @@
+id,short_code,label,slr_value_mm,description,is_active,created_at,created_by,updated_at,updated_by,source
+1,none,No sea level rise,0,Baseline — no sea level rise applied,True,2026-03-01 21:24:28.434094+00:00,2,2026-03-01 22:09:49.519229+00:00,2,james_gilbert
+2,slr_15,15mm sea level rise,15,15mm sea level rise scenario,True,2026-03-01 21:24:28.434094+00:00,2,2026-03-01 22:09:49.519229+00:00,2,james_gilbert
+3,slr_30,30mm sea level rise,30,30mm sea level rise scenario,True,2026-03-01 21:24:28.434094+00:00,2,2026-03-01 22:09:49.519229+00:00,2,james_gilbert
+4,slr_60,60mm sea level rise,60,60mm sea level rise scenario,True,2026-03-01 21:24:28.434094+00:00,2,2026-03-01 22:09:49.519229+00:00,2,james_gilbert

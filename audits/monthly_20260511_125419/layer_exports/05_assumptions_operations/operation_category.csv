@@ -1,0 +1,10 @@
+id,short_code,name,description,is_active,created_at,created_by,updated_at,updated_by
+1,comm_delivery,Community Water Delivery,Operations related to community water delivery prioritization,True,2024-01-01 00:00:00+00:00,2,2026-03-01 21:36:26.386274+00:00,2
+2,delta_outflow,Delta Outflow,Operations related to Delta outflow requirements,True,2024-01-01 00:00:00+00:00,2,2026-03-01 21:36:26.386274+00:00,2
+3,carryover,Reservoir Carryover,Operations related to reservoir carryover storage requirements,True,2024-01-01 00:00:00+00:00,2,2026-03-01 21:36:26.386274+00:00,2
+4,regulatory_salinity,Regulatory Salinity,Operations related to Delta salinity standards (X2),True,2024-01-01 00:00:00+00:00,2,2026-03-01 21:36:26.386274+00:00,2
+5,tucp,TUCP / TUCO,Temporary Urgency Change Petitions and Temporary Urgency Change Orders,True,2026-03-01 21:49:28.404235+00:00,2,2026-03-01 21:49:28.404235+00:00,2
+6,gw_restrictions,Groundwater Restrictions,SGMA-type groundwater pumping restrictions,True,2026-03-01 21:49:28.404235+00:00,2,2026-03-01 21:49:28.404235+00:00,2
+7,infrastructure,Infrastructure,"Water infrastructure configuration (tunnels, reservoirs)",True,2026-03-01 21:49:28.404235+00:00,2,2026-03-01 21:49:28.404235+00:00,2
+8,flow,Flow Requirements,Instream flow and minimum flow objectives,True,2026-03-01 21:49:28.404235+00:00,2,2026-03-01 21:49:28.404235+00:00,2
+9,biops,Biological Opinions,NMFS and USFWS biological opinions (USBR LTO),True,2026-03-01 21:49:28.404235+00:00,2,2026-03-01 21:49:28.404235+00:00,2

@@ -1,0 +1,29 @@
+id,short_code,label,description,type_id,model_source_id,source_id,is_active,created_at,created_by,updated_at,updated_by
+1,BP,Bypass,Flood bypass arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+2,CH,Channel,General channel arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+3,CL,Canal,Constructed canal arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+4,HIS,Historical,Historical or discontinued arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+5,IM,Imported,Imported water arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+6,LI,Link,Connection link arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+7,NA,Not applicable,Not applicable arc subtype,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+8,NS,Not simulated,Not simulated arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+9,PRP,Proposed,Proposed future arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+10,ST,Stream,Natural stream arc,1,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+11,A,Agricultural,Agricultural demand node,21,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+12,BYP,Bypass,Bypass node,11,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+13,CNL,Canal,Canal node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+14,GWO,Groundwater outflow,Groundwater connection node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+15,NA,Not applicable,Not applicable node subtype,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+16,NSM,Non-Sacramento,Non-Sacramento node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+17,OMD,O&M demand,Operations & maintenance demand node,13,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+18,OMR,O&M return,Operations & maintenance return node,13,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+19,PRP,Proposed,Proposed future node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+20,R,Refuge,Wildlife refuge demand node,21,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+21,Reservoir,Reservoir,Storage reservoir node,17,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+22,SG,Stream gauge,Stream gauging station node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+23,SIM,Simulated,Simulated node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+24,STM,Stream,Stream channel node,18,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+25,U,Urban,Urban demand node,21,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+26,X,Other Demand,Other or unspecified demand node type,21,1,4,True,2025-10-16 22:28:47.882529+00:00,2,2025-10-16 22:28:47.882529+00:00,2
+27,PR,Project Refuge,CalSim project refuge demand node — receives CVP (Central Valley Project) contract deliveries,21,1,4,True,2026-03-02 14:45:26.732292+00:00,2,2026-03-02 14:45:26.732292+00:00,2
+28,NR,Non-project Refuge,CalSim non-project refuge demand node — served by water rights only (no CVP contract deliveries),21,1,4,True,2026-03-02 14:45:26.735953+00:00,2,2026-03-02 14:45:26.735953+00:00,2

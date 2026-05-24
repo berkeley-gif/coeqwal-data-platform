@@ -569,6 +569,8 @@ Layer 10+ — statistics    <domain>_<period>                (e.g. *_monthly, *_
 
 > **Rule of thumb for new tables in the CWS domain:** use `cws_*` for things that are scoped to a community water system (e.g. PWSID-keyed entity, lookup, link). Keep `du_urban_*` for things scoped to a CalSim urban demand unit, and `mi_*` for things scoped to an M&I contractor. Do not introduce new prefixes.
 
+**Concept guide:** how urban DUs, M&I contractors, CWS aggregates, and drinking-water utility names relate in the live schema is documented in [`docs/water_user_categories.md`](../docs/water_user_categories.md) (verified against monthly audit CSVs).
+
 #### Implemented entity tables
 
 Counts are from the most recent monthly audit (run `python database/audit/run_monthly_audit.py` to refresh).

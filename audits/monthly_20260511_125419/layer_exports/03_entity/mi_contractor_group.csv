@@ -1,0 +1,7 @@
+id,short_code,label,description,display_order,is_active,created_at,created_by,updated_at,updated_by
+1,swp,State Water Project Contractors,SWP contractors receiving Table A allocations,1,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+2,cvp_nod,CVP North of Delta Contractors,Central Valley Project contractors north of the Delta,2,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+3,cvp_sod,CVP South of Delta Contractors,Central Valley Project contractors south of the Delta,3,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+4,all_mi,All M&I Contractors,All Municipal & Industrial contractors combined,4,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+5,swp_mi,SWP M&I Contractors,SWP Municipal & Industrial contractors,5,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2
+6,swp_ag,SWP Agricultural Contractors,SWP Agricultural contractors,6,True,2026-02-02 00:00:00+00:00,2,2026-03-14 22:18:34.503785+00:00,2

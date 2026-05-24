@@ -1,0 +1,15 @@
+id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
+1,theme,Theme,Research themes and storylines,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+2,scenario,Scenario,Water management scenarios,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+3,assumption,Assumption,Scenario assumptions and parameters,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+4,operation,Operation,Operational policies and rules,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+5,hydroclimate,Hydroclimate,Hydroclimate conditions and projections,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+6,variable,Variable,CalSim model variables and definitions,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+7,statistics,Statistics,Outcome categories and measurement systems,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+8,tier,Tier,Tier definitions and classification systems,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+9,geospatial,Geospatial,Geographic and spatial data definitions,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+10,interpretive,Interpretive,Analysis and interpretive frameworks,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+11,metadata,Metadata,Data metadata and documentation,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+12,network,Network,CalSim network topology and connectivity,True,2025-09-01 13:34:43.149964+00:00,2,2026-03-01 13:48:44.471182+00:00,2
+13,entity,Entity,Entity version family for tracking entity data versions,True,2025-09-04 22:45:51.133690+00:00,2,2025-09-04 22:45:51.133690+00:00,2
+14,audit,Audit,"Layer 00 system tables: versioning, developer registry, domain mapping, audit log",True,2026-02-15 17:47:37.317465+00:00,2,2026-03-13 23:42:45.379828+00:00,2
