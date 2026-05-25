@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 def dispatch_module(
     module_name: str,
     scenario_short_code: str,
-    conn,
+    conn=None,
     csv_path: Optional[str] = None,
 ) -> ModuleResult:
     """Import the named module and call its `run()`.

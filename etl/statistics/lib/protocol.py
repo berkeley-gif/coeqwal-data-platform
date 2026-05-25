@@ -1,7 +1,7 @@
 """protocol.py - The contract every statistics module implements.
 
-Each module exposes `run(scenario_short_code, conn, csv_path=None)` and
-returns a `ModuleResult`. The runner and CLI commands work with this
+Each module exposes `run(scenario_short_code, conn=None, csv_path=None)`
+and returns a `ModuleResult`. The runner and CLI commands work with this
 contract, not with any specific module.
 """
 
@@ -31,6 +31,6 @@ class RunFn(Protocol):
     def __call__(
         self,
         scenario_short_code: str,
-        conn,
+        conn=None,
         csv_path: Optional[str] = None,
     ) -> ModuleResult: ...
