@@ -12,8 +12,14 @@ log = logging.getLogger(__name__)
 DATABASE_URL_ENV = "DATABASE_URL"
 
 
-class DatabaseUrlMissing(RuntimeError):
+class DatabaseUrlMissing(RuntimeError, ValueError):
     """Raised when DATABASE_URL is required but not set in the environment.
+
+    Inherits from both `RuntimeError` (the natural classification for an
+    unset environment variable at runtime) and `ValueError` (so the many
+    pre-existing `except ValueError:` blocks in stats modules that
+    previously raised `ValueError("DATABASE_URL not set")` themselves
+    still catch it after migrating to this helper).
     """
 
 
@@ -36,14 +42,19 @@ def get_database_url(required: bool = True) -> Optional[str]:
     return None
 
 
-def get_db_connection(required: bool = True):
-    """Open a psycopg2 connection using DATABASE_URL.
+def get_db_connection(required: bool = True, db_url: Optional[str] = None):
+    """Open a psycopg2 connection.
+
+    If `db_url` is given, use it directly (caller-provided overrides win).
+    Otherwise read from the `DATABASE_URL` environment variable via
+    `get_database_url`.
 
     Lazy import of psycopg2 so scripts that only need constants do not pay
-    the import cost. Returns None when `required=False` and the env var is
-    unset (callers can then run in CSV-only / dry-run mode).
+    the import cost. Returns None when `required=False` and neither
+    `db_url` nor the env var is available (callers can then run in
+    CSV-only / dry-run mode).
     """
-    url = get_database_url(required=required)
+    url = db_url or get_database_url(required=required)
     if url is None:
         return None
 
