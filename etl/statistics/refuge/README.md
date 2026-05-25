@@ -448,9 +448,6 @@ psql $SUPERUSER_URL -f database/scripts/sql/migrations/20_create_refuge_entity_t
 # Process single scenario and write to database
 DATABASE_URL=postgres://... python main.py --scenario s0020
 
-# Process from S3 key (extracts scenario ID automatically)
-DATABASE_URL=postgres://... python main.py --s3-key scenario/s0020/csv/s0020_coeqwal_sv_input.csv
-
 # Process all known scenarios
 DATABASE_URL=postgres://... python main.py --all-scenarios
 

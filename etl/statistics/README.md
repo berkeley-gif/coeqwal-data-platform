@@ -29,18 +29,23 @@ Utility code (not a module): `charts/` for visualization helpers, top-level `ver
 
 ## Overview
 
-This pipeline processes CalSim model output CSVs stored in S3 to calculate reservoir statistics. The calculated metrics are loaded directly into PostgreSQL for the COEQWAL website API.
+This pipeline processes CalSim model output CSVs stored in S3 to calculate
+reservoir statistics. The calculated metrics are loaded directly into
+PostgreSQL for the COEQWAL website API.
 
-**Automated pipeline flow:**
+**Data flow:**
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  S3 bucket      │───▶│  AWS Lambda      │───▶│  PostgreSQL     │───▶│  API endpoints  │
-│  CSV upload     │    │  (main.py)       │    │  database       │    │  /api/statistics│
-└─────────────────┘    └──────────────────┘    └─────────────────┘    └─────────────────┘
-        │                      │
-        │  S3 Event Trigger    │  Direct DB writes
-        └──────────────────────┘  via psycopg2
+┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│  S3 bucket       │──▶│  run_all.py      │──▶│  PostgreSQL      │──▶│  API endpoints   │
+│  CalSim CSVs     │   │  on Cloud9 EC2   │   │  database        │   │  /api/statistics │
+└──────────────────┘   └──────────────────┘   └──────────────────┘   └──────────────────┘
+                              │
+                              │  manually triggered, see "Running the ETL"
+                              │  writes via psycopg2 (direct, no API layer)
 ```
+
+See "Scenario backfill strategy and pipeline status" below for the full
+extraction-to-statistics flow, including where the manual handoff happens.
 
 ## Scenario backfill strategy and pipeline status
 
@@ -337,7 +342,7 @@ etl/statistics/
 ├── test_local.py                        # Local test runner
 ├── verify_metrics.py                    # Verification against notebook output
 └── reservoirs/                          # Reservoir statistics
-    ├── main.py                            # Entry point - Lambda handler + CLI
+    ├── main.py                            # CLI entry point for direct database writes
     ├── calculate_reservoir_statistics.py  # Full statistics for all 92 reservoirs
     ├── calculate_reservoir_percentiles.py # Percentile bands for website charts
     └── reservoir_metrics.py               # Core calculation functions
@@ -347,69 +352,13 @@ etl/statistics/
 
 | Script | Purpose |
 |--------|---------|
-| `reservoirs/main.py` | **Entry point** - Lambda handler + CLI for automated ETL |
+| `reservoirs/main.py` | **CLI entry point** for reservoir statistics writes (invoked by `run_all.py`) |
 | `dev_run.sh` | Local development runner for testing with CSV files |
 | `test_local.py` | Quick sanity check for individual reservoir calculations |
 | `verify_metrics.py` | **Verification** - Compare ETL output against metrics in all_metrics_output.csv |
 | `reservoirs/calculate_reservoir_statistics.py` | Calculates all reservoir statistics including probability metrics |
 | `reservoirs/calculate_reservoir_percentiles.py` | Percentile band calculation for website charts |
 | `reservoirs/reservoir_metrics.py` | Core calculation functions aligned with COEQWAL modeler Jupyter notebooks |
-
-## Automated pipeline setup
-
-### 1. AWS Lambda configuration
-
-Lambda function with:
-- **Runtime**: Python 3.9+
-- **Handler**: `main.lambda_handler`
-- **Memory**: 512 MB (for large CSV processing)
-- **Timeout**: 5 minutes
-- **Environment variables**:
-  - `DATABASE_URL`: PostgreSQL connection string
-  - `COEQWAL_S3_BUCKET`: `coeqwal-model-run`
-
-### 2. S3 event trigger
-
-Trigger Lambda on new DSS uploads:
-
-```json
-{
-  "LambdaFunctionConfigurations": [{
-    "LambdaFunctionArn": "arn:aws:lambda:...:function:coeqwal-statistics-etl",
-    "Events": ["s3:ObjectCreated:*"],
-    "Filter": {
-      "Key": {
-        "FilterRules": [
-          {"Name": "prefix", "Value": "scenario/"},
-          {"Name": "suffix", "Value": "_coeqwal_calsim_output.csv"}
-        ]
-      }
-    }
-  }]
-}
-```
-
-### 3. Dependencies (Lambda layer)
-
-```
-pandas
-numpy
-psycopg2-binary
-boto3
-```
-
-### 4. New scenario pipeline
-
-When a new scenario DSS is uploaded to S3:
-
-1. **Extraction** → pydsstools implementation creates output csv
-2. **S3 event** → Triggers lambda
-3. **Lambda** → Extracts scenario ID from path (`s0030`)
-4. **ETL** → Calculates percentiles, statistics, probabilities
-5. **Database** → Writes directly via psycopg2
-6. **API** → Data available at `/api/statistics/`
-
----
 
 ## Unit conversion: CFS to TAF
 
@@ -707,9 +656,6 @@ Use `reservoirs/main.py` for direct database writes:
 ```bash
 # Process single scenario and write to database
 DATABASE_URL=postgres://... python reservoirs/main.py --scenario s0020
-
-# Process from S3 key (extracts scenario ID automatically)
-DATABASE_URL=postgres://... python reservoirs/main.py --s3-key scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
 
 # Process all scenarios
 DATABASE_URL=postgres://... python reservoirs/main.py --all-scenarios

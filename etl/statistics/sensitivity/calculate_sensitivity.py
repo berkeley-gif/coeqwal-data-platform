@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Cross-scenario sensitivity analysis.
+calculate_sensitivity.py - Cross-scenario sensitivity analysis.
 
-Computes two types of sensitivity from pre-computed per-scenario statistics:
+Experimental: Computes two types of sensitivity from pre-computed per-scenario statistics:
 
-1. **Climate sensitivity** — Within each hydroclimate sibling group
+1. **Climate sensitivity** - Within each hydroclimate sibling group
    (scenarios sharing identical operations), measure how each metric
-   changes from historical → cc50 → cc95.  Stored per
+   changes from historical.  Stored per
    (sibling_group, module, entity, metric, water_month).
 
-2. **Operational sensitivity** — Within each hydroclimate level
+2. **Operational sensitivity** - Within each hydroclimate level
    (e.g. all historical-hydrology scenarios), measure how each metric
    varies across the different operational configurations.  Stored per
    (hydroclimate_id, module, entity, metric, water_month).
 
 Results are written to ``sensitivity_climate`` and
-``sensitivity_operational`` (created by migration 54).
+``sensitivity_operational``
 
 This script reads from the database (not S3) and must run AFTER all
 per-scenario statistics modules have completed.
@@ -77,7 +77,7 @@ class MetricSource:
     value_col: str
     metric_name: str
     unit: str
-    is_period: bool  # True → water_month stored as 0
+    is_period: bool  # True -> water_month stored as 0
 
 
 MONTHLY_SOURCES: List[MetricSource] = [

@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
-"""
-/reservoirs/main.py - Main entry point for reservoir statistics ETL.
+"""reservoirs/main.py - CLI entry point for reservoir statistics ETL.
 
-Designed for automated pipelines:
-- AWS Lambda triggered by S3 ObjectCreated events
-- Direct database writes via psycopg2
-- CLI for manual runs and testing
+Reads a scenario CSV (from a local path or implicitly from the configured
+S3 bucket), runs the reservoir percentile and statistics calculations,
+and writes results directly to PostgreSQL via psycopg2.
 
 Usage:
-    # CLI
     python main.py --scenario s0020
-    python main.py --s3-key scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
+    python main.py --scenario s0020 --csv-path /local/path/to/output.csv --dry-run
+    python main.py --all-scenarios
 
-    # Lambda handler
-    from main import lambda_handler
+Typically invoked indirectly via etl/statistics/run_all.py, which dispatches
+this module along with the other seven per-scenario stats modules.
 """
 
 import argparse
 import json
 import logging
 import os
-import re
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -89,20 +86,6 @@ def sanitize_value(val):
 def sanitize_row(row_dict: dict) -> dict:
     """Sanitize all values in a row dictionary."""
     return {k: sanitize_value(v) for k, v in row_dict.items()}
-
-
-def extract_scenario_from_s3_key(s3_key: str) -> Optional[str]:
-    """
-    Extract scenario ID from S3 object key.
-
-    Expected patterns:
-    - scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
-    - scenario/s0020/csv/s0020_DV.csv
-    """
-    match = re.search(r"scenario/(s\d{4})/", s3_key)
-    if match:
-        return match.group(1)
-    return None
 
 
 def get_db_connection():
@@ -498,75 +481,12 @@ def process_scenario(
     return result
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """
-    AWS Lambda handler for S3-triggered ETL.
-
-    Triggered by S3 ObjectCreated events when a new scenario CSV is uploaded.
-
-    Event structure:
-    {
-        "Records": [{
-            "s3": {
-                "bucket": {"name": "coeqwal-model-run"},
-                "object": {"key": "scenario/s0020/csv/s0020_coeqwal_calsim_output.csv"}
-            }
-        }]
-    }
-    """
-    log.info(f"Lambda triggered with event: {json.dumps(event)}")
-
-    results = []
-
-    for record in event.get("Records", []):
-        s3_info = record.get("s3", {})
-        bucket = s3_info.get("bucket", {}).get("name")
-        key = s3_info.get("object", {}).get("key")
-
-        if not key:
-            log.warning("No S3 key in record, skipping")
-            continue
-
-        # Extract scenario ID from key
-        scenario_id = extract_scenario_from_s3_key(key)
-        if not scenario_id:
-            log.warning(f"Could not extract scenario ID from key: {key}")
-            continue
-
-        log.info(f"Processing scenario {scenario_id} from s3://{bucket}/{key}")
-
-        try:
-            result = process_scenario(scenario_id, write_to_db=True)
-            results.append(result)
-        except Exception as e:
-            results.append(
-                {
-                    "scenario_id": scenario_id,
-                    "status": "error",
-                    "error": str(e),
-                }
-            )
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps(
-            {
-                "message": f"Processed {len(results)} scenarios",
-                "results": results,
-            }
-        ),
-    }
-
-
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         description="Reservoir statistics ETL - calculates and loads statistics to database"
     )
     parser.add_argument("--scenario", "-s", help="Scenario ID to process (e.g., s0020)")
-    parser.add_argument(
-        "--s3-key", help="S3 object key (extracts scenario ID from path)"
-    )
     parser.add_argument(
         "--all-scenarios", action="store_true", help="Process all known scenarios"
     )
@@ -584,20 +504,13 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine scenarios to process
     scenarios = []
-    if args.s3_key:
-        scenario_id = extract_scenario_from_s3_key(args.s3_key)
-        if scenario_id:
-            scenarios.append(scenario_id)
-        else:
-            parser.error(f"Could not extract scenario ID from: {args.s3_key}")
-    elif args.scenario:
+    if args.scenario:
         scenarios.append(args.scenario)
     elif args.all_scenarios:
         scenarios = SCENARIOS
     else:
-        parser.error("Specify --scenario, --s3-key, or --all-scenarios")
+        parser.error("Specify --scenario or --all-scenarios")
 
     write_to_db = not (args.dry_run or args.output_json)
 
