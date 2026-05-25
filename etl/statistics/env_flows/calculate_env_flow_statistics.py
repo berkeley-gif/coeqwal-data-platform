@@ -2,40 +2,40 @@
 """
 Calculate environmental river flow statistics for 60 CalSim channel reaches.
 
-COEQWAL — Environmental River Flow ETL
+COEQWAL - Environmental River Flow ETL
 =======================================
 
 Computes three metrics per reach per scenario:
 
-  Metric 1 — Monthly % of natural unimpaired flow
+  Metric 1 - Monthly % of natural unimpaired flow
     pct_unimpaired = C_{reach}[CFS] / UNIMP_{watershed}[CFS] × 100
-    Output: one row per (reach, scenario, water_month) → env_flow_channel_monthly
-    Coverage: 58 of 60 channels (MOK019, MOK028 excluded — no UNIMP variable)
+    Output: one row per (reach, scenario, water_month) - env_flow_channel_monthly
+    Coverage: 58 of 60 channels (MOK019, MOK028 excluded - no UNIMP variable)
 
-  Metric 2 — Seasonal % of functional flow (EFLOWS) target
+  Metric 2 - Seasonal % of functional flow (EFLOWS) target
     pct_ff = C_{reach}[CFS] / EFLOWS_{reach}[CFS] × 100
     Aggregated by CEFF 5-season calendar, per water year
-    Output: one row per (reach, scenario, CEFF season) → env_flow_channel_seasonal
+    Output: one row per (reach, scenario, CEFF season) - env_flow_channel_seasonal
     Coverage: ~17 channels with has_eflows = true
 
-  Metric 3 — Flow alteration index (period of record)
+  Metric 3 - Flow alteration index (period of record)
     pearson_r = Pearson correlation between C_{reach} and UNIMP_{watershed} monthly series
     Also: mif_met_pct (% months where C >= MIF), avg_pct_unimpaired, avg_pct_ff
-    Output: one row per (reach, scenario) → env_flow_channel_period_summary
+    Output: one row per (reach, scenario) - env_flow_channel_period_summary
     Coverage: same 58 channels as Metric 1 (+ MIF/EFLOWS subsets)
 
 DATA SOURCES:
   DV (CalSim output):
     S3: scenario/{id}/csv/{id}_coeqwal_calsim_output.csv
     Variables: C_{reach} (CHANNEL, CFS), C_{reach}_MIF (FLOW-MIN-INSTREAM, CFS)
-    Note: C_SAC122 appears twice — first occurrence used.
+    Note: C_SAC122 appears twice - first occurrence used.
 
   SV (CalSim input):
     S3: scenario/{id}/csv/{id}_coeqwal_sv_input.csv
     Variables: UNIMP_{watershed} (FLOW-UNIMPAIRED, CFS), EFLOWS_{reach} (FLOW-MIN-EFLOW, CFS)
     Note: Do not use UNIMP_*_UHH variants.
 
-SEASON DEFINITIONS (CEFF — California Environmental Flows Framework):
+SEASON DEFINITIONS (CEFF - California Environmental Flows Framework):
   wet_peak        (id=1): WY months 3,4,5     = Dec, Jan, Feb
   wet_base        (id=2): WY months 6,7       = Mar, Apr
   spring_recession(id=3): WY months 8,9       = May, Jun
@@ -79,13 +79,11 @@ try:
 except ImportError:
     HAS_BOTO3 = False
 
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -101,7 +99,7 @@ log = logging.getLogger("env_flow_statistics")
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from etl.common import S3_BUCKET  # noqa: E402
+from etl.common import S3_BUCKET, get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 SV_INPUT_S3_KEY = "scenario/{scenario}/csv/{scenario}_coeqwal_sv_input.csv"
@@ -134,7 +132,7 @@ CEFF_SEASONS: Dict[str, Dict] = {
     "fall_pulse": {"id": 5, "wy_months": {2}},
 }
 
-# Map WY month → season short_code
+# Map WY month - season short_code
 WY_MONTH_TO_SEASON: Dict[int, str] = {
     wm: season for season, info in CEFF_SEASONS.items() for wm in info["wy_months"]
 }
@@ -416,7 +414,7 @@ def _build_target_ids(channels: List[Dict]) -> Tuple[Set[str], Set[str]]:
         if ch["eflows_var"]:
             sv_ids.add(ch["eflows_var"])
 
-    log.info(f"Target IDs — DV: {len(dv_ids)}, SV: {len(sv_ids)}")
+    log.info(f"Target IDs - DV: {len(dv_ids)}, SV: {len(sv_ids)}")
     return dv_ids, sv_ids
 
 
@@ -426,7 +424,7 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 
     Handles both period-ending dates (DV: last day of month) and
     period-beginning dates (SV: first day of following month) by normalising
-    to the actual data month — see full explanation in calculate_refuge_statistics.py.
+    to the actual data month - see full explanation in calculate_refuge_statistics.py.
     """
     df = df.copy()
     first_col = df.columns[0]
@@ -452,7 +450,7 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =============================================================================
-# CALCULATIONS — SHARED HELPERS
+# CALCULATIONS - SHARED HELPERS
 # =============================================================================
 
 
@@ -492,7 +490,7 @@ def _percentile_stats(data: pd.Series) -> Dict[str, Optional[float]]:
 
 
 # =============================================================================
-# CALCULATIONS — METRIC 1: Monthly % unimpaired
+# CALCULATIONS - METRIC 1: Monthly % unimpaired
 # =============================================================================
 
 
@@ -503,8 +501,8 @@ def _flow_volume_stats(
     """
     Compute flow-volume percentile statistics in both CFS and TAF.
 
-    flow_cfs       — per-year monthly mean flow (CFS), already dropna'd, one value per year
-    days_in_month  — days in that calendar month for the matching rows (same index as flow_cfs)
+    flow_cfs       - per-year monthly mean flow (CFS), already dropna'd, one value per year
+    days_in_month  - days in that calendar month for the matching rows (same index as flow_cfs)
 
     Returns a flat dict with keys:
         flow_avg_taf,
@@ -552,21 +550,21 @@ def calculate_monthly_statistics(
     For each water month 1–12, across all simulated years, computes:
 
       Flow volume (all channels):
-        flow_avg_cfs, flow_cv  — mean CFS and coefficient of variation
-        flow_avg_taf           — mean TAF/month (CFS × actual_days × CFS_TO_TAF_PER_DAY)
+        flow_avg_cfs, flow_cv  - mean CFS and coefficient of variation
+        flow_avg_taf           - mean TAF/month (CFS × actual_days × CFS_TO_TAF_PER_DAY)
         flow_q{p}_cfs, flow_q{p}_taf, flow_exc_p{p}_cfs, flow_exc_p{p}_taf
-          — percentile bands and exceedance percentiles of per-year monthly flow
+          - percentile bands and exceedance percentiles of per-year monthly flow
 
       % unimpaired (channels with unimp_sv_variable only):
         pct_unimpaired = C_{reach}[CFS] / UNIMP_{watershed}[CFS] × 100
         pct_unimpaired_avg, pct_unimpaired_cv
-        q{p}, exc_p{p}  — percentile bands of pct_unimpaired
+        q{p}, exc_p{p}  - percentile bands of pct_unimpaired
         NaN where UNIMP == 0 (divide-by-zero guard).
 
     Returns one row per water month (up to 12 rows).
     """
     if network_arc_id not in df.columns:
-        log.debug(f"Monthly: {network_arc_id} not in DataFrame — skipped")
+        log.debug(f"Monthly: {network_arc_id} not in DataFrame - skipped")
         return []
 
     has_unimp = unimp_sv_variable and unimp_sv_variable in df.columns
@@ -580,7 +578,7 @@ def calculate_monthly_statistics(
         if flow.empty:
             continue
 
-        # DaysInMonth for CFS→TAF conversion (same index as flow after dropna)
+        # DaysInMonth for CFS-TAF conversion (same index as flow after dropna)
         days = month_df["DaysInMonth"].reindex(flow.index)
 
         row: Dict[str, Any] = {
@@ -634,7 +632,7 @@ def calculate_monthly_statistics(
 
 
 # =============================================================================
-# CALCULATIONS — METRIC 2: Seasonal statistics
+# CALCULATIONS - METRIC 2: Seasonal statistics
 # (raw flow volume + % unimpaired + % functional flows)
 # =============================================================================
 
@@ -654,7 +652,7 @@ def calculate_seasonal_statistics(
 
     Computed where unimp_sv_variable is available (58 channels):
       - unimp_avg_cfs
-        Mean of UNIMP_{watershed} seasonal averages — natural flow reference.
+        Mean of UNIMP_{watershed} seasonal averages - natural flow reference.
       - pct_unimpaired_avg, pct_unimpaired_cv, unimp percentile bands
         Metric 1 (seasonal): (C_{reach} / UNIMP) × 100, distributed across years.
 
@@ -668,7 +666,7 @@ def calculate_seasonal_statistics(
     Returns up to 5 rows (one per CEFF season). Returns [] if C_{reach} not present.
     """
     if network_arc_id not in df.columns:
-        log.debug(f"Seasonal: {network_arc_id} not in DataFrame — skipped")
+        log.debug(f"Seasonal: {network_arc_id} not in DataFrame - skipped")
         return []
 
     has_unimp = unimp_sv_variable and unimp_sv_variable in df.columns
@@ -802,7 +800,7 @@ def calculate_seasonal_statistics(
 
 
 # =============================================================================
-# CALCULATIONS — METRIC 3: Period-of-record flow alteration index
+# CALCULATIONS - METRIC 3: Period-of-record flow alteration index
 # =============================================================================
 
 
@@ -826,7 +824,7 @@ def calculate_period_summary(
     r ≈  0: flow substantially altered by reservoir operations
     """
     if network_arc_id not in df.columns:
-        log.debug(f"Period: {network_arc_id} not in DataFrame — skipped")
+        log.debug(f"Period: {network_arc_id} not in DataFrame - skipped")
         return None
 
     flow = pd.to_numeric(df[network_arc_id], errors="coerce")
@@ -859,7 +857,7 @@ def calculate_period_summary(
             result["pearson_r"] = _round_or_none(r, 4)
             result["p_value"] = _round_or_none(p, 6)
     elif not HAS_SCIPY:
-        log.warning("scipy not installed — Pearson r skipped. pip install scipy")
+        log.warning("scipy not installed - Pearson r skipped. pip install scipy")
 
     # ── % Unimpaired: avg and annual CV ───────────────────────────────────
     if has_unimp:
@@ -972,7 +970,7 @@ def calculate_all_env_flow_statistics(
     sv_df = add_water_year_month(sv_df)
 
     # Merge on WaterYear + WaterMonth (date-format agnostic).
-    # DaysInMonth is kept from the DV side (needed for CFS→TAF conversion)
+    # DaysInMonth is kept from the DV side (needed for CFS-TAF conversion)
     # and dropped only from the SV side to prevent a name collision.
     drop_from_both = ["DateTime", "CalendarMonth", "CalendarYear"]
     merged = pd.merge(
@@ -1000,7 +998,7 @@ def calculate_all_env_flow_statistics(
             r["updated_by"] = ETL_OPERATOR_ID
         monthly_rows.extend(rows)
 
-        # ── Metric 2: seasonal statistics — all channels ──────────────────
+        # ── Metric 2: seasonal statistics - all channels ──────────────────
         # Computes flow volume + % unimpaired for all 60 channels.
         # Adds pct_ff columns for the ~17 EFLOWS channels.
         rows = calculate_seasonal_statistics(
@@ -1051,12 +1049,12 @@ MONTHLY_COLS = [
     "network_arc_id",
     "scenario_short_code",
     "water_month",
-    # Raw flow — mean CFS and CV
+    # Raw flow - mean CFS and CV
     "flow_avg_cfs",
     "flow_cv",
-    # Raw flow — mean TAF/month
+    # Raw flow - mean TAF/month
     "flow_avg_taf",
-    # Raw flow — percentile bands CFS (added migration 28)
+    # Raw flow - percentile bands CFS (added migration 28)
     "flow_q0_cfs",
     "flow_q10_cfs",
     "flow_q30_cfs",
@@ -1064,7 +1062,7 @@ MONTHLY_COLS = [
     "flow_q70_cfs",
     "flow_q90_cfs",
     "flow_q100_cfs",
-    # Raw flow — exceedance percentiles CFS
+    # Raw flow - exceedance percentiles CFS
     "flow_exc_p5_cfs",
     "flow_exc_p10_cfs",
     "flow_exc_p25_cfs",
@@ -1072,7 +1070,7 @@ MONTHLY_COLS = [
     "flow_exc_p75_cfs",
     "flow_exc_p90_cfs",
     "flow_exc_p95_cfs",
-    # Raw flow — percentile bands TAF (added migration 28)
+    # Raw flow - percentile bands TAF (added migration 28)
     "flow_q0_taf",
     "flow_q10_taf",
     "flow_q30_taf",
@@ -1080,7 +1078,7 @@ MONTHLY_COLS = [
     "flow_q70_taf",
     "flow_q90_taf",
     "flow_q100_taf",
-    # Raw flow — exceedance percentiles TAF
+    # Raw flow - exceedance percentiles TAF
     "flow_exc_p5_taf",
     "flow_exc_p10_taf",
     "flow_exc_p25_taf",
@@ -1116,7 +1114,7 @@ SEASONAL_COLS = [
     "network_arc_id",
     "scenario_short_code",
     "season_id",
-    # Raw flow volume (CFS) — all 60 channels
+    # Raw flow volume (CFS) - all 60 channels
     "flow_avg_cfs",
     "flow_cv",
     "flow_q0",
@@ -1133,7 +1131,7 @@ SEASONAL_COLS = [
     "flow_exc_p75",
     "flow_exc_p90",
     "flow_exc_p95",
-    # Natural flow reference and % unimpaired — 58 channels
+    # Natural flow reference and % unimpaired - 58 channels
     "unimp_avg_cfs",
     "pct_unimpaired_avg",
     "pct_unimpaired_cv",
@@ -1151,7 +1149,7 @@ SEASONAL_COLS = [
     "unimp_exc_p75",
     "unimp_exc_p90",
     "unimp_exc_p95",
-    # % Functional flows — ~17 EFLOWS channels
+    # % Functional flows - ~17 EFLOWS channels
     "pct_ff_avg",
     "pct_ff_cv",
     "deviation_avg",
@@ -1217,10 +1215,7 @@ def save_to_database(scenario_id: str, stats: Dict[str, Any], db_url: str) -> No
 
     Uses DELETE + bulk INSERT (not upsert) for clean per-scenario replacement.
     """
-    if not HAS_PSYCOPG2:
-        raise ImportError("psycopg2 required. pip install psycopg2-binary")
-
-    conn = psycopg2.connect(db_url)
+    conn = get_db_connection(db_url=db_url)
     try:
         with conn.cursor() as cur:
             for table in [
@@ -1242,7 +1237,7 @@ def save_to_database(scenario_id: str, stats: Dict[str, Any], db_url: str) -> No
                     f"INSERT INTO env_flow_channel_monthly ({', '.join(MONTHLY_COLS)}) VALUES %s",
                     mon_rows,
                 )
-                log.info(f"Inserted {len(mon_rows)} rows → env_flow_channel_monthly")
+                log.info(f"Inserted {len(mon_rows)} rows - env_flow_channel_monthly")
 
             # Seasonal
             sea_rows = _rows_to_tuples(stats["seasonal"], SEASONAL_COLS)
@@ -1252,7 +1247,7 @@ def save_to_database(scenario_id: str, stats: Dict[str, Any], db_url: str) -> No
                     f"INSERT INTO env_flow_channel_seasonal ({', '.join(SEASONAL_COLS)}) VALUES %s",
                     sea_rows,
                 )
-                log.info(f"Inserted {len(sea_rows)} rows → env_flow_channel_seasonal")
+                log.info(f"Inserted {len(sea_rows)} rows - env_flow_channel_seasonal")
 
             # Period summary
             per_rows = _rows_to_tuples(stats["period_summary"], PERIOD_COLS)
@@ -1263,7 +1258,7 @@ def save_to_database(scenario_id: str, stats: Dict[str, Any], db_url: str) -> No
                     per_rows,
                 )
                 log.info(
-                    f"Inserted {len(per_rows)} rows → env_flow_channel_period_summary"
+                    f"Inserted {len(per_rows)} rows - env_flow_channel_period_summary"
                 )
 
         conn.commit()

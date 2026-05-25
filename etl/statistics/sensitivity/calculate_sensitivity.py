@@ -32,18 +32,25 @@ import math
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
-try:
-    import psycopg2
-    from psycopg2.extras import execute_values
+# Make the project root importable so `etl.common.db.get_db_connection` resolves
+# whether this file is run as a script (via run_all.py subprocess or directly).
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-    HAS_PSYCOPG2 = True
+from etl.common.db import get_db_connection  # noqa: E402
+
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
+try:
+    from psycopg2.extras import execute_values  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 
 def _py_native(val):
@@ -911,11 +918,7 @@ def run_sensitivity(
     dry_run: bool = False,
 ):
     """Main entry point."""
-    if not HAS_PSYCOPG2:
-        log.error("psycopg2 is required.  pip install psycopg2-binary")
-        sys.exit(1)
-
-    conn = psycopg2.connect(db_url)
+    conn = get_db_connection(db_url=db_url)
     try:
         meta = load_scenario_metadata(conn)
         if meta.empty:

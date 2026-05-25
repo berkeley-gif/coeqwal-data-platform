@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate delivery and shortage statistics for CWS system-level aggregates.
+calculate_cws_aggregate_statistics.py - Calculate delivery and shortage statistics for CWS system-level aggregates.
 
 This module processes CalSim output to calculate statistics for:
 - SWP Total M&I (DEL_SWP_PMI, SHORT_SWP_PMI)
@@ -46,13 +46,11 @@ except ImportError:
     HAS_BOTO3 = False
 
 # Optional: psycopg2 for database access
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 # Logging setup
 logging.basicConfig(
@@ -65,7 +63,7 @@ log = logging.getLogger("cws_aggregate_statistics")
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from etl.common import S3_BUCKET  # noqa: E402
+from etl.common import S3_BUCKET, get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Percentiles for statistics
@@ -732,12 +730,8 @@ def main():
         log.info("Use --output-json to output results as JSON instead.")
         return
 
-    if not HAS_PSYCOPG2:
-        log.error("psycopg2 not installed. Cannot save to database.")
-        return
-
     try:
-        conn = psycopg2.connect(database_url)
+        conn = get_db_connection(db_url=database_url)
         cur = conn.cursor()
 
         # Delete existing data for these scenarios

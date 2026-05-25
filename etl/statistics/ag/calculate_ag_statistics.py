@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate demand, delivery, and shortage statistics for agricultural demand units.
+calculate_ag_statistics.py - Calculate demand, delivery, and shortage statistics for agricultural demand units.
 
 DATA SOURCE:
   All data from the CalSim DV output CSV:
@@ -76,13 +76,11 @@ except ImportError:
     HAS_BOTO3 = False
 
 # Optional: psycopg2 for database access
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 # Logging setup
 logging.basicConfig(
@@ -95,7 +93,7 @@ log = logging.getLogger("ag_statistics")
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from etl.common import S3_BUCKET  # noqa: E402
+from etl.common import S3_BUCKET, get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 DV_OUTPUT_S3_KEYS = [
@@ -1407,12 +1405,8 @@ def save_to_database(
         log.error("DATABASE_URL not set. Cannot save to database.")
         return False
 
-    if not HAS_PSYCOPG2:
-        log.error("psycopg2 not installed. Cannot save to database.")
-        return False
-
     try:
-        conn = psycopg2.connect(database_url)
+        conn = get_db_connection(db_url=database_url)
         cur = conn.cursor()
 
         # Delete existing data for these scenarios

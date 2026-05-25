@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate delivery, shortage, and demand statistics for M&I contractors.
+calculate_mi_statistics.py - Calculate delivery, shortage, and demand statistics for M&I contractors.
 
 All data sourced from the DV (CalSim output) CSV:
 - D_*_PMI delivery variables (CFS)
@@ -51,12 +51,9 @@ except ImportError:
 
 # Optional: psycopg2 for database access
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 # Logging setup
 logging.basicConfig(
@@ -69,7 +66,7 @@ log = logging.getLogger("mi_statistics")
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from etl.common import S3_BUCKET  # noqa: E402
+from etl.common import S3_BUCKET, get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Paths relative to project
@@ -959,10 +956,6 @@ def main():
         log.info("Use --output-json to output results as JSON instead.")
         return
 
-    if not HAS_PSYCOPG2:
-        log.error("psycopg2 not installed. Cannot save to database.")
-        return
-
     def convert_numpy(val):
         """Convert numpy types to Python native types."""
         if val is None:
@@ -974,7 +967,7 @@ def main():
         return val
 
     try:
-        conn = psycopg2.connect(database_url)
+        conn = get_db_connection(db_url=database_url)
         cur = conn.cursor()
 
         # Delete existing data for these scenarios

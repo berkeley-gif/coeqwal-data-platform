@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate delivery, shortage, and reliability statistics for wildlife refuge demand units.
+calculate_refuge_statistics.py - Calculate delivery, shortage, and reliability statistics for wildlife refuge demand units.
 
 COEQWAL — Wildlife Refuge Water Delivery ETL
 ============================================
@@ -65,6 +65,14 @@ from units import (  # noqa: E402
     check_post_conversion_magnitude,
 )
 
+# Make the project root importable so `etl.common.db.get_db_connection` resolves
+# whether this file is run as a script (via run_all.py subprocess or directly)
+# or imported.
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from etl.common.db import get_db_connection  # noqa: E402
+
 try:
     import boto3
 
@@ -72,13 +80,11 @@ try:
 except ImportError:
     HAS_BOTO3 = False
 
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -294,10 +300,10 @@ def add_water_year_month(df: pd.DataFrame) -> pd.DataFrame:
     type, both of which must be mapped to the same calendar month:
 
     - Period-ending (DV / calsim_output): the date stamp is the LAST day of the
-      month the data represents.  Example: 1921-10-31 → October 1921 (WM=1).
+      month the data represents.  Example: 1921-10-31 - October 1921 (WM=1).
 
     - Period-beginning (SV input): the date stamp is the FIRST day of the
-      FOLLOWING month.  Example: 1920-11-01 → October 1920 (WM=1), not November.
+      FOLLOWING month.  Example: 1920-11-01 - October 1920 (WM=1), not November.
 
     Detection: if the date's day-of-month == 1, subtract one day to get the
     actual data period before deriving CalendarMonth/Year/DaysInMonth.  Dates
@@ -780,12 +786,7 @@ def save_to_database(scenario_id: str, stats: Dict[str, Any], db_url: str) -> No
     Uses DELETE + bulk INSERT (not upsert) to ensure clean replacement.
     created_by/updated_by are set explicitly by the ETL (ETL_OPERATOR_ID = 2).
     """
-    if not HAS_PSYCOPG2:
-        raise ImportError(
-            "psycopg2 required. Install with: pip install psycopg2-binary"
-        )
-
-    conn = psycopg2.connect(db_url)
+    conn = get_db_connection(db_url=db_url)
     try:
         with conn.cursor() as cur:
             for table in [

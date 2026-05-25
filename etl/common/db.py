@@ -56,7 +56,7 @@ def _summarize_url_for_log(url: str) -> str:
             return "<unparseable>"
         host = parsed.hostname or "?"
         port = parsed.port if parsed.port is not None else "?"
-        dbname = (parsed.path or "/").lstrip("/") or "?"
+        dbname = (parsed.path or "/").strip("/") or "?"
         user = parsed.username or "?"
         return f"{user}@{host}:{port}/{dbname}"
     except Exception:

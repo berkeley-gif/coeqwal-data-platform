@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate delivery and demand statistics for urban demand units.
+calculate_du_statistics_v2.py - Calculate delivery and demand statistics for urban demand units.
 
 Version 2: Uses database variable mappings and SV CSV for demand data.
 
@@ -51,13 +51,11 @@ try:
 except ImportError:
     HAS_BOTO3 = False
 
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values, RealDictCursor
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values, RealDictCursor  # noqa: F401
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 # Logging setup
 logging.basicConfig(
@@ -70,7 +68,7 @@ log = logging.getLogger("du_statistics_v2")
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from etl.common import S3_BUCKET  # noqa: E402
+from etl.common import S3_BUCKET, get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -155,19 +153,6 @@ def get_delivery_arcs(conn) -> Dict[str, List[str]]:
 def load_csv_with_dss_headers(file_path: str) -> Tuple[pd.DataFrame, List[str]]:
     """
     Load CSV with DSS-style multi-row headers.
-
-    Row structure:
-        Row 0 (A): Source (CALSIM, MANUAL-ADD, CALCULATED)
-        Row 1 (B): Variable name
-        Row 2 (C): Kind
-        Row 3 (E): Time step
-        Row 4 (F): Level
-        Row 5 (type): Type
-        Row 6 (units): Units (CFS, TAF, etc.)
-        Row 7+: Data
-
-    Returns:
-        Tuple of (DataFrame with data, list of variable names from row B)
     """
     log.info(f"Loading CSV: {file_path}")
 
@@ -321,7 +306,7 @@ def compute_demand_for_du(
         # values for each SWP contract grouping, where perdv_swp_N is the
         # monthly allocation fraction (0-1) for that grouping. Dividing by
         # perdv_swp_N inverts the scaling and recovers the unscaled monthly
-        # demand (V3's `dem_*` variable) — which is the denominator used by
+        # demand (V3's `dem_*` variable), which is the denominator used by
         # reliability_pct below. Months where perdv_swp_N == 0 become NaN (no
         # allocation, no implied demand) and are dropped from annual aggregation.
         perdv_vars = params.get("perdv_vars", [])
@@ -966,19 +951,13 @@ def main():
                 if not args.all_scenarios:
                     raise
     else:
-        # Connect to database
+        # Connect to database (use --mock-mappings to bypass DB)
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ValueError(
                 "DATABASE_URL environment variable required (or use --mock-mappings for testing)"
             )
-
-        if not HAS_PSYCOPG2:
-            raise ImportError(
-                "psycopg2 required. Install with: pip install psycopg2-binary"
-            )
-
-        conn = psycopg2.connect(database_url)
+        conn = get_db_connection(db_url=database_url)
 
         for scenario_id in scenarios:
             try:
