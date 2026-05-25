@@ -130,7 +130,7 @@ database/scripts/sql/**/*_cloud9.sql
 # Seed tables are tracked in the repo AND mirrored to S3 (coeqwal-seeds-dev)
 # database/seed_tables/   (intentionally NOT ignored)
 
-# Local audit outputs (tracked). See docs/AUDITS_AND_VERIFICATION.md.
+# Local audit outputs (tracked). See etl/verification/README.md.
 # Tarballs result when dat is downloaded directly from EC2/Cloud9 are kept local-only.
 audits/*.tar.gz
 costs/

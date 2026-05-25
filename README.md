@@ -34,7 +34,7 @@ Three of those stages run automatically, the rest are developer-driven. All are 
 | 3. Batch extraction | [`etl/batch-container/`](etl/batch-container/) | Automatic (AWS Batch on Fargate Spot) |
 | 4a. Statistics ETL | [`etl/statistics/`](etl/statistics/) | Developer (`run_all.py`) |
 | 4b. Tier data | [`etl/tier_data/`](etl/tier_data/) | Developer (team-delivered drops) |
-| Verification | [`etl/verification/`](etl/verification/) | Developer (end-to-end accuracy checks). Stakeholder overview: [`docs/VERIFICATION.md`](docs/VERIFICATION.md) |
+| Verification | [`etl/verification/`](etl/verification/README.md) | Single canonical verification doc: layered walkthrough, paste-able end-to-end commands, audit-artifact index, hashes, tolerances, metric coverage |
 
 Tech: Python, `boto3`, `pydsstools`, AWS Batch on Fargate Spot, Docker (for the extraction container).
 

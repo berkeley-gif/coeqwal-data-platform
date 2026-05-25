@@ -46,7 +46,7 @@ def main():
 
     # Paths
     script_dir = Path(__file__).parent
-    default_csv = script_dir / "../pipelines/s0020_coeqwal_calsim_output.csv"
+    default_csv = script_dir / "../reference/s0020_coeqwal_calsim_output.csv"
     csv_path = Path(args.csv_path) if args.csv_path else default_csv
 
     print("=" * 60)

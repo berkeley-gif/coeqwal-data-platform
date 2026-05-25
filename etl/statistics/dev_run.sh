@@ -19,7 +19,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CSV_FILE="${SCRIPT_DIR}/../pipelines/s0020_coeqwal_calsim_output.csv"
+CSV_FILE="${SCRIPT_DIR}/../reference/s0020_coeqwal_calsim_output.csv"
 SCENARIO="s0020"
 
 # Check if CSV exists

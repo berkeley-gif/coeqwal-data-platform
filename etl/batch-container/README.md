@@ -224,6 +224,6 @@ python scan_dupes.py --compare-values --audit-units --workers 4
 ## Related
 
 - The Lambda that fires extraction jobs: [../lambda/README.md](../lambda/README.md)
-- The developer scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to process raw scenario model run data" and "Developer scripts in `etl/ingestion/`")
+- The developer scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to load scenario data into the database and S3 buckets from Google Drive" and "Developer scripts in `etl/ingestion/`")
 - End-to-end accuracy verification (Layer 1-4): [../verification/README.md](../verification/README.md)
 - AWS-side resource details: [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)

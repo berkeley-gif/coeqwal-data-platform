@@ -10,6 +10,485 @@ _Last refreshed 2026-05-22T16:54:19Z from `https://api.coeqwal.org/api/scenarios
 
 <!-- ACTIVE_SCENARIOS:END -->
 
+## How to load scenario data into the database and S3 buckets from Google Drive
+
+End-to-end loading of a CalSim scenario, from a row on the WAM team's
+Google Drive spreadsheet to live data in the public API. Runs on Cloud9
+(see [Cloud9 first-time setup](#cloud9-first-time-setup) the first time).
+
+The pipeline has three phases:
+
+1. **Ingest**: pull from Google Drive, validate, stage in S3, promote to
+   `ready/` where the Lambda picks up the ZIP and dispatches Batch.
+2. **Statistics**: read the extracted CSVs out of S3 and write derived
+   metrics to the database.
+3. **Activate**: bootstrap the scenario row, run verification, flip
+   `is_active` to publish on the website.
+
+### Prerequisites
+
+- Cloud9 venv activated with `boto3` installed: `source venv/bin/activate`
+- `DATABASE_URL` exported: `source database/setup_db_connection.sh`
+- AWS credentials available (Cloud9 has these automatically)
+- A row in [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv)
+  for each scenario you are loading
+- A row in the `scenario` DB table (write a SQL migration like
+  [`database/scripts/sql/52_add_s0070_s0090.sql`](../database/scripts/sql/52_add_s0070_s0090.sql))
+
+If any of these is missing, the one-shot preflight in
+[Cloud9 first-time setup](#cloud9-first-time-setup) below tells you
+exactly what to fix.
+
+### Step-by-step
+
+**1. Edit the working CSV and refresh `ETL_SCENARIOS`.**
+
+Open [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv).
+Each scenario you are loading needs a row with `drive_folder_url`,
+`DV_Path`, `SV_Path`, and (if the Drive folder has more than one
+candidate) `pinned_model_run_zip` / `pinned_trend_csv`. Then:
+
+```bash
+python etl/ingestion/tools/refresh_etl_scenarios.py
+```
+
+Commit the resulting diff in [`etl/common/etl_scenarios.py`](common/etl_scenarios.py).
+
+**2. Scan Google Drive (optional pre-flight).**
+
+```bash
+python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0042 s0043
+```
+
+Walks each named Drive folder without touching S3. Surfaces missing
+folders, missing ZIPs, pinned-filename-not-found cases before you spend
+bandwidth on a real download.
+
+**3. Download from Drive, validate, stage to S3.**
+
+```bash
+python etl/ingestion/gdrive_bulk_download.py download --scenarios s0042 s0043
+# or every row in the CSV:
+python etl/ingestion/gdrive_bulk_download.py download --all
+```
+
+Downloads each ZIP and trend CSV, validates that DV / SV basenames are
+present exactly once, computes SHA-256 hashes, writes
+`ingest_record.json`, and uploads to
+`s3://coeqwal-model-run/staging/scenario_data/<id>/`. When the run
+finishes, [`etl/ingestion/audit.md`](ingestion/audit.md) regenerates
+automatically.
+
+**4. Read the audit and fix anything that needs attention.**
+
+Open [`etl/ingestion/audit.md`](ingestion/audit.md). The "What needs
+your attention" section lists scenarios that did not stage; each row
+has the exact action to take. Fix the issue (edit the working CSV row,
+rename a file in Drive, set a `pinned_*`, etc.) and re-run for that
+subset:
+
+```bash
+python etl/ingestion/gdrive_bulk_download.py download --scenarios s0042
+```
+
+When "What needs your attention" is empty, you are clear to promote.
+
+**5. Promote staged scenarios to `ready/` (this triggers Lambda + Batch).**
+
+```bash
+python etl/ingestion/gdrive_bulk_download.py promote
+# or a subset:
+python etl/ingestion/gdrive_bulk_download.py promote --scenarios s0020,s0021
+# or dry-run first:
+python etl/ingestion/gdrive_bulk_download.py promote --dry-run
+```
+
+Copies each staged scenario's files to `ready/<id>/` in safe order:
+`ingest_record.json` first, trend CSV next, ZIP last. The ZIP PUT under
+`ready/` is the Lambda trigger.
+
+**6. Wait for Batch to finish.**
+
+```bash
+# Watch the Lambda fire and Batch dispatch:
+aws logs tail /aws/lambda/coeqwalEtlTrigger --follow
+
+# Or poll until terminal state per scenario:
+python etl/run_full_pipeline.py --poll-batch-extraction --scenarios s0042
+```
+
+Each Batch job extracts DSS to CSV under
+`s3://coeqwal-model-run/scenario/<id>/csv/` and writes
+`extract_record.json` to the scenario prefix. One to two minutes per
+scenario in Fargate Spot.
+
+**7. Refresh the audit after Batch finishes.**
+
+```bash
+python etl/ingestion/tools/audit.py
+```
+
+Re-renders [`etl/ingestion/audit.md`](ingestion/audit.md) to pick up
+extraction outcomes (status, validation result, mismatch counts).
+
+**8. Compute statistics for each scenario.**
+
+```bash
+python etl/statistics/run_all.py --scenario s0042
+```
+
+Reads CSVs from `s3://.../scenario/<id>/csv/`, computes per-section
+statistics across all 8 modules (reservoirs, delta, refuge, env_flows,
+sensitivity, du_urban, cws_aggregate, ag, mi), and writes rows to
+PostgreSQL using DELETE-then-INSERT per scenario (so re-running is
+idempotent).
+
+**9. Verify end-to-end.**
+
+```bash
+SCENARIO=s0042
+python etl/statistics/verify_all_sections.py --scenario "$SCENARIO"
+python etl/statistics/verify_api.py --scenario "$SCENARIO"
+```
+
+For the full layered walkthrough, tolerances, and the
+copy-paste-ready end-to-end block (Layer 2 + Layer 3 + tier
+verification), see [`etl/verification/README.md`](verification/README.md).
+
+**10. Activate the scenario (publish on the website).**
+
+The scenario is in `ETL_SCENARIOS` but NOT in `ACTIVE_SCENARIOS` until
+you flip `is_active`. Three steps:
+
+```bash
+# 10a. Append a row to database/seed_tables/06_scenario/scenario.csv
+#      with description, narrative, baseline, hydroclimate, is_active=0
+
+# 10b. Upsert into the DB
+psql "$DATABASE_URL" -f database/scripts/sql/upsert_scenario_data.sql
+
+# 10c. Flip is_active=1 and regenerate the active-scenarios block at
+#      the top of this README in one step
+python etl/ingestion/tools/set_scenario_active.py --activate s0042
+```
+
+Commit the resulting diff in [`etl/common/active_scenarios.py`](common/active_scenarios.py)
+and the `<!-- ACTIVE_SCENARIOS:BEGIN -->` block at the top of this
+file. The scenario is now in `ACTIVE_SCENARIOS` and reaches the tier
+loaders, API verification, and tier verification.
+
+If you are bringing in multiple new scenarios, run steps 1-9 against
+the full list of new short codes (`--scenarios s0042,s0043,s0044` or
+`--all` if the working CSV is in the right state), then run step 10
+once with `--activate s0042,s0043,s0044`.
+
+### Pre-flight a new scenario before activating it
+
+Between step 9 and step 10, the new scenario has data in S3 and the DB
+but is not yet in `ACTIVE_SCENARIOS`. Three scripts gate on
+`ACTIVE_SCENARIOS` and accept `--scenarios-override sXXX,sYYY` as a
+per-invocation replacement so you can pre-flight against the new
+scenario:
+
+```bash
+python etl/tier_data/scripts/verify_tiers.py --scenarios-override s0070,s0072
+python etl/statistics/verify_api.py --scenarios-override s0070
+python etl/tier_data/scripts/load_all_tier_results.py --scenarios-override s0070 --dry-run
+```
+
+The override is per-invocation only and emits a `WARNING` line naming
+the resolved set.
+
+### Full-pipeline orchestrator (alternative to running steps 2-9 by hand)
+
+For scan + download + promote + Batch wait + statistics + verification
+in one process, use [`run_full_pipeline.py`](run_full_pipeline.py):
+
+```bash
+python etl/run_full_pipeline.py --all --workers 4 \
+  --listing-csv etl/ingestion/scenario_listing/model_run_file_source_working.csv \
+  --s3-bucket coeqwal-model-run
+```
+
+Pass `--scenarios s0042 s0043` for specific IDs. Writes a consolidated
+report under `etl/ingestion/audit_reports/pipeline_runs/<UTC>/` with
+per-stage logs, `pipeline_state.json` (resumable with `--resume`), and
+`pipeline_summary.md`. Stops short of activation (step 10) so a
+developer can review before publishing.
+
+### Manual upload (no Drive access, hand-assembled ZIP, recovery)
+
+For one-off uploads through the AWS console or with
+`tools/manual_ingest.py`, see [Manual upload path](#manual-upload-path)
+below.
+
+### When something goes wrong
+
+Most failures surface in [`etl/ingestion/audit.md`](ingestion/audit.md)
+with an `error_code` and an action message. The error-code reference is
+in [Troubleshooting](#troubleshooting) below.
+
+---
+
+## How to load tier data into the database
+
+The tier data pipeline is independent of the scenario model-run
+pipeline. The data team drops CSVs into [`etl/tier_data/staging/`](tier_data/staging/)
+on disk; the loader generates SQL locally and `psql` applies it. No S3
+or Batch involvement.
+
+Two distinct workflows live in [`etl/tier_data/README.md`](tier_data/README.md):
+
+- **Loading new tier-result values** (updated tier 1-4 numbers per
+  scenario) - the workflow below
+- **Updating tier locations** (the data team added or dropped a
+  `location_id` from a tier) - see
+  [Updating tier locations](tier_data/README.md#updating-tier-locations-when-a-tier-team-sends-new-data)
+  in the detailed README
+
+### Prerequisites
+
+Same as scenario load: Cloud9 venv activated, `DATABASE_URL` exported,
+fresh `git pull`.
+
+### Step-by-step
+
+**1. Drop the team's CSVs into [`etl/tier_data/staging/`](tier_data/staging/).**
+
+Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`,
+`RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`,
+`FW_EXP.csv`, `WRC_SALMON_AB.csv`. Format reference:
+[Staging CSV format](tier_data/README.md#staging-csv-format).
+
+If the team sends pre-staging drops (multiple files per tier,
+per-climate splits), normalize them first:
+
+```bash
+python etl/tier_data/scripts/stage_tier_results.py
+```
+
+**2. Refresh the active-scenario allowlist.**
+
+```bash
+python etl/ingestion/tools/refresh_active_scenarios.py
+```
+
+Regenerates [`etl/common/active_scenarios.py`](common/active_scenarios.py)
+from the live API (`/api/scenarios?is_active=true`). The tier loader
+gates on `ACTIVE_SCENARIOS`, so this must be current. If any scenarios
+are being retired, add their short codes to `DEACTIVATED_SCENARIOS` in
+[`etl/tier_data/scripts/load_all_tier_results.py`](tier_data/scripts/load_all_tier_results.py).
+
+**3. Commit and push from your local machine.** The staging CSVs are
+git-tracked on purpose so Cloud9 sees the same bytes.
+
+**4. On Cloud9: `git pull`.**
+
+**5. Dry run; verify per-tier counts.**
+
+```bash
+python etl/tier_data/scripts/load_all_tier_results.py --dry-run
+```
+
+Expected counts per scenario (full table in
+[`etl/tier_data/README.md`](tier_data/README.md#how-to-load-new-tier-data)):
+`CWS_DEL` ~76, `AG_REV` ~132, `ENV_FLOWS` 17, `RES_STOR` 8, `GW_STOR`
+42, plus a handful of single-value tiers.
+
+**6. Generate the SQL.**
+
+```bash
+python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
+```
+
+Writes `etl/tier_data/output/all_tiers.sql` (the whole `output/` tree
+is gitignored).
+
+**7. Apply the SQL.**
+
+```bash
+psql "$DATABASE_URL" -f etl/tier_data/output/all_tiers.sql
+```
+
+The SQL ends with two verification queries (one per table) showing row
+counts grouped by `tier_short_code`. Active scenario counts should
+match `ALLOWED_SCENARIOS`. Use `$DATABASE_URL` (your personal role) so
+audit attribution lands on you, not on the shared `postgres` account.
+
+The loader writes two tables, both UPSERT (`ON CONFLICT ... DO UPDATE`)
+keyed on `(scenario_short_code, tier_short_code, location_id?,
+tier_version_id)`. The unique constraints make duplicates structurally
+impossible: re-running the loader is always safe and idempotent.
+
+**8. Verify against the live API.**
+
+```bash
+python etl/tier_data/scripts/verify_tiers.py
+# Or for one scenario:
+python etl/tier_data/scripts/verify_tiers.py --scenario s0042
+# Or for a single tier code:
+python etl/tier_data/scripts/verify_tiers.py --tier CWS_DEL
+```
+
+For the full layered verification framework, see
+[`etl/verification/README.md`](verification/README.md).
+
+### Tier-location coverage and geometry audits
+
+Two sidecar checks are worth running after a tier load, especially when
+entity tables changed:
+
+```bash
+# Confirm every tier_location id resolves to an entity attribute + polygon
+python etl/tier_data/scripts/audit_tier_location_geometry.py
+
+# Diff staging-CSV tier locations against the live `tier_location` catalog
+python etl/tier_data/scripts/diff_tier_locations.py
+
+# Sync (upsert active, soft-delete dropped)
+python etl/tier_data/scripts/sync_tier_locations_from_staging.py
+```
+
+See [`etl/tier_data/README.md#updating-tier-locations-when-a-tier-team-sends-new-data`](tier_data/README.md#updating-tier-locations-when-a-tier-team-sends-new-data)
+for the full workflow.
+
+---
+
+## Cloud9 first-time setup
+
+The ingestion scripts need three things on the Cloud9 instance: enough
+disk space, `rclone` configured against the COEQWAL Shared Drive, and a
+Python venv with `boto3`.
+
+The fastest way to confirm all three is the one-shot preflight script:
+
+```bash
+bash scripts/setup_etl_cloud9.sh           # full preflight + venv install
+bash scripts/setup_etl_cloud9.sh --check   # read-only checks only
+```
+
+Prints PASS / WARN / FAIL per check (AWS creds, rclone + gdrive remote,
+venv + requirements, `DATABASE_URL`, EBS capacity, `etl.common`
+import) with a one-line remediation hint per failure. Exit 0 means you
+are ready to load scenario or tier data. The manual steps below are
+the longer explanation of each check.
+
+### 1. EBS storage
+
+Cloud9 instances default to 10 GB EBS. The ingestion script streams
+files through `/tmp/` and uploads to S3 immediately, so you only need
+room for one ZIP per worker at a time. Check:
+
+```bash
+df -h /
+```
+
+If the root partition is above ~70% used: AWS Console → EC2 → Volumes →
+find the volume attached to your Cloud9 instance
+(`curl -s http://169.254.169.254/latest/meta-data/instance-id`) →
+Actions → Modify Volume. Then grow the filesystem:
+
+```bash
+lsblk                            # confirm device name (usually /dev/xvda or /dev/nvme0n1)
+sudo growpart /dev/xvda 1
+sudo resize2fs /dev/xvda1
+df -h /
+```
+
+### 2. rclone (Google Drive access)
+
+```bash
+curl https://rclone.org/install.sh | sudo bash
+rclone version
+```
+
+The rclone config (with the `gdrive` remote pointing at the COEQWAL
+Shared Drive) must be authenticated on a machine with a web browser
+(Google OAuth requires a browser redirect). Authenticate once on any
+machine with a browser, then copy the config to Cloud9:
+
+```bash
+# On your local machine:
+cat ~/.config/rclone/rclone.conf
+
+# On Cloud9:
+mkdir -p ~/.config/rclone
+nano ~/.config/rclone/rclone.conf
+# Paste, save with Ctrl+O, exit with Ctrl+X
+```
+
+If you need to set up rclone from scratch on a local machine first:
+
+```bash
+rclone config
+#   n) New remote
+#   name> gdrive
+#   Storage> drive (Google Drive)
+#   client_id> (blank - uses rclone's built-in OAuth client)
+#   client_secret> (blank)
+#   scope> 2 (drive.readonly)
+#   service_account_file> (blank)
+#   Edit advanced config> n
+#   Use web browser to authenticate> y
+#   (browser opens, authenticate with UC Berkeley Google account, 2FA required)
+#   Configure as Shared Drive> y
+#   Select: COEQWAL
+#   Keep this remote> y
+```
+
+Verify on Cloud9:
+
+```bash
+rclone lsd gdrive:   # should list top-level Shared Drive folders
+```
+
+The rclone refresh token typically auto-renews. If you get `401
+Unauthorized` after weeks of inactivity, run `rclone config reconnect
+gdrive:` on a local machine and re-copy the config.
+
+**Security note.** The file you are copying around contains an OAuth
+**refresh token**, not a Google password. The token is Drive-scoped,
+revocable in seconds at
+[https://myaccount.google.com/permissions](https://myaccount.google.com/permissions),
+bound to the rclone OAuth client app, lives outside the repo at
+`~/.config/rclone/rclone.conf`, and is never read by our Python (the
+code only shells out to `rclone`). `rclone.conf` and `*.rclone.conf`
+are also in `.gitignore` as belt-and-suspenders.
+
+### 3. Python venv
+
+The ingestion and statistics scripts depend on `boto3` and `psycopg2`.
+Create the venv once:
+
+```bash
+cd ~/environment/coeqwal-backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r etl/ingestion/requirements.txt
+pip list
+```
+
+After the venv exists, future shells just need `source venv/bin/activate`
+before running the scripts.
+
+### 4. AWS credentials and DATABASE_URL
+
+Cloud9 has the `AWSCloud9SSMAccessRole` IAM role attached (see
+[Cloud9 IAM permissions](#cloud9-iam-permissions) below). No further
+AWS setup needed.
+
+For DB writes (`run_all.py`, `psql`, tier loader):
+
+```bash
+source database/setup_db_connection.sh
+```
+
+Exports `DATABASE_URL` pointing at RDS through your personal psql
+role. Always use this rather than the shared `postgres` account so
+audit attribution lands on you.
+
+---
+
 ## Sources of truth
 
 Every piece of shared state in this pipeline has one canonical home. Drift
@@ -102,7 +581,7 @@ These directories exist on the developer's machine but never enter git. They are
 | [`reference/`](reference/) | Large reference CSVs (full-scenario DV/SV outputs, audit logs) used for local testing only. |
 | `archive/` | Historical code kept for reference (the legacy `pydsstools` setup, before it became the separate [COEQWAL-pydsstools](https://github.com/berkeley-gif/COEQWAL-pydsstools) repo). Not used in any current run. |
 
-For deeper context on each pipeline's operations, see [How to ingest the model run data](#how-to-ingest-the-model-run-data-step-by-step) and the per-directory READMEs linked above.
+For deeper context on each pipeline's operations, see [How to load scenario data into the database and S3 buckets from Google Drive](#how-to-load-scenario-data-into-the-database-and-s3-buckets-from-google-drive) and the per-directory READMEs linked above.
 
 ## How do we run the COEQWAL ETL?
 
@@ -119,196 +598,6 @@ And we use the ETL to insert the tier data into the database for fetching via th
 The database also serves as a stable repository for the data, and joins numerical data with attribute data.
 
 **Where this runs.** The ETL runs on Cloud9 (`coeqwal-db-admin`), which already has AWS credentials, the production `DATABASE_URL`, `rclone` with the `gdrive` remote, and the working CSV. Running ETL off Cloud9 is not supported.
-
-## Adding a new scenario
-
-Lifecycle of a single new scenario from "WAM team published it" to "live on the public website." Steps 1-5 are ETL; the ETL works on whatever you tell it via `--scenarios sXXX`. Steps 6-8 promote the scenario into the public/curated set and only run after you trust the data.
-
-1. **Add a row to the working CSV.** Open `etl/ingestion/scenario_listing/model_run_file_source_working.csv` and add the WAM-sheet row for the new scenario (or `cp` the freshly downloaded reference CSV over the working CSV if more than one new row has landed). Fill the operator columns (`pinned_model_run_zip`, `pinned_trend_csv`, `notes`) as needed. Then regenerate the ETL scenario list:
-   ```bash
-   python etl/ingestion/tools/refresh_etl_scenarios.py
-   ```
-   Commit the resulting diff in `etl/common/etl_scenarios.py`.
-
-2. **Ingest the model run.** Pulls ZIP + trend CSV from Drive, validates, and stages to S3.
-   ```bash
-   python etl/ingestion/gdrive_bulk_download.py download --scenarios sXXX
-   python etl/ingestion/gdrive_bulk_download.py promote  --scenarios sXXX
-   ```
-
-3. **Wait for extraction.** The promote step triggers the S3 Lambda, which submits a Batch job that extracts the DSS files to CSV under `s3://coeqwal-model-run/scenario/sXXX/csv/`. Poll with:
-   ```bash
-   python etl/run_full_pipeline.py --poll-batch-extraction --scenarios sXXX
-   ```
-
-4. **Compute statistics.** Run the per-section calculators against the new scenario, writing rows into the DB.
-   ```bash
-   python etl/statistics/run_all.py --scenario sXXX
-   ```
-
-5. **Verify statistics.** Compare CSV-side expectations vs DB values for this one scenario.
-   ```bash
-   python etl/statistics/verify_all_sections.py --scenario sXXX
-   ```
-
-   At this point the scenario has data in S3 and the DB. It is in `ETL_SCENARIOS` but NOT in `ACTIVE_SCENARIOS`, so the website does not see it yet and `verify_api.py --all-scenarios` skips it.
-
-6. **Bootstrap the scenario row.** Append a row to `database/seed_tables/06_scenario/scenario.csv` with description, narrative, baseline, hydroclimate, and `is_active=0`. The seed CSV is bootstrap-only for the `is_active` column: it introduces new scenario rows into the DB, but ongoing flips happen in the DB directly (step 8). The seed CSV's `is_active` value is allowed to drift after this point.
-
-7. **Upsert the row into the DB.** Loads the new metadata into the `scenario` table.
-   ```bash
-   psql "$DATABASE_URL" -f database/scripts/sql/upsert_scenario_data.sql
-   ```
-
-8. **Flip is_active=1 when you trust the scenario.** Updates the DB directly and regenerates `etl/common/active_scenarios.py` + the README marker block in one step.
-   ```bash
-   python etl/ingestion/tools/set_scenario_active.py --activate sXXX
-   ```
-   Commit the resulting diff in `etl/common/active_scenarios.py` and the `<!-- ACTIVE_SCENARIOS:BEGIN -->` block at the top of this file. The scenario is now in `ACTIVE_SCENARIOS` and reaches the tier loaders, API verification, and tier verification.
-
-If you are bringing in multiple new scenarios, run steps 1-5 against the full list of new short codes (`--scenarios sXXX,sYYY,sZZZ` or `--all` if the working CSV is in the right state), then run steps 6-8 once with `--activate sXXX,sYYY,sZZZ`.
-
-### Pre-flight a scenario before activating it
-
-Between step 5 and step 6, the new scenario has data in S3 and the DB but is not yet in `ACTIVE_SCENARIOS`. Three scripts gate on `ACTIVE_SCENARIOS` and skip anything outside it, which means you cannot test them against the new scenario by default. Each one accepts `--scenarios-override sXXX,sYYY` as a per-invocation replacement:
-
-| Script | Use case |
-|---|---|
-| [`etl/tier_data/scripts/verify_tiers.py`](tier_data/scripts/verify_tiers.py) | Sanity-check tier-coverage and tier-value diffs for the new scenario against the live API |
-| [`etl/statistics/verify_api.py`](statistics/verify_api.py) | Compare DB rows vs API responses for the new scenario before it goes public |
-| [`etl/tier_data/scripts/load_all_tier_results.py`](tier_data/scripts/load_all_tier_results.py) | Pre-flight a tier load (typically with `--dry-run` or `--output-sql`) against the new scenario |
-
-```bash
-python etl/tier_data/scripts/verify_tiers.py --scenarios-override s0070,s0072
-python etl/statistics/verify_api.py --scenarios-override s0070
-python etl/tier_data/scripts/load_all_tier_results.py --scenarios-override s0070 --dry-run
-```
-
-Mechanics:
-- Per-invocation only. The override is never persisted. To change `ACTIVE_SCENARIOS` itself, use [`etl/ingestion/tools/set_scenario_active.py`](ingestion/tools/set_scenario_active.py).
-- Whenever the override is active the script emits a `WARNING` line naming the resolved set, so it is visible in any pipeline log.
-- On the two verifiers, `--scenarios-override` is mutually exclusive with `--scenario` (and on `verify_api.py`, also with `--all-scenarios`). Passing both is a parser error. `--scenarios-override s0020` already covers the "I only want s0020" case.
-
-## How to process raw scenario model run data
-
-There are two ways to kick off the ETL for the model run data. One way is to manually download a scenario model run zip file from the Water Allocation Modeling Team's Model_Run directory at https://drive.google.com/drive/folders/1IBX1DjMnlxTEFqOO2Pwi0OCt61dG_Ezg.
-
-### Before you start
-
-- Locate Dino's/Water Allocation Modeling Team's spreadsheet that lists the scenarios and their paths in the team's Google Drive. As of May 15, 2026, this spreadsheet is titled `coeqwal_cs3_scenario_listing_v7` and can be found at https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo. 
-
-- Download the spreadsheet and save as `etl/ingestion/scenario_listing/model_run_file_source.csv` as a record, and make a copy called `etl/ingestion/scenario_listing/model_run_file_source_working.csv` in the same directory.
-
-- Git commit and push. Pull on Cloud 9. Cloud 9 is set up with a Python virtual environment for running the scripts and is in the same VPN security network as the S3 bucket and the database.
-
-[ Cloud 9 setup:
-
-Cloud 9 > 
-Environment: coeqwal-db-admin
-Repo is at ~/environment/coeqwal-backend
-To activate venv: `source venv/bin/activate`
-EC2 instance:
-Cloud 9 is running under the instance profile: arn:aws:sts::533266975152:assumed-role/AWSCloud9SSMAccessRole/i-0315ab9be361259a2 (run `aws sts get-caller-identity`)
-]
-
-- venv activated with `boto3` installed:
-  ```bash
-  source venv/bin/activate
-  ```
-  First-time setup: see "Cloud9 venv setup" in the developer reference below.
-- AWS credentials available to the shell (Cloud9 handles this automatically).
-
-### Steps
-
-**1. Confirm the working CSV has the rows you need, and pin where needed.**
-
-Open `etl/ingestion/scenario_listing/model_run_file_source_working.csv`. Make sure each scenario you are loading has a row with correct `drive_folder_url`, `DV_Path`, and `SV_Path`. If a scenario has multiple ZIPs in its `Model_Files/` folder or multiple CSVs in its trend folder, fill in `pinned_model_run_zip` and `pinned_trend_csv` to pick the canonical one.
-
-Which scenarios get processed is set on the CLI, not in the CSV (see Step 2 and Step 3 below). The `download_status` column is informational only; the script never filters by it.
-
-#### Listing scenarios on the CLI
-
-`--scenarios` accepts whitespace or commas (or any mix) and treats newlines like whitespace. So all of these mean the same thing:
-
-```bash
---scenarios s0070 s0071 s0072
---scenarios s0070,s0071,s0072
---scenarios "s0070, s0071, s0072"
---scenarios "s0070
-              s0071
-              s0072"
-```
-
-That last form is exactly what you get when you select a column in a spreadsheet and paste into quotes. The clipboard contents are newline-separated, the script splits on whitespace, and it works.
-
-**2. Pre-flight against Google Drive.**
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0042 s0043
-# or, to scan every row in the CSV:
-python etl/ingestion/gdrive_bulk_download.py scan --all
-```
-
-Walks each named Drive folder and writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json` (use `python etl/ingestion/tools/show_last_run.py --stage scan` for a quick spreadsheet-style view). Every row should say `OK`. Missing folders, missing ZIPs, missing trend CSVs, and pinned-filename-not-found cases surface here, before you spend any bandwidth.
-
-`scan` does not touch S3 and does not need AWS credentials, but Cloud9 already has every prereq (`rclone` + the `gdrive` remote, Python 3.10, `boto3`), so run it there. Running ETL off Cloud9 is not supported.
-
-**3. Download, validate, stage to S3.**
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py download --scenarios s0042 s0043
-# or, to process every row in the CSV:
-python etl/ingestion/gdrive_bulk_download.py download --all
-```
-
-Either `--scenarios` or `--all` is required. The script will error out if you give neither.
-
-For each named scenario, this downloads the ZIP and trend CSV from Drive, opens the ZIP and confirms the DV and SV basenames declared in the working CSV are present exactly once, computes SHA-256 hashes for the ZIP, the DV, the SV, and the trend CSV, writes an `ingest_record.json` with those hashes and the provenance, and uploads everything to `s3://coeqwal-model-run/staging/scenario_data/<short_code>/`. When the run finishes, `etl/ingestion/audit.md` regenerates automatically.
-
-Per-scenario failures skip that scenario and the run continues. The audit is where you read what happened.
-
-**4. Read `etl/ingestion/audit.md`.**
-
-Three sections to look at:
-
-- **Summary** at the top: one-line counts.
-- **What needs your attention**: scenarios that did not stage. The action column tells you the fix (edit a column in the working CSV, rename a file in Drive, set a `pinned_*`, etc.). After fixing, re-run for just that subset:
-  ```bash
-  python etl/ingestion/gdrive_bulk_download.py download --scenarios s0042
-  ```
-- **Unverified scenarios**: scenarios that staged but without a usable trend report (missing, ambiguous, or pinned-not-found). They are not blocked; you decide whether to proceed.
-
-When "What needs your attention" is empty, you are clear to promote.
-
-**5. Promote everything staged to `ready/`.**
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py promote
-```
-
-Copies each staged scenario's files from `staging/scenario_data/<id>/` to `ready/<id>/` in safe order: `ingest_record.json` first, trend CSV next, ZIP last. The ZIP PUT under `ready/` is the Lambda trigger, so promoting is the moment of release. Use `--scenarios s0020,s0021` to release a subset, or `--dry-run` to print the planned copies without executing them.
-
-**6. Watch the Lambda fire and Batch jobs run.**
-
-```bash
-aws logs tail /aws/lambda/coeqwalEtlTrigger --follow
-```
-
-Each ZIP PUT triggers the Lambda within a second or two. The Lambda moves the ZIP into `scenario/<id>/run/`, places the ingest record at `scenario/<id>/ingest_record.json`, locates the peer trend CSV, and submits a Batch job. Batch takes one to two minutes per scenario in Fargate Spot.
-
-**7. Refresh the audit after Batch finishes.**
-
-```bash
-python etl/ingestion/tools/audit.py
-```
-
-Each Batch job writes `extract_record.json` to its scenario's `scenario/<id>/` prefix. Re-rendering reads those alongside the per-scenario ingest records so the audit reflects extraction outcomes (status, validation result, mismatch counts) next to ingestion outcomes. The CSVs the container produces live at `s3://coeqwal-model-run/scenario/<id>/csv/` and are now ready for the statistics ETL (`etl/statistics/run_all.py`, separate runbook).
-
-### What is next
-
-Pass 2b will tighten the Batch container to strict-mode-against-ingest-record, add Lambda ingest-record inference so pure drag-and-drop in the AWS console works without developer follow-up, and add end-to-end API verification. The seven developer steps above do not change.
-
-For deeper context (concepts, the six layers of validation, the manual upload path, AWS-side details), see the sections below.
 
 ## Pipeline at a glance
 
@@ -461,252 +750,6 @@ The scripts in this directory never call `git`. They write files to disk in trac
 ### Timing and race conditions, in one paragraph
 
 S3 events are at-least-once and per-object. The Lambda is wired to fire on a ZIP PUT under `ready/`, which means the ZIP is the trigger and everything else must already be at rest when it lands. Six defenses protect against the obvious failure modes: (1) the automated `promote` enforces upload order `ingest_record.json` -> trend CSV -> ZIP last; (2) Pass 2b adds a 60-second Lambda grace window (HEAD-and-retry, not a fixed sleep) to catch in-flight ingest records without adding latency in the common case where the record is already at rest; (3) Pass 2b adds a Lambda idempotency check that does not submit duplicate Batch jobs; (4) `manual_ingest.py ingest-record --retrigger-batch` recovers from a missing ingest record without re-uploading the ZIP; (5) the "Manual upload path" section below tells human uploaders to upload the ingest record (and trend) before the ZIP; (6) Pass 2b adds Lambda-side inference so that a pure drag-and-drop with no ingest record still produces a strict-mode-compatible ingest record before Batch. is submitted.
-
-## How to ingest the model run data (step by step)
-
-Loading a new scenario, end-to-end on Cloud9. Pass 2b will add an end-to-end verification step that the Batch container and API agree.
-
-### Step 0: bootstrap the working CSV (one time per repo)
-
-Both CSVs live side by side in `etl/ingestion/scenario_listing/`. Both are tracked in git so they travel between the dev machine, GitHub, and Cloud9 with a normal `git pull`. After someone has bootstrapped and committed the working copy once, subsequent developers (and Cloud9) just pull and run.
-
-**Developer (first time only):** copy the pristine reference CSV into the working location, then commit.
-
-```bash
-cp etl/ingestion/scenario_listing/model_run_file_source.csv \
-   etl/ingestion/scenario_listing/model_run_file_source_working.csv
-git add etl/ingestion/scenario_listing/model_run_file_source_working.csv
-git commit -m "Bootstrap working scenario listing"
-```
-
-The reference copy is the pristine download of the WAM team's [coeqwal_cs3_scenario_listing_v7](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646) sheet. The working copy is what `gdrive_bulk_download.py` reads. Developer edits go in the working copy, and the script never modifies either file. Re-download the pristine CSV from the WAM sheet whenever the upstream sheet changes.
-
-If the working copy does not exist when you run the script, it errors out with the exact `cp` command above.
-
-#### Cloud9 setup (also one-time)
-
-The ingestion scripts need three things on the Cloud9 instance: enough disk space, `rclone` configured against the COEQWAL Shared Drive, and a Python venv with `boto3`.
-
-The fastest way to confirm all three are in place is the one-shot preflight script:
-
-```bash
-bash scripts/setup_etl_cloud9.sh           # full preflight + venv install
-bash scripts/setup_etl_cloud9.sh --check   # read-only checks only
-```
-
-It prints PASS / WARN / FAIL per check (AWS creds, rclone + gdrive remote, venv + requirements, `DATABASE_URL`, EBS capacity, `etl.common` import) with a one-line remediation hint for each failure. Exit 0 means you are ready to run `python etl/run_full_pipeline.py`. The manual steps below are the longer explanation of each check.
-
-**1. EBS storage check.** Cloud9 instances default to 10 GB EBS. The script streams files through `/tmp/` and uploads to S3 immediately, so you only need room for one ZIP per worker at a time, but it is worth checking.
-
-```bash
-df -h /
-```
-
-If the root partition is above ~70% used: AWS Console -> EC2 -> Volumes -> find the volume attached to your Cloud9 instance (instance ID: `curl -s http://169.254.169.254/latest/meta-data/instance-id`) -> Actions -> Modify Volume -> raise the size. Then grow the filesystem:
-
-```bash
-lsblk                            # confirm device name (usually /dev/xvda or /dev/nvme0n1)
-sudo growpart /dev/xvda 1
-sudo resize2fs /dev/xvda1
-df -h /
-```
-
-**2. rclone.** Used to copy ZIPs and trend CSVs from the COEQWAL Shared Drive.
-
-```bash
-curl https://rclone.org/install.sh | sudo bash
-rclone version
-```
-
-The rclone config (with the `gdrive` remote pointing at the COEQWAL Shared Drive) must be authenticated on a machine with a web browser, because Google OAuth requires a browser redirect. So you authenticate once on any machine with a browser and rclone installed, then copy the config to Cloud9.
-
-If you already authenticated on a local machine, copy the config:
-
-```bash
-# On your local machine:
-cat ~/.config/rclone/rclone.conf
-
-# On Cloud9:
-mkdir -p ~/.config/rclone
-nano ~/.config/rclone/rclone.conf
-# Paste, save with Ctrl+O, exit with Ctrl+X
-```
-
-If you need to set up rclone from scratch on a local machine first:
-
-```bash
-rclone config
-#   n) New remote
-#   name> gdrive
-#   Storage> drive (Google Drive)
-#   client_id> (blank - uses rclone's built-in OAuth client)
-#   client_secret> (blank)
-#   scope> 2 (drive.readonly)
-#   service_account_file> (blank)
-#   Edit advanced config> n
-#   Use web browser to authenticate> y
-#   (browser opens, authenticate with UC Berkeley Google account, 2FA required)
-#   Configure as Shared Drive> y
-#   Select: COEQWAL
-#   Keep this remote> y
-```
-
-Verify on Cloud9:
-
-```bash
-rclone lsd gdrive:   # should list top-level Shared Drive folders
-```
-
-The rclone refresh token typically auto-renews. If you get `401 Unauthorized` after weeks of inactivity, run `rclone config reconnect gdrive:` on a local machine and re-copy the config.
-
-**Security note - what is actually in `rclone.conf` and why this setup is safe.**
-
-The file you are copying around contains an OAuth **refresh token**, not a Google password. A refresh token is a Google-issued credential that the rclone client app can exchange for a short-lived access token whenever it needs to make a Drive API call. Some properties worth knowing:
-
-- **Scoped to Drive only.** The token can read and write Google Drive on behalf of the UC Berkeley account that authenticated. It cannot read Gmail, log in to anything, change the account password, or touch any other Google service.
-- **Revocable in seconds.** Visit [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions), find "rclone", click Remove access. The token is dead within a few minutes. No password rotation, no SSO ticket.
-- **Bound to the rclone OAuth client app.** A leaked token can only be used by something pretending to be rclone. The Google account owner still sees activity attributed to "rclone" in their account audit log, not "unknown".
-- **Lives outside the repo.** The file is at `~/.config/rclone/rclone.conf`, well outside the working tree. `git status` will never see it.
-- **Never read by our code.** The Python in this repo only ever shells out to `rclone`; it does not `open()` the config file. There is no code path that could accidentally log or print the token.
-- **Gitignored as belt-and-suspenders.** `rclone.conf` and `*.rclone.conf` are in `.gitignore`, so even if you accidentally copied the file into the repo, `git add` would skip it.
-
-If you suspect a token leak: revoke at the URL above, then `rclone config reconnect gdrive:` on a local machine and re-distribute the new config to anyone who needs it.
-
-Run `rclone config file` on any machine to print the exact config path.
-
-**3. Python venv.** The ingestion scripts depend on `boto3`. Create the venv once:
-
-```bash
-cd ~/environment/coeqwal-backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r etl/ingestion/requirements.txt
-pip list   # confirm what is installed
-```
-
-After the venv exists, future shells just need `source venv/bin/activate` before running the scripts.
-
-**4. AWS credentials.** Cloud9 has the `AWSCloud9SSMAccessRole` IAM role attached, which is sufficient. No further setup needed. See "Cloud9 IAM permissions" below for the policy details.
-
-### Step 1: edit the working CSV and run the download
-
-**Developer (prerequisite):** before extracting any data, each scenario needs a row in the `scenario` table in the database. Write a migration SQL script (see `database/scripts/sql/52_add_s0070_s0090.sql` for the pattern) that:
-
-- Inserts the scenario with `short_code`, `run_name`, `is_active`, `hydroclimate_id`, `hydroclimate_sibling`, `scenario_version_id`, `scenario_author_id`, `model_source_id`.
-- Disables the audit trigger, sets `created_by=2` and `updated_by=2` (developer attribution), then re-enables the trigger.
-- Runs via `psql $SUPERUSER_URL -f database/scripts/sql/<migration>.sql` from Cloud9.
-
-If the scenario belongs to an existing sibling group (same operational configuration, different hydroclimate), set `hydroclimate_sibling` to the group's reference short code. If it is a new operational configuration, add a row to `scenario_hydroclimate_sibling` too. The ETL itself does not insert into `scenario`; it expects the row to be there.
-
-**Developer:** open `etl/ingestion/scenario_listing/model_run_file_source_working.csv` and confirm or set the columns for the scenario you are loading. The first five columns come straight from the WAM sheet. The rest are developer-managed.
-
-| Internal field | Working CSV column (default) | Required? | What it does |
-|---|---|---|---|
-| `short_code` | `Index` | yes | Scenario short code, e.g. `s0020`. Must be unique across rows. |
-| `drive_folder_name` | `GoogleDriveFolderName` | yes | Folder name on the COEQWAL Shared Drive. |
-| `drive_folder_url` | `ModelFilesLink` | yes | URL like `.../folders/<id>`. The folder ID is regex-extracted. |
-| `dv_path` | `DV_Path` | yes | Full Drive path of the DV (output) DSS file. Only the basename is used at ingest. |
-| `sv_path` | `SV_Path` | yes | Full Drive path of the SV (input) DSS file. Only the basename is used at ingest. |
-| `pinned_model_run_zip` | `pinned_model_run_zip` | when multiple | Exact ZIP filename to pick when `Model_Files/` contains more than one ZIP. |
-| `pinned_trend_csv` | `pinned_trend_csv` | when multiple | Exact CSV filename to pick when the trend folder contains more than one CSV. Trend CSVs are optional, so leaving this blank when there are multiple just marks the scenario `unverified_multi_trend`. |
-| `download_status` | `download_status` | informational | Developer note column. `ready`, `needs_review`, `skip`, etc. The script does not filter by this; run scope is set on the CLI. |
-| `notes` | `notes` | optional | Free-text scratch for the developer. Surfaced in the audit. |
-
-If the upstream sheet renames a column, update the right-hand side of `COLUMN_MAP` near the top of `etl/ingestion/gdrive_bulk_download.py`. Internal field names stay the same.
-
-**How the script knows which scenarios to process.** Run scope is set on the CLI. Pass `--scenarios <list>` to process specific short codes, or `--all` to process every row in the working CSV. Without one of these, the script errors out. The list accepts whitespace, commas, or newlines as separators, so a column copied from the spreadsheet pastes in cleanly. The `download_status` column is informational only. See "Listing scenarios on the CLI" in the team-facing section above for paste examples.
-
-**Developer (optional pre-flight):** check Drive without touching S3.
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0070 s0080
-# or, to scan every row:
-python etl/ingestion/gdrive_bulk_download.py scan --all
-```
-
-`scan` walks each scenario's Drive folder and writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json` (run `python etl/ingestion/tools/show_last_run.py --stage scan` for a tabular view). It catches missing folders, missing ZIPs, missing trend CSVs, folder-name mismatches, and pinned-filename-not-found cases before you spend bandwidth on a real download run. It never touches S3 and never downloads files. Run it as a pre-flight on a freshly bootstrapped working CSV, or after editing rows.
-
-#### Where to run scan
-
-Run `scan` on Cloud9. Cloud9 already has `rclone`, the `gdrive` remote, Python 3.10, `boto3`, and the working CSV. `scan` is the only step that does not actually need AWS, but `download` and `promote` push ~200 MB ZIPs to S3 per scenario and are only fast over the AWS-internal network from Cloud9. Running ingestion off Cloud9 is not supported.
-
-**Developer:** run the download. `--s3-bucket` defaults to `coeqwal-model-run`. `--scenarios` or `--all` is required.
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py download --scenarios s0070 s0080
-# or
-python etl/ingestion/gdrive_bulk_download.py download --all
-```
-
-This is the two-stage validation in action. Layer 1 validates the spreadsheet (essential columns present, paths non-empty, folder IDs parse, short_codes unique, DV basenames unique). Layer 2 then downloads each ZIP into a temp dir and validates its contents (DV and SV basenames present, exactly once, in a non-excluded subfolder). SHA-256 is computed for the ZIP, the DV entry, the SV entry, and the trend CSV when present. Everything lands in `s3://coeqwal-model-run/staging/scenario_data/<id>/` alongside its `ingest_record.json`. Per-scenario failures skip that scenario, record an error code, and continue.
-
-When the run finishes, `audit.md` regenerates automatically from the run state and current S3 state. Open it to see what staged cleanly, what skipped, and what marked itself unverified. Pass `--skip-audit` to skip the auto-render if you want to defer.
-
-**Developer:** if anything in the audit looks wrong, fix it in the working CSV (or in Drive) and re-run `download --scenarios <id>` for just that scenario. When the audit looks clean:
-
-```bash
-python etl/ingestion/gdrive_bulk_download.py promote
-```
-
-`promote` copies each scenario's files to `ready/<id>/` in a fixed order: `ingest_record.json` first, trend CSV next, ZIP last. The ZIP PUT triggers the Lambda, so the ingest record and trend are already at rest when the trigger fires.
-
-Use `--scenarios s0020,s0021` to promote a subset, and `--dry-run` to print the planned copy order without copying.
-
-### Full pipeline orchestrator
-
-For Cloud9 developers who want **scan → download → promote → wait for AWS Batch → statistics (`run_all.py`) → verification (`verify_all_sections.py`)** in one process, use [`run_full_pipeline.py`](run_full_pipeline.py). It subprocesses the existing tools (their stdout/stderr stream live), continues past per-scenario failures, and writes a consolidated report.
-
-**Canonical command** for every scenario in the working CSV:
-
-```bash
-python etl/run_full_pipeline.py --all --workers 4 \
-  --listing-csv etl/ingestion/scenario_listing/model_run_file_source_working.csv \
-  --s3-bucket coeqwal-model-run
-```
-
-Or pass explicit IDs: `--scenarios s0107 s0108 …`.
-
-**Stages (one line each):**
-
-1. **scan** — Google Drive presence check (`gdrive_bulk_download.py scan`); reads `ingest_state.json::scan` to decide which scenarios move on.
-2. **download** — rclone pull + Layer 2 validation + S3 staging (`download`); reads `ingest_state.json::download` (`validation_status == OK` continues).
-3. **promote** — copies staging → `ready/` (`promote`); confirms each ZIP exists under `ready/<id>/`.
-4. **batch** — discovers Lambda-named jobs `etl-<scenario>-*` on queue `coeqwal-dss-queue`, polls until terminal state, then cross-checks `scenario/<id>/extract_record.json` (`status` must be `SUCCEEDED` or `SUCCEEDED_PARTIAL`).
-5. **statistics** — `etl/statistics/run_all.py --scenario <id>` per scenario that succeeded extraction.
-6. **verify** — `etl/statistics/verify_all_sections.py --scenario <id> --report-dir <run>/verify`.
-
-**Outputs:** default report directory `etl/ingestion/audit_reports/pipeline_runs/<UTC>/` with stage logs (`scan.log`, `download.log`, …), `pipeline_state.json` (resume), and `pipeline_summary.md` (one human-readable summary table with per-scenario notes). The process exits non-zero if any scenario failed any stage.
-
-**Resume:** reuse the same directory and loaded state:
-
-```bash
-python etl/run_full_pipeline.py --resume \
-  --report-dir etl/ingestion/audit_reports/pipeline_runs/<timestamp> \
-  --start-stage batch
-```
-
-Earlier stages are left as recorded in `pipeline_state.json`; only stages from `--start-stage` onward run again (combine with `--skip-stage scan,verify` for partial reruns).
-
-**IAM on the Cloud9 role:** in addition to existing S3 usage for ingestion, the Batch wait step needs **`batch:ListJobs`** and **`batch:DescribeJobs`** on the job queue used by the Lambda (`coeqwal-dss-queue` by default, overridable with `--batch-queue`). Statistics and verification need **`DATABASE_URL`** unless you pass **`--dry-run`** on the orchestrator (passed through to `run_all.py`; verify runs with `--csv-only` when the orchestrator is in dry-run).
-
-### Step 2: refresh the audit after Batch finishes
-
-The auto-render at the end of `download` captures pre-promote state. Once Batch finishes (one to two minutes per scenario after promote), the container writes `extract_record.json` to each scenario's prefix. To pick that up:
-
-```bash
-python etl/ingestion/tools/audit.py
-```
-
-Open `etl/ingestion/audit.md` again. The "What needs your attention" section is empty when everything succeeded.
-
-### Step 3: verify end-to-end
-
-```bash
-python etl/statistics/verify_all_sections.py --scenario <id>
-python etl/statistics/verify_api.py --scenario <id>
-```
-
-See [etl/verification/README.md](verification/README.md) for what each layer checks and where output lands. For the stakeholder / new-hire orientation on verification + auditing across the whole pipeline, see [docs/VERIFICATION.md](../docs/VERIFICATION.md).
 
 ## Manual upload path
 

@@ -346,7 +346,7 @@ for every scenario.
 
 Run the standard verification suite per scenario. The expected counts
 and tolerances are documented in
-[`AUDITS_AND_VERIFICATION.md`](AUDITS_AND_VERIFICATION.md).
+[`etl/verification/README.md`](../etl/verification/README.md).
 
 ```bash
 for id in $(echo "$TAIESM1_IDS" | tr ',' ' '); do

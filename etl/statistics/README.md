@@ -340,7 +340,6 @@ etl/statistics/
 ├── README.md                            # This file
 ├── dev_run.sh                           # Local development script
 ├── test_local.py                        # Local test runner
-├── verify_metrics.py                    # Verification against notebook output
 └── reservoirs/                          # Reservoir statistics
     ├── main.py                            # CLI entry point for direct database writes
     ├── calculate_reservoir_statistics.py  # Full statistics for all 92 reservoirs
@@ -355,7 +354,6 @@ etl/statistics/
 | `reservoirs/main.py` | **CLI entry point** for reservoir statistics writes (invoked by `run_all.py`) |
 | `dev_run.sh` | Local development runner for testing with CSV files |
 | `test_local.py` | Quick sanity check for individual reservoir calculations |
-| `verify_metrics.py` | **Verification** - Compare ETL output against metrics in all_metrics_output.csv |
 | `reservoirs/calculate_reservoir_statistics.py` | Calculates all reservoir statistics including probability metrics |
 | `reservoirs/calculate_reservoir_percentiles.py` | Percentile band calculation for website charts |
 | `reservoirs/reservoir_metrics.py` | Core calculation functions aligned with COEQWAL modeler Jupyter notebooks |
@@ -726,178 +724,12 @@ Row 7+:        1921-10-31, 1234.5, ...      (data)
 
 ## Verification
 
-### Verification Script
-
-Use `verify_metrics.py` to validate ETL calculations against the COEQWAL research notebook output:
-
-```bash
-# Calculate metrics and display
-python verify_metrics.py
-
-# Compare against notebook output (stored in S3/audits)
-python verify_metrics.py --compare /path/to/all_metrics_output.csv
-
-# Save calculated metrics to CSV
-python verify_metrics.py --output my_metrics.csv
-
-# Test specific reservoirs
-python verify_metrics.py --reservoirs SHSTA OROVL FOLSM
-```
-
-### Verification Results (s0020 Baseline)
-
-**Tolerance: 0.01% (0.0001)**
-
-| Category | Passed | Failed | Notes |
-|----------|--------|--------|-------|
-| Flood Pool Probabilities | 14/14 | 0 | All match within tolerance |
-| Dead Pool Probabilities | 14/14 | 0 | All match within tolerance |
-| Monthly Averages (TAF) | 12/16 | 4 | See SLUIS note below |
-| Coefficient of Variation | 16/16 | 0 | All match exactly |
-| **TOTAL** | **56/60** | **4** | 93% exact match |
-
-### Naming Convention
-
-Column names match the notebook's `all_metrics_output.csv` exactly:
-
-| Metric Type | Column Pattern | Example |
-|-------------|----------------|---------|
-| Flood Probability (all) | `All_Prob_S_{RES}_flood` | `All_Prob_S_SHSTA_flood` |
-| Flood Probability (Sep) | `Sep_Prob_S_{RES}_flood` | `Sep_Prob_S_SHSTA_flood` |
-| Dead Pool Probability | `All_Prob_S_{RES}_dead` | `All_Prob_S_OROVL_dead` |
-| April Average | `Apr_Avg_S_{RES}_TAF` | `Apr_Avg_S_SHSTA_TAF` |
-| September Average | `Sep_Avg_S_{RES}_TAF` | `Sep_Avg_S_TRNTY_TAF` |
-| April CV | `Apr_S_{RES}_CV` | `Apr_S_FOLSM_CV` |
-| September CV | `Sep_S_{RES}_CV` | `Sep_S_MELON_CV` |
-
-**Note**: SLUIS reservoirs use condensed naming (no underscore before TAF/CV):
-- `Apr_Avg_S_SLUIS_SWPTAF` (not `Apr_Avg_S_SLUIS_SWP_TAF`)
-- `Apr_S_SLUIS_CVPCV` (not `Apr_S_SLUIS_CVP_CV`)
-
-### Sample Verified Values (s0020)
-
-| Metric | ETL Value | Notebook Value | Status |
-|--------|-----------|----------------|--------|
-| All_Prob_S_SHSTA_flood | 0.3117 | 0.3117 | ✅ |
-| All_Prob_S_SHSTA_dead | 0.0150 | 0.0150 | ✅ |
-| Sep_Prob_S_OROVL_flood | 0.0800 | 0.0800 | ✅ |
-| Apr_Avg_S_SHSTA_TAF | 3906.98 | 3906.98 | ✅ |
-| Sep_S_SHSTA_CV | 0.3045 | 0.3045 | ✅ |
-| Apr_S_SLUIS_SWPCV | 0.3692 | 0.3692 | ✅ |
-| Sep_S_SLUIS_CVPCV | 0.9886 | 0.9886 | ✅ |
-
-### ⚠️ SLUIS Monthly Averages - Known Discrepancy
-
-**Status**: Under investigation with modeling team
-
-The notebook outputs constant values for SLUIS monthly averages that don't match the ETL calculations:
-
-| Metric | ETL Value | Notebook Value | Analysis |
-|--------|-----------|----------------|----------|
-| Apr_Avg_S_SLUIS_SWPTAF | 710.54 | 1067.0 | ⚠️ |
-| Sep_Avg_S_SLUIS_SWPTAF | 442.29 | 1067.0 | ⚠️ |
-| Apr_Avg_S_SLUIS_CVPTAF | 746.59 | 972.0 | ⚠️ |
-| Sep_Avg_S_SLUIS_CVPTAF | 262.42 | 972.0 | ⚠️ |
-
-**Evidence that ETL values are correct**:
-
-1. **CV values match exactly** - The same storage data produces matching CV calculations:
-   - ETL `Apr_S_SLUIS_SWPCV`: 0.3692 = Notebook: 0.3692 ✅
-   - ETL `Sep_S_SLUIS_CVPCV`: 0.9886 = Notebook: 0.9886 ✅
-
-2. **Hydrological validity** - ETL values show expected seasonal pattern:
-   - September storage < April storage (reservoirs draw down in summer)
-   - SLUIS_CVP September (262 TAF) much lower than April (747 TAF) - reflects CVP pumping patterns
-
-3. **Notebook values are constant** - Same value for April and September (1067, 972) is hydrologically impossible for storage reservoirs
-
-4. **Probability metrics match** - Same data source produces matching probabilities:
-   - ETL `All_Prob_S_SLUIS_CVP_flood`: 0.125 = Notebook: 0.125 ✅
-
-**Hypothesis**: The notebook may be outputting threshold constants instead of calculated averages for these variables.
-
-### Metrics Not in Notebook
-
-The following metrics are calculated by the ETL but not included in the notebook output:
-
-| Metric | ETL Value | Notes |
-|--------|-----------|-------|
-| All_Prob_S_FOLSM_flood | 0.4267 | FOLSM excluded from notebook probability calculations |
-| Sep_Prob_S_FOLSM_flood | 0.2900 | FOLSM excluded from notebook probability calculations |
-
-### Verification Workflow
-
-1. **Notebook generates reference data**:
-   - Run `coeqwal/notebooks/Metrics.ipynb`
-   - Outputs `all_metrics_output.csv` to `{GroupDataDirPath}/metrics_output/`
-
-2. **Reference data stored in two locations**:
-   - **Local**: `coeqwal-backend/audits/all_metrics_output.csv`
-   - **S3**: `s3://coeqwal-model-run/reference/all_metrics_output.csv`
-
-   Upload command:
-   ```bash
-   aws s3 cp audits/all_metrics_output.csv s3://coeqwal-model-run/reference/all_metrics_output.csv
-   ```
-
-3. **ETL verification** (from `etl/statistics/` directory):
-   ```bash
-   # Using local file
-   python verify_metrics.py --compare ../../audits/all_metrics_output.csv
-
-   # Or download from S3 first
-   aws s3 cp s3://coeqwal-model-run/reference/all_metrics_output.csv /tmp/
-   python verify_metrics.py --compare /tmp/all_metrics_output.csv
-   ```
-
-4. **Expected results**:
-   - 56/60 metrics pass at 0.01% tolerance
-   - 4 SLUIS monthly averages flagged (known discrepancy)
-   - 2 FOLSM flood probabilities not in notebook (ETL-only)
-
----
-
-## Verification Summary
-
-### ✅ Verified Against Notebook (56 metrics)
-
-| Statistic | Reservoirs | Verification Status |
-|-----------|------------|---------------------|
-| **Flood Pool Probability (All)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
-| **Flood Pool Probability (Sep)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
-| **Dead Pool Probability (All)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
-| **Dead Pool Probability (Sep)** | SHSTA, OROVL, TRNTY, SLUIS_CVP, SLUIS_SWP, MLRTN, MELON | ✅ 0.01% tolerance |
-| **April Average (TAF)** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN | ✅ 0.01% tolerance |
-| **September Average (TAF)** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN | ✅ 0.01% tolerance |
-| **April CV** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP | ✅ 0.01% tolerance |
-| **September CV** | SHSTA, OROVL, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP | ✅ 0.01% tolerance |
-
-### ⚠️ Known Discrepancy (4 metrics)
-
-| Statistic | Reservoirs | Issue |
-|-----------|------------|-------|
-| **April Average (TAF)** | SLUIS_CVP, SLUIS_SWP | Notebook outputs constant values |
-| **September Average (TAF)** | SLUIS_CVP, SLUIS_SWP | Notebook outputs constant values |
-
-### 📊 ETL-Only Metrics (not in notebook)
-
-| Statistic | Reservoirs | Notes |
-|-----------|------------|-------|
-| **Flood Pool Probability** | FOLSM | FOLSM not in notebook threshold calculations |
-| **All 92 reservoirs** | Full entity list | Notebook only calculates 8 major reservoirs |
-| **Monthly percentile bands** | All | Website-specific visualization data |
-| **Spill statistics** | All | Not calculated in Metrics.ipynb |
-| **Storage exceedance percentiles** | All | Period summary metrics |
-
-### 🔍 Cannot Verify (no notebook equivalent)
-
-| Statistic | Reason |
-|-----------|--------|
-| Monthly percentile bands by water month | Website-specific grouping approach |
-| Spill frequency and volume metrics | Not in Metrics.ipynb scope |
-| Storage exceedance curves | Different calculation in notebook |
-| April flood pool probability | Notebook only calculates All and September; `verify_metrics.py` does not calculate April probabilities (including FOLSM) |
-| 84 additional reservoirs | Notebook limited to 8 major reservoirs |
+Reservoir statistics are verified end-to-end alongside every other section
+by [`etl/statistics/verify_all_sections.py`](verify_all_sections.py)
+(Layer 2). See [`etl/verification/README.md`](../verification/README.md)
+for the full layered walkthrough, tolerances, and known notes (including
+the SLUIS monthly-average discrepancy carried forward from the original
+notebook comparison).
 
 ---
 
@@ -917,13 +749,13 @@ pip install pandas numpy psycopg2-binary boto3
 
 **1. Get a sample CSV file**
 
-Place a CalSim output CSV in the `pipelines/` directory:
+Place a CalSim output CSV in the `etl/reference/` directory:
 ```bash
 # If you have AWS access:
-aws s3 cp s3://coeqwal-model-run/scenario/s0020/csv/s0020_coeqwal_calsim_output.csv ../pipelines/
+aws s3 cp s3://coeqwal-model-run/scenario/s0020/csv/s0020_coeqwal_calsim_output.csv ../reference/
 
 # Or use any existing CSV with the 7-header format
-ls ../pipelines/*.csv
+ls ../reference/*.csv
 ```
 
 **2. Run with dry-run (no database required)**
@@ -932,10 +764,10 @@ ls ../pipelines/*.csv
 cd /path/to/coeqwal-backend/etl/statistics
 
 # Dry run - calculates metrics, prints summary, no database writes
-python reservoirs/main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run
+python reservoirs/main.py --scenario s0020 --csv-path ../reference/s0020_coeqwal_calsim_output.csv --dry-run
 
 # With JSON output for debugging
-python reservoirs/main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run --output-json
+python reservoirs/main.py --scenario s0020 --csv-path ../reference/s0020_coeqwal_calsim_output.csv --dry-run --output-json
 ```
 
 **3. Run quick tests**
@@ -943,9 +775,6 @@ python reservoirs/main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal
 ```bash
 # Test imports and basic calculations
 python test_local.py
-
-# Verify metrics against notebook output
-python verify_metrics.py --reservoirs SHSTA OROVL
 ```
 
 **4. Use the dev script**

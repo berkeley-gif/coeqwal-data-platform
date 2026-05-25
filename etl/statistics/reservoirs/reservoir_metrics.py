@@ -12,7 +12,7 @@ This module provides calculation functions for:
 Reference: coeqwal/notebooks/coeqwalpackage/metrics.py
 
 Usage:
-    from etl.statistics.reservoir_metrics import (
+    from etl.statistics.reservoirs.reservoir_metrics import (
         calculate_flood_pool_probability,
         calculate_dead_pool_probability,
         calculate_cv,

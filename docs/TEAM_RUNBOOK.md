@@ -16,7 +16,7 @@ historical context live in the linked docs.
 | What this codebase is | [`README.md`](../README.md) |
 | The schema | [`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`](../database/schema/COEQWAL_SCENARIOS_DB_ERD.md) |
 | What the database looks like right now | `audits/monthly_20260524_143951/report.md` |
-| Verification and audit systems | [`docs/AUDITS_AND_VERIFICATION.md`](AUDITS_AND_VERIFICATION.md) |
+| Verification and audit systems | [`etl/verification/README.md`](../etl/verification/README.md) |
 | How DU, M&I, contractor, and CWS concepts relate | [`docs/water_user_categories.md`](water_user_categories.md) |
 | Statistics and model-run roadmap | [`docs/statistics_roadmap.md`](statistics_roadmap.md) |
 | **Copy-paste Cloud9 procedures (threads A1, A2)** | [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) |
@@ -452,7 +452,7 @@ checkout is stale - `git pull` and rerun.
 |---|---|
 | This runbook | [`docs/TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md) |
 | Cloud9 procedures (A1, A2) | [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) |
-| Audits + verification | [`docs/AUDITS_AND_VERIFICATION.md`](AUDITS_AND_VERIFICATION.md) |
+| Audits + verification | [`etl/verification/README.md`](../etl/verification/README.md) |
 | Statistics + M&I roadmap | [`docs/statistics_roadmap.md`](statistics_roadmap.md) |
 | gw/sw reconciliation | [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md) |
 | Database geometry pattern (roadmap) | [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) |
