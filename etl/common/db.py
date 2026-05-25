@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import Optional
+from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,26 @@ def get_database_url(required: bool = True) -> Optional[str]:
     return None
 
 
+def _summarize_url_for_log(url: str) -> str:
+    """Render a postgres URL as `user@host:port/dbname` for log lines.
+
+    The password is never read. Reads only `username`, `hostname`, `port`,
+    and `path` from the parsed URL. Returns `<unparseable>` if the URL
+    is not in URI form (e.g. libpq key=value DSN strings).
+    """
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme:
+            return "<unparseable>"
+        host = parsed.hostname or "?"
+        port = parsed.port if parsed.port is not None else "?"
+        dbname = (parsed.path or "/").lstrip("/") or "?"
+        user = parsed.username or "?"
+        return f"{user}@{host}:{port}/{dbname}"
+    except Exception:
+        return "<unparseable>"
+
+
 def get_db_connection(required: bool = True, db_url: Optional[str] = None):
     """Open a psycopg2 connection.
 
@@ -53,10 +74,17 @@ def get_db_connection(required: bool = True, db_url: Optional[str] = None):
     the import cost. Returns None when `required=False` and neither
     `db_url` nor the env var is available (callers can then run in
     CSV-only / dry-run mode).
+
+    Logs two INFO lines per call: one before connect identifying the URL
+    source, one after connect identifying the target as `user@host:port/db`.
+    Credentials are never logged.
     """
     url = db_url or get_database_url(required=required)
     if url is None:
         return None
+
+    source = "db_url parameter" if db_url else f"{DATABASE_URL_ENV} env var"
+    log.info("Opening DB connection (URL source: %s)", source)
 
     try:
         import psycopg2  # noqa: F401 (imported for the side effect of raising)
@@ -69,4 +97,12 @@ def get_db_connection(required: bool = True, db_url: Optional[str] = None):
 
     import psycopg2
 
-    return psycopg2.connect(url)
+    conn = psycopg2.connect(url)
+
+    try:
+        log.info("Connected to %s", _summarize_url_for_log(url))
+    except Exception:
+        # Logging failures must never break the connection itself
+        pass
+
+    return conn

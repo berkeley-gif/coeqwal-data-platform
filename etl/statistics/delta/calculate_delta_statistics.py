@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Calculate Delta statistics: outflow, X2, and salinity at compliance points.
+calculate_delta_statistics.py - outflow, X2, and salinity at compliance points.
 
 Variables (verified against COEQWAL_V3 variable_groupings.csv and metrics.py):
 
@@ -54,13 +54,11 @@ except ImportError:
     HAS_BOTO3 = False
     ClientError = None
 
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2  # noqa: F401
     from psycopg2.extras import execute_values  # noqa: F401
-
-    HAS_PSYCOPG2 = True
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,7 +70,7 @@ log = logging.getLogger("delta_statistics")
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from etl.common import S3_BUCKET  # noqa: E402
+from etl.common import S3_BUCKET, get_db_connection  # noqa: E402
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 
@@ -560,14 +558,7 @@ def save_to_database(
     """
     import json as _json
 
-    if not HAS_PSYCOPG2:
-        raise ImportError("psycopg2 is required to write to database")
-
-    db_url = database_url or os.environ.get("DATABASE_URL")
-    if not db_url:
-        raise ValueError("DATABASE_URL not set")
-
-    conn = psycopg2.connect(db_url)
+    conn = get_db_connection(db_url=database_url)
     cur = conn.cursor()
 
     try:
