@@ -121,12 +121,57 @@ python run_all.py --all-scenarios --workers 4 --batch-size 20 --start-from s0027
 
 | Flag | Purpose |
 |------|---------|
-| `--workers N` | Parallel scenario processing. 4 recommended for t3a.2xlarge (32GB). |
-| `--batch-size N` | Process N scenarios per batch (for cleaner log output). |
+| `--workers N` | Parallel scenario processing. See "Choosing `--workers`" below. |
+| `--batch-size N` | Split a long run into chunks of N scenarios with a logged checkpoint between batches. Recommended 10-20 for a full backfill. Lets you cleanly resume from the last completed batch with `--start-from` if anything goes wrong mid-run. |
 | `--start-from sXXXX` | Skip scenarios before this one (inclusive). For resuming partial runs. |
 | `--continue-on-error` | Don't stop on failure. Default is fail-fast. |
 | `--only module1,module2` | Run only specific modules (e.g. `--only reservoirs,ag`). |
 | `--dry-run` | Calculate but don't write to the database. |
+
+#### Choosing `--workers`
+
+Each worker loads one scenario's CSV (~300MB on disk) and expands it into a
+pandas DataFrame plus intermediate arrays, peaking at roughly 2-3 GB of RAM
+per worker during computation. Pick `--workers` to fit your environment:
+
+| Environment | Recommended `--workers` |
+|---|---|
+| Cloud9 `t3a.2xlarge` (32 GB RAM, 8 vCPU) - the standard ETL host | 4 |
+| Cloud9 `t3a.xlarge` (16 GB RAM, 4 vCPU) | 2 |
+| Cloud9 `t3a.large` or smaller | 1 |
+| Developer laptop (any size) | 1 |
+
+To check the instance size you're on:
+
+```bash
+nproc                                      # vCPU count
+free -h                                    # available RAM
+curl -s http://169.254.169.254/latest/meta-data/instance-type   # EC2 instance type
+```
+
+Higher worker counts risk OOM (the kernel will SIGKILL Python) or heavy
+swapping that slows the run more than it speeds it up. When in doubt,
+start with 1, watch `free -h` for a few minutes, then increase.
+
+#### When to use `--batch-size`
+
+For a full backfill (40+ scenarios), always pair `--workers` with
+`--batch-size`:
+
+```bash
+python run_all.py --all-scenarios --workers 4 --batch-size 15
+```
+
+Why batching helps:
+
+1. **Resumability.** Each batch is a clean log checkpoint. If something fails
+   in batch 3 of 5, you know to resume with `--start-from sXXXX` at the start
+   of batch 3.
+2. **Long-run resilience.** AWS SSO and IAM session tokens have expiration
+   limits. Breaking a multi-hour run into ~10-15 scenario batches gives you
+   natural pause points if a credential needs refreshing.
+3. **Easier scorecard reading.** The end-of-batch summary is easier to scan
+   than one giant log of 60 scenarios.
 
 #### Using tmux for long runs
 
@@ -287,12 +332,12 @@ python run_all.py --scenario {new_scenario_id}
 
 ```
 etl/statistics/
-├── main.py                              # Entry point - Lambda handler + CLI
 ├── README.md                            # This file
 ├── dev_run.sh                           # Local development script
 ├── test_local.py                        # Local test runner
 ├── verify_metrics.py                    # Verification against notebook output
 └── reservoirs/                          # Reservoir statistics
+    ├── main.py                            # Entry point - Lambda handler + CLI
     ├── calculate_reservoir_statistics.py  # Full statistics for all 92 reservoirs
     ├── calculate_reservoir_percentiles.py # Percentile bands for website charts
     └── reservoir_metrics.py               # Core calculation functions
@@ -302,7 +347,7 @@ etl/statistics/
 
 | Script | Purpose |
 |--------|---------|
-| `main.py` | **Entry point** - Lambda handler + CLI for automated ETL |
+| `reservoirs/main.py` | **Entry point** - Lambda handler + CLI for automated ETL |
 | `dev_run.sh` | Local development runner for testing with CSV files |
 | `test_local.py` | Quick sanity check for individual reservoir calculations |
 | `verify_metrics.py` | **Verification** - Compare ETL output against metrics in all_metrics_output.csv |
@@ -657,23 +702,23 @@ For the complete list of all 92 reservoirs, see: `database/seed_tables/04_calsim
 
 ### Automated
 
-Use `main.py` for direct database writes:
+Use `reservoirs/main.py` for direct database writes:
 
 ```bash
 # Process single scenario and write to database
-DATABASE_URL=postgres://... python main.py --scenario s0020
+DATABASE_URL=postgres://... python reservoirs/main.py --scenario s0020
 
 # Process from S3 key (extracts scenario ID automatically)
-DATABASE_URL=postgres://... python main.py --s3-key scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
+DATABASE_URL=postgres://... python reservoirs/main.py --s3-key scenario/s0020/csv/s0020_coeqwal_calsim_output.csv
 
 # Process all scenarios
-DATABASE_URL=postgres://... python main.py --all-scenarios
+DATABASE_URL=postgres://... python reservoirs/main.py --all-scenarios
 
 # Dry run (calculate without writing)
-python main.py --scenario s0020 --dry-run
+python reservoirs/main.py --scenario s0020 --dry-run
 
 # Output as JSON (for debugging)
-python main.py --scenario s0020 --output-json
+python reservoirs/main.py --scenario s0020 --output-json
 ```
 
 ### Manual (via direct SQL)
@@ -941,10 +986,10 @@ ls ../pipelines/*.csv
 cd /path/to/coeqwal-backend/etl/statistics
 
 # Dry run - calculates metrics, prints summary, no database writes
-python main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run
+python reservoirs/main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run
 
 # With JSON output for debugging
-python main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run --output-json
+python reservoirs/main.py --scenario s0020 --csv-path ../pipelines/s0020_coeqwal_calsim_output.csv --dry-run --output-json
 ```
 
 **3. Run quick tests**

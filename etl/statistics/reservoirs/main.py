@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main entry point for reservoir statistics ETL.
+/reservoirs/main.py - Main entry point for reservoir statistics ETL.
 
 Designed for automated pipelines:
 - AWS Lambda triggered by S3 ObjectCreated events
@@ -25,13 +25,12 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
-# Import calculation modules
-from reservoirs.calculate_reservoir_statistics import (
+from calculate_reservoir_statistics import (
     calculate_all_statistics,
     load_reservoir_entities,
     SCENARIOS,
 )
-from reservoirs.calculate_reservoir_percentiles import (
+from calculate_reservoir_percentiles import (
     calculate_all_reservoir_percentiles,
 )
 

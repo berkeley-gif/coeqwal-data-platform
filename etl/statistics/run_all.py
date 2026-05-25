@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Consolidated statistics ETL runner.
+run_all.py - Consolidated statistics ETL runner.
 
-Runs all statistics calculations for a scenario in the correct order:
+Runs all statistics calculations for a scenario in the order:
 1. Reservoir statistics (storage, percentiles, spill, period summary)
 2. Urban demand unit (DU) statistics (delivery, shortage)
 3. M&I contractor statistics (delivery, shortage)
 4. CWS aggregate statistics (SWP, CVP, MWD totals)
 5. Agricultural (AG) statistics (delivery, shortage, aggregates)
-6. Wildlife Refuge statistics (delivery, shortage, reliability)
-7. Environmental River Flow statistics (% unimpaired, % functional flow, alteration index)
+6. Refuge statistics (delivery, shortage, reliability)
+7. eFlow statistics (% unimpaired, % functional flow, alteration index)
 
 Usage:
     # Run all statistics for a scenario
@@ -61,7 +61,7 @@ DEFAULT_AUDIT_DIR = SCRIPT_DIR / "audit_reports"
 # Available ETL modules and their entry points
 ETL_MODULES = {
     "reservoirs": {
-        "path": SCRIPT_DIR / "main.py",
+        "path": SCRIPT_DIR / "reservoirs" / "main.py",
         "name": "Reservoir Statistics",
         "tables": [
             "reservoir_monthly_percentile",
@@ -204,9 +204,6 @@ def _alert_failure(
     exception: Optional[Exception] = None,
 ):
     """Print a loud, immediate alert to stderr when a module fails.
-
-    This ensures the operator sees failures in real time rather than
-    discovering them only in the final scorecard.
     """
     global _failure_count
     _failure_count += 1
@@ -427,8 +424,11 @@ Examples:
         type=int,
         default=1,
         help="Number of scenarios to process in parallel (default: 1). "
-        "Each worker downloads ~300MB CSV, so set based on available RAM. "
-        "Recommended: 4 for 8GB+ RAM.",
+        "Each worker holds a ~300MB CSV plus its expanded pandas DataFrame "
+        "in memory (~2-3 GB peak per worker). On the standard Cloud9 "
+        "t3a.2xlarge (32GB RAM, 8 vCPU), use 4. On a smaller t3a.xlarge "
+        "(16GB), use 2. On a developer laptop, use 1. Higher values risk OOM. "
+        "See etl/statistics/README.md 'Choosing --workers' for details.",
     )
     parser.add_argument(
         "--with-sensitivity",
@@ -440,9 +440,12 @@ Examples:
         "--batch-size",
         type=int,
         default=0,
-        help="Process scenarios in batches of this size, pausing between batches. "
-        "0 (default) = no batching (process all at once). "
-        "Recommended: 10-15 to prevent long-running AWS token issues.",
+        help="Split a long run into chunks of this many scenarios, with a "
+        "logged checkpoint between batches. 0 (default) = no batching "
+        "(process all at once). Recommended: 10-20 for a full backfill. "
+        "Lets you cleanly resume from the last completed batch with "
+        "--start-from if anything goes wrong mid-run, and gives natural "
+        "pause points if an AWS session token needs refreshing.",
     )
     parser.add_argument(
         "--start-from",
