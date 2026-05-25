@@ -29,13 +29,12 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+# Optional: only RealDictCursor is referenced directly. The connection itself
+# is opened via etl.common.db.get_db_connection.
 try:
-    import psycopg2
-    import psycopg2.extras
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import RealDictCursor
 except ImportError:
-    HAS_PSYCOPG2 = False
+    RealDictCursor = None  # type: ignore[assignment]
 
 try:
     import requests
@@ -55,7 +54,7 @@ REL_TOL = 0.001
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from etl.common import resolve_active_scenarios  # noqa: E402
+from etl.common import get_db_connection, resolve_active_scenarios  # noqa: E402
 from etl.common.active_scenarios import ACTIVE_SCENARIOS  # noqa: E402
 
 # Rebound inside main() when --scenarios-override is passed
@@ -176,10 +175,10 @@ def _sf(val) -> Optional[float]:
 
 def connect_db():
     url = os.environ.get("DATABASE_URL")
-    if not url or not HAS_PSYCOPG2:
+    if not url:
         return None
     try:
-        return psycopg2.connect(url)
+        return get_db_connection(db_url=url)
     except Exception as e:
         log.error(f"DB connection failed: {e}")
         return None
@@ -188,7 +187,7 @@ def connect_db():
 def db_query(conn, sql: str, params: tuple = ()) -> List[dict]:
     if conn is None:
         return []
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
         return [dict(row) for row in cur.fetchall()]
 

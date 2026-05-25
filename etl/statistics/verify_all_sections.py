@@ -37,13 +37,12 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+# Optional: only RealDictCursor is referenced directly. The connection itself
+# is opened via etl.common.db.get_db_connection.
 try:
-    import psycopg2
-    import psycopg2.extras
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import RealDictCursor
 except ImportError:
-    HAS_PSYCOPG2 = False
+    RealDictCursor = None  # type: ignore[assignment]
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -55,6 +54,7 @@ log = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from units import CFS_TO_TAF_PER_DAY  # noqa: E402
+from etl.common import get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as ALL_SCENARIOS  # noqa: E402
 
 SHORTAGE_THRESHOLD_TAF = 0.1
@@ -380,11 +380,8 @@ def connect_db() -> Optional[object]:
     if not url:
         log.warning("DATABASE_URL not set; skipping DB verification")
         return None
-    if not HAS_PSYCOPG2:
-        log.warning("psycopg2 not installed; skipping DB verification")
-        return None
     try:
-        conn = psycopg2.connect(url)
+        conn = get_db_connection(db_url=url)
         log.info("Connected to database")
         return conn
     except Exception as e:
@@ -395,7 +392,7 @@ def connect_db() -> Optional[object]:
 def db_query(conn, sql: str, params: tuple = ()) -> List[dict]:
     if conn is None:
         return []
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, params)
         return [dict(row) for row in cur.fetchall()]
 

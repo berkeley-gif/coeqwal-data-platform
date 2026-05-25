@@ -134,7 +134,7 @@ ETL_MODULES = {
 # Add the repo root to sys.path so `etl.common` is importable when this
 # script is run directly. See etl/common/__init__.py for the rationale.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from etl.common import S3_BUCKET as BUCKET  # noqa: E402
+from etl.common import S3_BUCKET as BUCKET, get_db_connection  # noqa: E402
 from etl.common.etl_scenarios import ETL_SCENARIOS as SCENARIOS  # noqa: E402
 
 # Track failures in real time for the running tally
@@ -936,13 +936,7 @@ def verify_db_row_counts(db_url: Optional[str] = None):
         return
 
     try:
-        import psycopg2
-    except ImportError:
-        log.warning("psycopg2 not installed; skipping DB verification")
-        return
-
-    try:
-        conn = psycopg2.connect(url)
+        conn = get_db_connection(db_url=url)
         cur = conn.cursor()
     except Exception as e:
         log.warning(f"Could not connect for verification: {e}")
