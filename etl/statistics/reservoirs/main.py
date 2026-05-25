@@ -18,27 +18,32 @@ import argparse
 import json
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
 
-import numpy as np
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-from calculate_reservoir_statistics import (
+import numpy as np  # noqa: E402
+
+from etl.common.db import get_db_connection  # noqa: E402
+
+from calculate_reservoir_statistics import (  # noqa: E402
     calculate_all_statistics,
     load_reservoir_entities,
     SCENARIOS,
 )
-from calculate_reservoir_percentiles import (
+from calculate_reservoir_percentiles import (  # noqa: E402
     calculate_all_reservoir_percentiles,
 )
 
-# Optional: psycopg2 for direct database writes
+# Optional: only needed for DB writes. Dry-run skips the writer path entirely.
 try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
+    from psycopg2.extras import execute_values  # noqa: E402
 except ImportError:
-    HAS_PSYCOPG2 = False
+    pass
 
 # Logging
 logging.basicConfig(
@@ -86,17 +91,6 @@ def sanitize_value(val):
 def sanitize_row(row_dict: dict) -> dict:
     """Sanitize all values in a row dictionary."""
     return {k: sanitize_value(v) for k, v in row_dict.items()}
-
-
-def get_db_connection():
-    """Get database connection from DATABASE_URL."""
-    if not HAS_PSYCOPG2:
-        raise ImportError(
-            "psycopg2 required for database writes. Install with: pip install psycopg2-binary"
-        )
-    if not DATABASE_URL:
-        raise ValueError("DATABASE_URL environment variable not set")
-    return psycopg2.connect(DATABASE_URL)
 
 
 def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any]) -> int:
