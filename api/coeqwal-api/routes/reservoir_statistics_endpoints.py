@@ -464,18 +464,3 @@ async def list_reservoirs(
     }
     _static_cache[cache_key] = result
     return _json_response(result, api_cache_max_age())
-
-
-# Deprecated alias - prefer GET /api/statistics/reservoirs. Kept so existing
-# clients keep working through one deploy cycle
-@router.get(
-    "/reservoirs/all",
-    summary="(Deprecated) List all reservoirs with statistics data",
-    description="Alias for `/api/statistics/reservoirs`. Prefer the canonical path.",
-    deprecated=True,
-)
-async def list_all_reservoirs_deprecated(
-    connection: asyncpg.Connection = Depends(get_db),
-) -> JSONResponse:
-    """Deprecated alias for `list_reservoirs`."""
-    return await list_reservoirs(connection)

@@ -98,30 +98,9 @@ db_pool = None
 API_TITLE = "COEQWAL API"
 API_VERSION = "2.1.1"
 API_DESCRIPTION = """
-Data API for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
+Data API for the Collaboratory for Equity in Water Allocation (COEQWAL) project. Enables exploration of how different water management scenarios affect communities, agriculture, and ecosystems across California.
 
-Enables exploration of how different water management scenarios affect communities, 
-agriculture, and ecosystems across California.
-
-### How `coeqwal-website` consumes this API
-
-The official COEQWAL website does **not** call these endpoints with `fetch()` directly.
-All data access flows through the `@repo/data` package in the `coeqwal-website` repo
-(`packages/data/src/coeqwal`):
-
-- `coeqwal/hooks/*` - SWR hooks the website uses to read from the API. Most
-  endpoints have a dedicated hook. A few have several hooks for different filter
-  shapes (e.g. `useReservoirPercentiles`, `useAllReservoirPercentiles`, and
-  `useGroupedReservoirPercentiles` all hit `/reservoir-percentiles` with
-  different query params), and `useBatchStatistics` fans out to many endpoints
-  in one call. Hook files are organized by domain
-  (`useMiContractorStatistics.ts`, `useUrbanDemandUnitStatistics.ts`,
-  `useAgStatistics.ts`, `useRefugeStatistics.ts`, `useReservoirPercentiles.ts`,
-  `useEnvFlowStatistics.ts`, `useDeltaStatistics.ts`, etc).
-
-Components consume hooks, never raw URLs. If you change a URL or payload shape here,
-the matching website update lives in those four files. That said, outside callers (notebooks,
-third-party tools, ad-hoc scripts) can consume these endpoints directly.
+The official `coeqwal-website` consumes these endpoints via the `@repo/data` package, not raw `fetch()`. See the [API README](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/api/coeqwal-api/README.md#how-coeqwal-website-consumes-this-api) for the integration pattern.
 """
 
 TAGS_METADATA = [
@@ -131,15 +110,15 @@ TAGS_METADATA = [
     },
     {
         "name": "tiers",
-        "description": "**Tier definitions, scenario tier scores, and per-location tier assignments.** Used for charts, dashboards, and the map. No geometry is served; the map joins `location_id` to Mapbox vector tile features.",
+        "description": "**Tier definitions, scenario tier scores, and per-location tier assignments.** No geometry is served. The map joins `location_id` to Mapbox vector tile features.",
     },
     {
         "name": "network",
-        "description": "**CalSim3 water network data.** Bulk node (point) and arc (line) lists for offline analysis and downloads.",
+        "description": "**CalSim3 water network data.** Bulk node (point) and arc (line) lists.",
     },
     {
         "name": "statistics",
-        "description": "**Water system statistics.** Reservoir storage and M&I delivery/shortage percentile data for band charts.",
+        "description": "**Statistics from scenario model run data.**",
     },
     {
         "name": "system",

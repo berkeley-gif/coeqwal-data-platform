@@ -16,6 +16,83 @@ If the auto-deploy gets stuck, see "Manual Deployment (Troubleshooting)" further
 - **Interactive docs**: `https://api.coeqwal.org/docs`
 - **Health check**: `https://api.coeqwal.org/api/health`
 
+## Smoke tests
+
+After a deploy, paste this into a shell to walk every endpoint family. It uses scenario `s0020` (override via `SMOKE_SCENARIO`) and targets prod (override via `COEQWAL_API_URL`). Each line prints `PASS 200 <path>` or `FAIL <code> <path>`, and the script exits non-zero if anything missed.
+
+```bash
+BASE="${COEQWAL_API_URL:-https://api.coeqwal.org}"
+SCENARIO="${SMOKE_SCENARIO:-s0020}"
+FAILED=0
+
+while IFS= read -r path; do
+  [ -z "$path" ] && continue
+  code=$(curl -sS --max-time 60 -o /dev/null -w '%{http_code}' "$BASE$path")
+  if [ "$code" = "200" ]; then
+    printf 'PASS %3s %s\n' "$code" "$path"
+  else
+    printf 'FAIL %3s %s\n' "$code" "$path"
+    FAILED=$((FAILED+1))
+  fi
+done <<EOF
+/api/health
+/api/scenarios
+/api/scenarios/$SCENARIO
+/api/tiers/definitions
+/api/tiers/list
+/api/tiers/scenarios/$SCENARIO/tiers
+/api/statistics/reservoirs
+/api/statistics/reservoir-groups
+/api/statistics/scenarios/$SCENARIO/reservoir-percentiles
+/api/statistics/scenarios/$SCENARIO/spill-monthly
+/api/statistics/mi-contractors
+/api/statistics/scenarios/$SCENARIO/mi-contractors/monthly
+/api/statistics/scenarios/$SCENARIO/mi-contractors/period-summary
+/api/statistics/demand-units
+/api/statistics/scenarios/$SCENARIO/demand-units/monthly
+/api/statistics/scenarios/$SCENARIO/demand-units/period-summary
+/api/statistics/ag-demand-units
+/api/statistics/scenarios/$SCENARIO/ag-demand-units/monthly?du_id=64_PA1
+/api/statistics/scenarios/$SCENARIO/ag-demand-units/period-summary
+/api/statistics/ag-aggregates
+/api/statistics/scenarios/$SCENARIO/ag-aggregates/monthly
+/api/statistics/scenarios/$SCENARIO/ag-aggregates/period-summary
+/api/statistics/cws-aggregates
+/api/statistics/scenarios/$SCENARIO/cws-aggregates/monthly
+/api/statistics/scenarios/$SCENARIO/cws-aggregates/period-summary
+/api/statistics/refuge-demand-units
+/api/statistics/scenarios/$SCENARIO/refuge-demand-units/monthly
+/api/statistics/scenarios/$SCENARIO/refuge-demand-units/period-summary
+/api/statistics/channels
+/api/statistics/scenarios/$SCENARIO/delta/monthly
+/api/statistics/batch?scenarios=$SCENARIO
+EOF
+
+echo
+if [ "$FAILED" = "0" ]; then
+  echo "All endpoint families OK."
+else
+  echo "$FAILED endpoint(s) failed."
+  exit 1
+fi
+```
+
+### Targeted shape checks
+
+For regressions specific to the recent streamline, pipe individual endpoints through `jq`:
+
+```bash
+BASE="${COEQWAL_API_URL:-https://api.coeqwal.org}"
+
+# AG DU monthly now returns the four merged metric bands in one payload.
+# Expect monthly_demand, monthly_sw_delivery, monthly_gw_pumping, monthly_shortage.
+curl -sS "$BASE/api/statistics/scenarios/s0020/ag-demand-units/monthly?du_id=64_PA1" \
+  | jq '.demand_units["64_PA1"] | keys'
+
+# Env-flow channels list envelope uses `count`, not `total`.
+curl -sS "$BASE/api/statistics/channels" | jq 'keys'
+```
+
 ## How `coeqwal-website` consumes this API
 
 The website does **not** call these endpoints with `fetch()` directly. All data access flows through the `@repo/data` package in [`coeqwal-website/packages/data`](../../../COEQWAL_repo/coeqwal-website/packages/data):
@@ -92,12 +169,11 @@ curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentil
 # Filter by group
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?group=major"
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?group=cvp"
-curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/storage-monthly?group=swp"
+curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/spill-monthly?group=swp"
 
 # Filter by specific reservoirs
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?reservoirs=SHSTA,OROVL,FOLSM"
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/spill-monthly?reservoirs=SHSTA,TRNTY"
-curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/period-summary?reservoirs=MELON,MLRTN"
 ```
 
 **Available Reservoir Groups:**
@@ -117,16 +193,13 @@ curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/period-summary?rese
 **Endpoints supporting these filters:**
 
 - `GET /api/statistics/scenarios/{scenario_id}/reservoir-percentiles` - Monthly percentile bands
-- `GET /api/statistics/scenarios/{scenario_id}/storage-monthly` - Monthly storage statistics
-- `GET /api/statistics/scenarios/{scenario_id}/spill-monthly` - Monthly spill statistics  
-- `GET /api/statistics/scenarios/{scenario_id}/period-summary` - Period-of-record summary
+- `GET /api/statistics/scenarios/{scenario_id}/spill-monthly` - Monthly spill statistics
 
 **Discovery endpoints:**
 
 ```bash
 # List all reservoirs with statistics data
 curl "https://api.coeqwal.org/api/statistics/reservoirs"
-# (Older URL "/reservoirs/all" still works as a deprecated alias.)
 
 # List reservoir groups and their members
 curl "https://api.coeqwal.org/api/statistics/reservoir-groups"
