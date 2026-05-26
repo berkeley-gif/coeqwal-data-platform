@@ -192,6 +192,16 @@ df -h /
 
 These commands only delete objects that are not currently in use. Running containers, their images, and attached volumes are untouched. The `-f` flag skips the confirmation prompt.
 
+## Open threads and roadmap
+
+When picking up a partially-finished thread (geometry refactor, gw/sw
+reconciliation, TAIESM1 ingest, master crosswalk reconciliation, etc.),
+start at the team runbook. It indexes each open thread with current
+state, files touched, and a "Next steps" block.
+
+- [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md) - active threads, rolled-back roadmap entries (R1, R2), and conventions for picking work back up
+- [`docs/statistics_roadmap.md`](docs/statistics_roadmap.md) - statistics ETL roadmap (connection unification, atomic transactions, verification streamlining, reference-directory clarity)
+
 ## License
 
 See [LICENSE](./LICENSE) for details.

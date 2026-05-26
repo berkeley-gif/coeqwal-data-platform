@@ -199,7 +199,7 @@ The `clip(lower=0)` step removes occasional negative micro-values that CalSim's 
 
 The two metrics are **not complementary**. `(1 − reliability_pct/100) × demand` will **not** equal `annual_shortage_avg_taf`. For SBA029 / s0020, reliability is 54.99% and shortage is 0.85 TAF - both numbers are correct; they simply measure against different baselines.
 
-In `du_period_summary`, the column comments now document this explicitly (see [`02_create_du_statistics_tables.sql` L216-L230](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/database/scripts/sql/12_mi_statistics/02_create_du_statistics_tables.sql#L216-L230)). The ETL has matching inline comments at the PERDV and reliability_pct blocks.
+In `du_period_summary`, the column comments now document this explicitly (see [`02_create_du_statistics_tables.sql` L216-L230](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/database/scripts/sql/.archive/12_mi_statistics/02_create_du_statistics_tables.sql#L216-L230)). The ETL has matching inline comments at the PERDV and reliability_pct blocks.
 
 ---
 

@@ -34,7 +34,7 @@ relative paths resolve correctly:
 
 ```bash
 # Example: run a migration that loads seed data
-psql $SUPERUSER_URL -f database/scripts/sql/migrations/20_create_refuge_entity_table.sql
+psql $SUPERUSER_URL -f database/scripts/sql/.archive/migrations/20_create_refuge_entity_table.sql
 
 # Example: re-sync scenario / theme / link tables after editing a CSV
 psql $SUPERUSER_URL -f database/scripts/sql/upsert_scenario_data.sql
@@ -61,6 +61,6 @@ python database/audit/verify_erd_against_audit.py \
 ## Inspect a layer
 
 ```bash
-psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
+psql $DATABASE_URL -f database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
 psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
 ```

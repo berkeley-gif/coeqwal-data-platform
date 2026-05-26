@@ -245,8 +245,8 @@ audit or spot-check `du_urban_entity` gw/sw columns.
 
 ## Step 7: BOOLEAN migration (after seed is stable)
 
-Tracked in [`docs/statistics_roadmap.md`](statistics_roadmap.md) and Section
-1 Phase 1.4a of the finish plan.
+Tracked in [`docs/statistics_roadmap.md`](statistics_roadmap.md) and as
+thread R1 in [`docs/TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md).
 
 1. SQL migration: `VARCHAR(5)` to `BOOLEAN NULL` on `du_urban_entity.gw/sw`
    (and ag/refuge if applicable).
@@ -268,13 +268,13 @@ explicitly deferred with documented defaults.
 | Cryptic urban ids gw/sw (`CLLPT`, `NAPA2`, etc.) | Team | Locate in PDF region tables |
 | `du_urban_entity.csv` seed update | Dev | Decisions spreadsheet |
 | `gw`/`sw` BOOLEAN migration | Dev | Stable seed |
-| xlsx lat/long ingest (separate from gw/sw) | Phase 1.4d | Out of scope here |
+| xlsx lat/long ingest (separate from gw/sw) | Deferred | Out of scope here |
 
 ---
 
 ## Polygon loader clarification (separate from gw/sw)
 
-Migration `database/scripts/sql/56_add_du_geometry_columns.sql` adds
+Migration `database/scripts/sql/.archive/56_add_du_geometry_columns.sql` adds
 `geom`, `geom_wkt`, and `srid` to the **existing demand-unit entity tables**:
 
 - `du_urban_entity`

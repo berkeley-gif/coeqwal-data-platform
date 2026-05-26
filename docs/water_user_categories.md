@@ -5,7 +5,7 @@ utilities relate in the COEQWAL schema. Every claim below is verified against
 the May 24 2026 monthly audit snapshot
 (`audits/monthly_20260524_143951/layer_exports/`) unless noted.
 
-Related: [`database/scripts/sql/12_mi_statistics/README.md`](../database/scripts/sql/12_mi_statistics/README.md)
+Related: [`database/scripts/sql/.archive/12_mi_statistics/README.md`](../database/scripts/sql/.archive/12_mi_statistics/README.md)
 
 ---
 

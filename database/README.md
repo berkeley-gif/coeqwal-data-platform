@@ -64,8 +64,8 @@ For bulk operations (e.g., loading batches of scenario statistics data), the ETL
 ### Adding new scenarios
 
 1. Prepare scenario metadata (short_code, run_name, name, descriptions, hydroclimate_id, baseline_scenario_id, sibling_group, etc.) — see the [ERD](schema/COEQWAL_SCENARIOS_DB_ERD.md) for the full `scenario` table schema
-2. Write a migration SQL script in `database/scripts/sql/migrations/` that INSERTs the new rows into the `scenario` table and populates the link tables (`scenario_tag_link`, `theme_scenario_link`, `scenario_key_assumption_link`, `scenario_key_operation_link`)
-3. Run the migration: `psql $SUPERUSER_URL -f database/scripts/sql/migrations/<script>.sql`
+2. Write a migration SQL script (historical archive lives under `database/scripts/sql/.archive/migrations/` if you want naming precedents). Apply it from wherever you keep it.
+3. Run the migration against `$SUPERUSER_URL` with `psql -f <path>`.
 4. Verify: `psql $DATABASE_URL -c "SELECT short_code, hydroclimate_id, sibling_group FROM scenario ORDER BY short_code;"`
 5. Run a fresh audit: `python database/audit/run_monthly_audit.py`
 
@@ -120,7 +120,7 @@ If you changed the API endpoint code (anything under `api/`), including query lo
 | **Cloud9 / VPN -> production RDS** | Developer work, monthly audits, real seed loads, DDL migrations on the live DB | `DATABASE_URL` set per "First-time setup" below |
 | **Linux dev host -> local Postgres** _(unsupported)_ | Offline schema work, query development, iterating on migrations before they touch RDS | `DATABASE_URL=postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario` |
 
-> **Local Postgres is unsupported.** The bootstrapper at [`scripts/setup_dev_env.sh`](../scripts/setup_dev_env.sh) (which brings up the local DB via [`docker-compose.yml`](../docker-compose.yml) and applies schema + seeds via [`scripts/load_local_seeds.sh`](../scripts/load_local_seeds.sh)) is best-effort on Linux and not maintained for macOS or Windows. Cloud9 is the supported environment for everything that touches production data.
+> **Local Postgres is unsupported.** Bring one up with `docker compose up -d postgres` (see [`docker-compose.yml`](../docker-compose.yml)) and apply DDL manually from [`database/scripts/sql/.archive/`](scripts/sql/.archive/). Cloud9 is the supported environment for everything that touches production data.
 
 > **Seed CSV `is_active` is bootstrap-only for `scenario.csv`.** [`database/seed_tables/06_scenario/scenario.csv`](seed_tables/06_scenario/scenario.csv) introduces new scenario rows into the DB via [`database/scripts/sql/upsert_scenario_data.sql`](scripts/sql/upsert_scenario_data.sql). Once a row exists, flip `is_active` with [`etl/ingestion/tools/set_scenario_active.py`](../etl/ingestion/tools/set_scenario_active.py), not by editing the CSV and re-upserting. The seed CSV's `is_active` value is allowed to drift from the live `scenario` table by design. The DB is the source of truth for live publication state, exposed by the API as [`/api/scenarios`](../api/coeqwal-api/routes/scenario_endpoints.py) and cached for ETL consumers in [`etl/common/active_scenarios.py`](../etl/common/active_scenarios.py).
 
@@ -157,7 +157,7 @@ bash database/setup_db_connection.sh
 | Task | Variable |
 |---|---|
 | Queries, seed loads, inspect scripts, ETL, API | `$DATABASE_URL` |
-| DDL migrations (`database/scripts/sql/migrations/`) | `$SUPERUSER_URL` |
+| DDL migrations (historical, `database/scripts/sql/.archive/migrations/`) | `$SUPERUSER_URL` |
 | Running the audit (`python database/audit/run_monthly_audit.py`) | `$DATABASE_URL`
 
 **Finding the postgres password:** If you forget the password, it is stored in AWS Secrets Manager. To find it:
@@ -204,7 +204,7 @@ psql $DATABASE_URL -c "SELECT session_user, coeqwal_current_operator() AS develo
 To inspect a specific layer's full table contents:
 
 ```bash
-psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
+psql $DATABASE_URL -f database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
 psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
 ```
 
@@ -292,7 +292,7 @@ After that the prompt switches to your name, `DATABASE_URL` is your role, and `c
 | Reference data export (layers 00–08) | `database/scripts/export_layer_tables.py` |
 | Per-layer SQL verification | `database/scripts/sql/NN_layer/09_verify_levelNN.sql` |
 | Seed data | `database/seed_tables/<layer>/` |
-| Applied migrations | `database/scripts/sql/migrations/` |
+| Applied migrations | `database/scripts/sql/.archive/migrations/` |
 | ETL accuracy verification | `etl/statistics/verify_all_sections.py` |
 | API accuracy verification | `etl/statistics/verify_api.py` |
 
@@ -322,16 +322,23 @@ database/
 │   └── 10_tier/
 ├── scripts/                        # Runnable scripts (Python + SQL)
 │   ├── export_layer_tables.py      #   export layers 00–08 to CSV for content review
-│   ├── fix_channel_entity_csv.py   #   one-off data fix utility
 │   └── sql/
-│       ├── 00_versioning/          #   DDL + audit trigger scripts
-│       ├── 01_lookup/              #   lookup table verification
+│       ├── 01_lookup/              #   lookup table verification + inspector
 │       ├── 02_network/             #   network layer verification
-│       ├── 11_reservoir_statistics/
-│       ├── 12_mi_statistics/
-│       ├── 13_ag_statistics/
-│       ├── migrations/             #   applied one-time ALTER TABLE scripts
-│       └── validate_data_integrity.sql
+│       ├── create_scenario_tables.sql            # active superuser DDL
+│       ├── create_tier_location_table.sql        # active superuser DDL
+│       ├── create_tier_location_result_table.sql # active superuser DDL
+│       ├── find_tier_locations.sql               # ad-hoc query utility
+│       ├── upsert_scenario_data.sql              # operator UPSERT
+│       ├── validate_data_integrity.sql           # post-ETL integrity check
+│       └── .archive/               #   historical one-shot DDL already applied to RDS
+│           ├── 00_versioning/      #     versioning + audit-trigger DDL
+│           ├── 11_reservoir_statistics/
+│           ├── 12_mi_statistics/
+│           ├── 13_ag_statistics/
+│           ├── 14_channel_entity/
+│           ├── migrations/         #     numbered ALTER TABLE migration history
+│           └── 00_create_helper_functions.sql, 46-57_*.sql  # top-level migrations
 ├── run_audit.sh                    # Quick schema-only snapshot to audits/ JSON+CSV
 ├── run_local_audit.py              # Python: collects schema snapshot (used by run_audit.sh)
 ├── setup_db_connection.sh          # Interactive connection string setup
@@ -1282,7 +1289,7 @@ $ python database/audit/verify_erd_against_audit.py \
 **Step 3 — Run per-layer structural verification** (checks triggers, FKs, naming conventions, row counts):
 
 ```bash
-$ psql $DATABASE_URL -f database/scripts/sql/00_versioning/09_verify_level00.sql
+$ psql $DATABASE_URL -f database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
 $ psql $DATABASE_URL -f database/scripts/sql/01_lookup/09_verify_level01.sql
 $ psql $DATABASE_URL -f database/scripts/sql/02_network/09_verify_level02.sql
 ```
@@ -1304,7 +1311,7 @@ Each `09_verify_level*.sql` script checks:
 **Layer audit modus operandi:**
 
 1. Run verification script — identify issues
-2. Write a migration script in `database/scripts/sql/migrations/` for each issue found
+2. Write a migration script for each issue found (precedents in `database/scripts/sql/.archive/migrations/`)
 3. Execute migration, re-run verification
 4. Delete the migration script after it has run (keep repo clean)
 5. Update ERD documentation if the schema changed
@@ -1652,21 +1659,21 @@ $ psql $DATABASE_URL
 Step 2 — once inside psql (`coeqwal_scenario=>` prompt), run scripts with `\i`:
 
 ```sql
-coeqwal_scenario=> \i database/scripts/sql/00_create_helper_functions.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/00_create_versioning_tables.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/01_create_audit_trigger_function.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/02_create_audit_log_table.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/03_apply_audit_triggers.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/04_create_developer_users.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/06_load_seed_data.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/05_populate_domain_family_map.sql
-coeqwal_scenario=> \i database/scripts/sql/00_versioning/09_verify_level00.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_create_helper_functions.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/00_create_versioning_tables.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/01_create_audit_trigger_function.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/02_create_audit_log_table.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/03_apply_audit_triggers.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/04_create_developer_users.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/06_load_seed_data.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/05_populate_domain_family_map.sql
+coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
 ```
 
 Or from the bash shell, pass the script directly without entering psql:
 
 ```bash
-$ psql $DATABASE_URL -f database/scripts/sql/00_create_helper_functions.sql
+$ psql $DATABASE_URL -f database/scripts/sql/.archive/00_create_helper_functions.sql
 ```
 
 ### Connect to production (read-only)
@@ -1738,6 +1745,6 @@ Source data is in `reference/community_water_systems/`. See the entity-pattern s
 ### Developer access and authentication
 
 - **SSO user attribution** — currently developers connect to the database using a named PostgreSQL role (e.g. `jfantauzza`). The long-term goal is to use AWS SSO identity for authentication so that the `aws_sso_username` field in the `developer` table is used automatically, without requiring a separate PostgreSQL password per developer.
-- **Role-based table permissions** — shipped in [`database/scripts/sql/57_install_coeqwal_developer_role.sql`](scripts/sql/57_install_coeqwal_developer_role.sql). The `coeqwal_developer` group role holds `SELECT, INSERT, UPDATE, DELETE` on every table in `public`, and `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` makes that grant auto-extend to any future table created via `$SUPERUSER_URL`. New developers get RW on everything via `GRANT coeqwal_developer TO <username>` (see "Setting up a new developer" above). This closed the permission-gap class of bugs surfaced by the `variable_type` issue during auditing.
+- **Role-based table permissions** — shipped in [`database/scripts/sql/.archive/57_install_coeqwal_developer_role.sql`](scripts/sql/.archive/57_install_coeqwal_developer_role.sql). The `coeqwal_developer` group role holds `SELECT, INSERT, UPDATE, DELETE` on every table in `public`, and `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` makes that grant auto-extend to any future table created via `$SUPERUSER_URL`. New developers get RW on everything via `GRANT coeqwal_developer TO <username>` (see "Setting up a new developer" above). This closed the permission-gap class of bugs surfaced by the `variable_type` issue during auditing.
 
 ### Review indices and compare to API

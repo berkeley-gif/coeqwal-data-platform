@@ -179,7 +179,7 @@ single `DEL_SWP_PMI` (unsuffixed) variable; CVP only exposes
   (`cvp_total` section).
 - Existing aggregate definitions: [`etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py`](../etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py)
   (`CWS_AGGREGATES` dict, lines ~85-136).
-- Table + seed: [`database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql`](../database/scripts/sql/12_mi_statistics/06_create_cws_aggregate_tables.sql).
+- Table + seed: [`database/scripts/sql/.archive/12_mi_statistics/06_create_cws_aggregate_tables.sql`](../database/scripts/sql/.archive/12_mi_statistics/06_create_cws_aggregate_tables.sql).
 
 **Question for the data team.** Three options:
 
@@ -324,7 +324,7 @@ operator can run end-to-end.
    `ALTER COLUMN` from `VARCHAR(5)` to `BOOLEAN NULL` on
    `du_urban_entity.gw` and `.sw`.
 3. Update CREATE TABLE in
-   `database/scripts/sql/12_mi_statistics/01_create_du_urban_entity.sql`
+   `database/scripts/sql/.archive/12_mi_statistics/01_create_du_urban_entity.sql`
    to `BOOLEAN`.
 4. Update ERD entry for `du_urban_entity.gw` / `.sw`.
 5. Reader audit:
@@ -344,27 +344,22 @@ current VARCHAR seed.
 ### R2. Move DU polygon geometry into dedicated tables (rolled back)
 
 **Live RDS state.** Migration
-[`56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql)
+[`56_add_du_geometry_columns.sql`](../database/scripts/sql/.archive/56_add_du_geometry_columns.sql)
 added `geom` / `geom_wkt` / `srid` directly to the three
 `du_*_entity` tables. Loader
 [`load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py)
 populates those columns from `database/seed_tables/03_GIS/du_4326.gpkg`.
 This contradicts the project's "geometry in dedicated tables" rule
-but works and is not blocking anything.
+but works and is not blocking anything. The migration SQL now lives in
+`.archive/` along with the rest of the one-shot DDL. The DU columns
+exist in RDS, so the loader runs as before. If you ever rebuild the DB
+from scratch, re-apply the migration from its archive location.
 
-**Cleanup note (2026-05).** During the May 2026 SQL archive sweep, all
-other one-shot migrations under `database/scripts/sql/` moved to
-`.archive/`. `56_add_du_geometry_columns.sql` was intentionally left
-in place because (a) the loader and the `audit_tier_location_geometry.py`
-script hardcode its filename, and (b) the planned replacements
+**When this thread is picked up**, the deferred work is to replace the
+on-entity columns with dedicated geometry tables. Draft new
 `58_create_du_geometry_tables.sql` and `59_migrate_du_geom_off_entity_tables.sql`
-are not on disk. When this thread is picked up, the geometry SQL files
-should move to `.archive/` together with their references in
-`load_du_geometries.py`, `audit_tier_location_geometry.py`,
-`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`,
-`docs/database_geometry_pattern.md`, `docs/du_geometry_gap.md`,
-`docs/gw_sw_reconciliation.md`, and
-`database/seed_tables/03_GIS/SPATIAL_DATA_PREP_GUIDE.md`.
+files (neither is on disk today), then update the loader, resolver
+registry, and `tier_map_endpoints.py` accordingly.
 
 **Why deferred.** Drafted CREATE-dedicated-tables and migrate-then-drop
 SQL plus a refactored loader, resolver registry, and API endpoint. None

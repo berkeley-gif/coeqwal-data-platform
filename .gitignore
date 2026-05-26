@@ -21,6 +21,7 @@ pip-wheel-metadata/
 # Python tooling
 .mypy_cache/
 .pytest_cache/
+.ruff_cache/
 .coverage
 .tox/
 .cache/
@@ -133,6 +134,10 @@ database/scripts/sql/**/*_cloud9.sql
 # Local audit outputs (tracked). See etl/verification/README.md.
 # Tarballs result when dat is downloaded directly from EC2/Cloud9 are kept local-only.
 audits/*.tar.gz
+# Generated verifier JSON reports and mismatch dumps. Regenerated on demand;
+# not part of the committed audit record.
+audits/verification_reports/
+audits/validation_mismatches/
 costs/
 
 # Private infrastructure documentation (AWS account IDs, ARNs, runbooks)
@@ -147,5 +152,3 @@ docs/INFRASTRUCTURE.md
 !etl/tier_data/reference/**
 !etl/statistics/reference/
 !etl/statistics/reference/**
-
-database/scripts/sql/migrations/

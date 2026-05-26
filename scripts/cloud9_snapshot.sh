@@ -133,9 +133,8 @@ emit() {
     printf '```\n\n'
   fi
 
-  section "How to mirror this on a Linux dev host (unsupported)"
-  printf 'Run:\n\n```bash\nbash scripts/setup_dev_env.sh\nbash scripts/check_env.sh\n```\n\n'
-  printf 'Both helpers are best-effort and unmaintained for macOS or Windows. If anything in `scripts/check_env.sh` reports `FAIL`, compare against the sections above.\n'
+  section "Reproducing this environment"
+  printf 'There is no automated mirror script. Cloud9 is the supported development environment for the COEQWAL backend. Use the sections above as a manual checklist when standing up a new Cloud9 instance, and compare against the production EC2 by re-running this script there.\n'
 }
 
 # output dispatch

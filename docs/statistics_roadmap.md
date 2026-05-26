@@ -11,7 +11,7 @@ the tier-location data quality batch (Section 1).
 came from `swp_contractor_perdel_A.wresl` with `project = SWP`. Zero CVP
 rows.
 
-**Schema expectation:** [`database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables.sql`](../database/scripts/sql/12_mi_statistics/03_create_mi_contractor_entity_tables.sql)
+**Schema expectation:** [`database/scripts/sql/.archive/12_mi_statistics/03_create_mi_contractor_entity_tables.sql`](../database/scripts/sql/.archive/12_mi_statistics/03_create_mi_contractor_entity_tables.sql)
 comments reference CVP source files (`nodcvpcontract.table`, etc.).
 
 **Work:**
@@ -55,7 +55,7 @@ plus NOD/SOD splits. CVP has `cvp_nod` and `cvp_sod` only. No `cvp_total`.
 
 **Target:** `BOOLEAN NULL` with reader audit across ETL and API.
 
-Tracked in Section 1 Phase 1.4a of the finish plan.
+Tracked as thread R1 in [`docs/TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md).
 
 ---
 
@@ -88,7 +88,7 @@ Reconciliation script:
 1. Complete `urban_du_calsim_report.csv` from `urban_du.pdf` (9 pages)
 2. Case-by-case decisions for other 29 disagreements
 3. Update `du_urban_entity.csv` seed
-4. Then `gw`/`sw` BOOLEAN migration (Phase 1.4a)
+4. Then `gw`/`sw` BOOLEAN migration (thread R1 in `docs/TEAM_RUNBOOK.md`)
 
 Ag PDF tables 3-4 and 3-5 have no gw/sw columns (diversion arcs only).
 Do not compare them to seed gw/sw.

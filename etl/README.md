@@ -33,7 +33,7 @@ The pipeline has three phases:
 - A row in [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv)
   for each scenario you are loading
 - A row in the `scenario` DB table (write a SQL migration like
-  [`database/scripts/sql/52_add_s0070_s0090.sql`](../database/scripts/sql/52_add_s0070_s0090.sql))
+  [`database/scripts/sql/.archive/52_add_s0070_s0090.sql`](../database/scripts/sql/.archive/52_add_s0070_s0090.sql))
 
 If any of these is missing, the one-shot preflight in
 [Cloud9 first-time setup](#cloud9-first-time-setup) below tells you
@@ -804,14 +804,7 @@ This locates the existing ZIP in `scenario/<id>/run/`, streams it to compute SHA
 
 ### Backfill ingest records for already-loaded scenarios
 
-The 72 scenarios listed at the top of this README were ingested before the ingest-record contract existed. Run this once after Pass 2a is deployed:
-
-```bash
-python etl/ingestion/tools/backfill_ingest_records.py --dry-run  # plan
-python etl/ingestion/tools/backfill_ingest_records.py            # execute
-```
-
-Reads the working CSV, locates each scenario's ZIP in `scenario/<id>/run/`, computes hashes by streaming the existing S3 ZIP, and writes `ingest_record.json` to `scenario/<id>/`. Use `--overwrite` to replace an existing record.
+The backfill that wrote `ingest_record.json` for the 72 scenarios ingested before the contract existed has been run. The script lives in [`etl/archive/oneshot_scripts/backfill_ingest_records.py`](archive/oneshot_scripts/backfill_ingest_records.py) for reference. If you ever revive historical scenarios that need new records, copy the script back into `etl/ingestion/tools/` and re-run it.
 
 ## Developer scripts in `etl/ingestion/`
 
@@ -834,7 +827,6 @@ The audit, recovery, verification, maintenance, and the manual upload path. See 
 | [`tools/show_last_run.py`](ingestion/tools/show_last_run.py) | Print a one-screen summary of the most recent ingest stage. Default shows `download`; `--stage scan` or `--stage all` switches the view. |
 | [`tools/retrigger_extraction.sh`](ingestion/tools/retrigger_extraction.sh) | Re-upload one ZIP to `ready/` to force the Lambda to fire again. Default recovery tool. |
 | [`tools/reextract_all_scenarios.py`](ingestion/tools/reextract_all_scenarios.py) | Submit Batch jobs directly against ZIPs already in `scenario/<id>/run/`, bypassing the Lambda. Surgical alternative to `retrigger_extraction.sh`. Supports `--validate`, `--memory`/`--vcpus`, and `--sv-only`/`--dv-only`. |
-| [`tools/backfill_ingest_records.py`](ingestion/tools/backfill_ingest_records.py) | One-time helper to write `ingest_record.json` for scenarios that landed in S3 before the ingest-record contract existed. |
 | [`tools/refresh_active_scenarios.py`](ingestion/tools/refresh_active_scenarios.py) | Rewrites the active-scenarios block at the top of this README from the live API. |
 
 ### Library modules (`ingestion/lib/`)
@@ -1069,4 +1061,4 @@ The Cloud9 IAM role credentials never expire. Long-running jobs in `tmux` keep r
 - (Related) We need to set a LICENSE on [COEQWAL-pydsstools](https://github.com/berkeley-gif/COEQWAL-pydsstools). I'm noticing that `pydsstools` is undergoing updates, so we may (or may not) decide to update our library.
 - **Reconcile `s0036`, `s0076`, `s0096` between the two scenario lists.** When `etl/common/etl_scenarios.py` was first regenerated from the working CSV (May 22, 2026), three scenarios that are live in the public API (`ACTIVE_SCENARIOS`) turned up missing from the WAM team's scenario listing CSV: `s0036`, `s0076`, `s0096`. They remain `is_active=1` in the database and continue to serve from the website. The WAM team has been emailed for context (intentional retirement, sheet desync, or rename). The two reconciliation surfaces are the two sources of truth: either the WAM team restores them to the listing CSV (then re-run `python etl/ingestion/tools/refresh_etl_scenarios.py`), or we take them off the website with `python etl/ingestion/tools/set_scenario_active.py --deactivate s0036,s0076,s0096`. Until one of those happens, `ACTIVE_SCENARIOS` is not a strict subset of `ETL_SCENARIOS`, which is the invariant we want.
 - **Tier locations live in the database, sourced from tier-team staging CSVs.** The `tier_location` table is a narrow catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The staging CSVs the tier teams drop into `etl/tier_data/staging/` are the source of truth for membership. When a tier team sends a new or renamed column, run [`etl/tier_data/scripts/diff_tier_locations.py`](tier_data/scripts/diff_tier_locations.py) to see the gaps and [`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](tier_data/scripts/sync_tier_locations_from_staging.py) to reconcile. Display names and geometry are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](common/tier_location_entities.py). See [`etl/tier_data/README.md`](tier_data/README.md#updating-tier-locations-when-a-tier-team-sends-new-data) for the full workflow and [`etl/tier_data/scripts/audit_tier_location_geometry.py`](tier_data/scripts/audit_tier_location_geometry.py) for the geometry coverage scorecard.
-- **Demand-unit geometry coverage is partial.** The geopackage at [`database/seed_tables/03_GIS/du_4326.gpkg`](../database/seed_tables/03_GIS/du_4326.gpkg) (EPSG:4326, layer `demandunits`, 235 dissolved `MULTIPOLYGON`s) covers 232 of the 286 distinct `DU_ID`s in `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity` (81.1%). Polygons load into the three entity tables via [`database/scripts/sql/56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql) and [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py). The 54 missing IDs (41 urban, 12 agriculture, 1 refuge), the 3 gpkg-only IDs (`07S_PA`, `50_NA`, `90_NA`), and the `26N_NA` cross-table case are enumerated in [`docs/du_geometry_gap.md`](../docs/du_geometry_gap.md). When agency-sourced polygons become available, add them to the geopackage (or a successor table) and rerun the loader.
+- **Demand-unit geometry coverage is partial.** The geopackage at [`database/seed_tables/03_GIS/du_4326.gpkg`](../database/seed_tables/03_GIS/du_4326.gpkg) (EPSG:4326, layer `demandunits`, 235 dissolved `MULTIPOLYGON`s) covers 232 of the 286 distinct `DU_ID`s in `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity` (81.1%). Polygons load into the three entity tables via [`database/scripts/sql/.archive/56_add_du_geometry_columns.sql`](../database/scripts/sql/.archive/56_add_du_geometry_columns.sql) (already applied to RDS) and [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py). The 54 missing IDs (41 urban, 12 agriculture, 1 refuge), the 3 gpkg-only IDs (`07S_PA`, `50_NA`, `90_NA`), and the `26N_NA` cross-table case are enumerated in [`docs/du_geometry_gap.md`](../docs/du_geometry_gap.md). When agency-sourced polygons become available, add them to the geopackage (or a successor table) and rerun the loader.

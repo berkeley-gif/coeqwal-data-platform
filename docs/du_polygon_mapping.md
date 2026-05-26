@@ -34,7 +34,7 @@ one entity row.
 |---|---|---|
 | `60N_PU1` | `60N_PU` | Trailing digit on entity id |
 | `90_PU5` | `90_PU` | Trailing digit on entity id |
-| `72_PU` | `72_PU2` | Documented id mismatch in [`database/scripts/sql/12_mi_statistics/README.md`](../database/scripts/sql/12_mi_statistics/README.md). Seed CSV has `72_PU2`. Live DB may have `72_PU`. |
+| `72_PU` | `72_PU2` | Documented id mismatch in [`database/scripts/sql/.archive/12_mi_statistics/README.md`](../database/scripts/sql/.archive/12_mi_statistics/README.md). Seed CSV has `72_PU2`. Live DB may have `72_PU`. |
 
 ---
 

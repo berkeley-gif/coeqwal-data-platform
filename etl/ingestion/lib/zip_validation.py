@@ -12,8 +12,9 @@ Three layers, top to bottom:
    ZIP to S3 and is later consulted by the Lambda and the batch container.
 
 `process_scenario` (in `worker.py`) is the only caller that chains all three.
-The tools under `etl/ingestion/tools/` (`manual_ingest`, `backfill_ingest_records`)
-reuse `build_ingest_record` on their own ZIP paths.
+`manual_ingest.py` (under `etl/ingestion/tools/`) reuses `build_ingest_record`
+on its own ZIP paths. The historical `backfill_ingest_records.py` in
+`etl/archive/oneshot_scripts/` also called `build_ingest_record` directly.
 
 Why we hash:
 

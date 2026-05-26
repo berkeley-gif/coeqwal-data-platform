@@ -14,7 +14,7 @@ the small, stable reference tables that define version domains and bootstrap use
 
 ## Loading
 
-Seed data is loaded by `database/scripts/sql/00_versioning/06_load_seed_data.sql`.
+Seed data is loaded by `database/scripts/sql/.archive/00_versioning/06_load_seed_data.sql`.
 Run it after `00_create_versioning_tables.sql`.
 
 `domain_family_map` is **not** loaded from the CSV here — it is populated by
@@ -87,7 +87,7 @@ Returns `developer.id` for the session user. Used in audit fields.
 -- Strict: RAISES EXCEPTION if no match found
 ```
 
-See `database/scripts/sql/00_create_helper_functions.sql` for the full definition.
+See `database/scripts/sql/.archive/00_create_helper_functions.sql` for the full definition.
 
 ## Versioning workflow
 

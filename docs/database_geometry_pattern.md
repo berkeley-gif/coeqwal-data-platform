@@ -46,7 +46,7 @@ Plus `CREATE INDEX ... ON <table> USING GIST (geom)`.
 
 ## Current state for demand-unit geometry
 
-Migration [`56_add_du_geometry_columns.sql`](../database/scripts/sql/56_add_du_geometry_columns.sql)
+Migration [`56_add_du_geometry_columns.sql`](../database/scripts/sql/.archive/56_add_du_geometry_columns.sql)
 added `geom` / `geom_wkt` / `srid` columns directly onto the three
 demand-unit entity tables:
 

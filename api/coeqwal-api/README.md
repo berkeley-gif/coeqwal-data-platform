@@ -18,27 +18,14 @@ If the auto-deploy gets stuck, see "Manual Deployment (Troubleshooting)" further
 
 ## Local development
 
-First-time local setup is one command from the repo root:
+The supported environment for everything touching production data is Cloud9, where `$DATABASE_URL` and `$SUPERUSER_URL` are already configured. To exercise the API locally without RDS access, bring up a local Postgres with `docker compose up -d postgres` from the repo root and apply DDL from [`database/scripts/sql/.archive/`](../../database/scripts/sql/.archive/) manually. Then:
 
 ```bash
-bash scripts/setup_dev_env.sh
-```
-
-This brings up a local Postgres (via `docker compose`), loads the schema and seeds, and installs every Python dependency the API needs. See the [top-level Developer setup](../../README.md#developer-setup) for details.
-
-Once setup is done:
-
-```bash
-# Activate the project venv
 source ../../.venv/bin/activate
-
-# Local DB created by scripts/setup_dev_env.sh
 export DATABASE_URL="postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario"
 
-# Run the API
 uvicorn main:app --reload --port 8000
 
-# View docs
 open http://localhost:8000/docs
 ```
 
@@ -49,10 +36,8 @@ To point at production RDS instead, replace `DATABASE_URL` with the production c
 If you want to exercise the same Docker image CI builds, but with the dev-friendly defaults (root user, default asyncio loop, no access log), use the `dev` target of the multi-stage Dockerfile:
 
 ```bash
-# From the repo root
 docker build --target dev -t coeqwal-api:dev api/coeqwal-api
 
-# Run it pointed at the local Postgres started by scripts/setup_dev_env.sh
 docker run --rm -p 8000:8000 \
   -e DATABASE_URL="postgresql://coeqwal:coeqwal@host.docker.internal:5432/coeqwal_scenario" \
   coeqwal-api:dev

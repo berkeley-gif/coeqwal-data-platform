@@ -737,12 +737,12 @@ Columns:
   updated_by                     integer             
   hydrologic_region_id           integer             
   model_source_id                integer             
-  geom_wkt                       text                 -- 56_add_du_geometry_columns.sql
-  srid                           integer              -- 56_add_du_geometry_columns.sql
-  geom                           geometry(MultiPolygon, 4326) -- 56_add_du_geometry_columns.sql
+  geom_wkt                       text                 -- .archive/56_add_du_geometry_columns.sql
+  srid                           integer              -- .archive/56_add_du_geometry_columns.sql
+  geom                           geometry(MultiPolygon, 4326) -- .archive/56_add_du_geometry_columns.sql
 ```
 
-**Indexes**: Present; `idx_du_urban_entity_geom (geom) USING GIST` added by `56_add_du_geometry_columns.sql`
+**Indexes**: Present; `idx_du_urban_entity_geom (geom) USING GIST` added by `.archive/56_add_du_geometry_columns.sql`
 
 ### **du_agriculture_entity**
 
@@ -786,12 +786,12 @@ Columns:
   updated_by                     integer             
   hydrologic_region_id           integer             
   model_source_id                integer             
-  geom_wkt                       text                 -- 56_add_du_geometry_columns.sql
-  srid                           integer              -- 56_add_du_geometry_columns.sql
-  geom                           geometry(MultiPolygon, 4326) -- 56_add_du_geometry_columns.sql
+  geom_wkt                       text                 -- .archive/56_add_du_geometry_columns.sql
+  srid                           integer              -- .archive/56_add_du_geometry_columns.sql
+  geom                           geometry(MultiPolygon, 4326) -- .archive/56_add_du_geometry_columns.sql
 ```
 
-**Indexes**: Present; `idx_du_agriculture_entity_geom (geom) USING GIST` added by `56_add_du_geometry_columns.sql`
+**Indexes**: Present; `idx_du_agriculture_entity_geom (geom) USING GIST` added by `.archive/56_add_du_geometry_columns.sql`
 
 ### **du_refuge_entity**
 
@@ -825,12 +825,12 @@ Columns:
   created_by                     integer             
   updated_at                     timestamp with time zone
   updated_by                     integer             
-  geom_wkt                       text                 -- 56_add_du_geometry_columns.sql
-  srid                           integer              -- 56_add_du_geometry_columns.sql
-  geom                           geometry(MultiPolygon, 4326) -- 56_add_du_geometry_columns.sql
+  geom_wkt                       text                 -- .archive/56_add_du_geometry_columns.sql
+  srid                           integer              -- .archive/56_add_du_geometry_columns.sql
+  geom                           geometry(MultiPolygon, 4326) -- .archive/56_add_du_geometry_columns.sql
 ```
 
-**Indexes**: Present; `idx_du_refuge_entity_geom (geom) USING GIST` added by `56_add_du_geometry_columns.sql`
+**Indexes**: Present; `idx_du_refuge_entity_geom (geom) USING GIST` added by `.archive/56_add_du_geometry_columns.sql`
 
 ### **wba**
 
@@ -982,7 +982,7 @@ Constraints:
 
 **Resolution map**: `location_id` joins to entity tables for display name and geometry. See [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py) for the registry. Summary:
 
-Both attribute and geometry lookups are tier-aware. `TIER_ATTRIBUTE_OVERRIDES` and `TIER_GEOMETRY_OVERRIDES` in [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py) route AG_REV demand-unit ids to `du_agriculture_entity`, while CWS_DEL (and the default for any other `demand_unit` tier) routes to `du_urban_entity`. DU polygons live in those same entity tables (added by [`56_add_du_geometry_columns.sql`](../scripts/sql/56_add_du_geometry_columns.sql), loaded by [`load_du_geometries.py`](../scripts/data_processing/load_du_geometries.py)). `26N_NA` is the one `du_id` that exists in both urban and ag entity tables; both rows carry the same dissolved polygon, so either resolver returns the same geometry. 54 `du_id`s lack a polygon in the source gpkg today and are listed in [`docs/du_geometry_gap.md`](../../docs/du_geometry_gap.md).
+Both attribute and geometry lookups are tier-aware. `TIER_ATTRIBUTE_OVERRIDES` and `TIER_GEOMETRY_OVERRIDES` in [`etl/common/tier_location_entities.py`](../../etl/common/tier_location_entities.py) route AG_REV demand-unit ids to `du_agriculture_entity`, while CWS_DEL (and the default for any other `demand_unit` tier) routes to `du_urban_entity`. DU polygons live in those same entity tables (added by [`.archive/56_add_du_geometry_columns.sql`](../scripts/sql/.archive/56_add_du_geometry_columns.sql), loaded by [`load_du_geometries.py`](../scripts/data_processing/load_du_geometries.py)). `26N_NA` is the one `du_id` that exists in both urban and ag entity tables; both rows carry the same dissolved polygon, so either resolver returns the same geometry. 54 `du_id`s lack a polygon in the source gpkg today and are listed in [`docs/du_geometry_gap.md`](../../docs/du_geometry_gap.md).
 
 | `location_type` (tier) | Attribute table (name) | Geometry table | Notes |
 |---|---|---|---|

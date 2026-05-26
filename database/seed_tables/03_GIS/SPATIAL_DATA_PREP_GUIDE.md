@@ -78,7 +78,7 @@
 - Columns: `DU_ID`, `OBJECTID`, `Shape_Leng`, `Shape_Area`, `geom`
 
 **Load path:**
-- Schema: `database/scripts/sql/56_add_du_geometry_columns.sql` adds
+- Schema: `database/scripts/sql/.archive/56_add_du_geometry_columns.sql` adds
   `geom_wkt TEXT`, `srid INTEGER`, `geom geometry(MultiPolygon, 4326)`,
   and `idx_<table>_geom USING GIST` to each of `du_urban_entity`,
   `du_agriculture_entity`, and `du_refuge_entity`.

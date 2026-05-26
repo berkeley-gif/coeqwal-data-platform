@@ -74,14 +74,6 @@ S3 at `scenario/<id>/run/`.
 
 ### Very occassionally
 
-- **`backfill_ingest_records.py`** -- writes `ingest_record.json` for
-  scenarios that landed in S3 before the ingest-record contract existed.
-  Should not need to run again unless historical data is revived.
-
-  ```
-  python etl/ingestion/tools/backfill_ingest_records.py --dry-run
-  ```
-
 - **`refresh_active_scenarios.py`** -- rewrites the active-scenarios
   block at the top of `etl/README.md` from the live API. Run when that
   block is visibly stale.
@@ -89,3 +81,7 @@ S3 at `scenario/<id>/run/`.
   ```
   python etl/ingestion/tools/refresh_active_scenarios.py
   ```
+
+For the one-time backfill of `ingest_record.json` for scenarios that
+landed in S3 before the contract existed, see
+[`etl/archive/oneshot_scripts/backfill_ingest_records.py`](../../archive/oneshot_scripts/backfill_ingest_records.py).
