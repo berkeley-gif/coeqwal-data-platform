@@ -1,5 +1,5 @@
 """
-Reservoir Statistics API endpoints for COEQWAL.
+reservoir_statistics_endpoints.py - Reservoir Statistics API endpoints for COEQWAL.
 
 Provides monthly percentile data for reservoir storage, enabling
 percentile band charts in the frontend.
@@ -278,13 +278,13 @@ async def list_reservoir_groups(
     try:
         query = """
         SELECT
-            rg.short_code, rg.name,
+            rg.short_code, rg.label,
             array_agg(re.short_code ORDER BY re.short_code) as reservoirs
         FROM reservoir_group rg
         JOIN reservoir_group_member rgm ON rg.id = rgm.reservoir_group_id
         JOIN reservoir_entity re ON re.id = rgm.reservoir_entity_id
         WHERE rg.short_code IN ('major', 'cvp', 'swp')
-        GROUP BY rg.short_code, rg.name
+        GROUP BY rg.short_code, rg.label
         ORDER BY rg.short_code
         """
         rows = await connection.fetch(query)
@@ -293,7 +293,7 @@ async def list_reservoir_groups(
             "groups": [
                 {
                     "group_id": row["short_code"],
-                    "name": row["name"] or row["short_code"],
+                    "name": row["label"] or row["short_code"],
                     "reservoirs": list(row["reservoirs"]),
                 }
                 for row in rows

@@ -279,59 +279,62 @@ async def get_du_shortage_monthly(
     if _db_pool is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    async with _db_pool.acquire() as conn:
-        if group:
-            # Filter by group membership
-            query = """
-                SELECT
-                    m.du_id,
-                    e.community_agency,
-                    e.hydrologic_region,
-                    m.water_month,
-                    m.shortage_avg_taf,
-                    m.shortage_cv,
-                    m.shortage_frequency_pct,
-                    m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
-                    m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
-                    m.demand_avg_taf, m.percent_of_demand_avg,
-                    m.sample_count
-                FROM du_shortage_monthly m
-                JOIN du_urban_group_member gm ON m.du_id = gm.du_id
-                JOIN du_urban_group g ON gm.du_urban_group_id = g.id
-                LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
-                WHERE m.scenario_short_code = $1
-                  AND g.short_code = $2
-                  AND g.is_active = TRUE
-                ORDER BY gm.display_order, m.water_month
-            """
-            rows = await conn.fetch(query, scenario_id, group)
-        else:
-            query = """
-                SELECT
-                    m.du_id,
-                    e.community_agency,
-                    e.hydrologic_region,
-                    m.water_month,
-                    m.shortage_avg_taf,
-                    m.shortage_cv,
-                    m.shortage_frequency_pct,
-                    m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
-                    m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
-                    m.demand_avg_taf, m.percent_of_demand_avg,
-                    m.sample_count
-                FROM du_shortage_monthly m
-                LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
-                WHERE m.scenario_short_code = $1
-            """
-            params: List[Any] = [scenario_id]
+    try:
+        async with _db_pool.acquire() as conn:
+            if group:
+                # Filter by group membership
+                query = """
+                    SELECT
+                        m.du_id,
+                        e.community_agency,
+                        e.hydrologic_region,
+                        m.water_month,
+                        m.shortage_avg_taf,
+                        m.shortage_cv,
+                        m.shortage_frequency_pct,
+                        m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                        m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                        m.sample_count
+                    FROM du_shortage_monthly m
+                    JOIN du_urban_group_member gm ON m.du_id = gm.du_id
+                    JOIN du_urban_group g ON gm.du_urban_group_id = g.id
+                    LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
+                    WHERE m.scenario_short_code = $1
+                      AND g.short_code = $2
+                      AND g.is_active = TRUE
+                    ORDER BY gm.display_order, m.water_month
+                """
+                rows = await conn.fetch(query, scenario_id, group)
+            else:
+                query = """
+                    SELECT
+                        m.du_id,
+                        e.community_agency,
+                        e.hydrologic_region,
+                        m.water_month,
+                        m.shortage_avg_taf,
+                        m.shortage_cv,
+                        m.shortage_frequency_pct,
+                        m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                        m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                        m.sample_count
+                    FROM du_shortage_monthly m
+                    LEFT JOIN du_urban_entity e ON m.du_id = e.du_id
+                    WHERE m.scenario_short_code = $1
+                """
+                params: List[Any] = [scenario_id]
 
-            if du_id:
-                ids = [d.strip() for d in du_id.split(",")]
-                query += f" AND m.du_id = ANY(${len(params) + 1})"
-                params.append(ids)
+                if du_id:
+                    ids = [d.strip() for d in du_id.split(",")]
+                    query += f" AND m.du_id = ANY(${len(params) + 1})"
+                    params.append(ids)
 
-            query += " ORDER BY m.du_id, m.water_month"
-            rows = await conn.fetch(query, *params)
+                query += " ORDER BY m.du_id, m.water_month"
+                rows = await conn.fetch(query, *params)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Database error: {str(e)}"
+        )
 
     if not rows:
         raise HTTPException(
@@ -368,8 +371,6 @@ async def get_du_shortage_monthly(
             "exc_p75": safe_float(row["exc_p75"]),
             "exc_p90": safe_float(row["exc_p90"]),
             "exc_p95": safe_float(row["exc_p95"]),
-            "demand_avg_taf": safe_float(row["demand_avg_taf"]),
-            "percent_of_demand": safe_float(row["percent_of_demand_avg"]),
             "sample_count": safe_int(row["sample_count"]),
         }
 
