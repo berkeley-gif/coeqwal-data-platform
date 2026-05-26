@@ -11,18 +11,17 @@ Endpoints:
   GET /api/statistics/scenarios/{id}/delta/monthly
      .Monthly percentile bands for all 8 Delta variables
 
-Performance: 30-minute in-process TTL cache + 15-minute browser Cache-Control.
+Performance: in-process TTL cache
 Water months: 1=October ... 12=September
 """
 
 import logging
 from typing import Any, Dict, Optional
 
-from cachetools import TTLCache
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from routes._common.null_handling import safe_float, safe_int
+from routes._common import api_cache_max_age, make_ttl_cache, safe_float, safe_int
 
 log = logging.getLogger(__name__)
 
@@ -30,8 +29,7 @@ router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 _db_pool = None
 
-_stats_cache: TTLCache = TTLCache(maxsize=2000, ttl=1800)
-_CACHE_MAX_AGE_STATS = 900
+_stats_cache = make_ttl_cache("delta_stats", maxsize=2000)
 
 
 def set_db_pool(pool) -> None:
@@ -163,4 +161,4 @@ async def get_delta_monthly(
             detail=f"No delta monthly statistics found for scenario '{scenario_id}'",
         )
 
-    return _json_response(result, _CACHE_MAX_AGE_STATS)
+    return _json_response(result, api_cache_max_age())

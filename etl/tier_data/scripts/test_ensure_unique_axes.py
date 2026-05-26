@@ -92,7 +92,7 @@ def case(label: str):
         except AssertionError as e:
             FAILED.append(f"{label}: {e}")
             print(f"  FAIL: {label}: {e}")
-        except Exception as e:  # pragma: no cover - surface unexpected types
+        except Exception as e:
             FAILED.append(f"{label}: unexpected {type(e).__name__}: {e}")
             print(f"  FAIL: {label}: unexpected {type(e).__name__}: {e}")
         return fn

@@ -2,20 +2,27 @@
 Scenario API endpoints for COEQWAL.
 
 Provides scenario metadata and definitions.
+
+Caching: shared in-process TTL helper (default 5 min, env-driven via
+API_CACHE_TTL_SECONDS). All responses also set a matching Cache-Control
+max-age so CDNs and browsers can reuse them.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Response
-from typing import Dict, List, Any
+import logging
+from typing import Any, Dict, List
+
 import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Response
+
+from routes._common import api_cache_max_age, make_ttl_cache
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/scenarios", tags=["scenarios"])
 
-# Cache-Control header for catalog endpoints whose contents only change between
-# ETL runs. 5 minutes gives CDNs and browsers a safe reuse window without
-# masking new data for long after a deploy.
-STATIC_CATALOG_CACHE_CONTROL = "public, max-age=300"
+# Static catalog. Scenario rows change between ETL runs only
+_static_cache = make_ttl_cache("scenarios_static", maxsize=200)
 
-# Database connection dependency (set by main.py)
 db_pool = None
 
 
@@ -26,9 +33,14 @@ def set_db_pool(pool):
 
 async def get_db():
     if db_pool is None:
-        raise HTTPException(status_code=500, detail="Database not available")
+        raise HTTPException(status_code=503, detail="Database not available")
     async with db_pool.acquire() as connection:
         yield connection
+
+
+def _set_catalog_cache(response: Response) -> None:
+    """Set the static-catalog Cache-Control header on the response."""
+    response.headers["Cache-Control"] = f"public, max-age={api_cache_max_age()}"
 
 
 @router.get("", summary="List all scenarios")
@@ -48,19 +60,15 @@ async def get_all_scenarios(
       different hydroclimates share this value)
     - `is_active`: Whether the scenario is active
 
-    Fields the API no longer returns (intentionally): `run_name`,
-    `long_description`, `hydroclimate_short_code`, `hydroclimate_name`,
-    `baseline_scenario`, plus the per-scenario `themes`, `key_assumptions`,
-    and `key_operations` arrays. The frontend currently sources themes from
-    a local `scenarioMetadata` map keyed by `sibling_group` and operation
-    icons from a hardcoded `opsIcons.tsx`. The database README roadmap
-    tracks the cutover that would move that content into the DB and bring
-    these payload fields back.
-
     **Use case:** Single fetch for the scenario explorer to render cards.
     `GET /api/scenarios/{short_code}` returns the same shape for a single
     scenario.
     """
+    cache_key = "scenarios:list"
+    if cache_key in _static_cache:
+        _set_catalog_cache(response)
+        return _static_cache[cache_key]
+
     try:
         # Active-only first, then all rows as a fallback so the UI never
         # sees an empty list during seed gaps
@@ -82,24 +90,26 @@ async def get_all_scenarios(
         rows = await connection.fetch(base_query.format(where="WHERE s.is_active = TRUE"))
         if not rows:
             rows = await connection.fetch(base_query.format(where=""))
-
-        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
-        return [
-            {
-                "short_code": row["short_code"],
-                "name": row["name"] or row["short_code"],
-                "short_description": row["short_description"],
-                "hydroclimate_id": row["hydroclimate_id"],
-                "sibling_group": row["hydroclimate_sibling"],
-                "is_active": bool(row["is_active"])
-                if row["is_active"] is not None
-                else True,
-            }
-            for row in rows
-        ]
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"scenarios list query failed: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
+
+    result = [
+        {
+            "short_code": row["short_code"],
+            "name": row["name"] or row["short_code"],
+            "short_description": row["short_description"],
+            "hydroclimate_id": row["hydroclimate_id"],
+            "sibling_group": row["hydroclimate_sibling"],
+            "is_active": bool(row["is_active"])
+            if row["is_active"] is not None
+            else True,
+        }
+        for row in rows
+    ]
+    _static_cache[cache_key] = result
+    _set_catalog_cache(response)
+    return result
 
 
 @router.get("/{scenario_id}", summary="Get scenario details")
@@ -121,6 +131,11 @@ async def get_scenario(
     Returns: `short_code`, `name`, `short_description`, `hydroclimate_id`,
     `sibling_group`, `is_active`.
     """
+    cache_key = f"scenarios:get:{scenario_id}"
+    if cache_key in _static_cache:
+        _set_catalog_cache(response)
+        return _static_cache[cache_key]
+
     try:
         query = """
         SELECT
@@ -135,28 +150,26 @@ async def get_scenario(
             ON s.hydroclimate_sibling = sg.short_code
         WHERE s.short_code = $1
         """
-
         row = await connection.fetchrow(query, scenario_id)
-
-        if not row:
-            raise HTTPException(
-                status_code=404, detail=f"Scenario {scenario_id} not found"
-            )
-
-        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
-        return {
-            "short_code": row["short_code"],
-            "name": row["name"] or row["short_code"],
-            "short_description": row["short_description"],
-            "hydroclimate_id": row["hydroclimate_id"],
-            "sibling_group": row["hydroclimate_sibling"],
-            "is_active": bool(row["is_active"])
-            if row["is_active"] is not None
-            else True,
-        }
-
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"scenario detail query failed for {scenario_id}: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
+    if not row:
+        raise HTTPException(
+            status_code=404, detail=f"Scenario '{scenario_id}' not found"
+        )
+
+    result = {
+        "short_code": row["short_code"],
+        "name": row["name"] or row["short_code"],
+        "short_description": row["short_description"],
+        "hydroclimate_id": row["hydroclimate_id"],
+        "sibling_group": row["hydroclimate_sibling"],
+        "is_active": bool(row["is_active"])
+        if row["is_active"] is not None
+        else True,
+    }
+    _static_cache[cache_key] = result
+    _set_catalog_cache(response)
+    return result

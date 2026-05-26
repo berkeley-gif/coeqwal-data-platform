@@ -1,30 +1,44 @@
 """
-reservoir_statistics_endpoints.py - Reservoir Statistics API endpoints for COEQWAL.
+reservoir_statistics_endpoints.py
 
-Provides monthly percentile data for reservoir storage, enabling
-percentile band charts in the frontend.
+Provides monthly percentile data for reservoir storage, monthly spill
+statistics, and the canonical reservoir / reservoir-group directories.
 
 Terminology:
-- Reservoir entities: SHSTA, TRNTY, OROVL, etc. (short_code in reservoir_entity table)
-- Statistics tables link to entities via reservoir_entity_id FK
+- Reservoir entities: SHSTA, TRNTY, OROVL, etc. (`short_code` in
+  `reservoir_entity` table)
+- Statistics tables link to entities via `reservoir_entity_id` FK
 
-Major Reservoirs (8 total, fetched from reservoir_group 'major'):
+Major reservoirs (8 total, fetched from `reservoir_group` 'major'):
 - SHSTA (Shasta), TRNTY (Trinity), OROVL (Oroville), FOLSM (Folsom)
-- MELON (New Melones), MLRTN (Millerton), SLUIS_CVP (San Luis CVP), SLUIS_SWP (San Luis SWP)
+- MELON (New Melones), MLRTN (Millerton), SLUIS_CVP, SLUIS_SWP (San Luis)
 
-API accepts entity short_codes only (SHSTA), not CalSim variable codes (S_SHSTA).
-
-All 92 reservoirs available via statistics endpoints.
+The API accepts entity short_codes only (SHSTA), not CalSim variable codes
+(`S_SHSTA`).
 
 Water months: Oct=1, Nov=2, ..., Sep=12
-Values: Percent of reservoir capacity (0-100+)
+Values: percent of reservoir capacity (0-100+) or absolute TAF.
+
+Caching: shared in-process TTL helper (default 5 min, env-driven via
+API_CACHE_TTL_SECONDS). All responses set a matching Cache-Control max-age.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Dict, Any, List, Optional
-import asyncpg
+import logging
+from typing import Any, Dict, List, Optional
 
-from routes._common.null_handling import safe_float, safe_int
+import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+
+from routes._common import (
+    api_cache_max_age,
+    make_ttl_cache,
+    safe_float,
+    safe_int,
+    safe_str,
+)
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
@@ -32,7 +46,7 @@ router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 # CONSTANTS
 # =============================================================================
 
-# Fallback entity short_codes if database query fails
+# Fallback entity short_codes if the database lookup of the major group fails
 MAJOR_RESERVOIRS_FALLBACK = [
     "SHSTA",
     "TRNTY",
@@ -44,13 +58,51 @@ MAJOR_RESERVOIRS_FALLBACK = [
     "SLUIS_SWP",
 ]
 
+# Valid reservoir group codes
+VALID_RESERVOIR_GROUPS = ["major", "cvp", "swp"]
+
+
+# =============================================================================
+# DATABASE CONNECTION + CACHE
+# =============================================================================
+
+db_pool = None
+
+# Per-scenario stats: 92 reservoirs * 19 scenarios * 2 routes -> ~3,500 entries
+_stats_cache = make_ttl_cache("reservoir_stats", maxsize=5000)
+_static_cache = make_ttl_cache("reservoir_static", maxsize=20)
+
+
+def set_db_pool(pool):
+    global db_pool
+    db_pool = pool
+
+
+async def get_db():
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    async with db_pool.acquire() as connection:
+        yield connection
+
+
+def _json_response(data: Dict[str, Any], max_age: int) -> JSONResponse:
+    """Wrap a dict in a JSONResponse with Cache-Control headers."""
+    return JSONResponse(
+        content=data,
+        headers={"Cache-Control": f"public, max-age={max_age}"},
+    )
+
+
+# =============================================================================
+# RESERVOIR GROUP HELPERS
+# =============================================================================
+
 
 async def get_major_reservoirs(connection: asyncpg.Connection) -> List[str]:
-    """
-    Fetch major reservoir short_codes from reservoir_group membership.
+    """Fetch major reservoir short_codes from `reservoir_group` membership.
 
-    Returns entity short_codes (e.g., SHSTA, not S_SHSTA).
-    The 'major' group is defined in reservoir_group_member table.
+    Falls back to a hardcoded list of the 8 known majors if the lookup fails.
+    Returns entity short_codes (e.g., SHSTA), not CalSim variable codes
     """
     try:
         query = """
@@ -64,35 +116,22 @@ async def get_major_reservoirs(connection: asyncpg.Connection) -> List[str]:
         rows = await connection.fetch(query)
         if rows:
             return [row["short_code"] for row in rows]
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning(f"major-reservoirs query failed; using fallback: {e}")
     return MAJOR_RESERVOIRS_FALLBACK
-
-
-# Valid reservoir group codes
-VALID_RESERVOIR_GROUPS = ["major", "cvp", "swp"]
 
 
 async def get_reservoirs_by_group(
     connection: asyncpg.Connection, group_code: str
 ) -> List[str]:
-    """
-    Fetch reservoir short_codes for a given group (major, cvp, swp).
-
-    Args:
-        connection: Database connection
-        group_code: Group short_code ('major', 'cvp', or 'swp')
-
-    Returns:
-        List of reservoir entity short_codes (e.g., ['SHSTA', 'OROVL', ...])
-
-    Raises:
-        HTTPException: If group_code is invalid or group not found
-    """
+    """Fetch reservoir short_codes for a given group ('major', 'cvp', 'swp')."""
     if group_code not in VALID_RESERVOIR_GROUPS:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid group '{group_code}'. Valid groups: {', '.join(VALID_RESERVOIR_GROUPS)}",
+            detail=(
+                f"Invalid group '{group_code}'. "
+                f"Valid groups: {', '.join(VALID_RESERVOIR_GROUPS)}"
+            ),
         )
 
     query = """
@@ -107,29 +146,47 @@ async def get_reservoirs_by_group(
 
     if not rows:
         raise HTTPException(
-            status_code=404, detail=f"No reservoirs found for group '{group_code}'"
+            status_code=404,
+            detail=f"No reservoirs found for group '{group_code}'",
         )
 
     return [row["short_code"] for row in rows]
 
 
-# =============================================================================
-# DATABASE CONNECTION
-# =============================================================================
+async def parse_reservoirs(
+    reservoirs: Optional[str], group: Optional[str], connection: asyncpg.Connection
+) -> List[str]:
+    """Resolve a reservoir filter from either an explicit list or a group code.
 
-db_pool = None
+    The two parameters are mutually exclusive. When neither is provided,
+    defaults to the major reservoir group
+    """
+    if reservoirs and group:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot specify both 'reservoirs' and 'group' parameters. "
+                "Use one or the other."
+            ),
+        )
 
+    if group:
+        return await get_reservoirs_by_group(connection, group)
 
-def set_db_pool(pool):
-    global db_pool
-    db_pool = pool
+    if reservoirs:
+        codes = [r.strip() for r in reservoirs.split(",") if r.strip()]
+        for code in codes:
+            if code.startswith("S_") or code.startswith("C_"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Use entity short_code (e.g., SHSTA), "
+                        f"not variable code ({code})"
+                    ),
+                )
+        return codes
 
-
-async def get_db():
-    if db_pool is None:
-        raise HTTPException(status_code=500, detail="Database not available")
-    async with db_pool.acquire() as connection:
-        yield connection
+    return await get_major_reservoirs(connection)
 
 
 # =============================================================================
@@ -139,54 +196,36 @@ async def get_db():
 
 @router.get(
     "/scenarios/{scenario_id}/reservoir-percentiles",
-    summary="Get reservoir percentiles for scenario",
+    summary="Monthly storage percentiles for reservoirs",
+    description=(
+        "Per-reservoir monthly storage percentile bands (% of capacity). "
+        "Defaults to the 8 major reservoirs when neither `reservoirs` nor "
+        "`group` is supplied."
+    ),
 )
 async def get_all_reservoir_percentiles(
     scenario_id: str,
     reservoirs: Optional[str] = Query(
         None,
-        description="Comma-separated reservoir short_codes (e.g., 'SHSTA,OROVL'). Defaults to 8 major reservoirs.",
+        description=(
+            "Comma-separated reservoir short_codes (e.g., 'SHSTA,OROVL'). "
+            "Defaults to 8 major reservoirs."
+        ),
     ),
     group: Optional[str] = Query(
         None,
-        description="Reservoir group filter: 'major', 'cvp', or 'swp'. Cannot be used with 'reservoirs' parameter.",
+        description=(
+            "Reservoir group filter: 'major', 'cvp', or 'swp'. "
+            "Cannot be combined with `reservoirs`."
+        ),
     ),
     connection: asyncpg.Connection = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Get percentile data for reservoirs (% of capacity) in a single request.
+) -> JSONResponse:
+    """Get monthly storage percentile bands for reservoirs."""
+    cache_key = f"percentiles:{scenario_id}:{reservoirs or ''}:{group or ''}"
+    if cache_key in _stats_cache:
+        return _json_response(_stats_cache[cache_key], api_cache_max_age())
 
-    **Use case:** Load reservoir data at once for comparison views
-    or dashboard initialization.
-
-    **Examples:**
-    - `GET /api/statistics/scenarios/s0020/reservoir-percentiles` (defaults to major reservoirs)
-    - `GET /api/statistics/scenarios/s0020/reservoir-percentiles?group=major` (8 major reservoirs)
-    - `GET /api/statistics/scenarios/s0020/reservoir-percentiles?group=cvp` (CVP reservoirs)
-    - `GET /api/statistics/scenarios/s0020/reservoir-percentiles?group=swp` (SWP reservoirs)
-    - `GET /api/statistics/scenarios/s0020/reservoir-percentiles?reservoirs=SHSTA,OROVL` (custom list)
-
-    **Response:**
-    ```json
-    {
-      "scenario_id": "s0020",
-      "group": "major",
-      "reservoirs": {
-        "SHSTA": {
-          "name": "Shasta",
-          "capacity_taf": 4552.0,
-          "dead_pool_taf": 115.0,
-          "monthly_percentiles": {
-            "1": {"q0": 32.1, "q10": 45.2, "q30": 58.7, "q50": 70.1, "q70": 81.2, "q90": 91.3, "q100": 98.5, "mean": 68.4},
-            ...
-          }
-        },
-        "OROVL": { ... },
-        ...
-      }
-    }
-    ```
-    """
     reservoir_list = await parse_reservoirs(reservoirs, group, connection)
 
     try:
@@ -202,79 +241,65 @@ async def get_all_reservoir_percentiles(
         ORDER BY re.short_code, rmp.water_month
         """
         rows = await connection.fetch(query, scenario_id, reservoir_list)
+    except Exception as e:
+        log.error(f"reservoir-percentiles query failed for {scenario_id}: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
-        if not rows:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No percentile data found for scenario {scenario_id}",
-            )
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No percentile data found for scenario '{scenario_id}'",
+        )
 
-        reservoirs = {}
-        for row in rows:
-            short_code = row["short_code"]
-
-            if short_code not in reservoirs:
-                reservoirs[short_code] = {
-                    "name": row["name"] or short_code,
-                    "capacity_taf": safe_float(row["capacity_taf"]),
-                    "dead_pool_taf": safe_float(row["dead_pool_taf"]),
-                    "monthly_percentiles": {},
-                }
-
-            reservoirs[short_code]["monthly_percentiles"][row["water_month"]] = {
-                "q0": safe_float(row["q0"]),
-                "q10": safe_float(row["q10"]),
-                "q30": safe_float(row["q30"]),
-                "q50": safe_float(row["q50"]),
-                "q70": safe_float(row["q70"]),
-                "q90": safe_float(row["q90"]),
-                "q100": safe_float(row["q100"]),
-                "mean": safe_float(row["mean_value"]),
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        short_code = row["short_code"]
+        if short_code not in out:
+            label = safe_str(row["name"]) or short_code
+            out[short_code] = {
+                "label": label,
+                "name": label,
+                "capacity_taf": safe_float(row["capacity_taf"]),
+                "dead_pool_taf": safe_float(row["dead_pool_taf"]),
+                "monthly_percentiles": {},
             }
 
-        response = {"scenario_id": scenario_id, "reservoirs": reservoirs}
-        if group:
-            response["group"] = group
-        return response
+        out[short_code]["monthly_percentiles"][row["water_month"]] = {
+            "q0": safe_float(row["q0"]),
+            "q10": safe_float(row["q10"]),
+            "q30": safe_float(row["q30"]),
+            "q50": safe_float(row["q50"]),
+            "q70": safe_float(row["q70"]),
+            "q90": safe_float(row["q90"]),
+            "q100": safe_float(row["q100"]),
+            "mean": safe_float(row["mean_value"]),
+        }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    response: Dict[str, Any] = {
+        "scenario_id": scenario_id,
+        "reservoirs": out,
+        "count": len(out),
+    }
+    if group:
+        response["group"] = group
+
+    _stats_cache[cache_key] = response
+    return _json_response(response, api_cache_max_age())
 
 
-@router.get("/reservoir-groups", summary="List reservoir groups")
+@router.get(
+    "/reservoir-groups",
+    summary="List reservoir groups and their members",
+    description="Returns the 'major', 'cvp', and 'swp' reservoir groups with their member entity short_codes.",
+)
 async def list_reservoir_groups(
     connection: asyncpg.Connection = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Get list of reservoir groups with their member reservoirs.
+) -> JSONResponse:
+    """List reservoir groups with their member reservoirs."""
+    cache_key = "reservoir_groups"
+    if cache_key in _static_cache:
+        return _json_response(_static_cache[cache_key], api_cache_max_age())
 
-    **Use case:** Populate group selector dropdowns in the UI.
-
-    **Response:**
-    ```json
-    {
-      "groups": [
-        {
-          "group_id": "major",
-          "name": "Major Reservoirs",
-          "reservoirs": ["FOLSM", "MELON", "MLRTN", "OROVL", "SHSTA", "SLUIS_CVP", "SLUIS_SWP", "TRNTY"]
-        },
-        {
-          "group_id": "cvp",
-          "name": "CVP Reservoirs",
-          "reservoirs": ["FOLSM", "MELON", "MLRTN", "SHSTA", "SLUIS_CVP", "TRNTY"]
-        },
-        {
-          "group_id": "swp",
-          "name": "SWP Reservoirs",
-          "reservoirs": ["OROVL", "SLUIS_SWP"]
-        }
-      ]
-    }
-    ```
-    """
     try:
         query = """
         SELECT
@@ -288,73 +313,31 @@ async def list_reservoir_groups(
         ORDER BY rg.short_code
         """
         rows = await connection.fetch(query)
-
-        return {
-            "groups": [
-                {
-                    "group_id": row["short_code"],
-                    "name": row["label"] or row["short_code"],
-                    "reservoirs": list(row["reservoirs"]),
-                }
-                for row in rows
-            ]
-        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"reservoir-groups query failed: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
-
-# =============================================================================
-# NEW STATISTICS ENDPOINTS (All 92 Reservoirs)
-# =============================================================================
-
-
-async def parse_reservoirs(
-    reservoirs: Optional[str], group: Optional[str], connection: asyncpg.Connection
-) -> List[str]:
-    """
-    Parse reservoir filter from either comma-separated codes or group name.
-
-    Args:
-        reservoirs: Comma-separated reservoir short_codes (e.g., 'SHSTA,OROVL')
-        group: Reservoir group code ('major', 'cvp', or 'swp')
-        connection: Database connection
-
-    Returns:
-        List of entity short_codes (e.g., ['SHSTA', 'OROVL'])
-
-    Raises:
-        HTTPException: If both reservoirs and group are provided, or invalid input
-    """
-    # Mutual exclusivity check
-    if reservoirs and group:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot specify both 'reservoirs' and 'group' parameters. Use one or the other.",
-        )
-
-    # Group filter
-    if group:
-        return await get_reservoirs_by_group(connection, group)
-
-    # Explicit reservoir list
-    if reservoirs:
-        codes = [r.strip() for r in reservoirs.split(",") if r.strip()]
-
-        # Validate: reject S_* or C_* prefixed codes
-        for code in codes:
-            if code.startswith("S_") or code.startswith("C_"):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Use entity short_code (e.g., SHSTA), not variable code ({code})",
-                )
-        return codes
-
-    # Default to major reservoirs
-    return await get_major_reservoirs(connection)
+    groups = [
+        {
+            "group_id": safe_str(row["short_code"]),
+            "label": safe_str(row["label"]) or safe_str(row["short_code"]),
+            "name": safe_str(row["label"]) or safe_str(row["short_code"]),
+            "reservoirs": list(row["reservoirs"]),
+        }
+        for row in rows
+    ]
+    result = {"groups": groups, "count": len(groups)}
+    _static_cache[cache_key] = result
+    return _json_response(result, api_cache_max_age())
 
 
 @router.get(
-    "/scenarios/{scenario_id}/spill-monthly", summary="Get monthly spill statistics"
+    "/scenarios/{scenario_id}/spill-monthly",
+    summary="Monthly spill statistics for reservoirs",
+    description=(
+        "Per-reservoir monthly spill frequency, average / max CFS, and storage "
+        "at spill. Defaults to the 8 major reservoirs."
+    ),
 )
 async def get_spill_monthly(
     scenario_id: str,
@@ -364,37 +347,18 @@ async def get_spill_monthly(
     ),
     group: Optional[str] = Query(
         None,
-        description="Reservoir group filter: 'major', 'cvp', or 'swp'. Cannot be used with 'reservoirs' parameter.",
+        description=(
+            "Reservoir group filter: 'major', 'cvp', or 'swp'. "
+            "Cannot be combined with `reservoirs`."
+        ),
     ),
     connection: asyncpg.Connection = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Get monthly spill (flood release) statistics for reservoirs.
+) -> JSONResponse:
+    """Get monthly spill (flood release) statistics for reservoirs."""
+    cache_key = f"spill:{scenario_id}:{reservoirs or ''}:{group or ''}"
+    if cache_key in _stats_cache:
+        return _json_response(_stats_cache[cache_key], api_cache_max_age())
 
-    **Use case:** Analyze spill frequency and magnitude by month.
-
-    **Examples:**
-    - `GET /api/statistics/scenarios/s0020/spill-monthly` (defaults to major reservoirs)
-    - `GET /api/statistics/scenarios/s0020/spill-monthly?group=cvp` (CVP reservoirs)
-    - `GET /api/statistics/scenarios/s0020/spill-monthly?reservoirs=SHSTA,OROVL`
-
-    **Response:**
-    ```json
-    {
-      "scenario_id": "s0020",
-      "group": "cvp",
-      "reservoirs": {
-        "SHSTA": {
-          "name": "Shasta",
-          "monthly": {
-            "1": {"spill_frequency_pct": 12.5, "spill_avg_cfs": 5000, "storage_at_spill_avg_pct": 95.2, ...},
-            ...
-          }
-        }
-      }
-    }
-    ```
-    """
     reservoir_list = await parse_reservoirs(reservoirs, group, connection)
 
     try:
@@ -411,63 +375,63 @@ async def get_spill_monthly(
         ORDER BY re.short_code, rsm.water_month
         """
         rows = await connection.fetch(query, scenario_id, reservoir_list)
-
-        if not rows:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No spill data found for scenario {scenario_id}",
-            )
-
-        result = {}
-        for row in rows:
-            short_code = row["short_code"]
-            if short_code not in result:
-                result[short_code] = {"name": row["name"] or short_code, "monthly": {}}
-
-            result[short_code]["monthly"][row["water_month"]] = {
-                "spill_months_count": safe_int(row["spill_months_count"]),
-                "total_months": safe_int(row["total_months"]),
-                "spill_frequency_pct": safe_float(row["spill_frequency_pct"]),
-                "spill_avg_cfs": safe_float(row["spill_avg_cfs"]),
-                "spill_max_cfs": safe_float(row["spill_max_cfs"]),
-                "spill_q50": safe_float(row["spill_q50"]),
-                "spill_q90": safe_float(row["spill_q90"]),
-                "spill_q100": safe_float(row["spill_q100"]),
-                "storage_at_spill_avg_pct": safe_float(row["storage_at_spill_avg_pct"]),
-            }
-
-        response = {"scenario_id": scenario_id, "reservoirs": result}
-        if group:
-            response["group"] = group
-        return response
-
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"spill-monthly query failed for {scenario_id}: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No spill data found for scenario '{scenario_id}'",
+        )
 
-@router.get("/reservoirs/all", summary="List all reservoirs with statistics data")
-async def list_all_reservoirs(
-    connection: asyncpg.Connection = Depends(get_db),
-) -> Dict[str, Any]:
-    """
-    Get list of all reservoirs with statistics data available.
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        short_code = row["short_code"]
+        if short_code not in out:
+            label = safe_str(row["name"]) or short_code
+            out[short_code] = {"label": label, "name": label, "monthly": {}}
+        out[short_code]["monthly"][row["water_month"]] = {
+            "spill_months_count": safe_int(row["spill_months_count"]),
+            "total_months": safe_int(row["total_months"]),
+            "spill_frequency_pct": safe_float(row["spill_frequency_pct"]),
+            "spill_avg_cfs": safe_float(row["spill_avg_cfs"]),
+            "spill_max_cfs": safe_float(row["spill_max_cfs"]),
+            "spill_q50": safe_float(row["spill_q50"]),
+            "spill_q90": safe_float(row["spill_q90"]),
+            "spill_q100": safe_float(row["spill_q100"]),
+            "storage_at_spill_avg_pct": safe_float(row["storage_at_spill_avg_pct"]),
+        }
 
-    **Use case:** Populate reservoir selector for custom reservoir selection.
-
-    **Response:**
-    ```json
-    {
-      "major": ["SHSTA", "TRNTY", ...],
-      "all": [
-        {"reservoir_id": "ALMNR", "name": "Almanor", "capacity_taf": 1143.0},
-        ...
-      ],
-      "total": 90
+    response: Dict[str, Any] = {
+        "scenario_id": scenario_id,
+        "reservoirs": out,
+        "count": len(out),
     }
-    ```
-    """
+    if group:
+        response["group"] = group
+
+    _stats_cache[cache_key] = response
+    return _json_response(response, api_cache_max_age())
+
+
+@router.get(
+    "/reservoirs",
+    summary="List reservoirs with statistics data",
+    description=(
+        "Returns every reservoir entity that has at least one period-summary "
+        "row (i.e. is available to the statistics endpoints), plus the major "
+        "reservoir group for convenience."
+    ),
+)
+async def list_reservoirs(
+    connection: asyncpg.Connection = Depends(get_db),
+) -> JSONResponse:
+    """List reservoirs with statistics data."""
+    cache_key = "reservoirs:list"
+    if cache_key in _static_cache:
+        return _json_response(_static_cache[cache_key], api_cache_max_age())
+
     try:
         query = """
         SELECT DISTINCT
@@ -478,22 +442,40 @@ async def list_all_reservoirs(
         ORDER BY re.short_code
         """
         rows = await connection.fetch(query)
-
-        all_reservoirs = [
-            {
-                "reservoir_id": row["short_code"],
-                "name": row["name"] or row["short_code"],
-                "capacity_taf": safe_float(row["capacity_taf"]),
-            }
-            for row in rows
-        ]
-
         major_reservoirs = await get_major_reservoirs(connection)
-        return {
-            "major": major_reservoirs,
-            "all": all_reservoirs,
-            "total": len(all_reservoirs),
-        }
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"reservoirs list query failed: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
+
+    all_reservoirs = [
+        {
+            "reservoir_id": safe_str(row["short_code"]),
+            "label": safe_str(row["name"]) or safe_str(row["short_code"]),
+            "name": safe_str(row["name"]) or safe_str(row["short_code"]),
+            "capacity_taf": safe_float(row["capacity_taf"]),
+        }
+        for row in rows
+    ]
+
+    result = {
+        "major": major_reservoirs,
+        "all": all_reservoirs,
+        "count": len(all_reservoirs),
+    }
+    _static_cache[cache_key] = result
+    return _json_response(result, api_cache_max_age())
+
+
+# Deprecated alias - prefer GET /api/statistics/reservoirs. Kept so existing
+# clients keep working through one deploy cycle
+@router.get(
+    "/reservoirs/all",
+    summary="(Deprecated) List all reservoirs with statistics data",
+    description="Alias for `/api/statistics/reservoirs`. Prefer the canonical path.",
+    deprecated=True,
+)
+async def list_all_reservoirs_deprecated(
+    connection: asyncpg.Connection = Depends(get_db),
+) -> JSONResponse:
+    """Deprecated alias for `list_reservoirs`."""
+    return await list_reservoirs(connection)

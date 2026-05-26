@@ -1,5 +1,5 @@
 """
-COEQWAL API
+coeqwal-api/main.py - COEQWAL API
 FastAPI backend for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
 
 This API provides:
@@ -10,10 +10,9 @@ This API provides:
 Geometry policy: per [database/README.md](../../database/README.md#api-conventions-geometry),
 no scenario or location geometry flows through this API. Polygon and point geometry for
 map rendering is served via Mapbox vector tiles. The `/api/nodes` and `/api/arcs` list
-endpoints are the only routes that still return GeoJSON, and exist for bulk offline use
-(downloads, exports, audits), not for live map rendering.
+endpoints are the only routes that still return GeoJSON, and exist for bulk offline use.
 
-Scenario file downloads are served by a separate AWS Lambda gateway, not this API.
+Scenario model run file downloads are served by a separate AWS Lambda gateway, not this API.
 
 Documentation: https://api.coeqwal.org/docs
 """
@@ -55,6 +54,10 @@ from routes.demand_unit_endpoints import (
 from routes.ag_endpoints import (
     router as ag_router,
     set_db_pool as set_ag_db_pool,
+)
+from routes.cws_aggregate_endpoints import (
+    router as cws_aggregate_router,
+    set_db_pool as set_cws_aggregate_db_pool,
 )
 from routes.batch_statistics_endpoints import (
     router as batch_stats_router,
@@ -99,6 +102,26 @@ Data API for the Collaboratory for Equity in Water Allocation (COEQWAL) project.
 
 Enables exploration of how different water management scenarios affect communities, 
 agriculture, and ecosystems across California.
+
+### How `coeqwal-website` consumes this API
+
+The official COEQWAL website does **not** call these endpoints with `fetch()` directly.
+All data access flows through the `@repo/data` package in the `coeqwal-website` repo
+(`packages/data/src/coeqwal`):
+
+- `coeqwal/hooks/*` - SWR hooks the website uses to read from the API. Most
+  endpoints have a dedicated hook. A few have several hooks for different filter
+  shapes (e.g. `useReservoirPercentiles`, `useAllReservoirPercentiles`, and
+  `useGroupedReservoirPercentiles` all hit `/reservoir-percentiles` with
+  different query params), and `useBatchStatistics` fans out to many endpoints
+  in one call. Hook files are organized by domain
+  (`useMiContractorStatistics.ts`, `useUrbanDemandUnitStatistics.ts`,
+  `useAgStatistics.ts`, `useRefugeStatistics.ts`, `useReservoirPercentiles.ts`,
+  `useEnvFlowStatistics.ts`, `useDeltaStatistics.ts`, etc).
+
+Components consume hooks, never raw URLs. If you change a URL or payload shape here,
+the matching website update lives in those four files. That said, outside callers (notebooks,
+third-party tools, ad-hoc scripts) can consume these endpoints directly.
 """
 
 TAGS_METADATA = [
@@ -154,6 +177,7 @@ async def lifespan(app: FastAPI):
     set_mi_contractor_db_pool(db_pool)
     set_demand_unit_db_pool(db_pool)
     set_ag_db_pool(db_pool)
+    set_cws_aggregate_db_pool(db_pool)
     set_batch_stats_db_pool(db_pool)
     set_refuge_db_pool(db_pool)
     set_env_flow_db_pool(db_pool)
@@ -197,6 +221,9 @@ app.include_router(demand_unit_router)
 
 # Agricultural statistics router
 app.include_router(ag_router)
+
+# CWS aggregate statistics router (SWP/CVP/MWD project-level rollups)
+app.include_router(cws_aggregate_router)
 
 # Batch statistics router (for Data Explorer performance)
 app.include_router(batch_stats_router)
@@ -386,9 +413,11 @@ async def api_root(
                 "ag_aggregates_list": "GET /api/statistics/ag-aggregates",
                 "ag_aggregates_monthly": "GET /api/statistics/scenarios/{scenario_id}/ag-aggregates/monthly",
                 "ag_aggregates_period": "GET /api/statistics/scenarios/{scenario_id}/ag-aggregates/period-summary",
+                "cws_aggregates_list": "GET /api/statistics/cws-aggregates",
+                "cws_aggregates_monthly": "GET /api/statistics/scenarios/{scenario_id}/cws-aggregates/monthly",
+                "cws_aggregates_period": "GET /api/statistics/scenarios/{scenario_id}/cws-aggregates/period-summary",
                 "mi_contractors_list": "GET /api/statistics/mi-contractors",
-                "mi_contractors_monthly": "GET /api/statistics/scenarios/{scenario_id}/mi-contractors/delivery-monthly",
-                "mi_contractors_shortage_monthly": "GET /api/statistics/scenarios/{scenario_id}/mi-contractors/shortage-monthly",
+                "mi_contractors_monthly": "GET /api/statistics/scenarios/{scenario_id}/mi-contractors/monthly",
                 "mi_contractors_period": "GET /api/statistics/scenarios/{scenario_id}/mi-contractors/period-summary",
             },
         },

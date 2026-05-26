@@ -1,5 +1,5 @@
 """
-Environmental River Flows Statistics API Endpoints.
+env_flow_endpoints.py - Environmental River Flows Statistics API Endpoints.
 
 Three metrics for 59 CalSim channel reaches:
   Metric 1.River flows as % of natural unimpaired flow (monthly and seasonal)
@@ -16,28 +16,27 @@ served through /api/statistics/batch only. The helper coroutines
 the batch handler. Seasonal data is not currently exposed.
 
 Performance strategy:
-  - Responses are cached in-process with a 30-minute TTL (cachetools.TTLCache).
-    The first request for a given (scenario, channel) key populates the cache; all
-    subsequent requests in the same 30-minute window are served from memory with
-    no DB round-trip. This makes a "room full of people" scenario cheap: DB load
-    is proportional to unique keys × 1 per TTL window, not 1 per person.
-  - Cache-Control: public, max-age=900 headers allow browsers and any CDN layer to
-    cache responses for an additional 15 minutes beyond the in-process TTL.
+  - Responses are cached in-process via the shared TTL helper in
+    routes._common.cache.
   - Each fetch helper acquires its own pool connection so asyncio.gather tasks
     in the batch endpoint run in true parallel, not sequentially on one connection.
 
 Water months: 1=October ... 12=September
-CFS: cubic feet per second (raw flow storage)
+
 """
 
 import logging
 from typing import Any, Dict, Optional
 
-from cachetools import TTLCache
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from routes._common.null_handling import safe_float, safe_int
+from routes._common import (
+    api_cache_max_age,
+    make_ttl_cache,
+    safe_float,
+    safe_int,
+)
 
 log = logging.getLogger(__name__)
 
@@ -46,20 +45,11 @@ router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 _db_pool = None
 
 # ---------------------------------------------------------------------------
-# In-process response cache
+# In-process response caches (env-driven via API_CACHE_TTL_SECONDS)
 # ---------------------------------------------------------------------------
-# Key → serialized response dict.
-# TTL: 1800 s (30 min). Env-flow ETL runs run are infrequent; data is stable.
-# maxsize: sized to hold all scenarios × channels × endpoints with headroom.
-#   19 scenarios × 59 channels × 3 stat endpoints = ~3,363 entries
-#   + channel list, seasons = a handful
-_stats_cache: TTLCache = TTLCache(maxsize=6000, ttl=1800)
-# Static lookups (channel list, seasons).much longer TTL; effectively permanent.
-_static_cache: TTLCache = TTLCache(maxsize=10, ttl=86400)  # 24 hours
 
-# HTTP max-age values (seconds) sent on successful GET responses.
-_CACHE_MAX_AGE_STATIC = 86400   # 24 h for channels / seasons.static data
-_CACHE_MAX_AGE_STATS = 900      # 15 min for statistics.safe refresh interval
+_stats_cache = make_ttl_cache("env_flow_stats", maxsize=6000)
+_static_cache = make_ttl_cache("env_flow_static", maxsize=10)
 
 
 def set_db_pool(pool) -> None:
@@ -84,8 +74,8 @@ def _json_response(data: Dict[str, Any], max_age: int) -> JSONResponse:
     "/channels",
     summary="List env-flow channel reaches",
     description=(
-        "Returns all 59 CalSim channel reaches attributed for environmental flow analysis, "
-        "with watershed and capability attributes. Results are stable between ETL runs."
+        "Returns all CalSim channel reaches, "
+        "with watershed and capability attributes."
     ),
 )
 async def list_channels(
@@ -112,7 +102,7 @@ async def list_channels(
     """
     cache_key = f"channels:{channel_class}:{watershed}:{has_mif}:{has_eflows}"
     if cache_key in _static_cache:
-        return _json_response(_static_cache[cache_key], _CACHE_MAX_AGE_STATIC)
+        return _json_response(_static_cache[cache_key], api_cache_max_age())
 
     if _db_pool is None:
         raise HTTPException(status_code=503, detail="Database not available")
@@ -172,9 +162,9 @@ async def list_channels(
         for row in rows
     ]
 
-    result = {"channels": channels, "total": len(channels)}
+    result = {"channels": channels, "count": len(channels)}
     _static_cache[cache_key] = result
-    return _json_response(result, _CACHE_MAX_AGE_STATIC)
+    return _json_response(result, api_cache_max_age())
 
 
 # =============================================================================

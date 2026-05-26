@@ -8,19 +8,34 @@ Two tier types:
 - single_value: Single overall tier level (1-4)
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Response
-from typing import Dict, List, Any, Optional
+import logging
+from typing import Any, Dict, List, Optional
+
 import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from routes._common.null_handling import safe_float, safe_int, safe_str
+from routes._common import (
+    api_cache_max_age,
+    make_ttl_cache,
+    safe_float,
+    safe_int,
+    safe_str,
+)
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tiers", tags=["tiers"])
 
-# Cache-Control header for catalog endpoints whose contents only change between
-# ETL runs (tier definitions, scenario lists, etc.). 5 minutes gives CDNs and
-# browsers a safe reuse window without masking new data for long after a deploy.
-STATIC_CATALOG_CACHE_CONTROL = "public, max-age=300"
+# Static catalog: tier definitions change between ETL runs only.
+# Per-scenario tier batches are cached more loosely below
+_static_cache = make_ttl_cache("tiers_static", maxsize=50)
+_batch_cache = make_ttl_cache("tiers_batch", maxsize=500)
+
+
+def _catalog_cache_header() -> str:
+    """Return the Cache-Control value matching the in-process TTL."""
+    return f"public, max-age={api_cache_max_age()}"
 
 # =============================================================================
 # PYDANTIC MODELS
@@ -59,7 +74,7 @@ def set_db_pool(pool):
 
 async def get_db():
     if db_pool is None:
-        raise HTTPException(status_code=500, detail="Database not available")
+        raise HTTPException(status_code=503, detail="Database not available")
     async with db_pool.acquire() as connection:
         yield connection
 
@@ -128,6 +143,11 @@ async def get_tier_definitions(
     }
     ```
     """
+    cache_key = "tiers:definitions"
+    if cache_key in _static_cache:
+        response.headers["Cache-Control"] = _catalog_cache_header()
+        return _static_cache[cache_key]
+
     try:
         query = """
         SELECT short_code, name, description 
@@ -135,18 +155,19 @@ async def get_tier_definitions(
         WHERE is_active = TRUE 
         ORDER BY short_code
         """
-
         rows = await connection.fetch(query)
-
-        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
-        # Fall back to `name` when no description was seeded, so tooltips still
-        # have human-readable text. This is a domain-specific UX choice, not a
-        # NULL-coercion problem (the alternative would force every consumer to
-        # render an awkward placeholder).
-        return {row["short_code"]: row["description"] or row["name"] for row in rows}
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"tier-definitions query failed: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
+
+    # Fall back to `name` when no description was seeded, so tooltips still
+    # have human-readable text. This is a domain-specific UX choice, not a
+    # NULL-coercion problem (the alternative would force every consumer to
+    # render an awkward placeholder).
+    result = {row["short_code"]: row["description"] or row["name"] for row in rows}
+    _static_cache[cache_key] = result
+    response.headers["Cache-Control"] = _catalog_cache_header()
+    return result
 
 
 @router.get(
@@ -167,6 +188,11 @@ async def get_all_tier_definitions(
     - `tier_type`: 'multi_value' (distribution) or 'single_value' (overall score)
     - `tier_count`: Number of locations (for multi_value) or 1 (for single_value)
     """
+    cache_key = "tiers:list"
+    if cache_key in _static_cache:
+        response.headers["Cache-Control"] = _catalog_cache_header()
+        return _static_cache[cache_key]
+
     try:
         query = """
         SELECT short_code, name, description, tier_type, tier_count, is_active
@@ -174,24 +200,25 @@ async def get_all_tier_definitions(
         WHERE is_active = TRUE 
         ORDER BY tier_type DESC, short_code
         """
-
         rows = await connection.fetch(query)
-
-        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
-        return [
-            TierDefinition(
-                short_code=row["short_code"],
-                name=row["name"],
-                description=safe_str(row["description"]),
-                tier_type=row["tier_type"],
-                tier_count=row["tier_count"],
-                is_active=row["is_active"],
-            )
-            for row in rows
-        ]
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"tier-list query failed: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
+
+    result = [
+        TierDefinition(
+            short_code=row["short_code"],
+            name=row["name"],
+            description=safe_str(row["description"]),
+            tier_type=row["tier_type"],
+            tier_count=row["tier_count"],
+            is_active=row["is_active"],
+        )
+        for row in rows
+    ]
+    _static_cache[cache_key] = result
+    response.headers["Cache-Control"] = _catalog_cache_header()
+    return result
 
 
 @router.get("/scenarios/{scenario_id}/tiers", summary="Get all tiers for scenario")
@@ -242,9 +269,14 @@ async def get_all_scenario_tiers(
         AND tr.is_active = TRUE
         ORDER BY td.tier_type DESC, tr.tier_short_code
         """
-
         rows = await connection.fetch(query, scenario_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"per-scenario tiers query failed for {scenario_id}: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
+    try:
         if not rows:
             raise HTTPException(
                 status_code=404, detail=f"No tier data found for scenario {scenario_id}"
@@ -296,11 +328,11 @@ async def get_all_scenario_tiers(
                 }
 
         return {"scenario": scenario_id, "tiers": tiers}
-
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"per-scenario tiers shaping failed for {scenario_id}: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
 
 @router.get("/batch", summary="Get tiers for multiple scenarios in one request")
@@ -335,6 +367,10 @@ async def get_batch_scenario_tiers(
 
     if not scenario_ids:
         raise HTTPException(status_code=400, detail="No scenario IDs provided")
+
+    cache_key = "tiers:batch:" + ",".join(sorted(scenario_ids))
+    if cache_key in _batch_cache:
+        return _batch_cache[cache_key]
 
     try:
         query = """
@@ -410,18 +446,20 @@ async def get_batch_scenario_tiers(
                     "level": level,
                 }
 
-        return {
+        out = {
             "scenarios": {
                 sid: {"scenario": sid, "tiers": tiers}
                 for sid, tiers in result.items()
             },
             "count": len(result),
         }
-
+        _batch_cache[cache_key] = out
+        return out
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(f"batch tiers query failed: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
 
 
 # =============================================================================
@@ -514,7 +552,7 @@ async def get_scenario_tier_locations(
     try:
         # Existence / active check so unknown and retired scenarios 404
         # explicitly instead of returning a misleading 200 with every
-        # requested code dumped into `missing`. Cheap indexed lookup; zero
+        # requested code dumped into `missing`. Cheap indexed lookup. Zero
         # cost on valid scenarios. The message is distinct between the two
         # cases so operators can tell "typo" from "scenario was retired".
         scenario_row = await connection.fetchrow(
@@ -610,8 +648,10 @@ async def get_scenario_tier_locations(
             "results": results,
             "missing": missing,
         }
-
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        log.error(
+            f"scenario-tier-locations query failed for {scenario_short_code}: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Database query failed")

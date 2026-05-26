@@ -16,6 +16,17 @@ If the auto-deploy gets stuck, see "Manual Deployment (Troubleshooting)" further
 - **Interactive docs**: `https://api.coeqwal.org/docs`
 - **Health check**: `https://api.coeqwal.org/api/health`
 
+## How `coeqwal-website` consumes this API
+
+The website does **not** call these endpoints with `fetch()` directly. All data access flows through the `@repo/data` package in [`coeqwal-website/packages/data`](../../../COEQWAL_repo/coeqwal-website/packages/data):
+
+- `coeqwal/api.ts` holds endpoint URL builders.
+- `coeqwal/fetchers.ts` wraps every endpoint in a typed `apiFetcher<T>` call.
+- `coeqwal/hooks/*` exposes SWR hooks the website uses to read from the API. Most endpoints have a dedicated hook. A few have several hooks for different filter shapes (e.g. `useReservoirPercentiles`, `useAllReservoirPercentiles`, and `useGroupedReservoirPercentiles` all hit `/reservoir-percentiles` with different query params), and `useBatchStatistics` fans out to many endpoints in one call. Hook files are organized by domain (`useMiContractorStatistics.ts`, `useUrbanDemandUnitStatistics.ts`, `useAgStatistics.ts`, `useRefugeStatistics.ts`, etc).
+- `cache/keys.ts` holds the matching cache-key constants.
+
+When you change a URL or payload shape here, the matching website update is in those four files (types, fetchers, hooks, occasionally one component). Components never see raw endpoint URLs. Outside callers (notebooks, third-party tools, ad-hoc scripts) consume these endpoints directly.
+
 ## Local development
 
 The supported environment for everything touching production data is Cloud9, where `$DATABASE_URL` and `$SUPERUSER_URL` are already configured. To exercise the API locally without RDS access, bring up a local Postgres with `docker compose up -d postgres` from the repo root and apply DDL from [`database/scripts/sql/.archive/`](../../database/scripts/sql/.archive/) manually. Then:
@@ -114,7 +125,8 @@ curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/period-summary?rese
 
 ```bash
 # List all reservoirs with statistics data
-curl "https://api.coeqwal.org/api/statistics/reservoirs/all"
+curl "https://api.coeqwal.org/api/statistics/reservoirs"
+# (Older URL "/reservoirs/all" still works as a deprecated alias.)
 
 # List reservoir groups and their members
 curl "https://api.coeqwal.org/api/statistics/reservoir-groups"
