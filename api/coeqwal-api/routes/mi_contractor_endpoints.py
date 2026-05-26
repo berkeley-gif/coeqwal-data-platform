@@ -16,16 +16,6 @@ from fastapi import APIRouter, HTTPException, Query
 
 log = logging.getLogger(__name__)
 
-
-def safe_float(val) -> Optional[float]:
-    """Safely convert value to float, returning None for NULL.
-    
-    Important: Uses explicit None check to preserve zero values.
-    """
-    if val is None:
-        return None
-    return float(val)
-
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 # Database pool - set by main.py at startup

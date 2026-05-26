@@ -7,6 +7,8 @@ from fastapi import Query, HTTPException
 import asyncpg
 import json
 
+from routes._common.null_handling import safe_float
+
 
 async def get_nodes_spatial(
     db_pool: asyncpg.Pool,
@@ -121,17 +123,13 @@ async def get_nodes_spatial(
                         "node_type_name": row["node_type_name"],
                         "hydrologic_region": row["hydrologic_region"],
                         "geometry": geometry,  # Parsed JSON object
-                        "latitude": float(row["latitude"]) if row["latitude"] else None,
-                        "longitude": float(row["longitude"])
-                        if row["longitude"]
-                        else None,
-                        "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
+                        "latitude": safe_float(row["latitude"]),
+                        "longitude": safe_float(row["longitude"]),
+                        "riv_mi": safe_float(row["riv_mi"]),
                         "riv_name": row["riv_name"],
                         # Reservoir identification and attributes
                         "is_reservoir": row["is_reservoir"],
-                        "capacity_taf": float(row["capacity_taf"])
-                        if row["capacity_taf"]
-                        else None,
+                        "capacity_taf": safe_float(row["capacity_taf"]),
                         "operational_purpose": row["operational_purpose"],
                         "associated_river": row["associated_river"],
                         # Map styling
@@ -388,17 +386,13 @@ async def get_all_nodes_unfiltered(
                         "node_type_name": row["node_type_name"],
                         "hydrologic_region": row["hydrologic_region"],
                         "geometry": geometry,
-                        "latitude": float(row["latitude"]) if row["latitude"] else None,
-                        "longitude": float(row["longitude"])
-                        if row["longitude"]
-                        else None,
-                        "riv_mi": float(row["riv_mi"]) if row["riv_mi"] else None,
+                        "latitude": safe_float(row["latitude"]),
+                        "longitude": safe_float(row["longitude"]),
+                        "riv_mi": safe_float(row["riv_mi"]),
                         "riv_name": row["riv_name"],
                         "json_id": row["json_id"],
                         "is_reservoir": row["is_reservoir"],
-                        "capacity_taf": float(row["capacity_taf"])
-                        if row["capacity_taf"]
-                        else None,
+                        "capacity_taf": safe_float(row["capacity_taf"]),
                         "operational_purpose": row["operational_purpose"],
                         "associated_river": row["associated_river"],
                         "map_category": row["map_category"],

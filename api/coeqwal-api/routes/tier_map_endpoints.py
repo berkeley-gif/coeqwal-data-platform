@@ -23,6 +23,8 @@ import asyncpg
 from pydantic import BaseModel, Field
 import json
 
+from routes._common.null_handling import safe_str
+
 # Cache-Control header for catalog endpoints whose contents only change between ETL
 # runs (tier/scenario/hydroclimate lists and their joins). 5 minutes gives CDNs and
 # browsers a safe reuse window without masking new data for long after a deploy.
@@ -190,7 +192,7 @@ async def get_available_tiers(
             tier_data = {
                 "tier_code": row["short_code"],
                 "tier_name": row["name"],
-                "description": row["description"] or "",
+                "description": safe_str(row["description"]),
                 "tier_type": row["tier_type"],
                 "tier_count": row["tier_count"],
             }
@@ -256,7 +258,7 @@ async def get_scenario_tier_summary(
             {
                 "tier_code": row["short_code"],
                 "tier_name": row["name"],
-                "description": row["description"] or "",
+                "description": safe_str(row["description"]),
                 "tier_type": row["tier_type"],
                 "tier_count": row["tier_count"],
                 "location_count": row["location_count"],

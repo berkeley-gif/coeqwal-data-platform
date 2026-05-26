@@ -21,6 +21,8 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import APIRouter, HTTPException, Query
 
+from routes._common.null_handling import safe_float, safe_int
+
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
@@ -33,20 +35,6 @@ def set_db_pool(pool):
     """Set the database connection pool."""
     global _db_pool
     _db_pool = pool
-
-
-def safe_float(val) -> Optional[float]:
-    """Safely convert to float, returning None for NULL."""
-    if val is None:
-        return None
-    return float(val)
-
-
-def safe_int(val) -> Optional[int]:
-    """Safely convert to int, returning None for NULL."""
-    if val is None:
-        return None
-    return int(val)
 
 
 # =============================================================================

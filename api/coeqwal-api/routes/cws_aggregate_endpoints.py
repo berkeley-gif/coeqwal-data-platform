@@ -15,6 +15,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Dict, Any, List, Optional
 import asyncpg
 
+from routes._common.null_handling import safe_float, safe_int
+
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 
@@ -40,20 +42,6 @@ async def get_db():
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
-
-
-def safe_float(val) -> Optional[float]:
-    """Safely convert value to float, returning None for NULL."""
-    if val is None:
-        return None
-    return float(val)
-
-
-def safe_int(val) -> Optional[int]:
-    """Safely convert value to int, returning None for NULL."""
-    if val is None:
-        return None
-    return int(val)
 
 
 async def parse_aggregates(

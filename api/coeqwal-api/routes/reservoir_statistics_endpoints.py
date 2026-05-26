@@ -25,6 +25,8 @@ from typing import Dict, Any, List, Optional
 import asyncpg
 from pydantic import BaseModel, Field
 
+from routes._common.null_handling import safe_float, safe_int
+
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
 
 # =============================================================================
@@ -130,12 +132,8 @@ async def get_reservoir_metadata(
         return {
             row["short_code"]: {
                 "name": row["name"] or row["short_code"],
-                "capacity_taf": float(row["capacity_taf"])
-                if row["capacity_taf"]
-                else 0.0,
-                "dead_pool_taf": float(row["dead_pool_taf"])
-                if row["dead_pool_taf"]
-                else 0.0,
+                "capacity_taf": safe_float(row["capacity_taf"]),
+                "dead_pool_taf": safe_float(row["dead_pool_taf"]),
             }
             for row in rows
         }
@@ -176,12 +174,8 @@ async def get_all_reservoir_metadata(
         return {
             row["short_code"]: {
                 "name": row["name"] or row["short_code"],
-                "capacity_taf": float(row["capacity_taf"])
-                if row["capacity_taf"]
-                else 0.0,
-                "dead_pool_taf": float(row["dead_pool_taf"])
-                if row["dead_pool_taf"]
-                else 0.0,
+                "capacity_taf": safe_float(row["capacity_taf"]),
+                "dead_pool_taf": safe_float(row["dead_pool_taf"]),
             }
             for row in rows
         }
@@ -195,16 +189,20 @@ async def get_all_reservoir_metadata(
 
 
 class MonthlyPercentiles(BaseModel):
-    """Percentile data for a single water month"""
+    """Percentile data for a single water month.
 
-    q0: float = Field(..., description="0th percentile - minimum (% of capacity)")
-    q10: float = Field(..., description="10th percentile")
-    q30: float = Field(..., description="30th percentile")
-    q50: float = Field(..., description="50th percentile (median)")
-    q70: float = Field(..., description="70th percentile")
-    q90: float = Field(..., description="90th percentile")
-    q100: float = Field(..., description="100th percentile - maximum")
-    mean: float = Field(..., description="Mean value")
+    Any field may be null if the underlying ETL row was missing or
+    that percentile was not computed.
+    """
+
+    q0: Optional[float] = Field(None, description="0th percentile - minimum (% of capacity)")
+    q10: Optional[float] = Field(None, description="10th percentile")
+    q30: Optional[float] = Field(None, description="30th percentile")
+    q50: Optional[float] = Field(None, description="50th percentile (median)")
+    q70: Optional[float] = Field(None, description="70th percentile")
+    q90: Optional[float] = Field(None, description="90th percentile")
+    q100: Optional[float] = Field(None, description="100th percentile - maximum")
+    mean: Optional[float] = Field(None, description="Mean value")
 
 
 class ReservoirPercentileResponse(BaseModel):
@@ -214,7 +212,7 @@ class ReservoirPercentileResponse(BaseModel):
     reservoir_name: str = Field(..., description="Human-readable name")
     scenario_id: str = Field(..., description="Scenario identifier")
     unit: str = Field("percent_capacity", description="Data unit")
-    max_capacity_taf: float = Field(..., description="Reservoir capacity in TAF")
+    max_capacity_taf: Optional[float] = Field(None, description="Reservoir capacity in TAF")
     monthly_percentiles: Dict[int, MonthlyPercentiles] = Field(
         ..., description="Percentiles by water month (1=Oct, 12=Sep)"
     )
@@ -225,7 +223,7 @@ class ReservoirSummary(BaseModel):
 
     reservoir_id: str
     reservoir_name: str
-    max_capacity_taf: float
+    max_capacity_taf: Optional[float] = None
 
 
 # =============================================================================
@@ -330,14 +328,14 @@ async def get_reservoir_percentiles(
         monthly = {}
         for row in rows:
             monthly[row["water_month"]] = {
-                "q0": float(row["q0"]) if row["q0"] else 0.0,
-                "q10": float(row["q10"]) if row["q10"] else 0.0,
-                "q30": float(row["q30"]) if row["q30"] else 0.0,
-                "q50": float(row["q50"]) if row["q50"] else 0.0,
-                "q70": float(row["q70"]) if row["q70"] else 0.0,
-                "q90": float(row["q90"]) if row["q90"] else 0.0,
-                "q100": float(row["q100"]) if row["q100"] else 0.0,
-                "mean": float(row["mean_value"]) if row["mean_value"] else 0.0,
+                "q0": safe_float(row["q0"]),
+                "q10": safe_float(row["q10"]),
+                "q30": safe_float(row["q30"]),
+                "q50": safe_float(row["q50"]),
+                "q70": safe_float(row["q70"]),
+                "q90": safe_float(row["q90"]),
+                "q100": safe_float(row["q100"]),
+                "mean": safe_float(row["mean_value"]),
             }
 
         attrs = metadata[reservoir_id]
@@ -436,24 +434,20 @@ async def get_all_reservoir_percentiles(
             if short_code not in reservoirs:
                 reservoirs[short_code] = {
                     "name": row["name"] or short_code,
-                    "capacity_taf": float(row["capacity_taf"])
-                    if row["capacity_taf"]
-                    else 0.0,
-                    "dead_pool_taf": float(row["dead_pool_taf"])
-                    if row["dead_pool_taf"]
-                    else 0.0,
+                    "capacity_taf": safe_float(row["capacity_taf"]),
+                    "dead_pool_taf": safe_float(row["dead_pool_taf"]),
                     "monthly_percentiles": {},
                 }
 
             reservoirs[short_code]["monthly_percentiles"][row["water_month"]] = {
-                "q0": float(row["q0"]) if row["q0"] else 0.0,
-                "q10": float(row["q10"]) if row["q10"] else 0.0,
-                "q30": float(row["q30"]) if row["q30"] else 0.0,
-                "q50": float(row["q50"]) if row["q50"] else 0.0,
-                "q70": float(row["q70"]) if row["q70"] else 0.0,
-                "q90": float(row["q90"]) if row["q90"] else 0.0,
-                "q100": float(row["q100"]) if row["q100"] else 0.0,
-                "mean": float(row["mean_value"]) if row["mean_value"] else 0.0,
+                "q0": safe_float(row["q0"]),
+                "q10": safe_float(row["q10"]),
+                "q30": safe_float(row["q30"]),
+                "q50": safe_float(row["q50"]),
+                "q70": safe_float(row["q70"]),
+                "q90": safe_float(row["q90"]),
+                "q100": safe_float(row["q100"]),
+                "mean": safe_float(row["mean_value"]),
             }
 
         response = {"scenario_id": scenario_id, "reservoirs": reservoirs}
@@ -779,9 +773,7 @@ async def get_storage_monthly(
             if short_code not in result:
                 result[short_code] = {
                     "name": row["name"] or short_code,
-                    "capacity_taf": float(row["capacity_taf"])
-                    if row["capacity_taf"]
-                    else 0.0,
+                    "capacity_taf": safe_float(row["capacity_taf"]),
                     "monthly_percent": {},
                     "monthly_taf": {},
                 }
@@ -790,46 +782,42 @@ async def get_storage_monthly(
 
             # Percent of capacity
             result[short_code]["monthly_percent"][wm] = {
-                "q0": float(row["q0"]) if row["q0"] else 0.0,
-                "q10": float(row["q10"]) if row["q10"] else 0.0,
-                "q30": float(row["q30"]) if row["q30"] else 0.0,
-                "q50": float(row["q50"]) if row["q50"] else 0.0,
-                "q70": float(row["q70"]) if row["q70"] else 0.0,
-                "q90": float(row["q90"]) if row["q90"] else 0.0,
-                "q100": float(row["q100"]) if row["q100"] else 0.0,
-                "mean": float(row["storage_pct_capacity"])
-                if row["storage_pct_capacity"]
-                else 0.0,
+                "q0": safe_float(row["q0"]),
+                "q10": safe_float(row["q10"]),
+                "q30": safe_float(row["q30"]),
+                "q50": safe_float(row["q50"]),
+                "q70": safe_float(row["q70"]),
+                "q90": safe_float(row["q90"]),
+                "q100": safe_float(row["q100"]),
+                "mean": safe_float(row["storage_pct_capacity"]),
                 # Exceedance percentiles (percent of capacity)
-                "exc_p5": float(row["exc_p5"]) if row["exc_p5"] else None,
-                "exc_p10": float(row["exc_p10"]) if row["exc_p10"] else None,
-                "exc_p25": float(row["exc_p25"]) if row["exc_p25"] else None,
-                "exc_p50": float(row["exc_p50"]) if row["exc_p50"] else None,
-                "exc_p75": float(row["exc_p75"]) if row["exc_p75"] else None,
-                "exc_p90": float(row["exc_p90"]) if row["exc_p90"] else None,
-                "exc_p95": float(row["exc_p95"]) if row["exc_p95"] else None,
+                "exc_p5": safe_float(row["exc_p5"]),
+                "exc_p10": safe_float(row["exc_p10"]),
+                "exc_p25": safe_float(row["exc_p25"]),
+                "exc_p50": safe_float(row["exc_p50"]),
+                "exc_p75": safe_float(row["exc_p75"]),
+                "exc_p90": safe_float(row["exc_p90"]),
+                "exc_p95": safe_float(row["exc_p95"]),
             }
 
             # Volume in TAF
             result[short_code]["monthly_taf"][wm] = {
-                "q0": float(row["q0_taf"]) if row["q0_taf"] else 0.0,
-                "q10": float(row["q10_taf"]) if row["q10_taf"] else 0.0,
-                "q30": float(row["q30_taf"]) if row["q30_taf"] else 0.0,
-                "q50": float(row["q50_taf"]) if row["q50_taf"] else 0.0,
-                "q70": float(row["q70_taf"]) if row["q70_taf"] else 0.0,
-                "q90": float(row["q90_taf"]) if row["q90_taf"] else 0.0,
-                "q100": float(row["q100_taf"]) if row["q100_taf"] else 0.0,
-                "mean": float(row["storage_avg_taf"])
-                if row["storage_avg_taf"]
-                else 0.0,
+                "q0": safe_float(row["q0_taf"]),
+                "q10": safe_float(row["q10_taf"]),
+                "q30": safe_float(row["q30_taf"]),
+                "q50": safe_float(row["q50_taf"]),
+                "q70": safe_float(row["q70_taf"]),
+                "q90": safe_float(row["q90_taf"]),
+                "q100": safe_float(row["q100_taf"]),
+                "mean": safe_float(row["storage_avg_taf"]),
                 # Exceedance percentiles (TAF)
-                "exc_p5": float(row["exc_p5_taf"]) if row["exc_p5_taf"] else None,
-                "exc_p10": float(row["exc_p10_taf"]) if row["exc_p10_taf"] else None,
-                "exc_p25": float(row["exc_p25_taf"]) if row["exc_p25_taf"] else None,
-                "exc_p50": float(row["exc_p50_taf"]) if row["exc_p50_taf"] else None,
-                "exc_p75": float(row["exc_p75_taf"]) if row["exc_p75_taf"] else None,
-                "exc_p90": float(row["exc_p90_taf"]) if row["exc_p90_taf"] else None,
-                "exc_p95": float(row["exc_p95_taf"]) if row["exc_p95_taf"] else None,
+                "exc_p5": safe_float(row["exc_p5_taf"]),
+                "exc_p10": safe_float(row["exc_p10_taf"]),
+                "exc_p25": safe_float(row["exc_p25_taf"]),
+                "exc_p50": safe_float(row["exc_p50_taf"]),
+                "exc_p75": safe_float(row["exc_p75_taf"]),
+                "exc_p90": safe_float(row["exc_p90_taf"]),
+                "exc_p95": safe_float(row["exc_p95_taf"]),
             }
 
         response = {"scenario_id": scenario_id, "reservoirs": result}
@@ -915,23 +903,15 @@ async def get_spill_monthly(
                 result[short_code] = {"name": row["name"] or short_code, "monthly": {}}
 
             result[short_code]["monthly"][row["water_month"]] = {
-                "spill_months_count": row["spill_months_count"] or 0,
-                "total_months": row["total_months"] or 0,
-                "spill_frequency_pct": float(row["spill_frequency_pct"])
-                if row["spill_frequency_pct"]
-                else 0.0,
-                "spill_avg_cfs": float(row["spill_avg_cfs"])
-                if row["spill_avg_cfs"]
-                else 0.0,
-                "spill_max_cfs": float(row["spill_max_cfs"])
-                if row["spill_max_cfs"]
-                else 0.0,
-                "spill_q50": float(row["spill_q50"]) if row["spill_q50"] else 0.0,
-                "spill_q90": float(row["spill_q90"]) if row["spill_q90"] else 0.0,
-                "spill_q100": float(row["spill_q100"]) if row["spill_q100"] else 0.0,
-                "storage_at_spill_avg_pct": float(row["storage_at_spill_avg_pct"])
-                if row["storage_at_spill_avg_pct"]
-                else None,
+                "spill_months_count": safe_int(row["spill_months_count"]),
+                "total_months": safe_int(row["total_months"]),
+                "spill_frequency_pct": safe_float(row["spill_frequency_pct"]),
+                "spill_avg_cfs": safe_float(row["spill_avg_cfs"]),
+                "spill_max_cfs": safe_float(row["spill_max_cfs"]),
+                "spill_q50": safe_float(row["spill_q50"]),
+                "spill_q90": safe_float(row["spill_q90"]),
+                "spill_q100": safe_float(row["spill_q100"]),
+                "storage_at_spill_avg_pct": safe_float(row["storage_at_spill_avg_pct"]),
             }
 
         response = {"scenario_id": scenario_id, "reservoirs": result}
@@ -1020,72 +1000,32 @@ async def get_period_summary(
             short_code = row["short_code"]
             result[short_code] = {
                 "name": row["name"] or short_code,
-                "capacity_taf": float(row["capacity_taf"])
-                if row["capacity_taf"]
-                else 0.0,
+                "capacity_taf": safe_float(row["capacity_taf"]),
                 "storage_exceedance": {
-                    "p5": float(row["storage_exc_p5"])
-                    if row["storage_exc_p5"]
-                    else 0.0,
-                    "p10": float(row["storage_exc_p10"])
-                    if row["storage_exc_p10"]
-                    else 0.0,
-                    "p25": float(row["storage_exc_p25"])
-                    if row["storage_exc_p25"]
-                    else 0.0,
-                    "p50": float(row["storage_exc_p50"])
-                    if row["storage_exc_p50"]
-                    else 0.0,
-                    "p75": float(row["storage_exc_p75"])
-                    if row["storage_exc_p75"]
-                    else 0.0,
-                    "p90": float(row["storage_exc_p90"])
-                    if row["storage_exc_p90"]
-                    else 0.0,
-                    "p95": float(row["storage_exc_p95"])
-                    if row["storage_exc_p95"]
-                    else 0.0,
+                    "p5": safe_float(row["storage_exc_p5"]),
+                    "p10": safe_float(row["storage_exc_p10"]),
+                    "p25": safe_float(row["storage_exc_p25"]),
+                    "p50": safe_float(row["storage_exc_p50"]),
+                    "p75": safe_float(row["storage_exc_p75"]),
+                    "p90": safe_float(row["storage_exc_p90"]),
+                    "p95": safe_float(row["storage_exc_p95"]),
                 },
                 "thresholds": {
-                    "dead_pool_taf": float(row["dead_pool_taf"])
-                    if row["dead_pool_taf"]
-                    else 0.0,
-                    "dead_pool_pct": float(row["dead_pool_pct"])
-                    if row["dead_pool_pct"]
-                    else 0.0,
-                    "spill_threshold_pct": float(row["spill_threshold_pct"])
-                    if row["spill_threshold_pct"]
-                    else None,
+                    "dead_pool_taf": safe_float(row["dead_pool_taf"]),
+                    "dead_pool_pct": safe_float(row["dead_pool_pct"]),
+                    "spill_threshold_pct": safe_float(row["spill_threshold_pct"]),
                 },
                 "spill": {
-                    "years_count": row["spill_years_count"] or 0,
-                    "frequency_pct": float(row["spill_frequency_pct"])
-                    if row["spill_frequency_pct"]
-                    else 0.0,
-                    "mean_cfs": float(row["spill_mean_cfs"])
-                    if row["spill_mean_cfs"]
-                    else 0.0,
-                    "peak_cfs": float(row["spill_peak_cfs"])
-                    if row["spill_peak_cfs"]
-                    else 0.0,
-                    "annual_avg_taf": float(row["annual_spill_avg_taf"])
-                    if row["annual_spill_avg_taf"]
-                    else 0.0,
-                    "annual_cv": float(row["annual_spill_cv"])
-                    if row["annual_spill_cv"]
-                    else 0.0,
-                    "annual_max_taf": float(row["annual_spill_max_taf"])
-                    if row["annual_spill_max_taf"]
-                    else 0.0,
-                    "annual_max_q50": float(row["annual_max_spill_q50"])
-                    if row["annual_max_spill_q50"]
-                    else 0.0,
-                    "annual_max_q90": float(row["annual_max_spill_q90"])
-                    if row["annual_max_spill_q90"]
-                    else 0.0,
-                    "annual_max_q100": float(row["annual_max_spill_q100"])
-                    if row["annual_max_spill_q100"]
-                    else 0.0,
+                    "years_count": safe_int(row["spill_years_count"]),
+                    "frequency_pct": safe_float(row["spill_frequency_pct"]),
+                    "mean_cfs": safe_float(row["spill_mean_cfs"]),
+                    "peak_cfs": safe_float(row["spill_peak_cfs"]),
+                    "annual_avg_taf": safe_float(row["annual_spill_avg_taf"]),
+                    "annual_cv": safe_float(row["annual_spill_cv"]),
+                    "annual_max_taf": safe_float(row["annual_spill_max_taf"]),
+                    "annual_max_q50": safe_float(row["annual_max_spill_q50"]),
+                    "annual_max_q90": safe_float(row["annual_max_spill_q90"]),
+                    "annual_max_q100": safe_float(row["annual_max_spill_q100"]),
                 },
             }
 
@@ -1136,9 +1076,7 @@ async def list_all_reservoirs(
             {
                 "reservoir_id": row["short_code"],
                 "name": row["name"] or row["short_code"],
-                "capacity_taf": float(row["capacity_taf"])
-                if row["capacity_taf"]
-                else 0.0,
+                "capacity_taf": safe_float(row["capacity_taf"]),
             }
             for row in rows
         ]

@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import Dict, List, Any
 import asyncpg
 
+from routes._common.null_handling import safe_float, safe_int
+
 router = APIRouter(prefix="/api/scenarios", tags=["scenarios"])
 
 # Cache-Control header for catalog endpoints whose contents only change between
@@ -297,25 +299,40 @@ async def compare_scenarios(
 
             # Calculate weighted score
             if row["tier_type"] == "multi_value":
-                n1 = float(row["norm_tier_1"] or 0)
-                n2 = float(row["norm_tier_2"] or 0)
-                n3 = float(row["norm_tier_3"] or 0)
-                n4 = float(row["norm_tier_4"] or 0)
-                total = n1 + n2 + n3 + n4
-                if total > 0:
-                    weighted = (1 * n1 + 2 * n2 + 3 * n3 + 4 * n4) / total
-                    normalized = (4 - weighted) / 3
-                else:
+                n1_raw = safe_float(row["norm_tier_1"])
+                n2_raw = safe_float(row["norm_tier_2"])
+                n3_raw = safe_float(row["norm_tier_3"])
+                n4_raw = safe_float(row["norm_tier_4"])
+
+                if n1_raw is None and n2_raw is None and n3_raw is None and n4_raw is None:
+                    # No tier data at all for this row.
                     weighted = None
                     normalized = None
+                else:
+                    n1 = n1_raw if n1_raw is not None else 0.0
+                    n2 = n2_raw if n2_raw is not None else 0.0
+                    n3 = n3_raw if n3_raw is not None else 0.0
+                    n4 = n4_raw if n4_raw is not None else 0.0
+                    total = n1 + n2 + n3 + n4
+                    if total > 0:
+                        weighted = (1 * n1 + 2 * n2 + 3 * n3 + 4 * n4) / total
+                        normalized = (4 - weighted) / 3
+                    else:
+                        weighted = None
+                        normalized = None
             else:
-                level = row["single_tier_level"] or 0
-                weighted = float(level)
-                normalized = (4 - weighted) / 3 if level else None
+                level = safe_int(row["single_tier_level"])
+                if level is None:
+                    weighted = None
+                    normalized = None
+                else:
+                    weighted = float(level)
+                    normalized = (4 - weighted) / 3
 
+            # Preserve a real zero by rounding only when there is a numeric value.
             comparison[tier_code][scenario] = {
-                "weighted_score": round(weighted, 3) if weighted else None,
-                "normalized_score": round(normalized, 3) if normalized else None,
+                "weighted_score": round(weighted, 3) if weighted is not None else None,
+                "normalized_score": round(normalized, 3) if normalized is not None else None,
             }
 
         return {"scenarios": [scenario_id, other_scenario_id], "comparison": comparison}

@@ -225,21 +225,39 @@ as `--scenarios-override` so the resolved set is visible in any
 pipeline log. Keep `--scenarios-override` as the explicit per-invocation
 escape hatch.
 
-### V5. Canonical reference CSV location
+### V5. Reference-directory clarity
 
-**Current:** three reference CSV homes coexist
-([`etl/reference/`](../etl/reference/),
-[`etl/statistics/reference/`](../etl/statistics/reference/), and the
-S3 path `s3://coeqwal-model-run/reference/`). The verifiers pick from
-different ones depending on which subcommand you use, and the
-`--csv-only` path on `verify_all_sections.py` is not always obvious
-about which CSVs it loaded.
+**Current:** three reference homes coexist with overlapping-but-distinct
+purposes, which makes the verifiers and `--csv-only` invocations
+confusing:
 
-**Goal:** standardize on `etl/statistics/reference/` as the canonical
-local home (already where `s0020_coeqwal_calsim_output.csv` lives),
-have the verifiers log the resolved path at INFO, and document the
-S3 sync command. Remove the duplicate copy in `etl/reference/` once
-nothing reads from it.
+- [`etl/reference/`](../etl/reference/) holds the CalSim scenario CSVs
+  (DV `s0020_coeqwal_calsim_output.csv`, SV `s0020_coeqwal_sv_input.csv`,
+  trend-report CSVs). This is the verifiers' default (`--ref-dir`
+  default in `verify_all_sections.py`).
+- [`etl/statistics/reference/`](../etl/statistics/reference/) holds the
+  `Master crosswalk SW DUs M&I.xlsx` (the CalSim-variable to DU-label
+  map intended for `compare_master_crosswalk.py` [NOT YET IMPLEMENTED];
+  see `docs/TEAM_RUNBOOK.md` thread A5). Different role; not used by
+  the verifiers.
+- `s3://coeqwal-model-run/reference/` is the cloud mirror of
+  `etl/reference/`.
+
+The two local homes do not conflict, but they look like they do (both
+named `reference/`), so the `--csv-only` path on
+`verify_all_sections.py` is not obvious about which directory it loaded
+from.
+
+**Goal:** keep the role split, name it explicitly, and make the
+verifiers log the resolved path at INFO:
+
+- Rename one of the local directories so the role is obvious from the
+  path (for example `etl/reference/` -> `etl/reference_calsim_csvs/`
+  and `etl/statistics/reference/` -> `etl/statistics/crosswalks/`).
+- Have `verify_all_sections.py` and `verify_api.py` log the resolved
+  `--ref-dir` at INFO on startup so the loaded source is unambiguous.
+- Document the S3 sync command and the role split in
+  [`etl/verification/README.md`](../etl/verification/README.md).
 
 ### V6. CI integration for Layer 3 (API vs DB)
 

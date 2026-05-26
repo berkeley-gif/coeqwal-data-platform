@@ -18,8 +18,9 @@ would not actually overlap the queries.
 import asyncio
 import logging
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
+from routes._common.null_handling import safe_float
 from routes.env_flow_endpoints import (
     _fetch_channels_monthly,
     _fetch_channels_seasonal,
@@ -38,20 +39,6 @@ def set_db_pool(pool):
     """Set the database connection pool."""
     global _db_pool
     _db_pool = pool
-
-
-def safe_float(val) -> Optional[float]:
-    """Safely convert value to float, returning None for NULL."""
-    if val is None:
-        return None
-    return float(val)
-
-
-def safe_int(val) -> Optional[int]:
-    """Safely convert value to int, returning None for NULL."""
-    if val is None:
-        return None
-    return int(val)
 
 
 # =============================================================================

@@ -972,7 +972,7 @@ Container strict mode + audit aggregation + API verification. Documented after P
 
 The Batch container runs strict-mode against `ingest_record.json`. No filename heuristics inside the container.
 
-To keep pure drag-and-drop usable, the Lambda is the inference point. When a ZIP lands in `ready/<id>/` with no peer `ingest_record.json`, the Lambda opens the ZIP, picks the obvious DV and SV by basename pattern, computes SHA-256 for the chosen entries and the ZIP, writes `ingest_record.json` to `scenario/<id>/`, then submits the Batch job. The inferred record sets `ingestion.path = "lambda_inferred"` so the audit can flag those scenarios for human review even though they extracted cleanly.
+To keep pure drag-and-drop usable, the Lambda is the inference point. When a ZIP lands in `ready/<id>/` with no peer `ingest_record.json`, the Lambda opens the ZIP, picks the obvious DV and SV by basename pattern, computes SHA-256 for the chosen entries and the ZIP, writes `ingest_record.json` to `scenario/<id>/`, then submits the Batch job. The inferred record sets `ingestion.path = "manual_inferred"` so the audit can flag those scenarios for human review even though they extracted cleanly.
 
 This makes three paths converge on the same strict container contract:
 
@@ -980,7 +980,7 @@ This makes three paths converge on the same strict container contract:
 |---|---|
 | `gdrive_bulk_download.py download` | Written before the ZIP, uploaded in safe order by `promote`. `ingestion.path = "gdrive_bulk_download"`. |
 | `manual_ingest.py upload` | Built by the script, uploaded in safe order. `ingestion.path = "manual_ingest"`. |
-| Console drag-and-drop, no record | Inferred by the Lambda from the ZIP. `ingestion.path = "lambda_inferred"`. |
+| Console drag-and-drop, no record | Inferred by the Lambda from the ZIP. `ingestion.path = "manual_inferred"`. |
 
 Console drag-and-drop with a developer-supplied ingest record is the recommended path when the ZIP has multiple DV-looking or SV-looking entries that inference cannot disambiguate. The developer uploads the ingest record first, the ZIP last. The Lambda sees the record already in place and skips inference.
 

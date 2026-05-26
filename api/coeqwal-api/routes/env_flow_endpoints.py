@@ -40,6 +40,8 @@ from cachetools import TTLCache
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from routes._common.null_handling import safe_float, safe_int
+
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/statistics", tags=["statistics"])
@@ -66,14 +68,6 @@ _CACHE_MAX_AGE_STATS = 900      # 15 min for statistics.safe refresh interval
 def set_db_pool(pool) -> None:
     global _db_pool
     _db_pool = pool
-
-
-def safe_float(val) -> Optional[float]:
-    return None if val is None else float(val)
-
-
-def safe_int(val) -> Optional[int]:
-    return None if val is None else int(val)
 
 
 def _json_response(data: Dict[str, Any], max_age: int) -> JSONResponse:

@@ -212,16 +212,15 @@ has time.
 
 **Files.**
 
-- Comparison script: [`etl/statistics/scripts/compare_master_crosswalk.py`](../etl/statistics/scripts/compare_master_crosswalk.py)
+- Comparison script: `etl/statistics/scripts/compare_master_crosswalk.py` [NOT YET IMPLEMENTED]
 - xlsx: [`etl/statistics/reference/Master crosswalk SW DUs M&I.xlsx`](../etl/statistics/reference/Master%20crosswalk%20SW%20DUs%20M&I.xlsx)
 - Snapshot CSV: `audits/monthly_20260524_143951/layer_exports/04_variable/du_urban_variable.csv`
-- Audit CSV (gitignored, regenerate with `--csv-out`):
+- Audit CSV (gitignored, regenerate with `--csv-out` once the script lands):
   `etl/statistics/audit_reports/master_crosswalk_audit.csv`
 
 **Next steps.**
 
-1. Run `python etl/statistics/scripts/compare_master_crosswalk.py --csv-out`
-   to refresh the audit CSV against the latest audit snapshot.
+1. Implement `etl/statistics/scripts/compare_master_crosswalk.py` (the comparison logic existed in a prior local checkout but was not committed). Then run with `--csv-out` to refresh the audit CSV against the latest audit snapshot.
 2. Decide delivery-variable policy (xlsx wins, DB wins, case-by-case).
    `D_<plant>_<id>` codes may encode the correct CalSim variable for
    that specific DU; check with the M&I team before normalizing to
@@ -352,6 +351,20 @@ added `geom` / `geom_wkt` / `srid` directly to the three
 populates those columns from `database/seed_tables/03_GIS/du_4326.gpkg`.
 This contradicts the project's "geometry in dedicated tables" rule
 but works and is not blocking anything.
+
+**Cleanup note (2026-05).** During the May 2026 SQL archive sweep, all
+other one-shot migrations under `database/scripts/sql/` moved to
+`.archive/`. `56_add_du_geometry_columns.sql` was intentionally left
+in place because (a) the loader and the `audit_tier_location_geometry.py`
+script hardcode its filename, and (b) the planned replacements
+`58_create_du_geometry_tables.sql` and `59_migrate_du_geom_off_entity_tables.sql`
+are not on disk. When this thread is picked up, the geometry SQL files
+should move to `.archive/` together with their references in
+`load_du_geometries.py`, `audit_tier_location_geometry.py`,
+`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`,
+`docs/database_geometry_pattern.md`, `docs/du_geometry_gap.md`,
+`docs/gw_sw_reconciliation.md`, and
+`database/seed_tables/03_GIS/SPATIAL_DATA_PREP_GUIDE.md`.
 
 **Why deferred.** Drafted CREATE-dedicated-tables and migrate-then-drop
 SQL plus a refactored loader, resolver registry, and API endpoint. None

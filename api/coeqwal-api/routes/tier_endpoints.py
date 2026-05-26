@@ -15,9 +15,11 @@ Two tier types:
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Response
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import asyncpg
 from pydantic import BaseModel, Field
+
+from routes._common.null_handling import safe_float, safe_int, safe_str
 
 router = APIRouter(prefix="/api/tiers", tags=["tiers"])
 
@@ -38,7 +40,7 @@ class TierDefinition(BaseModel):
         ..., description="Unique identifier (e.g., 'AG_REV', 'CWS_DEL')"
     )
     name: str = Field(..., description="Display name (e.g., 'Agricultural revenue')")
-    description: str = Field(..., description="Detailed description for tooltips")
+    description: Optional[str] = Field(None, description="Detailed description for tooltips. Null when no description was seeded.")
     tier_type: str = Field(..., description="'multi_value' or 'single_value'")
     tier_count: int = Field(..., description="Number of tier levels (usually 4)")
     is_active: bool = Field(..., description="Whether this tier is currently active")
@@ -73,9 +75,11 @@ def calculate_gini(t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float) -
     Gini coefficient measuring inequality in tier distribution.
     0.0 = all locations at same tier (equitable)
     ~1.0 = maximum polarization (inequitable)
+
+    Inputs are non-null and non-negative. Callers must filter None upstream.
     """
     tiers = [1, 2, 3, 4]
-    pcts = [t1_pct or 0, t2_pct or 0, t3_pct or 0, t4_pct or 0]
+    pcts = [t1_pct, t2_pct, t3_pct, t4_pct]
 
     # Weighted mean tier level
     mean = sum(t * p for t, p in zip(tiers, pcts))
@@ -96,13 +100,13 @@ def get_best_tier_present(
     t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float
 ) -> int:
     """Return the best (lowest numbered) tier with non-zero percentage."""
-    if (t1_pct or 0) > 0:
+    if t1_pct > 0:
         return 1
-    if (t2_pct or 0) > 0:
+    if t2_pct > 0:
         return 2
-    if (t3_pct or 0) > 0:
+    if t3_pct > 0:
         return 3
-    if (t4_pct or 0) > 0:
+    if t4_pct > 0:
         return 4
     return 1  # fallback
 
@@ -111,22 +115,29 @@ def get_worst_tier_present(
     t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float
 ) -> int:
     """Return the worst (highest numbered) tier with non-zero percentage."""
-    if (t4_pct or 0) > 0:
+    if t4_pct > 0:
         return 4
-    if (t3_pct or 0) > 0:
+    if t3_pct > 0:
         return 3
-    if (t2_pct or 0) > 0:
+    if t2_pct > 0:
         return 2
-    if (t1_pct or 0) > 0:
+    if t1_pct > 0:
         return 1
     return 4  # fallback
 
 
 def calculate_tier_scores(
-    norm_1: float, norm_2: float, norm_3: float, norm_4: float
+    norm_1: Optional[float],
+    norm_2: Optional[float],
+    norm_3: Optional[float],
+    norm_4: Optional[float],
 ) -> dict:
     """
     Calculate comprehensive scores for multi-value tiers.
+
+    Inputs may be None when the ETL row is missing or partial. If ALL four
+    inputs are None, every output is None (no data). Otherwise None values
+    are treated as 0 in the arithmetic so partial rows still yield scores.
 
     Returns:
     - weighted_score: 1.0 (best) to 4.0 (worst) - for sorting scenarios
@@ -135,14 +146,23 @@ def calculate_tier_scores(
     - band_upper: 0.0 to 1.0 - top edge of spread band on parallel plot
     - band_lower: 0.0 to 1.0 - bottom edge of spread band on parallel plot
     """
-    n1 = norm_1 or 0.0
-    n2 = norm_2 or 0.0
-    n3 = norm_3 or 0.0
-    n4 = norm_4 or 0.0
+    if norm_1 is None and norm_2 is None and norm_3 is None and norm_4 is None:
+        return {
+            "weighted_score": None,
+            "normalized_score": None,
+            "gini": None,
+            "band_upper": None,
+            "band_lower": None,
+        }
+
+    n1 = norm_1 if norm_1 is not None else 0.0
+    n2 = norm_2 if norm_2 is not None else 0.0
+    n3 = norm_3 if norm_3 is not None else 0.0
+    n4 = norm_4 if norm_4 is not None else 0.0
 
     total_pct = n1 + n2 + n3 + n4
 
-    # Handle missing/zero data
+    # All-zero distribution: tier math is undefined.
     if total_pct == 0:
         return {
             "weighted_score": None,
@@ -211,6 +231,10 @@ async def get_tier_definitions(
         rows = await connection.fetch(query)
 
         response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
+        # Fall back to `name` when no description was seeded, so tooltips still
+        # have human-readable text. This is a domain-specific UX choice, not a
+        # NULL-coercion problem (the alternative would force every consumer to
+        # render an awkward placeholder).
         return {row["short_code"]: row["description"] or row["name"] for row in rows}
 
     except Exception as e:
@@ -250,7 +274,7 @@ async def get_all_tier_definitions(
             TierDefinition(
                 short_code=row["short_code"],
                 name=row["name"],
-                description=row["description"] or "",
+                description=safe_str(row["description"]),
                 tier_type=row["tier_type"],
                 tier_count=row["tier_count"],
                 is_active=row["is_active"],
@@ -342,10 +366,10 @@ async def get_scenario_tier_data(
 
         # Return different format based on tier_type
         if row["tier_type"] == "multi_value":
-            norm_1 = float(row["norm_tier_1"]) if row["norm_tier_1"] else 0.0
-            norm_2 = float(row["norm_tier_2"]) if row["norm_tier_2"] else 0.0
-            norm_3 = float(row["norm_tier_3"]) if row["norm_tier_3"] else 0.0
-            norm_4 = float(row["norm_tier_4"]) if row["norm_tier_4"] else 0.0
+            norm_1 = safe_float(row["norm_tier_1"])
+            norm_2 = safe_float(row["norm_tier_2"])
+            norm_3 = safe_float(row["norm_tier_3"])
+            norm_4 = safe_float(row["norm_tier_4"])
 
             scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
 
@@ -362,32 +386,36 @@ async def get_scenario_tier_data(
                 "data": [
                     {
                         "tier": "tier1",
-                        "value": row["tier_1_value"],
+                        "value": safe_int(row["tier_1_value"]),
                         "normalized": norm_1,
                     },
                     {
                         "tier": "tier2",
-                        "value": row["tier_2_value"],
+                        "value": safe_int(row["tier_2_value"]),
                         "normalized": norm_2,
                     },
                     {
                         "tier": "tier3",
-                        "value": row["tier_3_value"],
+                        "value": safe_int(row["tier_3_value"]),
                         "normalized": norm_3,
                     },
                     {
                         "tier": "tier4",
-                        "value": row["tier_4_value"],
+                        "value": safe_int(row["tier_4_value"]),
                         "normalized": norm_4,
                     },
                 ],
-                "total_value": row["total_value"],
+                "total_value": safe_int(row["total_value"]),
             }
         else:
             # Single value tier - gini=0, band_upper=band_lower=normalized_score
-            level = row["single_tier_level"] or 0
-            weighted = float(level) if level else 0.0
-            normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
+            level = safe_int(row["single_tier_level"])
+            if level is None:
+                weighted = None
+                normalized = None
+            else:
+                weighted = float(level)
+                normalized = round((4.0 - weighted) / 3.0, 3)
             return {
                 "scenario": row["scenario_short_code"],
                 "tier_code": row["tier_short_code"],
@@ -395,7 +423,7 @@ async def get_scenario_tier_data(
                 "tier_type": "single_value",
                 "weighted_score": weighted,
                 "normalized_score": normalized,
-                "gini": 0.0,
+                "gini": 0.0 if level is not None else None,
                 "band_upper": normalized,
                 "band_lower": normalized,
                 "single_tier_level": level,
@@ -469,10 +497,10 @@ async def get_all_scenario_tiers(
             tier_code = row["tier_short_code"]
 
             if row["tier_type"] == "multi_value":
-                norm_1 = float(row["norm_tier_1"]) if row["norm_tier_1"] else 0.0
-                norm_2 = float(row["norm_tier_2"]) if row["norm_tier_2"] else 0.0
-                norm_3 = float(row["norm_tier_3"]) if row["norm_tier_3"] else 0.0
-                norm_4 = float(row["norm_tier_4"]) if row["norm_tier_4"] else 0.0
+                norm_1 = safe_float(row["norm_tier_1"])
+                norm_2 = safe_float(row["norm_tier_2"])
+                norm_3 = safe_float(row["norm_tier_3"])
+                norm_4 = safe_float(row["norm_tier_4"])
 
                 scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
 
@@ -487,37 +515,41 @@ async def get_all_scenario_tiers(
                     "data": [
                         {
                             "tier": "tier1",
-                            "value": row["tier_1_value"],
+                            "value": safe_int(row["tier_1_value"]),
                             "normalized": norm_1,
                         },
                         {
                             "tier": "tier2",
-                            "value": row["tier_2_value"],
+                            "value": safe_int(row["tier_2_value"]),
                             "normalized": norm_2,
                         },
                         {
                             "tier": "tier3",
-                            "value": row["tier_3_value"],
+                            "value": safe_int(row["tier_3_value"]),
                             "normalized": norm_3,
                         },
                         {
                             "tier": "tier4",
-                            "value": row["tier_4_value"],
+                            "value": safe_int(row["tier_4_value"]),
                             "normalized": norm_4,
                         },
                     ],
-                    "total": row["total_value"],
+                    "total": safe_int(row["total_value"]),
                 }
             else:
-                level = row["single_tier_level"] or 0
-                weighted = float(level) if level else 0.0
-                normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
+                level = safe_int(row["single_tier_level"])
+                if level is None:
+                    weighted = None
+                    normalized = None
+                else:
+                    weighted = float(level)
+                    normalized = round((4.0 - weighted) / 3.0, 3)
                 tiers[tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
                     "weighted_score": weighted,
                     "normalized_score": normalized,
-                    "gini": 0.0,
+                    "gini": 0.0 if level is not None else None,
                     "band_upper": normalized,
                     "band_lower": normalized,
                     "level": level,
@@ -600,10 +632,10 @@ async def get_batch_scenario_tiers(
                 result[scenario_id] = {}
 
             if row["tier_type"] == "multi_value":
-                norm_1 = float(row["norm_tier_1"]) if row["norm_tier_1"] else 0.0
-                norm_2 = float(row["norm_tier_2"]) if row["norm_tier_2"] else 0.0
-                norm_3 = float(row["norm_tier_3"]) if row["norm_tier_3"] else 0.0
-                norm_4 = float(row["norm_tier_4"]) if row["norm_tier_4"] else 0.0
+                norm_1 = safe_float(row["norm_tier_1"])
+                norm_2 = safe_float(row["norm_tier_2"])
+                norm_3 = safe_float(row["norm_tier_3"])
+                norm_4 = safe_float(row["norm_tier_4"])
 
                 scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
 
@@ -616,23 +648,27 @@ async def get_batch_scenario_tiers(
                     "band_upper": scores["band_upper"],
                     "band_lower": scores["band_lower"],
                     "data": [
-                        {"tier": "tier1", "value": row["tier_1_value"], "normalized": norm_1},
-                        {"tier": "tier2", "value": row["tier_2_value"], "normalized": norm_2},
-                        {"tier": "tier3", "value": row["tier_3_value"], "normalized": norm_3},
-                        {"tier": "tier4", "value": row["tier_4_value"], "normalized": norm_4},
+                        {"tier": "tier1", "value": safe_int(row["tier_1_value"]), "normalized": norm_1},
+                        {"tier": "tier2", "value": safe_int(row["tier_2_value"]), "normalized": norm_2},
+                        {"tier": "tier3", "value": safe_int(row["tier_3_value"]), "normalized": norm_3},
+                        {"tier": "tier4", "value": safe_int(row["tier_4_value"]), "normalized": norm_4},
                     ],
-                    "total": row["total_value"],
+                    "total": safe_int(row["total_value"]),
                 }
             else:
-                level = row["single_tier_level"] or 0
-                weighted = float(level) if level else 0.0
-                normalized = round((4.0 - weighted) / 3.0, 3) if level else 0.0
+                level = safe_int(row["single_tier_level"])
+                if level is None:
+                    weighted = None
+                    normalized = None
+                else:
+                    weighted = float(level)
+                    normalized = round((4.0 - weighted) / 3.0, 3)
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
                     "weighted_score": weighted,
                     "normalized_score": normalized,
-                    "gini": 0.0,
+                    "gini": 0.0 if level is not None else None,
                     "band_upper": normalized,
                     "band_lower": normalized,
                     "level": level,

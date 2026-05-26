@@ -39,7 +39,7 @@ PIPELINE_RUNS_DIR = REPO_ROOT / "etl" / "ingestion" / "audit_reports" / "pipelin
 STATS_AUDIT_DIR = REPO_ROOT / "etl" / "statistics" / "audit_reports"
 VERIFICATION_DIR = REPO_ROOT / "audits" / "verification_reports"
 
-TIER_LOADER_PATH = REPO_ROOT / "etl" / "tier_data" / "load_all_tier_results.py"
+TIER_LOADER_PATH = REPO_ROOT / "etl" / "tier_data" / "scripts" / "load_all_tier_results.py"
 
 # ANSI color helpers. Disabled when stdout is not a tty.
 _USE_COLOR = sys.stdout.isatty()
