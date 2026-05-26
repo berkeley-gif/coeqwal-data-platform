@@ -17,6 +17,7 @@ Provides statistics for agricultural demand units including:
 - Monthly GROUNDWATER PUMPING statistics (from GP_* or calculated as AW - DN)
 - Monthly GW RESTRICTION shortage statistics (from GW_SHORT_* - SJR/Tulare only)
 - Period-of-record summary
+- AG aggregate statistics (SWP PAG and CVP PAG totals + N/S splits)
 - Aggregate statistics (SWP PAG, CVP PAG, etc.)
 
 Water months: 1=October, 2=November, ..., 12=September
@@ -590,6 +591,173 @@ async def get_ag_du_gw_pumping_monthly(
 
 
 # =============================================================================
+# DU SHORTAGE MONTHLY (from GW_SHORT_* - GW restriction shortage, SJR/Tulare only)
+# =============================================================================
+
+
+@router.get(
+    "/scenarios/{scenario_id}/ag-demand-units/shortage-monthly",
+    summary="Get monthly GW RESTRICTION SHORTAGE statistics for AG demand units",
+)
+async def get_ag_du_shortage_monthly(
+    scenario_id: str,
+    du_id: Optional[str] = Query(
+        None, description="Comma-separated DU IDs to filter (e.g., '64_PA1,72_XA1')"
+    ),
+    region: Optional[str] = Query(
+        None, description="Filter by hydrologic region (SAC, SJR, TULARE)"
+    ),
+    cs3_type: Optional[str] = Query(
+        None, description="Filter by CS3 type (PA, SA, XA, etc.)"
+    ),
+):
+    """
+    Get monthly GROUNDWATER RESTRICTION SHORTAGE statistics for agricultural demand units.
+
+    **IMPORTANT:** This is COEQWAL-specific *groundwater restriction* shortage,
+    not the CalSim built-in shortage concept. CalSim assumes agricultural demand
+    is fully met (AW = DN + GP). GW restriction shortage represents the demand
+    that would have gone unmet if SGMA-style pumping limits had been enforced.
+    Source: GW_SHORT_* variables.
+
+    **Data coverage:**
+    - Available for SJR (San Joaquin) and TULARE region DUs only.
+    - Sacramento region DUs do not have GW restriction shortage data and will
+      not appear in the response.
+
+    For demand, use `/demand-monthly`. For surface water delivery, use
+    `/sw-delivery-monthly`. For groundwater pumping, use `/gw-pumping-monthly`.
+
+    **Use case:** Render percentile band charts showing GW restriction shortage
+    distribution across water years for each month.
+
+    **Examples:**
+    - `GET /api/statistics/scenarios/s0025/ag-demand-units/shortage-monthly` (all SJR/Tulare DUs)
+    - `GET /api/statistics/scenarios/s0025/ag-demand-units/shortage-monthly?du_id=64_PA1` (single)
+    - `GET /api/statistics/scenarios/s0025/ag-demand-units/shortage-monthly?region=SJR` (by region)
+
+    **Response:**
+    ```json
+    {
+      "scenario_id": "s0025",
+      "demand_units": {
+        "64_PA1": {
+          "agency": "Westlands WD",
+          "hydrologic_region": "SJR",
+          "cs3_type": "PA",
+          "monthly_shortage": {
+            "1": {
+              "avg_taf": 12.5,
+              "cv": 0.85,
+              "shortage_frequency_pct": 35.0,
+              "shortage_pct_of_demand_avg": 8.4,
+              "q0": 0.0, "q10": 0.0, "q30": 0.0,
+              "q50": 5.2, "q70": 18.6, "q90": 42.1, "q100": 75.0,
+              "exc_p5": 65.0, "exc_p10": 55.0, "exc_p25": 30.0,
+              "exc_p50": 5.2, "exc_p75": 0.0, "exc_p90": 0.0, "exc_p95": 0.0,
+              "sample_count": 100
+            },
+            ...
+          }
+        }
+      }
+    }
+    ```
+
+    **Water months:** 1=October, 2=November, ..., 12=September
+    """
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with _db_pool.acquire() as conn:
+        query = """
+            SELECT
+                m.du_id,
+                e.agency,
+                e.hydrologic_region,
+                e.cs3_type,
+                e.provider,
+                m.water_month,
+                m.shortage_avg_taf,
+                m.shortage_cv,
+                m.shortage_frequency_pct,
+                m.shortage_pct_of_demand_avg,
+                m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                m.sample_count
+            FROM ag_du_shortage_monthly m
+            LEFT JOIN du_agriculture_entity e ON m.du_id = e.du_id
+            WHERE m.scenario_short_code = $1
+        """
+        params = [scenario_id]
+
+        if du_id:
+            ids = [d.strip() for d in du_id.split(",")]
+            query += f" AND m.du_id = ANY(${len(params) + 1})"
+            params.append(ids)
+
+        if region:
+            query += f" AND e.hydrologic_region = ${len(params) + 1}"
+            params.append(region.upper())
+
+        if cs3_type is not None:
+            if cs3_type == "":
+                query += " AND (e.cs3_type IS NULL OR e.cs3_type = '')"
+            else:
+                query += f" AND e.cs3_type = ${len(params) + 1}"
+                params.append(cs3_type.upper())
+
+        query += " ORDER BY m.du_id, m.water_month"
+
+        rows = await conn.fetch(query, *params)
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No GW restriction shortage data found for scenario {scenario_id}. "
+                f"Note: only SJR and TULARE region DUs have GW restriction shortage."
+            ),
+        )
+
+    demand_units = {}
+    for row in rows:
+        du = row["du_id"]
+        if du not in demand_units:
+            demand_units[du] = {
+                "agency": row["agency"],
+                "hydrologic_region": row["hydrologic_region"],
+                "cs3_type": row["cs3_type"],
+                "provider": row["provider"],
+                "monthly_shortage": {},
+            }
+
+        demand_units[du]["monthly_shortage"][str(row["water_month"])] = {
+            "avg_taf": safe_float(row["shortage_avg_taf"]),
+            "cv": safe_float(row["shortage_cv"]),
+            "shortage_frequency_pct": safe_float(row["shortage_frequency_pct"]),
+            "shortage_pct_of_demand_avg": safe_float(row["shortage_pct_of_demand_avg"]),
+            "q0": safe_float(row["q0"]),
+            "q10": safe_float(row["q10"]),
+            "q30": safe_float(row["q30"]),
+            "q50": safe_float(row["q50"]),
+            "q70": safe_float(row["q70"]),
+            "q90": safe_float(row["q90"]),
+            "q100": safe_float(row["q100"]),
+            "exc_p5": safe_float(row["exc_p5"]),
+            "exc_p10": safe_float(row["exc_p10"]),
+            "exc_p25": safe_float(row["exc_p25"]),
+            "exc_p50": safe_float(row["exc_p50"]),
+            "exc_p75": safe_float(row["exc_p75"]),
+            "exc_p90": safe_float(row["exc_p90"]),
+            "exc_p95": safe_float(row["exc_p95"]),
+            "sample_count": safe_int(row["sample_count"]),
+        }
+
+    return {"scenario_id": scenario_id, "demand_units": demand_units}
+
+
+# =============================================================================
 # DU PERIOD SUMMARY
 # =============================================================================
 
@@ -756,3 +924,233 @@ async def get_ag_du_period_summary(
         }
 
     return {"scenario_id": scenario_id, "demand_units": demand_units}
+
+
+# =============================================================================
+# AG AGGREGATES (SWP/CVP project totals + N/S splits)
+# =============================================================================
+
+
+@router.get(
+    "/ag-aggregates",
+    summary="List agricultural aggregates",
+    description="Returns available agricultural aggregate entities (SWP/CVP project aggregates).",
+)
+async def list_ag_aggregates():
+    """
+    List all agricultural aggregate entities.
+
+    **Response:**
+    ```json
+    {
+      "aggregates": [
+        {"short_code": "swp_pag", "label": "SWP Project AG", "project": "SWP", "region": "TOTAL"},
+        {"short_code": "swp_pag_n", "label": "SWP Project AG North", "project": "SWP", "region": "NOD"},
+        ...
+      ]
+    }
+    ```
+    """
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with _db_pool.acquire() as conn:
+        query = """
+            SELECT short_code, label, project, region, delivery_variable, description
+            FROM ag_aggregate_entity
+            WHERE is_active = TRUE
+            ORDER BY display_order
+        """
+        rows = await conn.fetch(query)
+
+    return {
+        "aggregates": [
+            {
+                "short_code": row["short_code"],
+                "label": row["label"],
+                "project": row["project"],
+                "region": row["region"],
+                "delivery_variable": row["delivery_variable"],
+                "description": row["description"],
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.get(
+    "/scenarios/{scenario_id}/ag-aggregates/monthly",
+    summary="Get monthly delivery statistics for AG aggregates",
+)
+async def get_ag_aggregate_monthly(
+    scenario_id: str,
+    aggregate: Optional[str] = Query(
+        None,
+        description="Comma-separated aggregate codes (e.g., 'swp_pag,cvp_pag_n'). Defaults to all.",
+    ),
+):
+    """
+    Get monthly delivery statistics for agricultural aggregates.
+
+    **Use case:** Display SWP/CVP project-level agricultural delivery statistics.
+
+    **Available aggregates:**
+    - `swp_pag` - SWP Project AG Total
+    - `swp_pag_n` - SWP Project AG North of Delta
+    - `swp_pag_s` - SWP Project AG South of Delta
+    - `cvp_pag_n` - CVP Project AG North of Delta
+    - `cvp_pag_s` - CVP Project AG South of Delta
+
+    **Examples:**
+    - `GET /api/statistics/scenarios/s0020/ag-aggregates/monthly` (all)
+    - `GET /api/statistics/scenarios/s0020/ag-aggregates/monthly?aggregate=swp_pag`
+    """
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with _db_pool.acquire() as conn:
+        query = """
+            SELECT
+                m.aggregate_code,
+                e.label,
+                e.project,
+                e.region,
+                m.water_month,
+                m.delivery_avg_taf,
+                m.delivery_cv,
+                m.q0, m.q10, m.q30, m.q50, m.q70, m.q90, m.q100,
+                m.exc_p5, m.exc_p10, m.exc_p25, m.exc_p50, m.exc_p75, m.exc_p90, m.exc_p95,
+                m.sample_count
+            FROM ag_aggregate_monthly m
+            LEFT JOIN ag_aggregate_entity e ON m.aggregate_code = e.short_code
+            WHERE m.scenario_short_code = $1
+        """
+        params: list = [scenario_id]
+
+        if aggregate:
+            codes = [a.strip() for a in aggregate.split(",")]
+            query += f" AND m.aggregate_code = ANY(${len(params) + 1})"
+            params.append(codes)
+
+        query += " ORDER BY e.display_order, m.water_month"
+
+        rows = await conn.fetch(query, *params)
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No aggregate data found for scenario {scenario_id}",
+        )
+
+    aggregates: dict = {}
+    for row in rows:
+        code = row["aggregate_code"]
+        if code not in aggregates:
+            aggregates[code] = {
+                "label": row["label"],
+                "project": row["project"],
+                "region": row["region"],
+                "monthly_delivery": {},
+            }
+
+        aggregates[code]["monthly_delivery"][str(row["water_month"])] = {
+            "avg_taf": safe_float(row["delivery_avg_taf"]),
+            "cv": safe_float(row["delivery_cv"]),
+            "q0": safe_float(row["q0"]),
+            "q10": safe_float(row["q10"]),
+            "q30": safe_float(row["q30"]),
+            "q50": safe_float(row["q50"]),
+            "q70": safe_float(row["q70"]),
+            "q90": safe_float(row["q90"]),
+            "q100": safe_float(row["q100"]),
+            "exc_p5": safe_float(row["exc_p5"]),
+            "exc_p10": safe_float(row["exc_p10"]),
+            "exc_p25": safe_float(row["exc_p25"]),
+            "exc_p50": safe_float(row["exc_p50"]),
+            "exc_p75": safe_float(row["exc_p75"]),
+            "exc_p90": safe_float(row["exc_p90"]),
+            "exc_p95": safe_float(row["exc_p95"]),
+            "sample_count": safe_int(row["sample_count"]),
+        }
+
+    return {"scenario_id": scenario_id, "aggregates": aggregates}
+
+
+@router.get(
+    "/scenarios/{scenario_id}/ag-aggregates/period-summary",
+    summary="Get period summary for AG aggregates",
+)
+async def get_ag_aggregate_period_summary(
+    scenario_id: str,
+    aggregate: Optional[str] = Query(
+        None, description="Comma-separated aggregate codes. Defaults to all."
+    ),
+):
+    """
+    Get period-of-record summary for agricultural aggregates.
+
+    **Use case:** Dashboard display of annual delivery statistics for SWP/CVP
+    project-level agricultural deliveries (totals + N/S splits).
+    """
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    async with _db_pool.acquire() as conn:
+        query = """
+            SELECT
+                p.aggregate_code,
+                e.label,
+                e.project,
+                e.region,
+                p.simulation_start_year,
+                p.simulation_end_year,
+                p.total_years,
+                p.annual_delivery_avg_taf,
+                p.annual_delivery_cv,
+                p.delivery_exc_p5, p.delivery_exc_p10, p.delivery_exc_p25,
+                p.delivery_exc_p50, p.delivery_exc_p75, p.delivery_exc_p90, p.delivery_exc_p95
+            FROM ag_aggregate_period_summary p
+            LEFT JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
+            WHERE p.scenario_short_code = $1
+        """
+        params: list = [scenario_id]
+
+        if aggregate:
+            codes = [a.strip() for a in aggregate.split(",")]
+            query += f" AND p.aggregate_code = ANY(${len(params) + 1})"
+            params.append(codes)
+
+        query += " ORDER BY e.display_order"
+
+        rows = await conn.fetch(query, *params)
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No aggregate period summary found for scenario {scenario_id}",
+        )
+
+    aggregates: dict = {}
+    for row in rows:
+        code = row["aggregate_code"]
+        aggregates[code] = {
+            "label": row["label"],
+            "project": row["project"],
+            "region": row["region"],
+            "simulation_start_year": safe_int(row["simulation_start_year"]),
+            "simulation_end_year": safe_int(row["simulation_end_year"]),
+            "total_years": safe_int(row["total_years"]),
+            "annual_delivery_avg_taf": safe_float(row["annual_delivery_avg_taf"]),
+            "annual_delivery_cv": safe_float(row["annual_delivery_cv"]),
+            "delivery_exceedance": {
+                "p5": safe_float(row["delivery_exc_p5"]),
+                "p10": safe_float(row["delivery_exc_p10"]),
+                "p25": safe_float(row["delivery_exc_p25"]),
+                "p50": safe_float(row["delivery_exc_p50"]),
+                "p75": safe_float(row["delivery_exc_p75"]),
+                "p90": safe_float(row["delivery_exc_p90"]),
+                "p95": safe_float(row["delivery_exc_p95"]),
+            },
+        }
+
+    return {"scenario_id": scenario_id, "aggregates": aggregates}

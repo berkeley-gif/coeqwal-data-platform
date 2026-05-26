@@ -53,21 +53,19 @@ staging IDs not in entity tables" below) - adding it to
 
 Question: do these gaps reach end users on the map and in panels?
 
-Two ways tier results render in the website:
+Tier results render in the website via the Mapbox tileset path
+(`outcomeLayerRegistry.ts` -> `usePolygonTooltip`). Polygons come from
+the Mapbox vector tile `demand-units` keyed by `DU_ID`. Tier levels
+come from the API `/api/tiers/scenarios/{scenario}/locations` endpoint
+and are joined client-side by `DU_ID`. CWS_DEL, AG_REV, GW_STOR,
+RES_STOR, DELTA_ECO all render this way (the registry marks each
+`geometryType: "polygon"` with `requiresIdMatching: true` for the
+per-feature outcomes).
 
-1. **Mapbox tileset path** (`outcomeLayerRegistry.ts` -> `usePolygonTooltip`).
-   Polygons come from the Mapbox vector tile `demand-units` keyed by
-   `DU_ID`. Tier levels come from the API `/api/tier-map/{scenario}/locations`
-   endpoint and are joined client-side by `DU_ID`. CWS_DEL, AG_REV,
-   GW_STOR, RES_STOR, DELTA_ECO all render this way (the registry
-   marks each `geometryType: "polygon"` with `requiresIdMatching: true`
-   for the per-feature outcomes).
-2. **Server-side GeoJSON path** (`tier_map_endpoints.py`
-   `/{scenario}/{tier}`). FastAPI joins `tier_location_result` to the
-   `du_*_entity.geom` and emits a GeoJSON FeatureCollection. CWS_DEL
-   and AG_REV are documented to use the `/locations` endpoint instead.
-   This path is wired and works, but the live frontend does not call
-   it for demand-unit tiers today.
+The API does not serve GeoJSON for these tiers (or any tier). Geometry
+is only consumed by the Mapbox tile-build pipeline at ETL time; the
+gaps below therefore manifest as missing tile features at render time,
+not as missing API rows.
 
 What that means for each gap category:
 
@@ -288,5 +286,5 @@ shrink to zero over time as new polygons are added to
 
 - Schema: [`database/scripts/sql/.archive/56_add_du_geometry_columns.sql`](../database/scripts/sql/.archive/56_add_du_geometry_columns.sql) adds `geom_wkt TEXT`, `srid INTEGER`, `geom geometry(MultiPolygon, 4326)`, and `idx_<table>_geom USING GIST` to each of the three `du_*_entity` tables.
 - Loader: [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py) reads [`database/seed_tables/03_GIS/du_4326.gpkg`](../database/seed_tables/03_GIS/du_4326.gpkg), strips the GeoPackage GPB header from each `geom` blob, and writes the resulting WKB to whichever entity tables contain the `du_id` via `ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_GeomFromWKB(wkb, 4326)), 3))`. The `ST_MakeValid` wrap repairs ring self-intersections and other OGC validity violations that the upstream dissolve leaves in place; `ST_CollectionExtract(..., 3)` keeps only polygon parts; `ST_Multi` guarantees a `MultiPolygon` matches the column type. `geom_wkt` is materialized server-side from the same expression.
-- Registry: [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py) routes the lookup with `TIER_GEOMETRY_OVERRIDES` (mirroring the existing `TIER_ATTRIBUTE_OVERRIDES` pattern): `AG_REV` -> `du_agriculture_entity`, everything else -> `du_urban_entity`.
-- API: [`api/coeqwal-api/routes/tier_map_endpoints.py`](../api/coeqwal-api/routes/tier_map_endpoints.py) mirrors the registry in raw SQL when assembling GeoJSON FeatureCollections. There is no fallback to `network_gis` for missing DUs; they are dropped from the response and surface here.
+- Registry: [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py) routes the lookup with `TIER_GEOMETRY_OVERRIDES` (mirroring the existing `TIER_ATTRIBUTE_OVERRIDES` pattern): `AG_REV` -> `du_agriculture_entity`, everything else -> `du_urban_entity`. The registry feeds the Mapbox tile-build pipeline; the API consumes the attribute side of the same registry but not the geometry side.
+- API: [`api/coeqwal-api/routes/tier_endpoints.py`](../api/coeqwal-api/routes/tier_endpoints.py) at `/api/tiers/scenarios/{scenario_id}/locations` returns the per-location tier assignments without geometry. Missing DUs in the tile (per the gap counts above) surface as map features that exist in the API payload but cannot be highlighted; the website skips them.

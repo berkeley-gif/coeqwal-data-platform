@@ -358,8 +358,11 @@ from scratch, re-apply the migration from its archive location.
 **When this thread is picked up**, the deferred work is to replace the
 on-entity columns with dedicated geometry tables. Draft new
 `58_create_du_geometry_tables.sql` and `59_migrate_du_geom_off_entity_tables.sql`
-files (neither is on disk today), then update the loader, resolver
-registry, and `tier_map_endpoints.py` accordingly.
+files (neither is on disk today), then update the loader and resolver
+registry accordingly. The API itself no longer serves DU geometry (see
+`database/README.md` "API conventions, geometry"), so this thread is
+purely an ETL refactor. The Mapbox tile build is the only consumer of
+the new geometry tables.
 
 **Why deferred.** Drafted CREATE-dedicated-tables and migrate-then-drop
 SQL plus a refactored loader, resolver registry, and API endpoint. None
@@ -377,14 +380,14 @@ under "Future refactor". Roughly:
    DDL style).
 3. Refactor `load_du_geometries.py` to write the dedicated tables.
 4. Update `etl/common/tier_location_entities.py` `GeometryResolver`
-   for `demand_unit` to point at the new tables.
-5. Update `api/coeqwal-api/routes/tier_map_endpoints.py` to query the
-   new tables for `demand_unit` GeoJSON.
-6. Data migration: copy any existing rows from
-   `du_*_entity.geom` into the new tables.
-7. Drop `geom`, `geom_wkt`, `srid`, and the GiST index from the three
+   for `demand_unit` to point at the new tables. The resolver feeds
+   the Mapbox tile-build pipeline; the API does not consume it for
+   geometry.
+5. Data migration: copy any existing rows from `du_*_entity.geom`
+   into the new tables.
+6. Drop `geom`, `geom_wkt`, `srid`, and the GiST index from the three
    `du_*_entity` tables.
-8. **CWS rollout follow-on:** when `cws_entity` lands, put PWS
+7. **CWS rollout follow-on:** when `cws_entity` lands, put PWS
    **points** in a dedicated geometry table, not on `cws_entity`
    attribute rows. Same rule as DU.
 

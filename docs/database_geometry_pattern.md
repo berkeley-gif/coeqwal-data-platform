@@ -82,12 +82,12 @@ If a future developer picks this up, the rough shape is:
    to write the dedicated geometry tables, not entity rows.
 4. **Refactor** [`tier_location_entities.py`](../etl/common/tier_location_entities.py)
    `GeometryResolver.table` for `demand_unit` from `du_urban_entity` /
-   `du_agriculture_entity` to the new geometry tables.
-5. **Refactor** [`tier_map_endpoints.py`](../api/coeqwal-api/routes/tier_map_endpoints.py)
-   to query the new tables for the demand-unit GeoJSON path.
-6. **Drop** `geom`, `geom_wkt`, `srid` from the three `du_*_entity`
+   `du_agriculture_entity` to the new geometry tables. The resolver
+   feeds the Mapbox tile-build pipeline; the API does not consume
+   geometry from it (see geometry policy in `database/README.md`).
+5. **Drop** `geom`, `geom_wkt`, `srid` from the three `du_*_entity`
    tables once the dedicated tables exist and are loaded (reverse 56).
-7. **CWS delivery:** when `cws_entity` lands, put PWS **points in a
+6. **CWS delivery:** when `cws_entity` lands, put PWS **points in a
    dedicated geometry table** (not on `cws_entity` attribute rows).
    Same rule as DU.
 

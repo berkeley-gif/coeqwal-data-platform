@@ -70,62 +70,6 @@ async def get_db():
         yield connection
 
 
-def calculate_gini(t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float) -> float:
-    """
-    Gini coefficient measuring inequality in tier distribution.
-    0.0 = all locations at same tier (equitable)
-    ~1.0 = maximum polarization (inequitable)
-
-    Inputs are non-null and non-negative. Callers must filter None upstream.
-    """
-    tiers = [1, 2, 3, 4]
-    pcts = [t1_pct, t2_pct, t3_pct, t4_pct]
-
-    # Weighted mean tier level
-    mean = sum(t * p for t, p in zip(tiers, pcts))
-    if mean == 0:
-        return 0.0
-
-    # Mean absolute difference between all pairs
-    total_diff = 0.0
-    for i, (t_i, p_i) in enumerate(zip(tiers, pcts)):
-        for j, (t_j, p_j) in enumerate(zip(tiers, pcts)):
-            total_diff += abs(t_i - t_j) * p_i * p_j
-
-    gini = total_diff / (2 * mean)
-    return round(gini, 3)
-
-
-def get_best_tier_present(
-    t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float
-) -> int:
-    """Return the best (lowest numbered) tier with non-zero percentage."""
-    if t1_pct > 0:
-        return 1
-    if t2_pct > 0:
-        return 2
-    if t3_pct > 0:
-        return 3
-    if t4_pct > 0:
-        return 4
-    return 1  # fallback
-
-
-def get_worst_tier_present(
-    t1_pct: float, t2_pct: float, t3_pct: float, t4_pct: float
-) -> int:
-    """Return the worst (highest numbered) tier with non-zero percentage."""
-    if t4_pct > 0:
-        return 4
-    if t3_pct > 0:
-        return 3
-    if t2_pct > 0:
-        return 2
-    if t1_pct > 0:
-        return 1
-    return 4  # fallback
-
-
 def calculate_tier_scores(
     norm_1: Optional[float],
     norm_2: Optional[float],
@@ -133,27 +77,20 @@ def calculate_tier_scores(
     norm_4: Optional[float],
 ) -> dict:
     """
-    Calculate comprehensive scores for multi-value tiers.
+    Calculate the two scores used by the Scenario Explorer for multi-value
+    tier rows.
 
     Inputs may be None when the ETL row is missing or partial. If ALL four
-    inputs are None, every output is None (no data). Otherwise None values
+    inputs are None, both outputs are None (no data). Otherwise None values
     are treated as 0 in the arithmetic so partial rows still yield scores.
 
     Returns:
-    - weighted_score: 1.0 (best) to 4.0 (worst) - for sorting scenarios
-    - normalized_score: 0.0 to 1.0 - Y-axis for parallel plot (higher = better)
-    - gini: 0.0 to ~1.0 - equity indicator (lower = more equitable)
-    - band_upper: 0.0 to 1.0 - top edge of spread band on parallel plot
-    - band_lower: 0.0 to 1.0 - bottom edge of spread band on parallel plot
+    - weighted_score: 1.0 (best) to 4.0 (worst), drives sort comparators
+    - normalized_score: 0.0 to 1.0 (higher = better), Y-axis for the
+      parallel plot
     """
     if norm_1 is None and norm_2 is None and norm_3 is None and norm_4 is None:
-        return {
-            "weighted_score": None,
-            "normalized_score": None,
-            "gini": None,
-            "band_upper": None,
-            "band_lower": None,
-        }
+        return {"weighted_score": None, "normalized_score": None}
 
     n1 = norm_1 if norm_1 is not None else 0.0
     n2 = norm_2 if norm_2 is not None else 0.0
@@ -162,42 +99,19 @@ def calculate_tier_scores(
 
     total_pct = n1 + n2 + n3 + n4
 
-    # All-zero distribution: tier math is undefined.
+    # All-zero distribution: tier math is undefined
     if total_pct == 0:
-        return {
-            "weighted_score": None,
-            "normalized_score": None,
-            "gini": None,
-            "band_upper": None,
-            "band_lower": None,
-        }
+        return {"weighted_score": None, "normalized_score": None}
 
-    # 1. Weighted score (1-4 scale, lower = better)
     weighted_sum = (1 * n1) + (2 * n2) + (3 * n3) + (4 * n4)
     weighted_score = round(weighted_sum / total_pct, 3)
 
-    # 2. Normalized score (0-1 scale, higher = better)
-    # When weighted_score = 1.0 → normalized = 1.0 (best)
-    # When weighted_score = 4.0 → normalized = 0.0 (worst)
+    # Map weighted_score 1.0 to normalized 1.0 (best), 4.0 to 0.0 (worst)
     normalized_score = round((4.0 - weighted_score) / 3.0, 3)
-
-    # 3. Gini coefficient (0 = equitable, ~1 = polarized)
-    gini = calculate_gini(n1, n2, n3, n4)
-
-    # 4. Band upper (best tier present, normalized to 0-1)
-    best_tier = get_best_tier_present(n1, n2, n3, n4)
-    band_upper = round((4.0 - best_tier) / 3.0, 3)
-
-    # 5. Band lower (worst tier present, normalized to 0-1)
-    worst_tier = get_worst_tier_present(n1, n2, n3, n4)
-    band_lower = round((4.0 - worst_tier) / 3.0, 3)
 
     return {
         "weighted_score": weighted_score,
         "normalized_score": normalized_score,
-        "gini": gini,
-        "band_upper": band_upper,
-        "band_lower": band_lower,
     }
 
 
@@ -360,30 +274,14 @@ async def get_all_scenario_tiers(
                     "type": "multi_value",
                     "weighted_score": scores["weighted_score"],
                     "normalized_score": scores["normalized_score"],
-                    "gini": scores["gini"],
-                    "band_upper": scores["band_upper"],
-                    "band_lower": scores["band_lower"],
+                    # Fixed-length 4-element array, index i corresponds to
+                    # tier level i+1. Clients derive the tier label from the
+                    # index so we don't ship "tier1".."tier4" on every row
                     "data": [
-                        {
-                            "tier": "tier1",
-                            "value": safe_int(row["tier_1_value"]),
-                            "normalized": norm_1,
-                        },
-                        {
-                            "tier": "tier2",
-                            "value": safe_int(row["tier_2_value"]),
-                            "normalized": norm_2,
-                        },
-                        {
-                            "tier": "tier3",
-                            "value": safe_int(row["tier_3_value"]),
-                            "normalized": norm_3,
-                        },
-                        {
-                            "tier": "tier4",
-                            "value": safe_int(row["tier_4_value"]),
-                            "normalized": norm_4,
-                        },
+                        {"value": safe_int(row["tier_1_value"]), "normalized": norm_1},
+                        {"value": safe_int(row["tier_2_value"]), "normalized": norm_2},
+                        {"value": safe_int(row["tier_3_value"]), "normalized": norm_3},
+                        {"value": safe_int(row["tier_4_value"]), "normalized": norm_4},
                     ],
                     "total": safe_int(row["total_value"]),
                 }
@@ -400,9 +298,6 @@ async def get_all_scenario_tiers(
                     "type": "single_value",
                     "weighted_score": weighted,
                     "normalized_score": normalized,
-                    "gini": 0.0 if level is not None else None,
-                    "band_upper": normalized,
-                    "band_lower": normalized,
                     "level": level,
                 }
 
@@ -495,14 +390,13 @@ async def get_batch_scenario_tiers(
                     "type": "multi_value",
                     "weighted_score": scores["weighted_score"],
                     "normalized_score": scores["normalized_score"],
-                    "gini": scores["gini"],
-                    "band_upper": scores["band_upper"],
-                    "band_lower": scores["band_lower"],
+                    # Fixed-length 4-element array, index i corresponds to
+                    # tier level i+1 (see per-scenario handler for context)
                     "data": [
-                        {"tier": "tier1", "value": safe_int(row["tier_1_value"]), "normalized": norm_1},
-                        {"tier": "tier2", "value": safe_int(row["tier_2_value"]), "normalized": norm_2},
-                        {"tier": "tier3", "value": safe_int(row["tier_3_value"]), "normalized": norm_3},
-                        {"tier": "tier4", "value": safe_int(row["tier_4_value"]), "normalized": norm_4},
+                        {"value": safe_int(row["tier_1_value"]), "normalized": norm_1},
+                        {"value": safe_int(row["tier_2_value"]), "normalized": norm_2},
+                        {"value": safe_int(row["tier_3_value"]), "normalized": norm_3},
+                        {"value": safe_int(row["tier_4_value"]), "normalized": norm_4},
                     ],
                     "total": safe_int(row["total_value"]),
                 }
@@ -519,9 +413,6 @@ async def get_batch_scenario_tiers(
                     "type": "single_value",
                     "weighted_score": weighted,
                     "normalized_score": normalized,
-                    "gini": 0.0 if level is not None else None,
-                    "band_upper": normalized,
-                    "band_lower": normalized,
                     "level": level,
                 }
 
@@ -540,61 +431,195 @@ async def get_batch_scenario_tiers(
 
 
 # =============================================================================
-# DISCOVERY ENDPOINTS (For Scientists/Researchers)
+# PER-LOCATION TIER ASSIGNMENTS
 # =============================================================================
+#
+# Returns the per-location tier scores that map visualizations and tables
+# consume. No geometry. Polygon and point geometry comes from Mapbox vector
+# tiles on the client side, joined to these payloads by `location_id` (or
+# `du_id` / `wba_id` / `station_code` / network short_code, depending on the
+# entity). Location types in the payload: reservoir, wba, region,
+# compliance_station, network_node, demand_unit.
+#
+# See the geometry policy in `coeqwal-backend/database/README.md`
+# ("API conventions, geometry") and the corresponding tile workflow in
+# `coeqwal-website/packages/map/README.md` ("Adding new tile data via Mapbox
+# Tiling Service").
 
 
-@router.get("/scenarios", summary="List available scenarios")
-async def get_available_scenarios(
-    response: Response,
+@router.get(
+    "/scenarios/{scenario_short_code}/locations",
+    summary="Get per-location tier assignments for one or more outcomes (no geometry)",
+)
+async def get_scenario_tier_locations(
+    scenario_short_code: str,
+    codes: str = Query(
+        ...,
+        description=(
+            "Comma-separated list of tier short codes, e.g. "
+            "`CWS_DEL,AG_REV,ENV_FLOWS`. Must be non-empty."
+        ),
+    ),
     connection: asyncpg.Connection = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Discover which scenarios have tier data available.
+    Per-location tier assignments for one or more outcomes in a single
+    request. One SQL query replaces N parallel calls when a panel needs
+    several outcomes at once (e.g. an equity heatmap showing all nine
+    outcomes for one scenario).
 
-    **Use case:** Researchers can see what data exists before querying.
+    **Use case:** Batched per-location data for multi-outcome panels and the
+    map (which joins these `location_id`s to Mapbox tile features).
 
-    **Example:** `GET /api/tiers/scenarios`
+    **Example:** `GET /api/tiers/scenarios/s0020/locations?codes=CWS_DEL,AG_REV,ENV_FLOWS`
 
     **Response:**
     ```json
     {
-      "scenarios": [
-        {
-          "scenario_id": "s0020",
-          "tiers": ["AG_REV", "CWS_DEL", "DELTA_ECO", ...],
-          "tier_count": 9
-        },
-        ...
-      ],
-      "total": 8
+      "scenario": "s0020",
+      "results": {
+        "CWS_DEL":  { "scenario": "s0020", "tier_code": "CWS_DEL",  "tier_name": ..., "tier_type": ..., "locations": [...], "metadata": {...} },
+        "AG_REV":   { "scenario": "s0020", "tier_code": "AG_REV",   ... },
+        "ENV_FLOWS": { ... }
+      },
+      "missing": []
     }
     ```
+
+    `missing` lists codes the client requested that have no active rows for
+    this scenario (a normal case, for example `WRC_SALMON_AB` on `s0065`).
+
+    Filters `tier_result.is_active = TRUE`, so retired scenarios and retired
+    tier versions are never surfaced.
     """
+    # Parse and lightly validate the codes list. Deduplicate while
+    # preserving request order, upper-case for tolerance, reject empty /
+    # malformed lists.
+    seen = set()
+    requested: List[str] = []
+    for raw in codes.split(","):
+        code = raw.strip().upper()
+        if not code:
+            continue
+        if not code.replace("_", "").isalnum():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid tier short code: '{raw}'",
+            )
+        if code in seen:
+            continue
+        seen.add(code)
+        requested.append(code)
+
+    if not requested:
+        raise HTTPException(
+            status_code=400,
+            detail="Query parameter 'codes' must list at least one tier short code.",
+        )
+
     try:
+        # Existence / active check so unknown and retired scenarios 404
+        # explicitly instead of returning a misleading 200 with every
+        # requested code dumped into `missing`. Cheap indexed lookup; zero
+        # cost on valid scenarios. The message is distinct between the two
+        # cases so operators can tell "typo" from "scenario was retired".
+        scenario_row = await connection.fetchrow(
+            "SELECT is_active FROM scenario WHERE short_code = $1",
+            scenario_short_code,
+        )
+        if scenario_row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown scenario '{scenario_short_code}'.",
+            )
+        if not scenario_row["is_active"]:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Scenario '{scenario_short_code}' is not active.",
+            )
+
         query = """
-        SELECT 
-            tr.scenario_short_code,
-            array_agg(DISTINCT tr.tier_short_code ORDER BY tr.tier_short_code) as tiers,
-            COUNT(DISTINCT tr.tier_short_code) as tier_count
-        FROM tier_result tr
-        WHERE tr.is_active = TRUE
-        GROUP BY tr.scenario_short_code
-        ORDER BY tr.scenario_short_code
+        SELECT
+            tlr.tier_short_code,
+            tlr.location_type,
+            tlr.location_id,
+            tlr.location_name,
+            tlr.tier_level,
+            tlr.tier_value,
+            tlr.display_order,
+            td.name AS tier_name,
+            td.tier_type
+        FROM tier_location_result tlr
+        JOIN tier_definition td ON tlr.tier_short_code = td.short_code
+        JOIN tier_result tr
+          ON tr.scenario_short_code = tlr.scenario_short_code
+         AND tr.tier_short_code = tlr.tier_short_code
+         AND tr.tier_version_id = tlr.tier_version_id
+         AND tr.is_active = TRUE
+        WHERE tlr.scenario_short_code = $1
+          AND tlr.tier_short_code = ANY($2::text[])
+        ORDER BY tlr.tier_short_code, tlr.display_order, tlr.location_name
         """
-        rows = await connection.fetch(query)
 
-        scenarios = [
-            {
-                "scenario_id": row["scenario_short_code"],
-                "tiers": list(row["tiers"]),
-                "tier_count": row["tier_count"],
+        rows = await connection.fetch(query, scenario_short_code, requested)
+
+        # Bucket rows by tier_short_code. Keys are only created for codes
+        # that actually returned rows; codes with no active data land in
+        # `missing`.
+        buckets: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            code = row["tier_short_code"]
+            bucket = buckets.get(code)
+            if bucket is None:
+                bucket = {
+                    "scenario": scenario_short_code,
+                    "tier_code": code,
+                    "tier_name": row["tier_name"],
+                    "tier_type": row["tier_type"],
+                    "locations": [],
+                    "_location_types": set(),
+                    "_tier_counts": {1: 0, 2: 0, 3: 0, 4: 0},
+                }
+                buckets[code] = bucket
+
+            bucket["locations"].append(
+                {
+                    "location_id": row["location_id"],
+                    "location_name": row["location_name"],
+                    "location_type": row["location_type"],
+                    "tier_level": row["tier_level"],
+                    "tier_value": row["tier_value"],
+                    "display_order": row["display_order"],
+                }
+            )
+            bucket["_location_types"].add(row["location_type"])
+            if row["tier_level"] in bucket["_tier_counts"]:
+                bucket["_tier_counts"][row["tier_level"]] += 1
+
+        results: Dict[str, Any] = {}
+        for code, bucket in buckets.items():
+            results[code] = {
+                "scenario": bucket["scenario"],
+                "tier_code": bucket["tier_code"],
+                "tier_name": bucket["tier_name"],
+                "tier_type": bucket["tier_type"],
+                "locations": bucket["locations"],
+                "metadata": {
+                    "total_locations": len(bucket["locations"]),
+                    "location_types": sorted(bucket["_location_types"]),
+                    "tier_counts": bucket["_tier_counts"],
+                },
             }
-            for row in rows
-        ]
 
-        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
-        return {"scenarios": scenarios, "total": len(scenarios)}
+        missing = [code for code in requested if code not in results]
 
+        return {
+            "scenario": scenario_short_code,
+            "results": results,
+            "missing": missing,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

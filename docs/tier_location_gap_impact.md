@@ -20,33 +20,26 @@ Related: [`docs/du_geometry_gap.md`](du_geometry_gap.md),
 
 ## API behavior
 
-### `/api/tier-map/{scenario}/{tier}/locations` (CWS_DEL, AG_REV)
+### `/api/tiers/scenarios/{scenario}/locations?codes={tier}` (CWS_DEL, AG_REV)
 
-Used by the frontend map for urban and agricultural demand units.
+Used by the frontend map for urban and agricultural demand units, and
+by panels.
 
-Source: [`api/coeqwal-api/routes/tier_map_endpoints.py`](../api/coeqwal-api/routes/tier_map_endpoints.py)
+Source: [`api/coeqwal-api/routes/tier_endpoints.py`](../api/coeqwal-api/routes/tier_endpoints.py)
 
-Returns every row from `tier_location_result` for the scenario and tier.
-Does **not** check entity tables or geometry. Tier level and value are
-always present when tier data loaded successfully.
+Returns every active row from `tier_location_result` for the scenario
+and the requested tier codes. Does **not** check entity tables or
+geometry. Tier level and value are always present when tier data
+loaded successfully.
 
 **User impact for all three gap types:** tier scores (heatmap colors,
-tier level counts) include the location. The API response does not signal
-that geometry or entity metadata is missing.
+tier level counts) include the location. The API response does not
+signal that geometry or entity metadata is missing.
 
-### `/api/tier-map/{scenario}/{tier}` (GeoJSON, server-rendered polygons)
-
-For `demand_unit` locations, geometry comes from `du_urban_entity.geom`
-(CWS_DEL) or `du_agriculture_entity.geom` (AG_REV). Rows with
-`geom IS NULL` are **silently omitted** from the FeatureCollection.
-
-Docstring (verified): "There is no fallback for demand_units without a
-polygon. They are dropped from the FeatureCollection."
-
-**User impact:**
-- Missing polygon: tier score exists in `/locations` but no polygon in
-  GeoJSON. Not used by the main CWS_DEL map path today.
-- Missing attribute row: same, because the geometry query finds no row.
+The API does not serve GeoJSON. Map polygons come from the Mapbox
+`demand-units` vector tile keyed by `DU_ID`; rows with
+`du_*_entity.geom IS NULL` simply have no matching tile feature and
+render uncolored. See "Frontend behavior" below.
 
 ### Tier load-time warnings
 
@@ -61,7 +54,7 @@ user-facing.
 
 Source: coeqwal-website `apps/main/app/features/map/README.md` (How locations are resolved).
 
-1. Frontend calls `/api/tier-map/{scenario}/{tier}/locations`.
+1. Frontend calls `/api/tiers/scenarios/{scenario}/locations?codes={tier}`.
 2. Builds `tierColorMap` keyed by `location_id`.
 3. `OutcomePolygonLayer` matches those ids against the Mapbox
    `demand-units` vector tileset via `idProperty: "DU_ID"`.

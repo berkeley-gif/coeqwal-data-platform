@@ -12,13 +12,10 @@ Used by:
     DU polygon writer; routes by `du_id` presence in each entity table,
     matching this registry)
   - `etl/tier_data/scripts/verify_tiers.py` (catalog gating)
-  - `api/coeqwal-api/routes/tier_map_endpoints.py` mirrors the same map
-    in SQL when assembling GeoJSON FeatureCollections
-
-A `location_type` may resolve to one attribute table for names but a
-different table for geometry (e.g. `reservoir` names come from
-`reservoir_entity`, polygons from `reservoir`). Use the `attribute` and
-`geometry` blocks to drive each lookup independently.
+  - `api/coeqwal-api/routes/tier_endpoints.py`
+    (`/api/tiers/scenarios/{scenario_id}/locations`) mirrors the same
+    attribute lookups in SQL when assembling per-location tier
+    assignments. Geometry never leaves the DB through the API.
 """
 
 from __future__ import annotations

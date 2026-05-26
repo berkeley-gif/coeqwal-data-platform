@@ -37,81 +37,59 @@ async def get_all_scenarios(
     connection: asyncpg.Connection = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """
-    Get list of all scenarios with metadata.
+    Get the active scenario list with the minimal field set the frontend uses.
 
-    Returns scenario definitions including:
-    - `short_code`: Friendly identifier (e.g., 's0020')
-    - `run_name`: Technical run name (e.g., 's0020_DCRadjBL_2020LU_wTUCP')
-    - `name`: Display name
-    - `short_description`: Brief description
+    Each row carries six fields:
+    - `short_code`: Friendly identifier (e.g. `s0020`)
+    - `name`: Display name from sibling-group prose
+    - `short_description`: Brief description, 1-2 sentences
     - `hydroclimate_id`: Numeric hydroclimate id (internal)
-    - `hydroclimate_short_code`: Hydroclimate short code, e.g. `historical`, `cc50`,
-      `cc95`. Frontends should prefer this over the numeric id when resolving
-      sibling groups to concrete scenario runs for a given hydroclimate.
-    - `is_active`: Whether scenario is active
+    - `sibling_group`: Sibling-group short code (same strategy under
+      different hydroclimates share this value)
+    - `is_active`: Whether the scenario is active
 
-    **Use case:** Build scenario selection UI, show scenario cards, resolve
-    sibling-group IDs to actual scenario codes for the active hydroclimate
-    without needing a hardcoded string-to-id map on the client.
+    Fields the API no longer returns (intentionally): `run_name`,
+    `long_description`, `hydroclimate_short_code`, `hydroclimate_name`,
+    `baseline_scenario`, plus the per-scenario `themes`, `key_assumptions`,
+    and `key_operations` arrays. The frontend currently sources themes from
+    a local `scenarioMetadata` map keyed by `sibling_group` and operation
+    icons from a hardcoded `opsIcons.tsx`. The database README roadmap
+    tracks the cutover that would move that content into the DB and bring
+    these payload fields back.
+
+    **Use case:** Single fetch for the scenario explorer to render cards.
+    `GET /api/scenarios/{short_code}` returns the same shape for a single
+    scenario.
     """
     try:
-        # Join hydroclimate to expose short_code so clients can resolve sibling
-        # groups to the active hydroclimate without a hardcoded numeric map.
-        query = """
+        # Active-only first, then all rows as a fallback so the UI never
+        # sees an empty list during seed gaps
+        base_query = """
         SELECT
             s.short_code,
-            s.run_name,
             s.hydroclimate_id,
-            h.short_code AS hydroclimate_short_code,
             s.hydroclimate_sibling,
             s.is_active,
             sg.name,
-            sg.short_description,
-            sg.long_description,
-            sg.baseline_group
+            sg.short_description
         FROM scenario s
         LEFT JOIN scenario_hydroclimate_sibling sg
             ON s.hydroclimate_sibling = sg.short_code
-        LEFT JOIN hydroclimate h
-            ON s.hydroclimate_id = h.id
-        WHERE s.is_active = TRUE
+        {where}
         ORDER BY s.short_code
         """
 
-        rows = await connection.fetch(query)
-
+        rows = await connection.fetch(base_query.format(where="WHERE s.is_active = TRUE"))
         if not rows:
-            query_all = """
-            SELECT
-                s.short_code,
-                s.run_name,
-                s.hydroclimate_id,
-                h.short_code AS hydroclimate_short_code,
-                s.hydroclimate_sibling,
-                s.is_active,
-                sg.name,
-                sg.short_description,
-                sg.long_description,
-                sg.baseline_group
-            FROM scenario s
-            LEFT JOIN scenario_hydroclimate_sibling sg
-                ON s.hydroclimate_sibling = sg.short_code
-            LEFT JOIN hydroclimate h
-                ON s.hydroclimate_id = h.id
-            ORDER BY s.short_code
-            """
-            rows = await connection.fetch(query_all)
+            rows = await connection.fetch(base_query.format(where=""))
 
         response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return [
             {
                 "short_code": row["short_code"],
-                "run_name": row["run_name"],
                 "name": row["name"] or row["short_code"],
                 "short_description": row["short_description"],
                 "hydroclimate_id": row["hydroclimate_id"],
-                "hydroclimate_short_code": row["hydroclimate_short_code"],
-                "baseline_scenario": row["baseline_group"],
                 "sibling_group": row["hydroclimate_sibling"],
                 "is_active": bool(row["is_active"])
                 if row["is_active"] is not None
@@ -126,116 +104,59 @@ async def get_all_scenarios(
 
 @router.get("/{scenario_id}", summary="Get scenario details")
 async def get_scenario(
-    scenario_id: str, connection: asyncpg.Connection = Depends(get_db)
+    scenario_id: str,
+    response: Response,
+    connection: asyncpg.Connection = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Get detailed metadata for a specific scenario.
+    Get metadata for a specific scenario, in the same six-field shape as
+    each entry returned by `GET /api/scenarios`.
 
     **Example:** `GET /api/scenarios/s0020`
 
-    Returns full scenario metadata including themes and key assumptions.
+    `scenario_id` is the friendly `short_code` (e.g. `s0020`). The full
+    `run_name` is not accepted here. Use `GET /api/scenarios` to map
+    `run_name` to `short_code` if needed.
+
+    Returns: `short_code`, `name`, `short_description`, `hydroclimate_id`,
+    `sibling_group`, `is_active`.
     """
     try:
-        scenario_query = """
+        query = """
         SELECT
-            s.id,
             s.short_code,
-            s.run_name,
             s.hydroclimate_id,
             s.hydroclimate_sibling,
             s.is_active,
             sg.name,
-            sg.short_description,
-            sg.long_description,
-            sg.baseline_group
+            sg.short_description
         FROM scenario s
         LEFT JOIN scenario_hydroclimate_sibling sg
             ON s.hydroclimate_sibling = sg.short_code
-        WHERE s.short_code = $1 OR s.run_name = $1
+        WHERE s.short_code = $1
         """
 
-        scenario = await connection.fetchrow(scenario_query, scenario_id)
+        row = await connection.fetchrow(query, scenario_id)
 
-        if not scenario:
+        if not row:
             raise HTTPException(
                 status_code=404, detail=f"Scenario {scenario_id} not found"
             )
 
-        hydroclimate = None
-        hydroclimate_name = None
-        if scenario["hydroclimate_id"]:
-            hc = await connection.fetchrow(
-                "SELECT short_code, name FROM hydroclimate WHERE id = $1",
-                scenario["hydroclimate_id"],
-            )
-            if hc:
-                hydroclimate = hc["short_code"]
-                hydroclimate_name = hc["name"]
-
-        theme_query = """
-        SELECT t.short_code, t.name, t.short_title
-        FROM theme t
-        JOIN theme_scenario_link tsl ON t.id = tsl.theme_id
-        WHERE tsl.scenario_id = $1
-        """
-        themes = await connection.fetch(theme_query, scenario["id"])
-
-        assumption_query = """
-        SELECT ad.short_code, ad.name, ad.description
-        FROM assumption_definition ad
-        JOIN scenario_key_assumption_link skal ON ad.id = skal.assumption_id
-        WHERE skal.scenario_id = $1
-        """
-        assumptions = await connection.fetch(assumption_query, scenario["id"])
-
-        operation_query = """
-        SELECT od.short_code, od.name, od.description
-        FROM operation_definition od
-        JOIN scenario_key_operation_link skol ON od.id = skol.operation_id
-        WHERE skol.scenario_id = $1
-        """
-        operations = await connection.fetch(operation_query, scenario["id"])
-
+        response.headers["Cache-Control"] = STATIC_CATALOG_CACHE_CONTROL
         return {
-            "short_code": scenario["short_code"],
-            "run_name": scenario["run_name"],
-            "name": scenario["name"] or scenario["short_code"],
-            "short_description": scenario["short_description"],
-            "long_description": scenario["long_description"],
-            "hydroclimate": hydroclimate,
-            "hydroclimate_name": hydroclimate_name,
-            "baseline_scenario": scenario["baseline_group"],
-            "sibling_group": scenario["hydroclimate_sibling"],
-            "is_active": bool(scenario["is_active"]),
-            "themes": [
-                {
-                    "short_code": t["short_code"],
-                    "name": t["name"],
-                    "short_title": t["short_title"],
-                }
-                for t in themes
-            ],
-            "key_assumptions": [
-                {
-                    "short_code": a["short_code"],
-                    "name": a["name"],
-                    "description": a["description"],
-                }
-                for a in assumptions
-            ],
-            "key_operations": [
-                {
-                    "short_code": o["short_code"],
-                    "name": o["name"],
-                    "description": o["description"],
-                }
-                for o in operations
-            ],
+            "short_code": row["short_code"],
+            "name": row["name"] or row["short_code"],
+            "short_description": row["short_description"],
+            "hydroclimate_id": row["hydroclimate_id"],
+            "sibling_group": row["hydroclimate_sibling"],
+            "is_active": bool(row["is_active"])
+            if row["is_active"] is not None
+            else True,
         }
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
 

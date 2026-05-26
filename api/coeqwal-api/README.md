@@ -190,8 +190,8 @@ curl http://localhost:8000/api/health
 
 # Sample queries
 curl "http://localhost:8000/api/nodes?limit=5"
-curl "http://localhost:8000/api/tier-map/s0020/RES_STOR"
 curl "http://localhost:8000/api/tiers/scenarios/s0020/tiers"
+curl "http://localhost:8000/api/tiers/scenarios/s0020/locations?codes=RES_STOR,CWS_DEL"
 
 # Reservoir statistics with filtering
 curl "http://localhost:8000/api/statistics/scenarios/s0020/reservoir-percentiles?group=major"
