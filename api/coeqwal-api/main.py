@@ -5,7 +5,9 @@ FastAPI backend for the Collaboratory for Equity in Water Allocation (COEQWAL) p
 This API provides:
 - Tier data for scenario outcome visualization (charts and maps)
 - CalSim3 network node/arc data with spatial queries
-- Scenario file downloads from S3
+- Per-scenario water system statistics (reservoir, CWS, AG, env-flow, refuge, delta)
+
+Scenario file downloads are served by a separate AWS Lambda gateway, not this API.
 
 Documentation: https://api.coeqwal.org/docs
 """
@@ -42,14 +44,9 @@ from routes.scenario_endpoints import (
     router as scenario_router,
     set_db_pool as set_scenario_db_pool,
 )
-from routes.download_endpoints import router as download_router
 from routes.reservoir_statistics_endpoints import (
     router as reservoir_stats_router,
     set_db_pool as set_reservoir_stats_db_pool,
-)
-from routes.cws_aggregate_endpoints import (
-    router as cws_aggregate_router,
-    set_db_pool as set_cws_aggregate_db_pool,
 )
 from routes.mi_contractor_endpoints import (
     router as mi_contractor_router,
@@ -79,7 +76,6 @@ from routes.delta_endpoints import (
     router as delta_router,
     set_db_pool as set_delta_db_pool,
 )
-from routes.verification_endpoints import router as verification_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -127,16 +123,8 @@ TAGS_METADATA = [
         "description": "**CalSim3 water network data.** Nodes (reservoirs, demand units) and arcs (rivers, canals) with spatial queries.",
     },
     {
-        "name": "downloads",
-        "description": "**Scenario file downloads.** Lists available files and generates presigned S3 URLs.",
-    },
-    {
         "name": "statistics",
         "description": "**Water system statistics.** Reservoir storage and M&I delivery/shortage percentile data for band charts.",
-    },
-    {
-        "name": "verification",
-        "description": "**Data verification.** Reports on data accuracy across the ETL pipeline.",
     },
     {
         "name": "system",
@@ -174,8 +162,6 @@ async def lifespan(app: FastAPI):
     # Set the database pool for reservoir statistics router
     set_reservoir_stats_db_pool(db_pool)
 
-    # Set the database pool for CWS aggregate router
-    set_cws_aggregate_db_pool(db_pool)
     set_mi_contractor_db_pool(db_pool)
     set_demand_unit_db_pool(db_pool)
     set_ag_db_pool(db_pool)
@@ -214,14 +200,8 @@ app.include_router(tier_router)
 # Include tier map endpoints
 app.include_router(tier_map_router)
 
-# Include download endpoints (replaces problematic Lambda service)
-app.include_router(download_router)
-
 # Include reservoir statistics endpoints
 app.include_router(reservoir_stats_router)
-
-# Include CWS aggregate statistics endpoints
-app.include_router(cws_aggregate_router)
 
 # M&I contractor statistics router
 app.include_router(mi_contractor_router)
@@ -243,9 +223,6 @@ app.include_router(env_flow_router)
 
 # Delta statistics router (X2, salinity, outflow)
 app.include_router(delta_router)
-
-# Verification status (data quality reports)
-app.include_router(verification_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -427,7 +404,6 @@ async def api_root(
                 "description": "Water management scenario definitions",
                 "list": "GET /api/scenarios",
                 "detail": "GET /api/scenarios/{scenario_id}",
-                "compare": "GET /api/scenarios/{id}/compare/{other_id}",
             },
             "tiers": {
                 "description": "Outcome tier data for charts",
@@ -435,7 +411,6 @@ async def api_root(
                 "definitions": "GET /api/tiers/definitions",
                 "scenarios": "GET /api/tiers/scenarios",
                 "scenario_data": "GET /api/tiers/scenarios/{scenario_id}/tiers",
-                "scenario_tier_data": "GET /api/tiers/scenarios/{scenario_id}/tiers/{tier_code}",
                 "batch": "GET /api/tiers/batch?scenarios={id1},{id2},...",
             },
             "tier_map": {
@@ -454,17 +429,12 @@ async def api_root(
                 "spatial_query": "GET /api/nodes/spatial?bbox={minLng,minLat,maxLng,maxLat}",
                 "search": "GET /api/search?q={query}",
             },
-            "downloads": {
-                "description": "Model output file downloads",
-                "list": "GET /api/scenario",
-                "download": "GET /api/download?scenario={id}&type={zip|output|sv}",
-            },
             "statistics": {
-                "description": "Reservoir storage percentile statistics",
+                "description": "Per-scenario statistics for band charts and dashboards",
                 "reservoir_percentiles": "GET /api/statistics/scenarios/{scenario_id}/reservoirs/{reservoir_id}/percentiles",
                 "all_reservoirs": "GET /api/statistics/scenarios/{scenario_id}/reservoir-percentiles",
-                "list_reservoirs": "GET /api/statistics/reservoirs",
-                "list_scenarios": "GET /api/statistics/scenarios",
+                "spill_monthly": "GET /api/statistics/scenarios/{scenario_id}/spill-monthly",
+                "batch": "GET /api/statistics/batch?scenarios={s1},{s2}&types=storage,cws,ag,env_flow",
             },
         },
         "data_summary": {

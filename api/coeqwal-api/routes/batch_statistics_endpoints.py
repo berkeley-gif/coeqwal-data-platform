@@ -23,7 +23,6 @@ from typing import Dict, Any, List
 from routes._common.null_handling import safe_float
 from routes.env_flow_endpoints import (
     _fetch_channels_monthly,
-    _fetch_channels_seasonal,
     _fetch_channels_period_summary,
 )
 
@@ -302,7 +301,6 @@ async def get_batch_statistics(
       "env_flow": {
         "s0020": {
           "monthly": { "data": [...], "count": 708 },
-          "seasonal": { "data": [...], "count": 295 },
           "period":   { "data": [...], "count": 59 }
         }
       }
@@ -350,8 +348,6 @@ async def get_batch_statistics(
         if "env_flow" in type_list:
             tasks.append(_fetch_channels_monthly(_db_pool, scenario_id, None))
             task_keys.append(("env_flow", scenario_id, "monthly"))
-            tasks.append(_fetch_channels_seasonal(_db_pool, scenario_id, None))
-            task_keys.append(("env_flow", scenario_id, "seasonal"))
             tasks.append(_fetch_channels_period_summary(_db_pool, scenario_id, None))
             task_keys.append(("env_flow", scenario_id, "period"))
 

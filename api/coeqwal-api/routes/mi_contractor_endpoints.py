@@ -29,54 +29,6 @@ def set_db_pool(pool):
 
 
 # =============================================================================
-# LIST CONTRACTORS
-# =============================================================================
-
-
-@router.get(
-    "/mi-contractors",
-    summary="List M&I contractors",
-    description="Returns available M&I contractor entities.",
-)
-async def list_mi_contractors():
-    """List all M&I contractors."""
-    if _db_pool is None:
-        raise HTTPException(status_code=503, detail="Database not available")
-
-    async with _db_pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT
-                short_code,
-                contractor_name,
-                project,
-                region,
-                contractor_type,
-                contract_amount_taf
-            FROM mi_contractor
-            WHERE is_active = TRUE
-            ORDER BY short_code
-            """
-        )
-
-    return {
-        "contractors": [
-            {
-                "short_code": row["short_code"],
-                "name": row["contractor_name"],
-                "project": row["project"],
-                "region": row["region"],
-                "contractor_type": row["contractor_type"],
-                "contract_amount_taf": float(row["contract_amount_taf"])
-                if row["contract_amount_taf"]
-                else None,
-            }
-            for row in rows
-        ]
-    }
-
-
-# =============================================================================
 # MONTHLY DELIVERY STATISTICS
 # =============================================================================
 
