@@ -172,8 +172,18 @@ async def fetch_cws_aggregates_period(pool, scenario_id: str) -> Dict[str, Any]:
         SELECT
             e.short_code, e.label,
             p.annual_delivery_avg_taf,
+            p.annual_delivery_cv,
+            p.delivery_exc_p5, p.delivery_exc_p10, p.delivery_exc_p25,
+            p.delivery_exc_p50, p.delivery_exc_p75, p.delivery_exc_p90,
+            p.delivery_exc_p95,
+            p.annual_shortage_avg_taf,
+            p.shortage_frequency_pct,
+            p.shortage_exc_p5, p.shortage_exc_p10, p.shortage_exc_p25,
+            p.shortage_exc_p50, p.shortage_exc_p75, p.shortage_exc_p90,
+            p.shortage_exc_p95,
+            p.annual_demand_avg_taf,
             p.reliability_pct,
-            p.shortage_frequency_pct
+            p.avg_pct_demand_met
         FROM cws_aggregate_period_summary p
         JOIN cws_aggregate_entity e ON p.cws_aggregate_id = e.id
         WHERE p.scenario_short_code = $1 AND e.is_active = TRUE
@@ -186,8 +196,30 @@ async def fetch_cws_aggregates_period(pool, scenario_id: str) -> Dict[str, Any]:
         aggregates[row["short_code"]] = {
             "label": row["label"],
             "annual_delivery_avg_taf": safe_float(row["annual_delivery_avg_taf"]),
-            "reliability_pct": safe_float(row["reliability_pct"]),
+            "annual_delivery_cv": safe_float(row["annual_delivery_cv"]),
+            "delivery_exceedance": {
+                "p5": safe_float(row["delivery_exc_p5"]),
+                "p10": safe_float(row["delivery_exc_p10"]),
+                "p25": safe_float(row["delivery_exc_p25"]),
+                "p50": safe_float(row["delivery_exc_p50"]),
+                "p75": safe_float(row["delivery_exc_p75"]),
+                "p90": safe_float(row["delivery_exc_p90"]),
+                "p95": safe_float(row["delivery_exc_p95"]),
+            },
+            "annual_shortage_avg_taf": safe_float(row["annual_shortage_avg_taf"]),
             "shortage_frequency_pct": safe_float(row["shortage_frequency_pct"]),
+            "shortage_exceedance": {
+                "p5": safe_float(row["shortage_exc_p5"]),
+                "p10": safe_float(row["shortage_exc_p10"]),
+                "p25": safe_float(row["shortage_exc_p25"]),
+                "p50": safe_float(row["shortage_exc_p50"]),
+                "p75": safe_float(row["shortage_exc_p75"]),
+                "p90": safe_float(row["shortage_exc_p90"]),
+                "p95": safe_float(row["shortage_exc_p95"]),
+            },
+            "annual_demand_avg_taf": safe_float(row["annual_demand_avg_taf"]),
+            "reliability_pct": safe_float(row["reliability_pct"]),
+            "avg_pct_demand_met": safe_float(row["avg_pct_demand_met"]),
         }
 
     return {"scenario_id": scenario_id, "aggregates": aggregates}

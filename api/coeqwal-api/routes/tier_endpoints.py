@@ -3,12 +3,6 @@ Tier API endpoints for COEQWAL interpretive framework.
 
 Provides tier definitions and scenario tier data for outcome visualization.
 
-Tier System:
-- Tier 1 (Green): Best outcomes
-- Tier 2 (Blue): Good outcomes
-- Tier 3 (Orange): Moderate concern
-- Tier 4 (Red): Significant concern
-
 Two tier types:
 - multi_value: Distribution across locations (e.g., 70 tier-1, 30 tier-2, etc.)
 - single_value: Single overall tier level (1-4)
@@ -546,7 +540,6 @@ async def get_scenario_tier_locations(
             tlr.location_name,
             tlr.tier_level,
             tlr.tier_value,
-            tlr.display_order,
             td.name AS tier_name,
             td.tier_type
         FROM tier_location_result tlr
@@ -589,7 +582,6 @@ async def get_scenario_tier_locations(
                     "location_type": row["location_type"],
                     "tier_level": row["tier_level"],
                     "tier_value": row["tier_value"],
-                    "display_order": row["display_order"],
                 }
             )
             bucket["_location_types"].add(row["location_type"])
