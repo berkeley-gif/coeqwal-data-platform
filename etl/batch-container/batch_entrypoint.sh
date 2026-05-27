@@ -2,7 +2,7 @@
 
 # Batch entrypoint for COEQWAL ETL
 # - Downloads ZIP from S3, unzips, classifies DSS files
-# - Converts DSS -> CSV (SV + CalSim output)
+# - Converts DSS -> CSV (SV input csv + DV output csv)
 # - (Optional) Validates against a reference CSV (typically Trend Report, but could be any a DSS-style CSV, see README) if provided in the S3 bucket
 # - Uploads CSVs + extract_record.json to S3
 
@@ -21,9 +21,9 @@ VALIDATION_REF_CSV_KEY="${VALIDATION_REF_CSV_KEY:-}"  # e.g. scenario/s0020/veri
 ABS_TOL="${VALIDATION_ABS_TOL:-1e-06}"
 REL_TOL="${VALIDATION_REL_TOL:-1e-06}"
 
-# Which DSS sides to extract. Default is both. Set to "sv" or "dv" to
+# Which DSS csv's to extract. Default is both. Set to "sv" or "dv" to
 # extract only one. Used by `reextract_all_scenarios.py --sv-only` /
-# `--dv-only` to skip the side the developer does not need.
+# `--dv-only`.
 EXTRACT_TARGETS="${EXTRACT_TARGETS:-sv,dv}"
 
 WORKDIR=/tmp/work
@@ -119,22 +119,6 @@ finally:
 PY
 }
 
-SV_UNIT_MISMATCHES=0
-DV_UNIT_MISMATCHES=0
-
-# Helper: extract unit_mismatches from the METRICS JSON line in converter output
-extract_unit_mismatches () {
-  python -c "
-import sys, json, re
-for line in sys.stdin:
-    m = re.search(r'METRICS\s+(\{.*\})', line)
-    if m:
-        print(json.loads(m.group(1)).get('unit_mismatches', 0))
-        sys.exit(0)
-print(0)
-"
-}
-
 SV_CONVERT_RC=0
 DV_CONVERT_RC=0
 
@@ -145,14 +129,12 @@ if [[ -n "${SV_PATH}" ]]; then
   python /app/python-code/dss_to_csv.py \
     --dss "./${SV_PATH}" \
     --csv "${SV_CSV_LOCAL}" \
-    --type sv --verify-units 2>&1 | tee "${SV_CONVERT_LOG}"
+    --type sv 2>&1 | tee "${SV_CONVERT_LOG}"
   SV_CONVERT_RC=${PIPESTATUS[0]}
   set -e
   if [[ ${SV_CONVERT_RC} -ne 0 ]]; then
     echo "[ERROR] SV conversion failed with exit code ${SV_CONVERT_RC}"
   fi
-  SV_UNIT_MISMATCHES=$(extract_unit_mismatches < "${SV_CONVERT_LOG}")
-  echo "[INFO] SV unit mismatches: ${SV_UNIT_MISMATCHES}"
   sample_bparts_py "${SV_PATH}" "${SV_BPARTS_FILE}"
 fi
 
@@ -163,14 +145,12 @@ if [[ -n "${DV_PATH}" ]]; then
   python /app/python-code/dss_to_csv.py \
     --dss "./${DV_PATH}" \
     --csv "${DV_CSV_LOCAL}" \
-    --type dv --verify-units 2>&1 | tee "${DV_CONVERT_LOG}"
+    --type dv 2>&1 | tee "${DV_CONVERT_LOG}"
   DV_CONVERT_RC=${PIPESTATUS[0]}
   set -e
   if [[ ${DV_CONVERT_RC} -ne 0 ]]; then
     echo "[ERROR] DV conversion failed with exit code ${DV_CONVERT_RC}"
   fi
-  DV_UNIT_MISMATCHES=$(extract_unit_mismatches < "${DV_CONVERT_LOG}")
-  echo "[INFO] DV unit mismatches: ${DV_UNIT_MISMATCHES}"
   sample_bparts_py "${DV_PATH}" "${DV_BPARTS_FILE}"
 fi
 
@@ -274,24 +254,11 @@ DV_CSV_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv"
 # the Lambda placed there. No `<id>_` filename prefix, no `run/` subdir.
 EXTRACT_RECORD_KEY="${OUTPUT_PREFIX}${SCENARIO_ID}/extract_record.json"
 
-# Upload main CSV outputs and unit map sidecars. The CSV file basenames
+# Upload main CSV outputs. The CSV file basenames
 # (`_coeqwal_sv_input.csv`, `_coeqwal_calsim_output.csv`) are unchanged from
 # the original layout; only the in-code identifiers were renamed to sv/dv.
 [[ -f "${SV_CSV_LOCAL}" ]] && aws s3 cp "${SV_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${SV_CSV_KEY}" || SV_CSV_KEY=""
 [[ -f "${DV_CSV_LOCAL}" ]] && aws s3 cp "${DV_CSV_LOCAL}" "s3://${ZIP_BUCKET}/${DV_CSV_KEY}" || DV_CSV_KEY=""
-
-SV_UNITS_KEY=""
-DV_UNITS_KEY=""
-if [[ -f "${SV_CSV_LOCAL}.units.json" ]]; then
-  SV_UNITS_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_sv_input.csv.units.json"
-  aws s3 cp "${SV_CSV_LOCAL}.units.json" "s3://${ZIP_BUCKET}/${SV_UNITS_KEY}"
-  echo "[INFO] Uploaded SV unit map: s3://${ZIP_BUCKET}/${SV_UNITS_KEY}"
-fi
-if [[ -f "${DV_CSV_LOCAL}.units.json" ]]; then
-  DV_UNITS_KEY="${CSV_DIR}${SCENARIO_ID}_coeqwal_calsim_output.csv.units.json"
-  aws s3 cp "${DV_CSV_LOCAL}.units.json" "s3://${ZIP_BUCKET}/${DV_UNITS_KEY}"
-  echo "[INFO] Uploaded DV unit map: s3://${ZIP_BUCKET}/${DV_UNITS_KEY}"
-fi
 
 # Upload validation reports. The per-column summary (mismatch_columns,
 # mismatch_cells) is inlined into the manifest above, so we no longer
@@ -380,10 +347,6 @@ cat > "${WORKDIR}/extract_record.json" <<MF
     "mismatch_columns": ${MISMATCH_COLUMNS},
     "mismatch_cells": ${MISMATCH_CELLS},
     "mismatches_csv_key": "${VALIDATION_CSV_KEY}"
-  },
-  "unit_verification": {
-    "sv_unit_mismatches": ${SV_UNIT_MISMATCHES},
-    "dv_unit_mismatches": ${DV_UNIT_MISMATCHES}
   },
   "variable_sample_b_parts": {
     "sv": "${SV_B_SAMPLE}",

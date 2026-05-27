@@ -25,8 +25,7 @@ The Docker image AWS Batch runs in Fargate Spot to turn one CalSim ZIP into one 
 | File | Role |
 |---|---|
 | `classify_dss.py` | Walks the DSS files in a ZIP and picks the SV (state-variable / input) and DV (CalSim output) DSS files. Excludes `archive/`, `discard/`, `old/`, `backup/`. Has a small overrides table for hand-fixed scenarios (e.g. `s0023`, `s0024`). |
-| `dss_to_csv.py` | The DSS reader. Opens a DSS file via `pydsstools`, iterates pathnames, writes a CSV with row-6 unit header. Supports `--verify-units` to write a `.units.json` unit-map alongside the CSV from DSS ground-truth. |
-| `verify_dss_csv_units.py` | Standalone verifier. Re-opens any scenario's DSS from S3 and compares every column's unit against the CSV header. Runs inside this Docker image. |
+| `dss_to_csv.py` | The DSS reader. Opens a DSS file via `pydsstools`, iterates pathnames, writes a CSV whose row-6 (DV) / row-7 (SV) header carries the DSS-derived unit per column. |
 | `validate_csvs.py` | Compares the extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits a per-scenario validation summary as nested JSON, plus an optional per-row mismatches CSV for triage. |
 
 ## How it gets built and deployed
@@ -57,7 +56,6 @@ flowchart LR
   Container["batch_entrypoint.sh"]
   DV["DV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_calsim_output.csv"]
   SV["SV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_sv_input.csv"]
-  Units["*.units.json unit-map"]
   Valid["scenario/sXXXX/validation/<br/>sXXXX_validation_mismatches.csv (on failure)"]
   Rec["scenario/sXXXX/extract_record.json"]
 
@@ -65,7 +63,6 @@ flowchart LR
   Trend --> Container
   Container --> DV
   Container --> SV
-  Container --> Units
   Container --> Valid
   Container --> Rec
 ```
@@ -160,49 +157,6 @@ docker run --platform linux/amd64 \
     --out-json /data/output/validation_summary.json
 ```
 
-## Layer 1b: DSS-vs-CSV unit verification
-
-Every extraction job runs `verify_dss_csv_units.py` automatically via `--verify-units` wired into `batch_entrypoint.sh`. It:
-
-1. Re-opens the DSS file with `pydsstools`
-2. Reads the unit from DSS metadata for every pathname
-3. Compares against the CSV header row 6 for the same `(B-part, C-part)`
-4. Writes a `.units.json` unit-map listing DSS unit ground truth per variable
-5. Uploads the unit-map to S3: `scenario/{id}/csv/{id}_coeqwal_calsim_output.csv.units.json` (the CSV file basename is unchanged)
-6. Records `unit_verification.dv_unit_mismatches` in the extract record
-
-Unit-map format:
-
-```json
-{"AW_01_PA": {"c_part": "APPLIED-WATER", "unit": "CFS"},
- "S_SHSTA": {"c_part": "STORAGE", "unit": "TAF"}}
-```
-
-A `UNIT_MAP` line is also emitted in CloudWatch for every extraction, so there is a permanent audit trail without needing to re-open the DSS.
-
-To re-run unit verification on-demand for any scenario (or all of them) from Cloud9:
-
-```bash
-cd ~/environment/coeqwal-backend/etl/batch-container
-docker build -t coeqwal-etl:test .
-
-# Single scenario smoke test
-docker run --rm --entrypoint "" coeqwal-etl:test \
-  python /app/python-code/verify_dss_csv_units.py --scenario s0025 \
-  2>&1 | tee verify_units_s0025.log
-
-# All scenarios (auto-discovered from S3 bucket)
-docker run --rm --entrypoint "" coeqwal-etl:test \
-  python /app/python-code/verify_dss_csv_units.py --scenarios-from-s3 --workers 6 \
-  2>&1 | tee verify_units_all_$(date +%Y%m%d_%H%M%S).log
-
-# Save mismatch report to CSV
-docker run --rm --entrypoint "" coeqwal-etl:test \
-  python /app/python-code/verify_dss_csv_units.py --scenarios-from-s3 --output report.csv
-```
-
-All ~75 scenarios take ~50 minutes with 6 workers. Use `tmux` so SSO drops do not kill the run.
-
 ## Duplicate B-part detection
 
 `dss_to_csv.py` detects when multiple DSS pathnames share the same B-part but have different C-parts (e.g., `SHRTG_PCWA3/SHORTAGE` vs `SHRTG_PCWA3/DELIVERY-SHORTAGE`). These are logged as warnings and counted in the extract record under `duplicate_b_parts`. The statistics ETL resolves duplicates using C-part-aware deduplication (preferring the expected C-part, e.g., `SHORTAGE` over `DELIVERY-SHORTAGE` for `SHRTG_*` variables).
@@ -215,6 +169,17 @@ python scan_dupes.py --compare-values --audit-units --workers 4
 ```
 
 ## Maintenance roadmap
+
+### S3 cleanup: orphaned `.units.json` sidecars
+
+The unit-map sidecar was removed from the extraction pipeline. New extractions will not produce one, but already-uploaded objects (one per CSV per scenario, ~150 small files for the current ~75 scenarios) remain at `s3://coeqwal-model-run/scenario/<id>/csv/*.units.json`. They are harmless (nothing reads them) and the storage cost is trivial, but a one-line cleanup is:
+
+```bash
+aws s3 ls s3://coeqwal-model-run/ --recursive | awk '/\.units\.json$/ {print $4}' \
+  | xargs -I{} aws s3 rm s3://coeqwal-model-run/{}
+```
+
+Run from any environment with the COEQWAL S3 credentials. No service restart needed.
 
 ### pydsstools now ships manylinux wheels
 

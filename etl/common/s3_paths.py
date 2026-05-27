@@ -8,7 +8,7 @@ Bucket layout (under `etl.common.aws.S3_BUCKET`):
     scenario/<short_code>/extract_record.json   Batch container's per-run record (validation counts inlined)
     scenario/<short_code>/run/            ZIP after Lambda moves it (kept here for the presign-download API)
     scenario/<short_code>/verify/         trend report CSV
-    scenario/<short_code>/csv/            extracted CSVs + .units.json sidecars
+    scenario/<short_code>/csv/            extracted CSVs
     scenario/<short_code>/validation/     <id>_validation_mismatches.csv (per-row debug, only when mismatches found)
 """
 

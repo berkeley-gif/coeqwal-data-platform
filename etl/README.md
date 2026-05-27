@@ -1,5 +1,22 @@
 # ETL (Extract, Transform, Load)
 
+## What the ETL does
+
+This pipeline:
+
+- **Ingests** CalSim 3 model run ZIPs and trend report CSVs from the COEQWAL Shared Drive into S3, validated against [`ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv) (the canonical scenario -> Drive folder mapping).
+- **Reorganizes** uploaded ZIPs into a per-scenario S3 layout (`scenario/<id>/run/`) and submits a Batch job per ZIP through a Lambda trigger.
+- **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files and preserves the DSS unit metadata as a row-6 CSV header.
+- **Detects duplicate B-part pathnames** within the same DSS file (logged in the extract record under `duplicate_b_parts`).
+- **Validates content** by comparing each extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits per-scenario validation summary counts inline in `extract_record.json`.
+- **Audits ingestion and extraction** across all scenarios into one in-git report ([`ingestion/audit.md`](ingestion/audit.md)) covering ingest-record coverage, Batch extract-record status, validation result, and per-scenario mismatch counts.
+- **Computes statistics** from the extracted CSVs (reservoir storage, urban delivery, agricultural demand and shortage, M&I contractor reliability, environmental flow alteration, refuge delivery, delta salinity / NDO / X2, climate and operational sensitivity) and loads them into the layer 10+ tables in PostgreSQL.
+- **Loads tier outcomes** delivered by the data team (CWS deliveries, AG revenue, env flows, reservoir storage, groundwater storage, delta ecology, salmon abundance, freshwater salinity) into `tier_result` and `tier_location_result` via idempotent UPSERT SQL.
+- **Verifies accuracy** end-to-end across multiple layers: DSS extraction (Layer 1), CSV-to-DB statistics (Layer 2), DB-to-API responses (Layer 3), and surfaces results on the public `/verification` page (Layer 4).
+- **Produces audit artifacts** at every stage (`ingest_state.json` covering scan + download, the single-file `audit.md` covering ingestion + extraction + validation, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
+
+Tech: Python, `boto3`, `pydsstools`, AWS Batch on Fargate Spot, Docker (for the extraction container).
+
 ## The ETL pipeline
 
 - **Ingest** (Google Drive → S3 staging → `ready/`): manual Cloud9 scripts, not [`.github/workflows/etl.yml`](../.github/workflows/etl.yml)
@@ -656,15 +673,17 @@ flowchart LR
 
 ## Stages
 
-| Stage | Directory | What lives here |
-|---|---|---|
-| 1. Ingestion (developer) | [ingestion/](ingestion/) | The source-of-truth CSV plus the developer scripts that pull model runs from Google Drive, validate them, stage to S3, and promote to `ready/`. Start here when loading a new scenario. |
-| 2. Trigger (automatic) | [lambda/](lambda/) | The `coeqwalEtlTrigger` Lambda. Fires on every `ready/` ZIP PUT, moves the ZIP and its ingest record to the scenario layout, and submits a Batch job. |
-| 3. Extraction (automatic) | [batch-container/](batch-container/) | The Dockerfile and Python code that AWS Batch runs in Fargate Spot. Reads a CalSim ZIP, classifies its DSS files, converts to CSV, verifies units, writes an extract record. Built and pushed by [.github/workflows/etl.yml](../.github/workflows/etl.yml). |
-| 4a. Statistics ETL (developer) | [statistics/](statistics/) | `run_all.py` and per-module calculators that read the extracted CSVs out of S3 and load derived metrics into the database. |
-| 4b. Tier data (developer) | [tier_data/](tier_data/) | Loads tier outcome levels from team-delivered CSVs. Independent of the Drive -> Batch path. |
-| Verification | [verification/](verification/) | End-to-end accuracy checks (DSS to CSV to DB to API). |
-| Archive | [archive/](archive/) | Older code kept for reference. |
+Three of these stages run automatically (Lambda + Batch), the rest are developer-driven. All are laid out as siblings under `etl/`.
+
+| Stage | Directory | Trigger | What lives here |
+|---|---|---|---|
+| 1. Ingestion | [ingestion/](ingestion/) | Developer (`gdrive_bulk_download.py`) | The source-of-truth CSV plus the developer scripts that pull model runs from Google Drive, validate them, stage to S3, and promote to `ready/`. Start here when loading a new scenario. |
+| 2. Trigger | [lambda/](lambda/) | Automatic (S3 PUT to `ready/`) | The `coeqwalEtlTrigger` Lambda. Fires on every `ready/` ZIP PUT, moves the ZIP and its ingest record to the scenario layout, and submits a Batch job. |
+| 3. Extraction | [batch-container/](batch-container/) | Automatic (AWS Batch on Fargate Spot) | The Dockerfile and Python code that AWS Batch runs in Fargate Spot. Reads a CalSim ZIP, classifies its DSS files, converts to CSV, verifies units, writes an extract record. Built and pushed by [.github/workflows/etl.yml](../.github/workflows/etl.yml). |
+| 4a. Statistics ETL | [statistics/](statistics/) | Developer (`run_all.py`) | `run_all.py` and per-module calculators that read the extracted CSVs out of S3 and load derived metrics into the database. |
+| 4b. Tier data | [tier_data/](tier_data/) | Developer (team-delivered drops + `load_all_tier_results.py`) | Loads tier outcome levels from team-delivered CSVs. Independent of the Drive -> Batch path. |
+| Verification | [verification/](verification/) | Developer (`verify_all_sections.py`, `verify_api.py`) | End-to-end accuracy checks (DSS to CSV to DB to API). Single canonical doc: layered walkthrough, paste-able end-to-end commands, audit-artifact index, hashes, tolerances, metric coverage. |
+| Archive | [archive/](archive/) | - | Older code kept for reference. |
 
 For the AWS-side picture (queues, IAM, costs), see [docs/INFRASTRUCTURE.md](../docs/INFRASTRUCTURE.md).
 
@@ -1084,3 +1103,4 @@ The Cloud9 IAM role credentials never expire. Long-running jobs in `tmux` keep r
 - **Reconcile `s0036`, `s0076`, `s0096` between the two scenario lists.** When `etl/common/etl_scenarios.py` was first regenerated from the working CSV (May 22, 2026), three scenarios that are live in the public API (`ACTIVE_SCENARIOS`) turned up missing from the WAM team's scenario listing CSV: `s0036`, `s0076`, `s0096`. They remain `is_active=1` in the database and continue to serve from the website. The WAM team has been emailed for context (intentional retirement, sheet desync, or rename). The two reconciliation surfaces are the two sources of truth: either the WAM team restores them to the listing CSV (then re-run `python etl/ingestion/tools/refresh_etl_scenarios.py`), or we take them off the website with `python etl/ingestion/tools/set_scenario_active.py --deactivate s0036,s0076,s0096`. Until one of those happens, `ACTIVE_SCENARIOS` is not a strict subset of `ETL_SCENARIOS`, which is the invariant we want.
 - **Tier locations live in the database, sourced from tier-team staging CSVs.** The `tier_location` table is a narrow catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The staging CSVs the tier teams drop into `etl/tier_data/staging/` are the source of truth for membership. When a tier team sends a new or renamed column, run [`etl/tier_data/scripts/diff_tier_locations.py`](tier_data/scripts/diff_tier_locations.py) to see the gaps and [`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](tier_data/scripts/sync_tier_locations_from_staging.py) to reconcile. Display names and geometry are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](common/tier_location_entities.py). See [`etl/tier_data/README.md`](tier_data/README.md#updating-tier-locations-when-a-tier-team-sends-new-data) for the full workflow and [`etl/tier_data/scripts/audit_tier_location_geometry.py`](tier_data/scripts/audit_tier_location_geometry.py) for the geometry coverage scorecard.
 - **Demand-unit geometry coverage is partial.** The geopackage at [`database/seed_tables/03_GIS/du_4326.gpkg`](../database/seed_tables/03_GIS/du_4326.gpkg) (EPSG:4326, layer `demandunits`, 235 dissolved `MULTIPOLYGON`s) covers 232 of the 286 distinct `DU_ID`s in `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity` (81.1%). Polygons load into the three entity tables via [`database/scripts/sql/.archive/56_add_du_geometry_columns.sql`](../database/scripts/sql/.archive/56_add_du_geometry_columns.sql) (already applied to RDS) and [`database/scripts/data_processing/load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py). The 54 missing IDs (41 urban, 12 agriculture, 1 refuge), the 3 gpkg-only IDs (`07S_PA`, `50_NA`, `90_NA`), and the `26N_NA` cross-table case are enumerated in [`docs/du_geometry_gap.md`](../docs/du_geometry_gap.md). When agency-sourced polygons become available, add them to the geopackage (or a successor table) and rerun the loader.
+- **Statistics membership lists and calculations need first-class verification.** Today the runtime safeguards in [`etl/statistics/units.py`](statistics/units.py) (AG water balance, magnitude checks, AG DU filtering against `du_agriculture_entity.csv`) catch egregious errors at run time as log warnings, but there is no separate report that affirms "the entities included in each aggregate match the documented membership" or "the per-section formulas match the reference recomputation outside the run-time path". Layer 2 ([`verify_all_sections.py`](statistics/verify_all_sections.py)) compares database rows against reference CSVs but does not enumerate membership. Open work: design a `verify_statistics_membership.py` (or a section in `verify_all_sections.py`) that emits per-aggregate membership lists and per-formula recomputation, with the same PASS/FAIL JSON shape used by Layers 2 and 3. Detailed sketch and design questions belong in [`docs/statistics_roadmap.md`](../docs/statistics_roadmap.md#verification-streamlining) when someone takes it on.

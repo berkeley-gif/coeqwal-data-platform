@@ -587,15 +587,15 @@ def _render_appendix(bucket: str) -> str:
     return (
         "\n## Appendix: what's in the JSON records\n\n"
         "This report intentionally drops machine-only fields (sha256 prefixes, "
-        "schema versions, in-zip paths, sample B-parts, unit_verification "
-        "counts, developer/script provenance). Those live in two per-scenario "
+        "schema versions, in-zip paths, sample B-parts, "
+        "developer/script provenance). Those live in two per-scenario "
         "JSON records in S3:\n\n"
         f"- `s3://{bucket}/scenario/<id>/ingest_record.json` - ingestion-side "
         "contract: declared SV/DV basenames + SHA-256, ZIP hash, trend-CSV "
         "hash, convention check, spreadsheet provenance.\n"
         f"- `s3://{bucket}/scenario/<id>/extract_record.json` - Batch container "
         "output: detected DSS paths, written CSV keys, validation summary, "
-        "unit-verification counts, sample variable B-parts, job id.\n\n"
+        "sample variable B-parts, job id.\n\n"
         "Fetch one with `aws s3 cp s3://<bucket>/scenario/<id>/<record>.json -`.\n"
     )
 

@@ -1,53 +1,158 @@
 # COEQWAL Data Platform
 
-A comprehensive data platform for the Collaboratory for Equity in Water Allocation (COEQWAL) project, providing multi-level data schema, PostgreSQL database with PostGIS extension, data APIs, and upload and verification infrastructure for California water management scenario presentation, analysis, and review.
+A comprehensive data platform for the Collaboratory for Equity in Water Allocation (COEQWAL) project for California water management scenario presentation, analysis, and review.
 
-The data platform code repository and documentation is organized into four modules(`data`, `etl`, `database`, `api`) plus its AWS infrastructure (documented locally). Each module has its own README.
+The data platform code repository and documentation is organized into four sections(`data`, `etl`, `database`, `api`). Each section has its own series of (often nested) READMEs. There is a local INFRASTRUCTURE.md script that details AWS infrastructure values. A schematic of that infrastructure can be found at https://dev.coeqwal.org/aws_architecture.html.
 
 ## Data
 
-See [`data/README.md`](data/README.md) for the data inventory.
+Directory of reference files related to project data. The most important reference file is the CalSim manual pdf, which is too large to house outside LFS, but you can download it from DWR at https://water.ca.gov/Library/Modeling-and-Analysis/Central-Valley-models-and-tools/CalSim-3.
 
 ## ETL
 
-The pipeline that moves CalSim 3 model output from the COEQWAL Shared Drive through extraction, validation, and statistical processing into the database, with audit artifacts at every step.
+The ETL has two parallel pipelines. Pipeline 1, for CalSim scenario model run data, has two sub-pipelines that share the same ingest and DSS Batch extraction. 
 
-This pipeline:
+The first subpipeline (1.1) deposits a scenario's full model run directory (zipped) as well as an extracted full sv input csv and full dv output csv into a retrievable location in the S3 bucket. The second subpipeline (1.2) calculates statistics from this data and writes them to the database. 
 
-- **Ingests** CalSim 3 model run ZIPs and trend report CSVs from the COEQWAL Shared Drive into S3, validated against [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](etl/ingestion/scenario_listing/model_run_file_source_working.csv) (the canonical scenario -> Drive folder mapping).
-- **Reorganizes** uploaded ZIPs into a per-scenario S3 layout (`scenario/<id>/run/`) and submits a Batch job per ZIP through a Lambda trigger.
-- **Extracts** CalSim 3 HEC-DSS binary data to CSV inside a Docker container on Fargate Spot. Classifies SV (state-variable input) and DV (decision-variable output) files, preserves the DSS unit metadata as a row-6 CSV header, and writes a `.units.json` unit-map next to each CSV.
-- **Verifies units** that every CSV column's unit matches the DSS file's ground truth, and detects duplicate B-part pathnames within the same DSS.
-- **Validates content** by comparing each extracted CSV against the modeling team's trend report CSV with configurable absolute and relative tolerances. Emits per-scenario validation summary counts inline in `extract_record.json`.
-- **Audits ingestion and extraction** across all scenarios into one in-git report (`etl/ingestion/audit.md`) covering ingest-record coverage, Batch extract-record status, validation result, and per-scenario mismatch counts.
-- **Computes statistics** from the extracted CSVs (reservoir storage, urban delivery, agricultural demand and shortage, M&I contractor reliability, environmental flow alteration, refuge delivery, delta salinity / NDO / X2, climate and operational sensitivity) and loads them into the layer 10+ tables in PostgreSQL.
-- **Loads tier outcomes** delivered by the data team (CWS deliveries, AG revenue, env flows, reservoir storage, groundwater storage, delta ecology, salmon abundance, freshwater salinity) into `tier_result` and `tier_location_result` via idempotent UPSERT SQL.
-- **Verifies accuracy** end-to-end at four layers: DSS extraction (Layer 1), DSS-vs-CSV units (Layer 1b), CSV-to-DB statistics (Layer 2), DB-to-API responses (Layer 3), and surfaces results on the public `/verification` page (Layer 4).
-- **Produces audit artifacts** at every stage (`ingest_state.json` covering scan + download, the single-file `audit.md` covering ingestion + extraction + validation, `stats_audit_<ts>.csv`, `duplicate_scan_results.csv`) so each step's correctness is independently reviewable.
+Pipeline 2, for tier data, is independent and loads team-delivered csvs straight into the database. 
 
-Three of those stages run automatically, the rest are developer-driven. All are laid out as siblings under `etl/`:
+Details follow.
 
-| Stage | Directory | Trigger |
-|---|---|---|
-| 1. Ingestion | [`etl/ingestion/`](etl/ingestion/) | Developer (`gdrive_bulk_download.py`) |
-| 2. Lambda trigger | [`etl/lambda/`](etl/lambda/) | Automatic (S3 PUT to `ready/`) |
-| 3. Batch extraction | [`etl/batch-container/`](etl/batch-container/) | Automatic (AWS Batch on Fargate Spot) |
-| 4a. Statistics ETL | [`etl/statistics/`](etl/statistics/) | Developer (`run_all.py`) |
-| 4b. Tier data | [`etl/tier_data/`](etl/tier_data/) | Developer (team-delivered drops) |
-| Verification | [`etl/verification/`](etl/verification/README.md) | Single canonical verification doc: layered walkthrough, paste-able end-to-end commands, audit-artifact index, hashes, tolerances, metric coverage |
+### 1.1 Scenario model run data
 
-Tech: Python, `boto3`, `pydsstools`, AWS Batch on Fargate Spot, Docker (for the extraction container).
+Complete model run directories (zipped) plus their extracted CSVs land in S3 for the website's "Get Data" feature.
 
-See [`etl/README.md`](etl/README.md) for the full pipeline diagram, per-stage runbooks, and output-file conventions.
+`gdrive_bulk_download.py` scans, downloads, and promotes scenarios from the COEQWAL shared Drive into `s3://coeqwal-model-run/ready/`. The `coeqwalEtlTrigger` Lambda fires on the promote, moves the ZIP under `scenario/<id>/run/`, and submits an AWS Batch job. The Batch container (`coeqwal-etl`) extracts DSS to CSV and, if a reference csv like the Water Allocation Modeling Team's Trend Report is also staged, runs `validate_csvs.py` against it with configurable absolute/relative tolerances. Mismatch counts are inlined into `extract_record.json`. Any mismatches are written to a csv in `scenario/<id>/validation/` only on failure.
+
+**Products** (under `s3://coeqwal-model-run/scenario/<id>/`):
+
+- Original CalSim ZIP at `run/`
+- Extracted DV (output) CSV and SV (input) CSV at `csv/`
+- `extract_record.json` at the scenario root (validation result inlined)
+- `<id>_validation_mismatches.csv` at `validation/` (on validation failure only)
+
+**Website**: Get Data (download links served by the `coeqwalPresignDownload` Lambda).
+
+### 1.2 Statistics -> database
+
+Same ingest and Batch extraction as 1.1. From there, `etl/statistics/run_all.py` reads the extracted CSVs from S3, computes derived metrics, and writes them into PostgreSQL tables.
+
+**Products**: Statistics rows in the database tables: reservoir storage, urban delivery, ag demand and shortage, MI contractor reliability, environmental flow alteration, refuge delivery, delta salinity / NDO / X2, climate and operational sensitivity.
+
+**Website**: Data in Depth (via the FastAPI service).
+
+### 2. Tier data
+
+Team-delivered tier outcome CSVs loaded straight into PostgreSQL, independent of the scenario data ingest described above.
+
+The developer drops correctly-formatted CSVs into [`etl/tier_data/staging/`](etl/tier_data/staging/). `etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql` builds the idempotent UPSERT SQL, which is then applied with `psql -f` to the `tier_result` and `tier_location_result` tables.
+
+**Products**: Tier result rows in database.
+
+**Website**: Tier visualization tools.
+
+### Receipts, verification, and audits
+
+The pipeline produces a deliberate paper trail at every stage. Tags below: `[S3]` lives in S3, `[local]` is on disk but gitignored, `[tracked]` is committed to git.
+
+```
+Google Drive
+   |
+   | gdrive_bulk_download.py
+   v
+Ingest ----writes----> [S3]     scenario/<id>/ingest_record.json
+   |                            (provenance + SHA-256 hashes)
+   |
+   |   ----writes----> [local] etl/ingestion/audit_reports/ingest_state.json
+   v
+AWS Batch  (DSS to CSV + Trend Report validation)
+   |
+   |---writes--> [S3]     scenario/<id>/csv/*.csv
+   |
+   |---writes--> [S3]     scenario/<id>/extract_record.json
+   |                       (Batch status + inlined validation result)
+   |
+   +---writes--> [S3]     scenario/<id>/validation/<id>_validation_mismatches.csv
+                           (only on validation failure)
+
+etl/ingestion/tools/audit.py
+   reads:   ingest_record.json + ingest_state.json + extract_record.json
+   writes:  [tracked] etl/ingestion/audit.md
+            ("what needs attention" digest across all scenarios)
+
+----------------------------------------------------------------
+
+[S3] csv/*.csv  ----> etl/statistics/run_all.py
+                            |
+                            +--> PostgreSQL stats tables
+                            |
+                            +--> [local] etl/statistics/audit_reports/
+                                         stats_audit_<ts>.csv
+
+etl/tier_data/staging/  ----> load_all_tier_results.py
+                                    |
+                                    +--> PostgreSQL tier tables
+
+
+PostgreSQL  ----> verify_all_sections.py  --\
+            ----> verify_api.py              >--> frontend /verification page
+            ----> verify_tiers.py           -/
+
+----------------------------------------------------------------
+
+PostgreSQL  ----> database/audit/run_monthly_audit.py
+                            |
+                            +--> [tracked] audits/monthly_<ts>/
+                                           (schema, row counts, entity exports)
+```
+
+For the full per-stage artifact table (writer, reader, location, contents), see [`etl/verification/README.md`](etl/verification/README.md#8-audit-artifacts-per-stage).
+
+#### After a run: what to read
+
+The diagram above is the full menu. You do not read all of it after every run. Each kind of run has a headline in the documents that tells you whether to drill deeper. Read in the listed order. Stop at the first level that gives a clean answer.
+
+**After `gdrive_bulk_download.py download` or `run_full_pipeline.py`:**
+
+1. The terminal output. The audit runs at the end by default and prints "what needs attention" inline.
+2. `etl/ingestion/audit.md` if step 1 scrolled by or you missed it. Same content, tracked in git, surfaces in `git pull` for the rest of the team.
+3. Drill down only on a flagged scenario: `s3://<bucket>/scenario/<id>/extract_record.json` for the validation summary, `s3://<bucket>/scenario/<id>/validation/<id>_validation_mismatches.csv` for per-row detail, CloudWatch and Batch logs at `/aws/batch/job/...` for runtime traces.
+
+**After `etl/statistics/run_all.py`:**
+
+1. The terminal output (errors and totals printed at the end).
+2. `etl/statistics/audit_reports/stats_audit_<ts>.csv` for the per-(scenario, module) scorecard.
+
+**After `etl/tier_data/scripts/load_all_tier_results.py`:**
+
+1. The terminal output (idempotent UPSERT counts).
+2. `etl/tier_data/staging/tier_upload_manifest.csv` if you passed `--verify`.
+
+**After `verify_all_sections.py`, `verify_api.py`, or `verify_tiers.py`:**
+
+1. The terminal output. One-line PASS / FAIL summary per scenario.
+2. The `/verification` page on the website for the stakeholder-facing view of the same JSON reports.
+3. Drill down only on FAIL: `audits/verification_reports/<scenario>_layer{2,3}.json` or `tiers_<ts>.json` for per-check detail.
+
+**After `database/audit/run_monthly_audit.py`:**
+
+1. `audits/monthly_<ts>/report.md`. Top-level summary, row counts, ERD diff, audit-field checks.
+2. Drill down only if `report.md` flags a discrepancy: per-table CSVs under `audits/monthly_<ts>/layer_exports/` and `audits/monthly_<ts>/results_samples/`.
+
+**Anytime ("when did X last run?"):** `python etl/status.py` reports freshness for ingest, batch, and stats.
+
+**Rule of thumb.** Trust the headline at each level (terminal output, then `audit.md`, then `stats_audit_<ts>.csv` or `report.md`). The forensic artifacts shown in the diagram exist for triage. Read them only when the headline says to.
+
+[`etl/README.md`](etl/README.md) has the developer runbook for running the whole ETL pipeline.
 
 ## Database
 
-PostgreSQL + PostGIS on RDS. A strictly layered schema of ~96 tables and ~402k rows. Every change goes through the audit-trigger framework and is verified against the canonical ERD.
+PostgreSQL + PostGIS on RDS. A strictly layered, highly-normalized schema of ~96 tables. Every change goes through the audit-trigger framework and is verified against the canonical ERD.
 
 **Layers:**
 
-- **00-08** Foundational and reference data: versioning, lookups, network, **entities**, variables, assumptions and operations, scenarios, hydroclimate, themes.
-- **10+** Derived results: tier results, monthly stats, period summaries.
+- **00-09** Foundational and reference data: versioning, lookups, network, entities, variables, assumptions and operations, scenarios, hydroclimate, themes, tier locations.
+- **10+** Derived results: tier results, statistics, period summaries.
 
 <!-- TODO: refine this block, then un-comment.
 

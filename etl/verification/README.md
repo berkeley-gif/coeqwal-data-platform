@@ -46,7 +46,6 @@ flowchart LR
   subgraph Verification
     direction LR
     L1[Layer 1<br/>extraction] -.-> S3OUT
-    L1B[Layer 1b<br/>unit ground truth] -.-> S3OUT
     L2[Layer 2<br/>statistics ETL] -.-> RDS
     L3[Layer 3<br/>API] -.-> API
     L3T[Layer 3-tier<br/>tier results] -.-> API
@@ -64,13 +63,12 @@ Six layers, each independent. Each can run alone. Together they answer
 | Layer | What it verifies | Where it runs | Command |
 |---|---|---|---|
 | **1** | DSS extraction: extracted CSV vs modeling team's trend report CSV (column-by-column, with tolerances) | Inside every Batch job (automatic) | `validate_csvs.py` in `etl/batch-container/python-code/` |
-| **1b** | Units in CSV header row 6 vs units reported by re-opening the DSS file with `pydsstools` | Inside every Batch job (automatic) | `verify_dss_csv_units.py` in `etl/batch-container/python-code/` |
 | **2** | Statistics in PostgreSQL vs values recomputed from reference CSVs | Cloud9 (developer) | `python etl/statistics/verify_all_sections.py --scenario <id>` |
 | **3** | Public API responses vs direct database queries | Cloud9 (developer) | `python etl/statistics/verify_api.py --scenario <id>` |
 | **3-tier** | Tier results in DB / API vs the team-supplied staging CSVs | Cloud9 (developer) | `python etl/tier_data/scripts/verify_tiers.py` |
 | **4** | Frontend status page at `/verification` shows the per-scenario PASS / FAIL grid | Browser | n/a (visualization of layer 2 + 3 reports) |
 
-Layer 1 and 1b run automatically on every ingest. Layers 2, 3, and
+Layer 1 runs automatically on every ingest. Layers 2, 3, and
 3-tier are developer-driven today and are the typical bottleneck for
 releasing a new scenario.
 
@@ -129,19 +127,6 @@ records stored in `audits/validation_mismatches/{scenario_id}_extract_record.jso
 
 Runs automatically inside every Batch job. See
 [`etl/batch-container/README.md`](../batch-container/README.md).
-
-### Layer 1b: DSS-vs-CSV unit verification
-
-Independently verifies that the unit metadata in every CSV column header
-matches what the original DSS file reports. Ground-truth check: re-opens
-the DSS file with `pydsstools` and compares each variable's unit against
-CSV header row 6.
-
-Runs automatically inside every Batch job, with results in the manifest
-at `unit_verification.dv_unit_mismatches`. Can also be re-run on-demand
-from Cloud9 via the Docker image. See
-[`etl/batch-container/README.md`](../batch-container/README.md#layer-1b-dss-vs-csv-unit-verification)
-for details.
 
 ### Layer 2: ETL Statistics (CSV to DB)
 
@@ -271,29 +256,131 @@ psql connect?"), run `python etl/status.py`.
 ## 8. Audit artifacts per stage
 
 Every stage leaves something on disk or in S3 that a later reader can
-use to reconstruct what happened. The chain:
+use to reconstruct what happened. The table groups artifacts by stage
+in pipeline order. S3-resident records survive a fresh Cloud9 checkout.
+Local files under `audit_reports/` and `audits/` are gitignored on
+purpose because they grow per run, with `etl/ingestion/audit.md` as the
+one tracked exception.
 
 | Stage | Artifact | Location | What it contains |
 |---|---|---|---|
 | Ingestion (Drive -> S3) | `ingest_state.json` | `etl/ingestion/audit_reports/` (gitignored) | Per-row scan and download outcomes for the most recent `gdrive_bulk_download.py` run |
 | Ingestion (Drive -> S3) | `ingest_record.json` | `s3://<bucket>/scenario/<id>/` | Per-scenario provenance: source spreadsheet row, Drive file IDs, SHA-256 hashes on the ZIP / SV / DV / trend CSV, spreadsheet row, ingest timestamp |
+| Ingestion (Drive -> S3) | Trend report CSV | `s3://<bucket>/scenario/<id>/verify/*.csv` | Modeling-team reference used as the Layer 1 validation source. SHA-256 recorded in `ingest_record.json` |
 | Ingestion (developer-facing audit) | `audit.md` | `etl/ingestion/` (tracked) | Cross-references `ingest_state.json` against S3 evidence. "What needs your attention" is empty when everything succeeded |
-| Batch extraction | `extract_record.json` | `s3://<bucket>/scenario/<id>/` | Per-scenario extraction provenance: DSS basenames, extracted CSV sizes, `validate_csvs.py` summary, unit verification results |
+| Batch extraction | `extract_record.json` | `s3://<bucket>/scenario/<id>/` | Per-scenario extraction provenance: DSS basenames, extracted CSV sizes, `validate_csvs.py` summary |
+| Batch extraction | `<id>_validation_mismatches.csv` | `s3://<bucket>/scenario/<id>/validation/` | Per-row Layer 1 mismatches between extracted CSV and trend report. Written only on validation failure |
 | Batch extraction | `validation_mismatches/<scenario>_extract_record.json` | `audits/validation_mismatches/` (gitignored) | Local mirror of `extract_record.json` for developer review |
+| Batch extraction | CloudWatch and Batch logs | `/aws/batch/job/...`, `/aws/lambda/coeqwalEtlTrigger` | Runtime trace for the trigger Lambda, DSS-to-CSV conversion, and `validate_csvs.py`. First place to look when a job fails |
 | Orchestrator | `pipeline_state.json` | `etl/ingestion/audit_reports/pipeline_runs/<ts>/` | Stage outcomes per scenario for one `run_full_pipeline.py` invocation. Used for `--resume` |
 | Orchestrator | `pipeline_summary.md` | `etl/ingestion/audit_reports/pipeline_runs/<ts>/` | Human-readable end-of-run summary for that pipeline invocation |
 | Statistics | `stats_audit_<ts>.csv` | `etl/statistics/audit_reports/` (gitignored) | Per-scenario row counts written by `run_all.py` |
+| Statistics | `duplicate_scan_results.csv`, `duplicate_scan_results_units.csv` | `etl/statistics/audit_reports/` (gitignored) | Cross-scenario duplicate B-part scan and unit-declaration consistency from `scan_dupes.py` |
+| Tier data load | `tier_upload_manifest.csv` | `etl/tier_data/staging/` (tracked) | Per-row manifest of the tier data the last `load_all_tier_results.py` run intends to write. Consumed by `--verify` |
+| Tier data geometry audit | `audit_tier_location_geometry` JSON | path passed to `--json` | Coverage check for tier-location geometry against entity attributes. Non-zero exit when gaps are found |
 | Verification (Layer 2) | `<scenario>_layer2.json` | `audits/verification_reports/` (gitignored) | Per-check pass / fail / skip from `verify_all_sections.py` |
 | Verification (Layer 3) | `<scenario>_layer3.json` | `audits/verification_reports/` (gitignored) | Per-endpoint pass / fail from `verify_api.py` |
 | Verification (tiers) | `tiers_<ts>.json` | `audits/verification_reports/` (gitignored) | Per-tier-code OK / mismatch / missing from `verify_tiers.py` |
-| Monthly DB audit | `audits/monthly_YYYYMMDD_HHMMSS/` | `audits/` (tracked, except tarballs) | Schema + row counts + ERD diff + entity exports. See [§10](#10-monthly-database-audit) |
+| Monthly DB audit | `audits/monthly_YYYYMMDD_HHMMSS/` | `audits/` (tracked, except tarballs) | Container directory for one full database snapshot. See [§10](#10-monthly-database-audit) |
+| Monthly DB audit | `report.md`, `schema_snapshot.json`, `tables_summary.csv`, `layer_exports/**/*.csv`, `results_samples/*_{head,tail}.csv` | inside each `audits/monthly_*/` directory | Markdown report, full schema, per-table row counts, full reference and entity exports, head/tail samples of layer-10+ result tables |
 
-S3-resident records (`ingest_record.json`, `extract_record.json`) survive
-a fresh Cloud9 checkout. Local artifacts under `audit_reports/` and
-`audits/` are gitignored on purpose: they grow per run and would
-otherwise pollute git history. `etl/ingestion/audit.md` is the
-exception; it is tracked intentionally as the human-facing state of the
+S3-resident records (`ingest_record.json`, `extract_record.json`, trend
+report CSV, per-row mismatches CSV) survive a fresh Cloud9 checkout.
+Local artifacts under `audit_reports/` and `audits/` are gitignored on
+purpose because they grow per run. `etl/ingestion/audit.md` is the
+exception. It is tracked intentionally as the human-facing state of the
 system.
+
+### Receipt vs scoreboard: `ingest_record.json` vs `ingest_state.json`
+
+Both files are written by `gdrive_bulk_download.py` and both record
+hashes plus per-scenario outcomes. They look similar from a distance and
+trip up new readers. They solve different problems.
+
+**`ingest_record.json` is the per-scenario receipt.** One file per
+scenario at `s3://<bucket>/scenario/<id>/ingest_record.json`. Write-once,
+kept forever. Travels with the ZIP and carries the five SHA-256 hashes
+(see [§9](#9-hashes-and-provenance)), the expected SV/DV filenames and
+in-zip paths, the filesizes, and an `ingestion.path` field of
+`"automatic"` (normal flow) or `"manual_inferred"` (Lambda fallback when
+no upstream record was found). Read by the Batch container at extract
+time and by `etl/ingestion/tools/audit.py` from S3 when rendering
+`audit.md` across all scenarios.
+
+**`ingest_state.json` is the per-run scoreboard.** Single file at
+`etl/ingestion/audit_reports/ingest_state.json` on the developer's
+machine. Gitignored. Overwritten in place every run. Two top-level
+blocks: `scan` (rewritten by `gdrive_bulk_download.py scan`) and
+`download` (rewritten by `gdrive_bulk_download.py download`). Inside
+each block, scenarios are keyed by `short_code` for O(1) lookup. Read
+by `audit.py` (download block, as one of three inputs to `audit.md`),
+by `etl/ingestion/tools/show_last_run.py` (terminal summary), by
+`etl/status.py` (freshness probe), and by `etl/run_full_pipeline.py`
+(resume logic).
+
+**One-sentence framing.** `ingest_record.json` is the durable
+per-artifact provenance in S3. `ingest_state.json` is the
+developer-machine record of the most recent `gdrive_bulk_download.py`
+invocation.
+
+### After a run: what to read
+
+The artifact table above is the full menu. You do not read all of it
+after every run. Each kind of run has a headline artifact that tells
+you whether to drill deeper. Read in the listed order. Stop at the
+first level that gives a clean answer.
+
+**After `gdrive_bulk_download.py download` or `run_full_pipeline.py`:**
+
+1. The terminal output. The audit runs at the end by default and prints
+   "what needs attention" inline.
+2. `etl/ingestion/audit.md` if step 1 scrolled by or you missed it.
+   Same content, tracked in git, surfaces in `git pull` for the rest of
+   the team.
+3. Drill down only on a flagged scenario:
+   `s3://<bucket>/scenario/<id>/extract_record.json` for the validation
+   summary, and `s3://<bucket>/scenario/<id>/validation/<id>_validation_mismatches.csv`
+   for per-row detail. CloudWatch and Batch logs at `/aws/batch/job/...`
+   and `/aws/lambda/coeqwalEtlTrigger` for runtime traces when a job
+   fails outright.
+
+**After `etl/statistics/run_all.py`:**
+
+1. The terminal output (errors and totals printed at the end).
+2. `etl/statistics/audit_reports/stats_audit_<ts>.csv` for the
+   per-(scenario, module) scorecard. The error column carries the
+   failure reason when a row fails.
+
+**After `etl/tier_data/scripts/load_all_tier_results.py`:**
+
+1. The terminal output (idempotent UPSERT counts).
+2. `etl/tier_data/staging/tier_upload_manifest.csv` if you passed
+   `--verify`.
+
+**After `verify_all_sections.py`, `verify_api.py`, or `verify_tiers.py`:**
+
+1. The terminal output. One-line PASS / FAIL summary per scenario.
+2. The `/verification` page on the website for the stakeholder-facing
+   view of the same JSON reports.
+3. Drill down only on FAIL: `audits/verification_reports/<scenario>_layer{2,3}.json`
+   or `audits/verification_reports/tiers_<ts>.json` for per-check
+   detail.
+
+**After `database/audit/run_monthly_audit.py`:**
+
+1. `audits/monthly_<ts>/report.md`. Top-level summary, row counts, ERD
+   diff, audit-field checks.
+2. Drill down only if `report.md` flags a discrepancy: per-table CSVs
+   under `audits/monthly_<ts>/layer_exports/` and
+   `audits/monthly_<ts>/results_samples/`.
+
+**Anytime ("when did X last run?"):** `python etl/status.py` reports
+freshness for ingest, batch, and stats.
+
+**Rule of thumb.** Trust the headline at each level (terminal output,
+then `audit.md`, then `stats_audit_<ts>.csv` or `report.md`). The
+forensic artifacts in the §8 table exist for triage. Read them only
+when the headline says to.
 
 ---
 
@@ -396,8 +483,7 @@ schema change.
 Today's split:
 
 - **Automatic** (no developer in the loop): hashes on ingest,
-  `validate_csvs.py` and `verify_dss_csv_units.py` inside every Batch
-  job.
+  `validate_csvs.py` inside every Batch job.
 - **Developer-driven** (run on Cloud9 after a scenario lands): Layer 2
   (`verify_all_sections.py`), Layer 3 (`verify_api.py`), tier
   verification (`verify_tiers.py`).
@@ -505,6 +591,11 @@ scheduled-or-deferred list.
 - **No automatic hash re-verification on the S3 side.** We trust
   `ingest_record.json` once written. A periodic job that re-hashes the
   ZIP in `ready/` and compares would catch silent corruption.
+- **Batch container does not re-hash the downloaded ZIP** against the
+  `zip_sha256` recorded in `ingest_record.json`. The hashes are
+  forensic-only at extract time today. Wiring a compare-on-download
+  into `batch_entrypoint.sh` would catch in-transit corruption between
+  S3 and the Batch worker without needing a periodic S3 job.
 - **`tiers_<ts>.json` lacks per-scenario stamping in its filename.**
   Easy fix when we start wanting per-scenario tier reports.
 - **No `verify_release.py` orchestrator** that gates a release on
@@ -522,8 +613,7 @@ scheduled-or-deferred list.
   including the `--verify` preset and the end-to-end how-to sections
   for loading scenario data and tier data
 - [`etl/batch-container/README.md`](../batch-container/README.md) -
-  Layer 1 and Layer 1b details, including how to swap the validation
-  reference CSV
+  Layer 1 details, including how to swap the validation reference CSV
 - [`etl/statistics/README.md`](../statistics/README.md) - Layer 2 /
   statistics ETL, including the per-module table
 - [`etl/tier_data/README.md`](../tier_data/README.md) - tier data
