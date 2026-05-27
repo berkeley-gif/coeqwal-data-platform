@@ -1,6 +1,28 @@
 # ETL (Extract, Transform, Load)
 
+## The ETL pipeline
 
+- **Ingest** (Google Drive → S3 staging → `ready/`): manual Cloud9 scripts, not [`.github/workflows/etl.yml`](../.github/workflows/etl.yml)
+- **Lambda trigger**: fires when a ZIP lands in `ready/`
+- **Batch extraction**: AWS Batch runs the `coeqwal-etl` image from ECR. This is what `etl.yml` deploys (build and push the Docker image only; it does not run extraction jobs)
+- **Statistics ETL**: separate Python jobs on Cloud9
+- **Activate**: DB / API publish steps
+
+### `etl.yml` and "Manual build" / "Manual rebuild"
+
+[`.github/workflows/etl.yml`](../.github/workflows/etl.yml) has two triggers:
+
+1. **Push to `main`** when `etl/batch-container/**` changes: builds and pushes the image automatically.
+2. **`workflow_dispatch`**: a "Run workflow" button in the GitHub Actions UI so you can rebuild and push the image without changing code (for example after fixing AWS credentials or to refresh `:latest`).
+
+The `workflow_dispatch` block defines one optional form field named `reason`:
+
+| YAML field | What it is |
+|---|---|
+| `description: 'Manual build'` | Label GitHub shows next to the text box when you click Run workflow |
+| `default: 'Manual rebuild'` | Text pre-filled in that box |
+
+That field is **not used by any job step**. Nothing in the workflow reads `inputs.reason`. It only appears on the workflow run page as a note for humans (for example "rebuild after ECR login fix"). You can leave the default, change it, or ignore it; the build steps are identical either way.
 
 <!-- ACTIVE_SCENARIOS:BEGIN -->
 
