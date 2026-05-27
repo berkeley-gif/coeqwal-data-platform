@@ -49,21 +49,6 @@ pip-wheel-metadata/
 rclone.conf
 *.rclone.conf
 
-# Local data and processing directories
-/CalSim3_schematic
-
-/data/*
-!/data/README.md
-!/data/raw/
-/data/raw/*
-!/data/raw/csv_from_CalSim_report_pdf/
-!/data/raw/csv_from_CalSim_report_pdf/**
-!/data/raw/pdf_tables_from_CalSim_report/
-!/data/raw/pdf_tables_from_CalSim_report/**
-!/data/reference/
-!/data/reference/**
-/dss_processing
-
 # ETL staging and output directories
 etl/staging/
 etl/*/staging/
@@ -143,11 +128,24 @@ costs/
 # Private infrastructure documentation (AWS account IDs, ARNs, runbooks)
 docs/INFRASTRUCTURE.md
 
-# /reference/ at the repo root is local-only.
-# Large per-scenario dumps belong in S3 (coeqwal-model-run).
+# Reference dumps - local only unless explicitly whitelisted below
 /reference/
+etl/reference/
 
-**/reference/
+# data/ — see data/README.md
+/data/*
+!/data/README.md
+!/data/raw/
+/data/raw/*
+!/data/raw/csv_from_CalSim_report_pdf/
+!/data/raw/csv_from_CalSim_report_pdf/**
+!/data/raw/pdf_tables_from_CalSim_report/
+!/data/raw/pdf_tables_from_CalSim_report/**
+!/data/reference/
+/data/reference/*
+!/data/reference/cws/
+!/data/reference/cws/**
+
 !etl/tier_data/reference/
 !etl/tier_data/reference/**
 !etl/statistics/reference/

@@ -1,4 +1,4 @@
-name: Build and push coeqwal-etl to ECR
+name: Build and push coeqwal-etl to ECR # CI to build and publish the Batch dss-to-csv extraction in the ingest phase
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
       - '.github/workflows/etl.yml'
     branches:
       - main
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual triggering of the workflow from GitHub Actions
     inputs:
       reason:
         description: 'Manual build'
