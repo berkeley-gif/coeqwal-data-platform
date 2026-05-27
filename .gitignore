@@ -145,6 +145,10 @@ etl/reference/
 /data/reference/*
 !/data/reference/cws/
 !/data/reference/cws/**
+!/data/reference/CS3_NetworkSchematic-Hongbing.pdf
+
+# LibreOffice lock files (after data/ whitelists, which would otherwise un-ignore them)
+**/.~lock.*
 
 !etl/tier_data/reference/
 !etl/tier_data/reference/**
