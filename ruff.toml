@@ -1,0 +1,28 @@
+# Ruff configuration for the COEQWAL backend monorepo
+# https://docs.astral.sh/ruff/
+#
+# For linting across api/, etl/, database/, scripts/,
+# run `ruff check .` from the repo root. CI runs the same command, see
+# .github/workflows/lint.yml.
+
+# Skip archived code at any depth (see **/.archive/ and **/_archive/ in
+# .gitignore for the matching ignore rules).
+exclude = [
+    "**/.archive",
+    "**/_archive",
+]
+
+[lint]
+# E = pycodestyle errors, F = pyflakes (undefined names, unused imports, etc.)
+select = ["E", "F"]
+
+ignore = [
+    "E501",  # Line too long, let the formatter (if any) handle wrapping
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+
+[lint.per-file-ignores]
+# Re-exports in package init files
+"__init__.py" = ["F401"]

@@ -1,9 +1,0 @@
-id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
-1,daily,Daily,Daily,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-2,weekly,Weekly,Weekly,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-3,monthly,Monthly,Monthly,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-4,seasonal,Seasonal,Seasonal,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-5,flow_seasonal,Flow-seasonal,Flow-based seasonal periods,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-6,annual,Annual,Annual,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-7,por,Period of record,period of record,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2
-8,long_term,Long-term,Long-term planning horizon,True,2025-09-01 13:37:57.123422+00:00,2,2025-09-01 13:37:57.123422+00:00,2

@@ -511,8 +511,6 @@ def generate_schema_snapshot(conn) -> dict:
     logger.info("Collecting functions...")
     report["functions"] = _get_functions(cursor)
 
-    tables_with_triggers = {t["table_name"] for t in report["triggers"]}  # noqa: F841
-
     tables = _get_all_tables(cursor)
     logger.info("Auditing %d tables...", len(tables))
 

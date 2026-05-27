@@ -62,13 +62,11 @@ Cloud9. Reference data does not belong in audit snapshots.
 - Move from: `audits/cws/` (Cloud9 only today)
 - **Cloud9 procedure (copy-paste):** [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) thread A1
 
-Once committed, Kristin's tier xlsx stays at
-`etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx` and the
-M&I crosswalk stays at `etl/statistics/reference/`. The new CWS folder
-is the canonical home for the spring-2026 CWS reference spreadsheets.
-What the team eventually does with those spreadsheets (CSV conversion,
-schema design, DB staging) is out of scope for now and not on this
-runbook.
+All M&I/CWS reference spreadsheets (Kristin's tier xlsx, the M&I
+crosswalk, and the spring-2026 CWS delivery files) live together under
+[`data/reference/cws/`](../data/reference/cws/). What the team
+eventually does with those spreadsheets (CSV conversion, schema design,
+DB staging) is out of scope for now and not on this runbook.
 
 ---
 
@@ -137,7 +135,7 @@ the team has time and context. Column types stay VARCHAR(5) (R1).
 - Walkthrough: [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md)
 - Audit script: [`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py)
 - CalSim Table 3-7 OR rollup: `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_demand_unit_water_sources.csv`
-- Kristin xlsx: `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx`
+- Kristin xlsx: `data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx`
 - Latest audit CSV: `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_gw_sw_audit.csv`
 
 **Buckets (May 2026 reconcile run).**
@@ -213,7 +211,7 @@ has time.
 **Files.**
 
 - Comparison script: `etl/statistics/scripts/compare_master_crosswalk.py` [NOT YET IMPLEMENTED]
-- xlsx: [`etl/statistics/reference/Master crosswalk SW DUs M&I.xlsx`](../etl/statistics/reference/Master%20crosswalk%20SW%20DUs%20M&I.xlsx)
+- xlsx: [`data/reference/cws/Updated Master crosswalk SW DUs M&I May7 2026.xlsx`](../data/reference/cws/Updated%20Master%20crosswalk%20SW%20DUs%20M&I%20May7%202026.xlsx)
 - Snapshot CSV: `audits/monthly_20260524_143951/layer_exports/04_variable/du_urban_variable.csv`
 - Audit CSV (gitignored, regenerate with `--csv-out` once the script lands):
   `etl/statistics/audit_reports/master_crosswalk_audit.csv`
@@ -406,9 +404,7 @@ shape. See [`docs/du_polygon_mapping.md`](du_polygon_mapping.md).
 | Latest DB audit | `audits/monthly_20260524_143951/` |
 | CalSim PDF extracts | `data/raw/csv_from_CalSim_report_pdf/du+diversion/` |
 | CalSim PDFs | `data/raw/pdf_tables_from_CalSim_report/` |
-| Tier xlsx (Kristin) | `etl/tier_data/reference/` |
-| Statistics crosswalk xlsx | `etl/statistics/reference/` |
-| CWS delivery xlsx | `data/reference/cws/` (target) |
+| M&I, CWS, crosswalk xlsx | `data/reference/cws/` |
 | Seed CSVs | `database/seed_tables/` |
 | SQL migrations | `database/scripts/sql/` |
 

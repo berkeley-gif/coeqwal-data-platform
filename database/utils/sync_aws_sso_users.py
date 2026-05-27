@@ -22,8 +22,7 @@ Requirements:
 import argparse
 import logging
 import sys
-from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 # Configuration
 SYSTEM_USER_ID = 1  # System user for created_by/updated_by fields
@@ -39,7 +38,6 @@ def get_aws_sso_users() -> List[Dict]:
     try:
         # TODO: Implement actual AWS SSO API calls
         # This is a placeholder for the actual implementation
-        import boto3
         
         # Example structure - replace with actual AWS SSO API calls
         mock_users = [
@@ -85,9 +83,8 @@ def sync_user_to_database(user_data: Dict, dry_run: bool = True) -> bool:
             return True
             
         # TODO: Implement actual database operations
-        # This is a placeholder for the actual implementation
-        
-        sql = """
+        # Placeholder SQL kept here for the next developer to wire up
+        _sql = """
         INSERT INTO user (
             email, display_name, affiliation, role, user_type,
             aws_sso_user_id, aws_sso_username, is_bootstrap, sync_source,
@@ -105,8 +102,8 @@ def sync_user_to_database(user_data: Dict, dry_run: bool = True) -> bool:
             sync_source = 'aws_sso',
             updated_at = NOW()
         """
-        
-        # Execute SQL with user_data
+
+        # Execute _sql with user_data
         logging.info(f"Synced user {user_data['email']}")
         return True
         
@@ -130,15 +127,16 @@ def deactivate_bootstrap_users(dry_run: bool = True) -> bool:
             return True
             
         # TODO: Implement actual database operations
-        sql = """
-        UPDATE user 
+        # Placeholder SQL kept here for the next developer to wire up
+        _sql = """
+        UPDATE user
         SET is_active = false, updated_at = NOW()
-        WHERE is_bootstrap = true 
+        WHERE is_bootstrap = true
         AND id != %(system_user_id)s
         AND sync_source = 'bootstrap'
         """
-        
-        # Execute SQL
+
+        # Execute _sql
         logging.info("Deactivated bootstrap users (kept system user active)")
         return True
         

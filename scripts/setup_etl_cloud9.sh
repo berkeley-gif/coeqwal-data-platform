@@ -101,22 +101,22 @@ if [ -z "$PYTHON_BIN" ]; then
 else
   pass "$($PYTHON_BIN --version) at $(command -v $PYTHON_BIN)"
 
-  VENV_DIR="$REPO_ROOT/.venv"
+  VENV_DIR="$REPO_ROOT/venv"
   if [ "$SKIP_VENV" -eq 1 ]; then
     note "Skipping venv creation (--no-venv)"
   elif [ ! -d "$VENV_DIR" ]; then
     if [ "$CHECK_ONLY" -eq 1 ]; then
-      fail ".venv exists" "rerun without --check to create it"
+      fail "venv exists" "rerun without --check to create it"
     else
       note "Creating $VENV_DIR ..."
       if "$PYTHON_BIN" -m venv "$VENV_DIR"; then
-        pass "created .venv/"
+        pass "created venv/"
       else
         fail "venv creation" "see traceback above"
       fi
     fi
   else
-    pass ".venv/ already exists"
+    pass "venv/ already exists"
   fi
 
   if [ -d "$VENV_DIR" ]; then
@@ -133,7 +133,7 @@ else
         if pip install --quiet -r "$REPO_ROOT/requirements.txt"; then
           pass "installed requirements.txt"
         else
-          fail "pip install -r requirements.txt" "rerun manually: source .venv/bin/activate && pip install -r requirements.txt"
+          fail "pip install -r requirements.txt" "rerun manually: source venv/bin/activate && pip install -r requirements.txt"
         fi
       else
         fail "requirements.txt present" "expected at $REPO_ROOT/requirements.txt"
@@ -186,9 +186,9 @@ fi
 # ---------------------------------------------------------------------------
 step "6/6 ETL package import"
 
-if [ -d "$REPO_ROOT/.venv" ] && [ -z "${VIRTUAL_ENV:-}" ]; then
+if [ -d "$REPO_ROOT/venv" ] && [ -z "${VIRTUAL_ENV:-}" ]; then
   # shellcheck disable=SC1091
-  . "$REPO_ROOT/.venv/bin/activate"
+  . "$REPO_ROOT/venv/bin/activate"
 fi
 
 if python -c 'import sys; sys.path.insert(0, "."); from etl.common import S3_BUCKET' >/dev/null 2>&1; then

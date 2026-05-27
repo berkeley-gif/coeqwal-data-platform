@@ -1,1 +1,18 @@
+# etl/tier_data dependencies.
+#
+# Pinning policy: floors (`>=`). Scripts run interactively on Cloud9 or a
+# developer laptop, not in a deployed service. The FastAPI service
+# (api/coeqwal-api/) is the only subsystem that uses exact pins.
+
+# Direct
 pandas>=2.0
+psycopg2-binary>=2.9
+
+# Transitive via etl.common (its __init__.py eagerly imports etl.common.db
+# and etl.common.aws). Any tier_data script that does
+# `from etl.common import ...` needs both drivers.
+boto3>=1.34
+
+# Optional. reconcile_gw_sw_sources.py lazy-imports openpyxl for one XLSX
+# code path and exits with a hint if it's missing. Uncomment to enable:
+# openpyxl>=3.1

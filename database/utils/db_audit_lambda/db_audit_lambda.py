@@ -509,9 +509,6 @@ def generate_audit_report(conn) -> Dict[str, Any]:
     logger.info("Collecting function inventory...")
     audit_report['functions'] = get_functions(cursor)
 
-    # Build a set of table names that have at least one trigger for fast lookup
-    tables_with_triggers = {t['table_name'] for t in audit_report['triggers']}
-
     # Per-table detail
     tables = get_all_tables(cursor)
     logger.info(f"Auditing {len(tables)} tables...")

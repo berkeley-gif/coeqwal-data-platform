@@ -113,14 +113,9 @@ If you changed the API endpoint code (anything under `api/`), including query lo
 
 ## Getting started
 
-### Two paths
+### Supported path
 
-| Path | Use it for | Connection |
-|---|---|---|
-| **Cloud9 / VPN -> production RDS** | Developer work, monthly audits, real seed loads, DDL migrations on the live DB | `DATABASE_URL` set per "First-time setup" below |
-| **Linux dev host -> local Postgres** _(unsupported)_ | Offline schema work, query development, iterating on migrations before they touch RDS | `DATABASE_URL=postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario` |
-
-> **Local Postgres is unsupported.** Bring one up with `docker compose up -d postgres` (see [`docker-compose.yml`](../docker-compose.yml)) and apply DDL manually from [`database/scripts/sql/.archive/`](scripts/sql/.archive/). Cloud9 is the supported environment for everything that touches production data.
+Cloud9 (or VPN) -> production RDS. `DATABASE_URL` is set per "First-time setup" below. This is the only supported workflow for developer work, monthly audits, seed loads, and DDL migrations on the live DB.
 
 > **Seed CSV `is_active` is bootstrap-only for `scenario.csv`.** [`database/seed_tables/06_scenario/scenario.csv`](seed_tables/06_scenario/scenario.csv) introduces new scenario rows into the DB via [`database/scripts/sql/upsert_scenario_data.sql`](scripts/sql/upsert_scenario_data.sql). Once a row exists, flip `is_active` with [`etl/ingestion/tools/set_scenario_active.py`](../etl/ingestion/tools/set_scenario_active.py), not by editing the CSV and re-upserting. The seed CSV's `is_active` value is allowed to drift from the live `scenario` table by design. The DB is the source of truth for live publication state, exposed by the API as [`/api/scenarios`](../api/coeqwal-api/routes/scenario_endpoints.py) and cached for ETL consumers in [`etl/common/active_scenarios.py`](../etl/common/active_scenarios.py).
 
@@ -659,12 +654,12 @@ Plus new attribute columns on `du_urban_entity`: `is_sw_du`, `is_gw_du`, `larges
 
 #### Project list vs CalSim list (community water systems)
 
-The COEQWAL project's CWS focus list (delivered in `reference/community_water_systems/`) is **not** identical to the full CalSim urban DU list now in the database. The team needs to know which list any given DU belongs to. Numbers below are from the audit + reference CSVs as of 2026-05-11:
+The COEQWAL project's CWS focus list (delivered in `data/reference/cws/`) is **not** identical to the full CalSim urban DU list now in the database. The team needs to know which list any given DU belongs to. Numbers below are from the audit + reference CSVs as of 2026-05-11:
 
 | List | Source | DUs |
 |---|---|---:|
 | `calsim_urban_du` | `du_urban_entity` (current DB) | 145 |
-| `coeqwal_master_du` | `Master demand unit list updated April 13 2026.xlsx` | 124 |
+| `coeqwal_master_du` | `Final_M&Idemandunits_withlatlongs.xlsx` | 124 |
 | `coeqwal_focal_sw_du` | SW DUs in master list | 75 |
 | `coeqwal_focal_gw_du` | GW DUs in master list | 83 |
 | `hhs_allocation` | `Updated HHS allocations May 6 2026.xlsx` | 76 |
@@ -1727,7 +1722,7 @@ Known improvements and cleanup tasks for future work.
 
 ### Community water systems (CWS) — spring-2026 work
 
-Source data is in `reference/community_water_systems/`. See the entity-pattern section above for the full plan. Sequenced TODOs:
+Source data is in [`data/reference/cws/`](../data/reference/cws/). See the entity-pattern section above for the full plan. Sequenced TODOs:
 
 1. **Stage and reconcile new CSVs** under `database/seed_tables/03_entity/cws/` and `database/seed_tables/01_lookup/cws_list/`. Strip the trailing newlines in `DWUC_*` headers and resolve the `ESB355` discrepancy (HHS list contains it but project master does not).
 2. **Add the 7 missing project DUs to `du_urban_entity`** (`ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION`) — or document why each one maps to an existing DU under a different `du_id`.

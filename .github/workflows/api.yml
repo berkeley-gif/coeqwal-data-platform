@@ -16,18 +16,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Lint Python code
-        run: |
-          pip install -r api/coeqwal-api/requirements.txt
-          echo "🔍 Checking for syntax errors and undefined variables..."
-          # Exclude backup files and network_endpoints.py (has pre-existing issues with commented imports)
-          ruff check api/coeqwal-api/ --select=E,F --ignore=E501,E741 --exclude="api/coeqwal-api/routes/_archive"
-          echo "✅ Linting passed!"
+      # Linting runs as a separate workflow (.github/workflows/lint.yml) on
+      # every push touching Python files. This workflow handles build+deploy
+      # only.
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2

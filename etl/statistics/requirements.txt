@@ -1,0 +1,19 @@
+# etl/statistics dependencies
+
+# Database and AWS
+boto3>=1.34
+psycopg2-binary>=2.9
+
+# Numerical / dataframe
+numpy>=1.24
+pandas>=2.0
+
+# Visualization (used by visualize_percentile_bands.py)
+matplotlib>=3.7
+
+# HTTP client (used by visualize_percentile_bands.py and verify_api.py)
+requests>=2.31
+
+# Optional. Pearson r in env_flow statistics is skipped if scipy is missing.
+# Uncomment to enable:
+# scipy>=1.11

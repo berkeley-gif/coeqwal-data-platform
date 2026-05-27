@@ -1,9 +1,0 @@
-id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
-1,output,Output,"Standard CalSim model output variables (flows, diversions, storage)",True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-2,control,Control,Operational control indicators and binary flags,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-3,decision,Decision,Model decision variables and optimization targets,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-4,state,State,State variables including storage zones and bookkeeping accounts,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-5,input,Input,External inputs and boundary conditions,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-6,intermediate,Intermediate,Calculated intermediate values used in model logic,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-7,aggregate,Aggregate,Variables that sum or combine multiple reservoir/system components,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2
-8,index,Index,Index variables,True,2026-03-01 18:22:51.128916+00:00,2,2026-03-01 18:22:51.128916+00:00,2

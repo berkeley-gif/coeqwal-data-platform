@@ -106,18 +106,16 @@ When you change a URL or payload shape here, the matching website update is in t
 
 ## Local development
 
-The supported environment for everything touching production data is Cloud9, where `$DATABASE_URL` and `$SUPERUSER_URL` are already configured. To exercise the API locally without RDS access, bring up a local Postgres with `docker compose up -d postgres` from the repo root and apply DDL from [`database/scripts/sql/.archive/`](../../database/scripts/sql/.archive/) manually. Then:
+Cloud9 is the supported environment for everything touching production data. `$DATABASE_URL` and `$SUPERUSER_URL` are already configured there. On Cloud9:
 
 ```bash
-source ../../.venv/bin/activate
-export DATABASE_URL="postgresql://coeqwal:coeqwal@localhost:5432/coeqwal_scenario"
-
+source ../../venv/bin/activate
 uvicorn main:app --reload --port 8000
 
 open http://localhost:8000/docs
 ```
 
-To point at production RDS instead, replace `DATABASE_URL` with the production connection string. That path is only available from Cloud9 or VPN.
+`DATABASE_URL` is inherited from the Cloud9 shell environment and points at production RDS. The same `DATABASE_URL` is reachable from VPN. There is no out-of-the-box local-Postgres path.
 
 ### Building the dev container
 

@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 
-# COEQWAL DSS ➜ CSV batch image
+# COEQWAL DSS -> CSV batch image
 
 #   - Builds pydsstools environment (via heclib static lib)
 
@@ -39,25 +39,22 @@ RUN mkdir -p /pydsstools/src/external/dss/linux64 \
 # supply heclib.a
 COPY heclib/heclib.a /pydsstools/src/external/dss/linux64/
 
-# compiler & linker hints
+# compiler & linker hints (used by the pydsstools build below)
 ENV CFLAGS="-I/usr/include -I/pydsstools/src/external/dss/headers -I/pydsstools/src/external/gridv6/headers"
 ENV LDFLAGS="-L/usr/lib/x86_64-linux-gnu -L/pydsstools/src/external/dss/linux64"
 
-# ---- Python dependencies ----
-RUN pip install --no-cache-dir \
-    numpy==1.24.4 \
-    pandas==2.0.3 \
-    PyYAML==6.0.1 \
-    psutil==5.9.8 \
-    psycopg2-binary==2.9.9 \
-    boto3==1.34.162 \
-    setuptools \
-    wheel
+# Python application deps. See requirements.txt for pin rationale.
+# setuptools and wheel are build tools needed for pydsstools' from-source
+# install; they are not application deps so they stay here.
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
 
-# pydsstools after env/inputs ready
+# pydsstools is built from source against the heclib.a above. Installed
+# after numpy is on disk so the build can find numpy headers.
 RUN pip install --no-cache-dir pydsstools
 
-# ---- Install AWS CLI v2 (official installer) ----
+# Install AWS CLI v2 (official installer)
 RUN curl -L "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
  && unzip /tmp/awscliv2.zip -d /tmp \
  && /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update \

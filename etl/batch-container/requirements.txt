@@ -1,0 +1,15 @@
+# etl/batch-container dependencies
+#
+# Pinning policy: exact pins (`==`). This image is the deployment artifact
+# pushed to ECR and pulled by AWS Batch, so reproducibility matters.
+#
+# Note: pydsstools is intentionally not listed here. It builds from source
+# against the heclib static lib that ships in this directory, and the
+# build needs numpy headers already installed. The Dockerfile installs
+# this file first, then runs `pip install pydsstools` as a separate step
+# with CFLAGS/LDFLAGS set.
+
+numpy==1.24.4
+pandas==2.0.3
+boto3==1.34.162
+

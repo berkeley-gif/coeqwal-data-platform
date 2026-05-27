@@ -1776,7 +1776,7 @@ Columns: 11
 
 ## PLANNED TABLES — community water systems (CWS)
 
-> Designed but **not yet implemented**. Source data lives in `reference/community_water_systems/`. See `database/README.md` → "03_ENTITY: entity tables and the entity-attribute pattern" → "Project list vs CalSim list (community water systems)" for the rationale and reconciliation work needed before these are created.
+> Planned but **not yet implemented**. Source data lives in [`data/reference/cws/`](../../data/reference/cws/). See `database/README.md` → "03_ENTITY: entity tables and the entity-attribute pattern" -> "Project list vs CalSim list (community water systems)" for the rationale and reconciliation work needed before these are created.
 
 ### **cws_entity** (planned)
 

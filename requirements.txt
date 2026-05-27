@@ -1,20 +1,35 @@
-# Top-level requirements aggregator.
+# requirements.txt - Top-level requirements aggregator
 #
-# Installs every Python dependency the COEQWAL backend needs across modules.
-# Each line below pulls in the per-module requirements file for that
-# subsystem. Edit the per-module files when adding new deps. This file
-# only changes when a whole new module is added.
+# Installs the Python dependencies for every subsystem that runs outside
+# Docker: the ETL pipelines, database scripts, and the FastAPI service.
+# Edit the per-subsystem files when adding new deps.
 #
-# Quick setup on Cloud9 (or any Linux dev host):
-#   python3.10 -m venv .venv
-#   source .venv/bin/activate
+# Not included here (each has its own self-contained dep story):
+#   - etl/batch-container/  : runs inside its own Docker image
+#                             (etl/batch-container/Dockerfile +
+#                             etl/batch-container/requirements.txt).
+#   - etl/lambda/           : Node.js, no Python deps.
+#   - api/lambda/           : Node.js, no Python deps.
+
+#
+# Quick setup:
+#   python3 -m venv venv
+#   source venv/bin/activate
 #   pip install --upgrade pip
 #   pip install -r requirements.txt
 #
-# rclone (the Drive sync binary) is a separate non-Python install. See
-# etl/README.md for instructions.
+# Python version: the batch container builds on python:3.10-slim
+# (etl/batch-container/Dockerfile) because pydsstools is known to build
+# against that. Other subsystems are not pinned to a Python minor
+# version. Can use whatever Cloud9 ships with.
+#
+# Non-Python tools managed separately:
+#   - rclone (Google Drive sync). See etl/README.md.
+#   - AWS CLI v2 (used by the batch container). See
+#     etl/batch-container/Dockerfile.
 
 -r etl/ingestion/requirements.txt
 -r etl/tier_data/requirements.txt
+-r etl/statistics/requirements.txt
 -r database/requirements.txt
 -r api/coeqwal-api/requirements.txt

@@ -486,8 +486,7 @@ notebook.
   the unzipped directories)
 - `data/raw/pdf_tables_from_CalSim_report/` is **tracked** (whitelisted
   in `.gitignore`)
-- Reference xlsx files under `etl/tier_data/reference/` and
-  `etl/statistics/reference/` are **tracked**
+- Reference xlsx files under `data/reference/cws/` are **tracked**
 - All `audit_reports/` directories under `etl/` are **gitignored** (run
   artifacts, regrowable)
 

@@ -3,6 +3,5 @@
 *.pyc
 data/
 logs/
-docker-compose.yml
 *.ipynb
 .DS_Store

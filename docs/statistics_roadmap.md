@@ -36,7 +36,7 @@ plus NOD/SOD splits. CVP has `cvp_nod` and `cvp_sod` only. No `cvp_total`.
 
 ## Master crosswalk vs `du_urban_variable`
 
-**File:** [`etl/statistics/reference/Master crosswalk SW DUs M&I.xlsx`](../etl/statistics/reference/Master%20crosswalk%20SW%20DUs%20M&I.xlsx)
+**File:** [`data/reference/cws/Updated Master crosswalk SW DUs M&I May7 2026.xlsx`](../data/reference/cws/Updated%20Master%20crosswalk%20SW%20DUs%20M&I%20May7%202026.xlsx)
 
 86 rows mapping `du_id` to CalSim `UD_*` demand and `DN_*` delivery variables.
 
@@ -66,7 +66,7 @@ Tracked as thread R1 in [`docs/TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md).
 | Seed CSV | `database/seed_tables/04_calsim_data/du_urban_entity.csv` | Current committed reference |
 | CalSim report PDF | `data/raw/pdf_tables_from_CalSim_report/urban_du.pdf` | Upstream source for urban gw/sw |
 | Ag PDF extracts | `data/raw/csv_from_CalSim_report_pdf/du+diversion/*.csv` | Upstream for ag gw/sw |
-| M&I team xlsx | `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx` | Team refresh, may override seed |
+| M&I team xlsx | `data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx` | Team refresh, may override seed |
 
 Reconciliation script:
 [`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py)
@@ -227,36 +227,24 @@ escape hatch.
 
 ### V5. Reference-directory clarity
 
-**Current:** three reference homes coexist with overlapping-but-distinct
-purposes, which makes the verifiers and `--csv-only` invocations
-confusing:
+**Current:** the M&I crosswalk xlsx moved out of `etl/statistics/reference/`
+into [`data/reference/cws/`](../data/reference/cws/) alongside the other
+CWS reference spreadsheets. One reference home remains:
 
 - [`etl/reference/`](../etl/reference/) holds the CalSim scenario CSVs
   (DV `s0020_coeqwal_calsim_output.csv`, SV `s0020_coeqwal_sv_input.csv`,
   trend-report CSVs). This is the verifiers' default (`--ref-dir`
   default in `verify_all_sections.py`).
-- [`etl/statistics/reference/`](../etl/statistics/reference/) holds the
-  `Master crosswalk SW DUs M&I.xlsx` (the CalSim-variable to DU-label
-  map intended for `compare_master_crosswalk.py` [NOT YET IMPLEMENTED];
-  see `docs/TEAM_RUNBOOK.md` thread A5). Different role; not used by
-  the verifiers.
 - `s3://coeqwal-model-run/reference/` is the cloud mirror of
   `etl/reference/`.
 
-The two local homes do not conflict, but they look like they do (both
-named `reference/`), so the `--csv-only` path on
-`verify_all_sections.py` is not obvious about which directory it loaded
-from.
+**Goal:** keep the role explicit and make the verifiers log the
+resolved path at INFO:
 
-**Goal:** keep the role split, name it explicitly, and make the
-verifiers log the resolved path at INFO:
-
-- Rename one of the local directories so the role is obvious from the
-  path (for example `etl/reference/` -> `etl/reference_calsim_csvs/`
-  and `etl/statistics/reference/` -> `etl/statistics/crosswalks/`).
+- Optional rename for clarity: `etl/reference/` -> `etl/reference_calsim_csvs/`.
 - Have `verify_all_sections.py` and `verify_api.py` log the resolved
   `--ref-dir` at INFO on startup so the loaded source is unambiguous.
-- Document the S3 sync command and the role split in
+- Document the S3 sync command in
   [`etl/verification/README.md`](../etl/verification/README.md).
 
 ### V6. CI integration for Layer 3 (API vs DB)

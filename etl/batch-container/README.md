@@ -214,6 +214,33 @@ cd ~/environment/coeqwal-backend/etl/statistics
 python scan_dupes.py --compare-values --audit-units --workers 4
 ```
 
+## Maintenance roadmap
+
+### pydsstools now ships manylinux wheels
+
+Tested 2026-05-27 (Apple Silicon emulating linux/amd64): `pip install pydsstools` resolved a pre-built wheel (`pydsstools-3.0.2-cp310-cp310-manylinux_2_28_x86_64.whl`) in ~6 seconds instead of building from source. The full image build completed in ~41 seconds, and `from pydsstools.heclib.dss import HecDss` works at runtime inside the built image.
+
+If a future maintainer wants to simplify, most of the current Dockerfile is dead weight:
+
+| Currently in [Dockerfile](Dockerfile) | Why it's there | Still needed once we trust the wheel? |
+|---|---|---|
+| `apt install build-essential gcc g++ make zlib1g-dev gfortran python3-dev` | Compile pydsstools from source | No |
+| `mkdir -p /pydsstools/src/external/...` | Layout pydsstools expects during build | No |
+| `COPY heclib/heclib.a /pydsstools/...` | Link against during build | No |
+| `ENV CFLAGS=... LDFLAGS=...` | Point pydsstools build at the layout above | No |
+| Two-step pip install (deps first, then pydsstools) | numpy headers needed for the from-source build | No, single `pip install -r requirements.txt && pip install pydsstools` works |
+| `apt install unzip curl` | AWS CLI v2 installer | Yes |
+| [`heclib/heclib.a`](heclib/) file in the repo | Used to be the source of truth for the static lib | No (the wheel bundles its own) |
+
+A simplified Dockerfile would land near ~30 lines, install in ~30 seconds even cold, and produce a substantially smaller image (no build toolchain layers).
+
+Before simplifying, validate:
+1. The pydsstools wheel is still published for the Python version you target. If wheels stop for cp310, the from-source path is the fallback.
+2. The wheel's bundled DSS lib version actually matches the heclib.a we ship. The current `heclib.a` is a known-good build the team trusts. Switching to whatever the wheel author ships is a trust change, not just a packaging change.
+3. AWS Batch runs the simplified image end-to-end on at least one scenario before deleting `heclib/`.
+
+If any of those fail, the right move is to keep the from-source build path and add `--no-binary pydsstools` to the pip install to force source builds even when wheels exist.
+
 ## Operating notes
 
 - **Job definition revisions:** Only revision 3 is ACTIVE as of 2026-05-11 (Fargate, 2 vCPU, 16 GiB, image `coeqwal-etl:latest`). Revisions 1 and 2 (8 GiB each) were deregistered. The Lambda submits the bare name `coeqwal-dss-jobdef`, so Batch resolves to revision 3 automatically. Do not deregister revision 3 without updating the Lambda.

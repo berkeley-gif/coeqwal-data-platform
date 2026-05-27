@@ -94,7 +94,7 @@ if not yet committed).
 ```bash
 git check-ignore -v audits/cws/ 2>&1 || echo '(audits/cws/ is empty or removed)'
 
-git check-ignore -v "data/reference/cws/Master M&I DUs.xlsx" 2>&1 \
+git check-ignore -v "data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx" 2>&1 \
   || echo '(file is tracked - expected)'
 ```
 

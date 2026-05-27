@@ -1,5 +1,0 @@
-id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
-1,sector_aggregate,Sector Aggregate,Variables that aggregate across a sector,True,2026-03-01 18:22:51.140927+00:00,2,2026-03-01 18:22:51.140927+00:00,2
-2,delta_variable,Delta,Variables specific to Delta conditions and operations,True,2026-03-01 18:22:51.140927+00:00,2,2026-03-01 18:22:51.140927+00:00,2
-3,environmental_indicator,Environmental Indicator,Environmental metrics and indicators,True,2026-03-01 18:22:51.140927+00:00,2,2026-03-01 18:22:51.140927+00:00,2
-4,regional_summary,Regional Summary,Variables that aggregate across a region,True,2026-03-01 18:22:51.140927+00:00,2,2026-03-01 18:22:51.140927+00:00,2

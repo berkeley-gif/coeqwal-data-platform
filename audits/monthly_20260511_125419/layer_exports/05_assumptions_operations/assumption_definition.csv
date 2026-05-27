@@ -1,7 +1,0 @@
-id,short_code,name,short_title,assumption_category_id,description,source_id,is_active,notes,created_by,updated_by,created_at,updated_at
-1,lu_2004_2013,2004-2013 land use model,,1,,2,True,,2,2,2024-01-01 00:00:00+00:00,2026-03-16 22:42:39.935147+00:00
-2,lu_updated,updated land use model,,1,,2,True,,2,2,2024-01-01 00:00:00+00:00,2026-03-16 22:42:39.935147+00:00
-3,lu_proj_reductions,updated land use model with projected land use reductions,,1,,2,True,,2,2,2024-01-01 00:00:00+00:00,2026-03-16 22:42:39.935147+00:00
-4,gw_model,groundwater model,,2,,2,True,,2,2,2024-01-01 00:00:00+00:00,2026-03-16 22:42:39.935147+00:00
-5,lu_2020_landiq,2020 LandIQ land use,2020 LandIQ,1,,2,True,,2,2,2026-03-01 21:49:28.404235+00:00,2026-03-16 22:42:39.935147+00:00
-6,lu_2020_landiq_reduced_ag,2020 LandIQ land use with reduced agricultural acreage,2020 LandIQ (reduced ag),1,,2,True,,2,2,2026-03-01 21:49:28.404235+00:00,2026-03-16 22:42:39.935147+00:00

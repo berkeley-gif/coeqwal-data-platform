@@ -1,25 +1,22 @@
 #!/usr/bin/env python3
 """reconcile_gw_sw_sources.py - Compare gw/sw classification across reference sources.
 
-Urban sources:
+Urban demand unit sources:
   - Seed: database/seed_tables/04_calsim_data/du_urban_entity.csv
-  - M&I team xlsx (Kristin): etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx
+  - M&I team xlsx (via Kristin Dobson): data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx
     (columns gw_su, sw_du, optional Notes)
   - CalSim manual OR rollup (Table 3-7):
     data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_demand_unit_water_sources.csv
   - Legacy partial extracts (superseded when manual CSV present):
     urban_du_calsim_report.csv, urban_du_calsim_report_rollup.csv
 
-Ag sources (only PDF tables that include gw/sw columns):
+Ag sources (the other du with gw/sw ):
   - Seed: database/seed_tables/04_calsim_data/du_agriculture_entity.csv
   - SAC Table 3-3: ag_demand_units_sac_calsim_report_Table_3-3.csv
   - SJR Table 3-6: ag_demand_units_sjr_calsim_report_Table_3-6.csv
 
 Ag PDF tables 3-4 and 3-5 list diversion arcs only. They have no gw/sw
 columns and are not compared here.
-
-Urban disagreements are usually semantic (rollup rule, team overrides),
-not formatting. Seed CSV uses true/false; xlsx still uses 0/1.
 
 This script is informational while gw/sw value reconciliation is deferred.
 See docs/gw_sw_reconciliation.md.
@@ -44,7 +41,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 SEED_URBAN = REPO / "database/seed_tables/04_calsim_data/du_urban_entity.csv"
-XLSX_URBAN = REPO / "etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx"
+XLSX_URBAN = REPO / "data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx"
 SEED_AG = REPO / "database/seed_tables/04_calsim_data/du_agriculture_entity.csv"
 PDF_DIR = REPO / "data/raw/csv_from_CalSim_report_pdf/du+diversion"
 PDF_URBAN_MANUAL = PDF_DIR / "urban_demand_unit_water_sources.csv"
@@ -100,7 +97,7 @@ def _load_xlsx_urban() -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
         import openpyxl
     except ImportError as e:
         raise SystemExit(
-            "openpyxl required. Install in venv or use scripts/pdf_scraper/venv."
+            "openpyxl required. Install with: pip install openpyxl"
         ) from e
     wb = openpyxl.load_workbook(XLSX_URBAN, data_only=True)
     ws = wb.active

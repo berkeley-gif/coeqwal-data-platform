@@ -1,5 +1,0 @@
-id,short_code,label,description,is_active,created_at,created_by,updated_at,updated_by
-1,POINT,Point,Single coordinate,True,2026-02-15 17:04:07.434150+00:00,2,2026-02-15 17:04:07.434150+00:00,2
-2,LINESTRING,LineString,Linear feature,True,2026-02-15 17:04:07.434150+00:00,2,2026-02-15 17:04:07.434150+00:00,2
-3,POLYGON,Polygon,Area polygon,True,2026-02-15 17:04:07.434150+00:00,2,2026-02-15 17:04:07.434150+00:00,2
-4,MULTIPOLYGON,MultiPolygon,Multiple polygons,True,2026-02-15 17:04:07.434150+00:00,2,2026-02-15 17:04:07.434150+00:00,2

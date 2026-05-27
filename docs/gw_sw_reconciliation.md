@@ -24,7 +24,7 @@ seed CSVs today. A planned migration will move them to `BOOLEAN`.
 | Source | File | Notes |
 |---|---|---|
 | Seed (committed) | `database/seed_tables/04_calsim_data/du_urban_entity.csv` | Current DB reference |
-| Team M&I xlsx | `etl/tier_data/reference/Final_M&Idemandunits_withlatlongs.xlsx` | `gw_su`, `sw_du`, optional `Notes` |
+| Team M&I xlsx | `data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx` | `gw_su`, `sw_du`, optional `Notes` |
 | CalSim PDF flat | `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_du_calsim_report.csv` | One row per community/system |
 | CalSim PDF rollup | `urban_du_calsim_report_rollup.csv` | DU-level OR rollup (partial) |
 | CalSim PDF text | `urban_du_calsim_report_text.txt` | 9 pages, Table 3-7 layout reference |
@@ -150,24 +150,7 @@ Save as:
 
 Overwrite or version the partial file once complete.
 
-### 4c. Optional automated assist
-
-```bash
-cd ~/coeqwal-backend/scripts/pdf_scraper
-source venv/bin/activate
-
-python extract_tables_to_csv.py \
-  --input ../../data/raw/pdf_tables_from_CalSim_report/urban_du.pdf \
-  --pages 1-9 \
-  --headers "Demand Unit,Cities Towns and Communities,ID,GW,SW,Point of Diversion" \
-  --output ../../data/raw/csv_from_CalSim_report_pdf/du+diversion/ \
-  --verbose
-```
-
-Expect manual cleanup. Table 3-7 uses multi-line cells and merged DU id rows.
-Use `urban_du_calsim_report_text.txt` as a line-by-line reference while editing.
-
-### 4d. Build the DU-level OR rollup
+### 4c. Build the DU-level OR rollup
 
 For each `du_id`:
 
@@ -186,7 +169,7 @@ du_id,gw_pdf,sw_pdf,n_systems_pdf
 The reconcile script computes OR from the flat file automatically and merges
 any pre-built rollup file.
 
-### 4e. Re-run reconcile and fill the audit spreadsheet
+### 4d. Re-run reconcile and fill the audit spreadsheet
 
 ```bash
 python etl/tier_data/scripts/reconcile_gw_sw_sources.py \
