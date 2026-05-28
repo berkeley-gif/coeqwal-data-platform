@@ -15,7 +15,7 @@ by use case.
   (ingestion side) and `extract_record.json` (Batch container side) for
   every active scenario in S3, plus the `download` block of
   `ingest_state.json` from the most recent local run. Auto-runs at the
-  end of `gdrive_bulk_download.py download`; re-run by hand after Batch
+  end of `gdrive_bulk_download.py download`. Re-run by hand after Batch
   finishes.
 
   ```
@@ -23,7 +23,7 @@ by use case.
   ```
 
 - **`show_last_run.py`** -- prints a quick summary of the most recent
-  ingest stage(s). Default is the last `download`; pass
+  ingest stage(s). Default is the last `download`. Pass
   `--stage scan` or `--stage all` to print the scan block, or both
   blocks back-to-back.
 

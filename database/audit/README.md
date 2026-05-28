@@ -72,7 +72,7 @@ pip install psycopg2-binary pandas
 
 ### How it works internally
 
-The script is self-contained — all schema snapshot, layer export, and sampling logic is built in. The only sibling import is `verify_erd_against_audit.py` for ERD comparison (same `database/audit/` directory). No Lambda, no `sys.path` hacks, no AWS dependencies.
+The script is self-contained - all schema snapshot, layer export, and sampling logic is built in. The only sibling import is `verify_erd_against_audit.py` for ERD comparison (same `database/audit/` directory). No Lambda, no `sys.path` hacks, no AWS dependencies.
 
 Database connections are opened as `readonly=True`. The script never writes to the database.
 

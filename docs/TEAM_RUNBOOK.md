@@ -23,7 +23,7 @@ historical context live in the linked docs.
 
 ---
 
-## Active threads (next operator can pick these up)
+## Active threads (next developer can pick these up)
 
 | # | Thread | Blocker |
 |---|---|---|
@@ -44,7 +44,7 @@ historical context live in the linked docs.
 
 R1 and R2 had partial code prep that was rolled back in May 2026
 because the team lost the access window needed to apply them safely.
-The design intent is preserved in the linked docs; future operators
+The design intent is preserved in the linked docs. Future developers
 can pick them up. See [Roadmap detail](#roadmap-detail-r1-and-r2)
 below.
 
@@ -185,7 +185,7 @@ single `DEL_SWP_PMI` (unsuffixed) variable; CVP only exposes
   mirror SWP). Confirm with M&I team.
 - **B.** ETL-computed sum of `cvp_nod` + `cvp_sod` (write a new
   `CWS_AGGREGATES` entry that sums the two existing aggregate values).
-- **C.** Leave as-is. Treat NOD + SOD as the canonical CVP split, no
+- **C.** Leave as-is. Treat NOD + SOD as the default CVP split, no
   total row.
 
 Pick one and the implementation is one ON-CONFLICT INSERT plus (if B)
@@ -196,7 +196,7 @@ one dict entry.
 ### A5. Reconcile master crosswalk with `du_urban_variable`
 
 **Where we are.** Comparison is computed and committed as a script
-(no DB needed; reads the audit snapshot). Headline:
+(no DB needed. Reads the audit snapshot). Headline:
 
 | Bucket | Count |
 |---|---:|
@@ -221,7 +221,7 @@ has time.
 1. Implement `etl/statistics/scripts/compare_master_crosswalk.py` (the comparison logic existed in a prior local checkout but was not committed). Then run with `--csv-out` to refresh the audit CSV against the latest audit snapshot.
 2. Decide delivery-variable policy (xlsx wins, DB wins, case-by-case).
    `D_<plant>_<id>` codes may encode the correct CalSim variable for
-   that specific DU; check with the M&I team before normalizing to
+   that specific DU. Check with the M&I team before normalizing to
    `DN_<id>`.
 3. Confirm whether the `_PA` rows in `du_urban_variable` are intentional
    (those look like agricultural rows misfiled in the urban table).
@@ -273,7 +273,7 @@ keyed on a uniqueness constraint that always includes `scenario_short_code`.
 | Other scenarios | Untouched |
 | Previous statistic values | Not preserved (no audit trail per cell) |
 | Re-running with same inputs | Idempotent - identical rows |
-| Schema migration (e.g. add a column) | Separate code change; data fills on next stats run |
+| Schema migration (e.g. add a column) | Separate code change. Data fills on next stats run |
 
 Modules following this pattern (from `etl/statistics/`):
 
@@ -299,7 +299,7 @@ overwrite the matching row by primary key.
 These two threads were prepped in May 2026, partially scaffolded in
 code, and then rolled back when the access window to apply them on RDS
 closed. The repo now describes the live RDS state. The intent docs
-linked below stay in place as design references for a future operator.
+linked below stay in place as design references for a future developer.
 
 ### R1. `gw` / `sw` BOOLEAN migration (rolled back)
 
@@ -311,7 +311,7 @@ use `BOOLEAN`.
 RDS. The seed CSV, CREATE TABLE script, ERD entry, and an SQL migration
 file all assumed BOOLEAN. With the migration unapplied, the prepared
 seed would have failed to load. Cleaner to revert the prep until an
-operator can run end-to-end.
+developer can run end-to-end.
 
 **Future pickup.** When the team is ready:
 
@@ -379,7 +379,7 @@ under "Future refactor". Roughly:
 3. Refactor `load_du_geometries.py` to write the dedicated tables.
 4. Update `etl/common/tier_location_entities.py` `GeometryResolver`
    for `demand_unit` to point at the new tables. The resolver feeds
-   the Mapbox tile-build pipeline; the API does not consume it for
+   the Mapbox tile-build pipeline. The API does not consume it for
    geometry.
 5. Data migration: copy any existing rows from `du_*_entity.geom`
    into the new tables.
@@ -449,7 +449,7 @@ checkout is stale - `git pull` and rerun.
 - Do not commit or push without an explicit request from the team
   lead.
 - Verification is by hand or by audit script. Do not drive a browser
-  for visual checks; describe what an operator should look at instead.
+  for visual checks. Describe what a developer should look at instead.
 
 ---
 

@@ -1,7 +1,7 @@
 # SQL Scripts
 
 SQL utility scripts. Almost everything that has been applied to RDS
-already lives in [`.archive/`](.archive/); only active utility DDL and
+already lives in [`.archive/`](.archive/). Only active utility DDL and
 two layer verifier directories remain at the top level.
 
 ## What's here
@@ -12,7 +12,7 @@ two layer verifier directories remain at the top level.
 | `create_tier_location_table.sql` | Active superuser DDL. Creates `tier_location`. |
 | `create_tier_location_result_table.sql` | Active superuser DDL. Creates `tier_location_result`. |
 | `find_tier_locations.sql` | Ad-hoc query utility for tier-location lookups. |
-| `upsert_scenario_data.sql` | Operator UPSERT for scenario / theme / link tables. |
+| `upsert_scenario_data.sql` | UPSERT for scenario / theme / link tables. |
 | `validate_data_integrity.sql` | Post-ETL integrity check (`psql $DATABASE_URL -f validate_data_integrity.sql`). |
 | `01_lookup/` | `09_verify_level01.sql` + `inspect_layer01.sql` for the lookup layer. |
 | `02_network/` | `09_verify_level02.sql` for the network layer. |
@@ -33,7 +33,7 @@ Review results for any non-zero counts in integrity checks.
 - `create_*.sql` - Creates new tables (superuser DDL)
 - `upsert_*.sql` - Insert or update operations
 - `*_local.sql` / `*_cloud9.sql` - Local / Cloud9 variants (gitignored)
-- `*_from_s3.sql` (in `.archive/`) - Deprecated; seed data is now loaded from the repo via `\copy`
+- `*_from_s3.sql` (in `.archive/`) - Deprecated. Seed data is now loaded from the repo via `\copy`
 - `migrate_*.sql` / numbered `NN_*.sql` (in `.archive/`) - Historical schema migrations
 
 ## Adding a new migration

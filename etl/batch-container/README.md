@@ -217,5 +217,5 @@ If any of those fail, the right move is to keep the from-source build path and a
 
 - The Lambda that fires extraction jobs: [../lambda/README.md](../lambda/README.md)
 - The developer scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to load scenario data into the database and S3 buckets from Google Drive" and "Developer scripts in `etl/ingestion/`")
-- End-to-end accuracy verification (Layer 1-4): [../verification/README.md](../verification/README.md)
+- End-to-end accuracy verification (Layer 1, 2, 3, 3-tier): [../verification/README.md](../verification/README.md)
 - AWS-side resource details: [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)

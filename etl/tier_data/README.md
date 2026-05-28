@@ -87,7 +87,7 @@ belt-and-suspenders. It should always return zero rows.
    ```
    Writes `etl/tier_data/output/all_tiers.sql` (the whole `output/` tree
    is gitignored via `etl/**/output/`). Bare filenames are auto-routed
-   there; paths with `/` are respected verbatim.
+   there. Paths with `/` are respected verbatim.
 
 **7. Apply it:**
    ```bash
@@ -137,7 +137,7 @@ belt-and-suspenders. It should always return zero rows.
 > **No seed CSV step.** `tier_result` and `tier_location_result` are
 > project data, not reference data, so they are not mirrored into
 > `database/seed_tables/10_tier/`. The staging CSVs in `staging/` plus
-> this loader are the canonical source of truth. A from-scratch DB
+> this loader are the source of truth. A from-scratch DB
 > rebuild populates these tables by running the loader after the DDLs,
 > exactly the same command as a routine load (steps 5-7 above).
 
@@ -175,14 +175,14 @@ DATABASE_URL=$DATABASE_URL python etl/tier_data/scripts/load_all_tier_results.py
 ### Notes
 
 - `tier_location_result` has no `is_active` column. Retired-scenario rows
-  stay in the table forever; the API hides them by filtering on
+  stay in the table forever. The API hides them by filtering on
   `tier_result.is_active`.
 - `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by
   design - it's the CalSim id for the Legal Delta, which is both a WBA
   (for groundwater accounting) and the polygon used by `DELTA_ECO`. The
   composite uniqueness key keeps these rows distinct because the
   `tier_short_code` differs. API routes that take a tier in the path
-  return only that tier's `DETAW` row; client code keying by
+  return only that tier's `DETAW` row. Client code keying by
   `location_id` across tiers should use `(tier_short_code, location_id)`.
 - Generated SQL lands in `etl/tier_data/output/` by default and that
   whole tree is gitignored. Only the script and staging CSVs are tracked.
@@ -194,7 +194,7 @@ DATABASE_URL=$DATABASE_URL python etl/tier_data/scripts/load_all_tier_results.py
 The tier teams' staging CSVs are the source of truth for tier-location
 membership. The `tier_location` database table is a narrow catalog
 (`tier_short_code`, `location_type`, `location_id`, `display_order`,
-`is_active`); display names and geometry are resolved at query time by
+`is_active`). Display names and geometry are resolved at query time by
 joining `location_id` to the entity tables documented in
 [`etl/common/tier_location_entities.py`](../common/tier_location_entities.py).
 There is no seed CSV for `tier_location`.
@@ -235,7 +235,7 @@ The workflow:
    The plan reports inserts, reactivations (rows that returned to
    staging after being soft-deleted), display-order updates, and
    deactivations. The script refuses to write rows whose `location_id`
-   does not resolve in the entity table; pass `--allow-unresolved` only
+   does not resolve in the entity table. Pass `--allow-unresolved` only
    during an active gap-fill.
 
 5. Apply:
@@ -267,11 +267,11 @@ WARNING: tier_location coverage gap in RES_STOR: 1 missing attribute [ORO]; 1 mi
 |---|---|
 | [`scripts/sync_tier_locations_from_staging.py`](scripts/sync_tier_locations_from_staging.py) | Prints per-tier `coverage: attribute X/Y, geometry A/B` in the plan, then the WARNING block. Attribute gaps still block sync (use `--allow-unresolved` during gap-fill). Geometry gaps warn only. |
 | [`scripts/diff_tier_locations.py`](scripts/diff_tier_locations.py) | Appends a coverage scorecard across the union of staging and catalog ids, then the WARNING block. Read-only, never exits non-zero. |
-| [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) | Emits the WARNING block on startup against active catalog rows. Loader continues regardless; the loader falls back to `location_id` for any name that fails to resolve. |
+| [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) | Emits the WARNING block on startup against active catalog rows. Loader continues regardless. The loader falls back to `location_id` for any name that fails to resolve. |
 | [`scripts/verify_tiers.py`](scripts/verify_tiers.py) | Emits the WARNING block on startup, immediately after the RES_STOR catalog fetch. Verifier pass/fail logic is unchanged. |
 | [`scripts/audit_tier_location_geometry.py`](scripts/audit_tier_location_geometry.py) | The dedicated tool. Full per-id scorecard plus the ERD-vs-live drift pass. Exits non-zero on any gap so CI / wrappers can branch on it. JSON dump via `--json`. |
 
-The four daily scripts only ever warn; only the audit script changes its
+The four daily scripts only ever warn. Only the audit script changes its
 exit code on gaps. Reach for the audit script when you need the full
 per-id detail or want CI to fail on regressions.
 

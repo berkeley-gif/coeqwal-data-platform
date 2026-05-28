@@ -83,7 +83,7 @@ If a future developer picks this up, the rough shape is:
 4. **Refactor** [`tier_location_entities.py`](../etl/common/tier_location_entities.py)
    `GeometryResolver.table` for `demand_unit` from `du_urban_entity` /
    `du_agriculture_entity` to the new geometry tables. The resolver
-   feeds the Mapbox tile-build pipeline; the API does not consume
+   feeds the Mapbox tile-build pipeline. The API does not consume
    geometry from it (see geometry policy in `database/README.md`).
 5. **Drop** `geom`, `geom_wkt`, `srid` from the three `du_*_entity`
    tables once the dedicated tables exist and are loaded (reverse 56).

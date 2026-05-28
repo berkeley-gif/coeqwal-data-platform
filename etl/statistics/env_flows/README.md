@@ -2,7 +2,7 @@
 
 > **Status: IMPLEMENTED**
 >
-> All migrations (23–27) applied. ETL complete for all 19 scenarios. Data loaded into
+> All migrations (23-27) applied. ETL complete for all 19 scenarios. Data loaded into
 > `env_flow_channel_monthly`, `env_flow_channel_seasonal`, and `env_flow_channel_period_summary`.
 > API endpoints are the next step.
 
@@ -37,7 +37,7 @@ in S3. No additional data pipeline work is required before building this ETL mod
 | Fallback | `s3://coeqwal-model-run/scenario/{scenario}/csv/{scenario}_DV_v*.csv` |
 | Local example | `data/example_data/s0020_DCRadjBL_2020LU_wTUCP_DV_v0.1.csv` |
 | Units | CFS (Part F = PER-AVER). Volume conversion: `TAF = CFS × 0.001984 × days_in_month` |
-| Time range | 1,200 months (October 1921 – September 2021, water years 1922–2021) |
+| Time range | 1,200 months (October 1921 - September 2021, water years 1922-2021) |
 
 **Variables in DV (Part B pattern to Part C label):**
 
@@ -126,7 +126,7 @@ meaningful analytical subset. The `channel_entity` table flags drives these filt
 
 | Filter | Column flag | Count | Description |
 |--------|------------|-------|-------------|
-| **Stream reaches** | `channel_class = 'stream'` | 47 | All natural river channels; excludes reservoir releases (below-dam flows) and conveyance canals |
+| **Stream reaches** | `channel_class = 'stream'` | 47 | All natural river channels. Excludes reservoir releases (below-dam flows) and conveyance canals |
 | **EFLOWS streams** | `has_eflows = true` | 17 | Streams with a prescribed functional flow (`EFLOWS_{reach}`) target in the SV input.the reach set used for tier results and CEFF analysis (Metric 2) |
 | **MIF streams** | `has_mif = true` | 20 | Streams with a binding minimum instream flow companion variable (`C_{reach}_MIF`) in the DV output.the primary regulatory monitoring locations |
 | **All channels** | (no filter) | 59 | Complete CalSim reach set including reservoir releases (e.g. below Shasta, Oroville, Folsom) and conveyance canals (e.g. Delta Cross Channel, Clifton Court Forebay) |
@@ -208,8 +208,8 @@ The Sacramento River mainstem uses two different unimpaired flow references, spl
 
 | Sub-reach | River Miles | `UNIMP_*` | Channels |
 |-----------|-------------|-----------|---------|
-| `SAC_UPPER`.above Bend Bridge | rm 257–310 | `UNIMP_SHAS` | SHSTA, KSWCK, SAC289 |
-| `SAC_LOWER`.at/below Bend Bridge | rm 0–257 | `UNIMP_SRBB` | SAC257, SAC240, SAC201, SAC148, SAC122, SAC120, SAC085, SAC083, SAC049, SAC048, SAC041, SAC029B, SAC007, SAC000, SSL001, YBP020 |
+| `SAC_UPPER`.above Bend Bridge | rm 257-310 | `UNIMP_SHAS` | SHSTA, KSWCK, SAC289 |
+| `SAC_LOWER`.at/below Bend Bridge | rm 0-257 | `UNIMP_SRBB` | SAC257, SAC240, SAC201, SAC148, SAC122, SAC120, SAC085, SAC083, SAC049, SAC048, SAC041, SAC029B, SAC007, SAC000, SSL001, YBP020 |
 
 `UNIMP_SRBB` = "Sacramento River Below Bend Bridge".captures additional inflow
 (Cottonwood Creek, Stony Creek) between Shasta and Bend Bridge.
@@ -233,13 +233,13 @@ Water year definition: October = WY month 1, September = WY month 12.
 
 | Season ID | `short_code` | Calendar Months | WY Months | Ecological Role |
 |-----------|--------------|-----------------|-----------|-----------------|
-| 1 | `wet_peak` | December, January, February | 3, 4, 5 | High-flow wet season pulse; spawning habitat creation |
+| 1 | `wet_peak` | December, January, February | 3, 4, 5 | High-flow wet season pulse. Spawning habitat creation |
 | 2 | `wet_base` | March, April | 6, 7 | Sustained baseflow after wet-season peak |
-| 3 | `spring_recession` | May, June | 8, 9 | Snowmelt-driven gradual recession; juvenile fish outmigration |
-| 4 | `dry` | July, August, September, October | 10, 11, 12, 1 | Summer low flows; thermal stress period |
-| 5 | `fall_pulse` | November | 2 | First flush; adult salmon migration trigger |
+| 3 | `spring_recession` | May, June | 8, 9 | Snowmelt-driven gradual recession. Juvenile fish outmigration |
+| 4 | `dry` | July, August, September, October | 10, 11, 12, 1 | Summer low flows. Thermal stress period |
+| 5 | `fall_pulse` | November | 2 | First flush. Adult salmon migration trigger |
 
-Note: the dry season spans the water year boundary (WY months 10–12 + month 1). In the ETL,
+Note: the dry season spans the water year boundary (WY months 10-12 + month 1). In the ETL,
 group by `(water_year, season_id)` treating October as belonging to the *preceding* water year's
 dry season (i.e., October 1922 is part of water year 1922's dry season, not 1923's).
 
@@ -258,7 +258,7 @@ MOK019 and MOK028 excluded).
 # Per timestep (monthly):
 pct_unimpaired = (C_{reach}[t] / UNIMP_{watershed}[t]) * 100   # both in CFS
 
-# Per water month m (1–12), across all years in period of record:
+# Per water month m (1-12), across all years in period of record:
 pct_unimpaired_avg[m] = mean(pct_unimpaired[t] for t where water_month[t] == m)
 pct_unimpaired_cv[m]  = std(pct_unimpaired[t] for t where water_month[t] == m) / pct_unimpaired_avg[m]
 # Store NULL where UNIMP_{watershed}[t] == 0 (divide-by-zero guard)
@@ -269,7 +269,7 @@ Output: one row per (channel_entity_id, scenario_id, water_month) to
 
 ### Metric 2.River flows (% functional flows).seasonal
 
-Computed for reaches with `has_eflows = true` (17 confirmed reaches; others may be added
+Computed for reaches with `has_eflows = true` (17 confirmed reaches. Others may be added
 if EFLOWS variable is discovered in SV).
 
 ```python
@@ -416,9 +416,9 @@ different regulatory frameworks being tested, not a data pipeline error.
 
 | Scenario(s) | MIF present / 20 | Missing variables |
 |------------|-----------------|-------------------|
-| s0020, s0021, s0025–s0028, s0029, s0030, s0031–s0033, s0044 | **20 / 20** |.|
-| s0039–s0042 | **7 / 20** | `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_STS011_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
-| s0011 | **8 / 20** | Same 13 as s0039–s0042 except `C_STS011_MIF` is present; missing: `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
+| s0020, s0021, s0025-s0028, s0029, s0030, s0031-s0033, s0044 | **20 / 20** |.|
+| s0039-s0042 | **7 / 20** | `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_STS011_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
+| s0011 | **8 / 20** | Same 13 as s0039-s0042 except `C_STS011_MIF` is present. Missing: `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
 | s0023, s0024 | **6 / 20** | Same 12 as s0011, plus `C_SAC257_MIF` and `C_STS011_MIF` |
 
 All 59 channel flow variables (`C_{reach}`) are present in every scenario.**no channel
@@ -433,7 +433,7 @@ EFLOWS targets are SV inputs.they are prescribed constraints, not DV outputs.
 
 | Scenario(s) | SV columns | EFLOWS present | Notes |
 |------------|------------|----------------|-------|
-| s0020, s0021, s0023–s0028, s0031–s0033, s0039–s0042, s0044 | 28 | All 17 | Full EFLOWS suite |
+| s0020, s0021, s0023-s0028, s0031-s0033, s0039-s0042, s0044 | 28 | All 17 | Full EFLOWS suite |
 | s0011 | 12 | **None** | Pre-EFLOWS baseline.no functional flow targets prescribed |
 | **s0029, s0030** | **12** | **1 of 17.only `EFLOWS_STS011`** | Unexpected.see open question below |
 

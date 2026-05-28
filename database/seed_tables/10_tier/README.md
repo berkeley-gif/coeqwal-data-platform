@@ -47,7 +47,7 @@ python etl/tier_data/scripts/sync_tier_locations_from_staging.py
 
 DDL: [`database/scripts/sql/create_tier_location_table.sql`](../../scripts/sql/create_tier_location_table.sql)
 (superuser-only, runs once). Display names are not stored on
-`tier_location`; the loader and API resolve them by joining `location_id`
+`tier_location`. The loader and API resolve them by joining `location_id`
 to the entity tables documented in
 [`etl/common/tier_location_entities.py`](../../../etl/common/tier_location_entities.py).
 Rows that drop out of staging are soft-deleted (`is_active = FALSE`)
@@ -58,7 +58,7 @@ row.
 
 The actual tier values per scenario are project data, not reference
 data. They change every time the data team produces a new round of
-scenarios or revises tier thresholds, and the canonical source is the
+scenarios or revises tier thresholds, and the source of truth is the
 staging CSVs in [`etl/tier_data/staging/`](../../../etl/tier_data/staging/).
 
 A from-scratch DB rebuild loads them by running the ETL loader after

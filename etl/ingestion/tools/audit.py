@@ -35,7 +35,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 
@@ -56,8 +56,8 @@ from etl.common import (  # noqa: E402
 )
 from etl.ingestion.lib.config import INGEST_STATE_PATH  # noqa: E402
 
-# audit.md stays at etl/ingestion/audit.md (tracked in git, referenced by
-# the README) regardless of where this script lives.
+# audit.md lives at etl/ingestion/audit.md. The path is not gitignored, so the developer can commit
+# the file when they want the team to see the latest digest.
 AUDIT_MD_PATH = INGESTION_DIR / "audit.md"
 
 log = logging.getLogger("audit")
@@ -604,8 +604,14 @@ def _render(
     local_state: Dict[str, Any],
     scenario_states: List[Dict[str, Any]],
     show_all: bool,
-) -> str:
-    """Build the full markdown."""
+) -> Tuple[str, Dict[str, int]]:
+    """Build the full markdown plus a small dict of headline counts.
+
+    The counts are the same numbers that go into the `## Run summary`
+    table in `audit.md`. They are surfaced so the caller
+    (`regenerate_audit`) can print a one-line console summary without
+    re-walking `scenario_states`.
+    """
     local_skips: List[Dict[str, Any]] = []
     local_unverified: List[Dict[str, Any]] = []
     for row in local_state.get("scenarios", []) or []:
@@ -694,7 +700,15 @@ def _render(
     parts.append("\n")
     parts.append(_render_details(scenario_states, show_all))
     parts.append(_render_appendix(DEFAULT_S3_BUCKET))
-    return "".join(parts)
+
+    summary: Dict[str, int] = {
+        "total": len(scenario_states),
+        "attention_count": attention_count,
+        "validation_failure_count": len(validation_failures),
+        "extraction_failure_count": len(extraction_failures),
+        "convention_warn_count": convention_warn_count,
+    }
+    return "".join(parts), summary
 
 
 # ---------------------------------------------------------------------------
@@ -724,7 +738,7 @@ def regenerate_audit(
         log.debug("  collecting state for %s", sc)
         scenario_states.append(_collect_scenario_state(s3, s3_bucket, sc))
 
-    markdown = _render(local_state, scenario_states, show_all)
+    markdown, summary = _render(local_state, scenario_states, show_all)
 
     if dry_run:
         return markdown
@@ -732,7 +746,15 @@ def regenerate_audit(
     audit_md_path.parent.mkdir(parents=True, exist_ok=True)
     audit_md_path.write_text(markdown)
     log.info("Wrote audit to %s", audit_md_path)
+
     print(f"\nAudit written to {audit_md_path}. Review and commit it manually when ready.")
+    print(
+        f"Summary: {summary['total']} active scenarios in S3, "
+        f"{summary['attention_count']} need developer action "
+        f"(extraction failures: {summary['extraction_failure_count']}, "
+        f"validation failures: {summary['validation_failure_count']}, "
+        f"convention warnings: {summary['convention_warn_count']})."
+    )
     return None
 
 

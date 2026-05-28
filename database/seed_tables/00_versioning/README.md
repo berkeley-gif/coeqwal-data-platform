@@ -10,14 +10,14 @@ the small, stable reference tables that define version domains and bootstrap use
 | `version_family.csv` | `version_family` | 14 | 14 | ✅ current |
 | `version.csv` | `version` | 14 | 14 | ✅ current |
 | `developer.csv` | `developer` | 2 | 2 | ⚠️ see note below |
-| `domain_family_map.csv` | `domain_family_map` | 34 | 70 | ❌ out of date — do not use for loading |
+| `domain_family_map.csv` | `domain_family_map` | 34 | 70 | ❌ out of date - do not use for loading |
 
 ## Loading
 
 Seed data is loaded by `database/scripts/sql/.archive/00_versioning/06_load_seed_data.sql`.
 Run it after `00_create_versioning_tables.sql`.
 
-`domain_family_map` is **not** loaded from the CSV here — it is populated by
+`domain_family_map` is **not** loaded from the CSV here - it is populated by
 `05_populate_domain_family_map.sql`, which contains the full current 70-row set.
 
 To regenerate `domain_family_map.csv` from the live database:
@@ -91,9 +91,9 @@ See `database/scripts/sql/.archive/00_create_helper_functions.sql` for the full 
 
 ## Versioning workflow
 
-1. **New version** — add a row to `version` with `is_active = true`, set previous
+1. **New version** - add a row to `version` with `is_active = true`, set previous
    active version to `is_active = false`.
-2. **New table** — add a row to `domain_family_map` linking the table to its family,
+2. **New table** - add a row to `domain_family_map` linking the table to its family,
    and update `05_populate_domain_family_map.sql`.
-3. **New developer** — run `register_developer()` (see `04_create_developer_users.sql`)
+3. **New developer** - run `register_developer()` (see `04_create_developer_users.sql`)
    and update `developer.csv` and `06_load_seed_data.sql`.

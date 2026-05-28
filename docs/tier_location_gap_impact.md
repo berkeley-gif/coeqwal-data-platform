@@ -37,7 +37,7 @@ tier level counts) include the location. The API response does not
 signal that geometry or entity metadata is missing.
 
 The API does not serve GeoJSON. Map polygons come from the Mapbox
-`demand-units` vector tile keyed by `DU_ID`; rows with
+`demand-units` vector tile keyed by `DU_ID`. Rows with
 `du_*_entity.geom IS NULL` simply have no matching tile feature and
 render uncolored. See "Frontend behavior" below.
 
@@ -45,7 +45,7 @@ render uncolored. See "Frontend behavior" below.
 
 [`etl/tier_data/scripts/load_all_tier_results.py`](../etl/tier_data/scripts/load_all_tier_results.py)
 prints coverage warnings via `format_coverage_warnings()` when entity
-attribute or geometry lookups fail. These are operator-facing, not
+attribute or geometry lookups fail. These are developer-facing, not
 user-facing.
 
 ---
@@ -78,7 +78,7 @@ does not crash.
 
 ## Impact summary
 
-| Gap type | Tier scores in API / heatmap | Colored polygon on map | Operator warning at ETL load |
+| Gap type | Tier scores in API / heatmap | Colored polygon on map | Developer warning at ETL load |
 |---|---|---|---|
 | Missing attribute row | Yes | Only if Mapbox tile exists | Yes (attribute missing) |
 | Missing polygon (row exists) | Yes | Only if Mapbox tile exists | Yes (geometry missing) |

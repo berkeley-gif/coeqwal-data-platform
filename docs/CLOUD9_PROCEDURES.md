@@ -6,7 +6,7 @@ Cloud9 instance. Each thread has its own section with pre-checks,
 the change, and verification. All commands assume you are logged in
 to the shared Cloud9 EC2 instance with the existing IAM role.
 
-These procedures are pure operator harnesses around code and migrations
+These procedures are pure developer harnesses around code and migrations
 that already live in the repo. Nothing here changes behavior on its own
 - if a step fails its pre-check, stop and triage rather than forcing
 through.
@@ -65,7 +65,7 @@ ls -la audits/cws/ 2>&1
 
 **Expect.** Target folder exists with a `README.md`. Source folder
 contains the team's xlsx files (filenames may not match the README's
-canonical names exactly; that is fine).
+the existing names exactly. That is fine).
 
 ### Step 2: move files and stage
 
@@ -105,7 +105,7 @@ Second command: returns nothing because the file is **tracked** (the
 
 ### Step 4: commit
 
-Per project policy, the operator commits. Suggested message:
+Per project policy, the developer commits. Suggested message:
 
 ```
 chore(data): track CWS reference xlsx under data/reference/cws/
@@ -269,7 +269,7 @@ python etl/ingestion/gdrive_bulk_download.py promote \
   --scenarios $(echo "$TAIESM1_IDS" | tr ',' ' ')
 ```
 
-The ZIP `PUT` under `ready/<id>/` is what the Lambda watches; each
+The ZIP `PUT` under `ready/<id>/` is what the Lambda watches. Each
 promote fires Batch automatically. Expect the Batch queue to fill
 within ~1 minute of the last promote.
 
@@ -313,7 +313,7 @@ done
 ```
 
 Or in one shot using `--all-scenarios` (relies on the refreshed
-`etl_scenarios.py`, so it will hit every non-skip scenario; use the
+`etl_scenarios.py`, so it will hit every non-skip scenario. Use the
 per-scenario loop above if you want to limit to TAIESM1 only):
 
 ```bash
@@ -355,7 +355,7 @@ for id in $(echo "$TAIESM1_IDS" | tr ',' ' '); do
 done
 ```
 
-Any FAIL gets a follow-up ticket; do not block ingest of subsequent
+Any FAIL gets a follow-up ticket. Do not block ingest of subsequent
 scenarios on one bad row.
 
 ### Step 8: frontend availability spot-check
@@ -374,7 +374,7 @@ curl -s "<API_BASE>/api/scenarios?hydroclimate=COEQWAL%20TAIESM1" \
 
 ### Step 9: commit
 
-Per project policy, the operator commits the working CSV change and
+Per project policy, the developer commits the working CSV change and
 the regenerated `etl_scenarios.py`. Suggested message:
 
 ```
@@ -395,7 +395,7 @@ commit and recorded in etl/ingestion/audit.md.
 - `s0107`'s SV file is `SV_COEQWAL_TAIESM1_20260309.dss` while the
   other 22 use `coeqwal_s9999_SV_v*.dss`. Confirm the
   `gdrive_bulk_download.py scan` step in step 1 still matched it
-  against the expected basename; if not, the `SV_Path` column in
+  against the expected basename. If not, the `SV_Path` column in
   the working CSV is the source of truth.
 
 ---
@@ -411,9 +411,9 @@ Threads not in this procedures doc are either team-decision blockers
 - Threads A4-A6 (`cvp_total`, master crosswalk, tier coverage gaps):
   team decisions, no Cloud9 commands.
 - Thread A7 (statistics correction pattern): reference only - explains
-  what the per-scenario ETL writes; not a task.
+  what the per-scenario ETL writes. Not a task.
 - Roadmap R1 (gw/sw BOOLEAN migration) and R2 (DU geometry refactor):
-  rolled back in May 2026. Future operators picking these up should
+  rolled back in May 2026. Future developers picking these up should
   start from the design notes in
   [`docs/database_geometry_pattern.md`](database_geometry_pattern.md)
   (for R2) and the BOOLEAN section in

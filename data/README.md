@@ -1,6 +1,6 @@
 # Data
 
-Where to find the canonical data the backend depends on. Most of it lives outside this repo (Google Drive, Google Sheets, a separate GIS repo). The local `data/` directory is mostly working space and is gitignored.
+Where to find the source data the backend depends on. Most of it lives outside this repo (Google Drive, Google Sheets, a separate GIS repo). The local `data/` directory is mostly working space and is gitignored.
 
 ## Where to find the data
 

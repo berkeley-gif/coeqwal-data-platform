@@ -14,7 +14,7 @@ Sacramento and San Joaquin hydrologic regions.
 
 | Metric                 | Unit         | Temporal                    | Statistics                                               |
 | ---------------------- | ------------ | --------------------------- | -------------------------------------------------------- |
-| Surface water delivery | TAF          | Monthly (water months 1–12) | Monthly percentile bands, monthly mean/CV; annual avg/CV |
+| Surface water delivery | TAF          | Monthly (water months 1-12) | Monthly percentile bands, monthly mean/CV. Annual avg/CV |
 | Delivery shortage      | TAF          | Monthly, annually           | Monthly percentile bands, annual avg/CV                  |
 | Delivery shortage      | % of demand  | Monthly, annually           | Monthly percentile bands, monthly avg/CV, annual avg/CV  |
 | Delivery reliability   | % (95th pct) | Period of record            | Single value per DU per scenario                         |
@@ -22,7 +22,7 @@ Sacramento and San Joaquin hydrologic regions.
 
 **Reliability definition:** The 95th percentile of annual shortage %. Interpretation: in 95 out of 100
 simulated years, the demand unit's shortage is at or below this value. A value of 0% means no shortage in
-95% of years; a value of 50% means even in "normal" years the DU is chronically under-supplied.
+95% of years. A value of 50% means even in "normal" years the DU is chronically under-supplied.
 
 **No shortage variable exists natively in CalSim for refuge DUs.** Unlike M&I contractors (which have
 `SHORT_D_*_PMI` variables), shortage is derived entirely as `demand − delivery`.
@@ -46,7 +46,7 @@ simulated years, the demand unit's shortage is at or below this value. A value o
 > column names may appear as `AW_`* depending on the extraction tooling. Verify column names
 > in the staged SV CSV before running the ETL. See open questions below.
 
-The SV input is the **canonical demand source** because it represents the original applied water
+The SV input is the **primary demand source** because it represents the original applied water
 requirement fed into the model.prior to any optimization or delivery logic.
 
 ### 2. DV output.delivery (`DN_{DU_ID}`)
@@ -167,7 +167,7 @@ Unit conversion is required for three reasons:
 
 1. **Volume vs. rate**: CFS measures instantaneous flow rate. TAF is volume over a period.
   Reporting and comparing deliveries requires volume.
-2. **Monthly aggregation**: Months have different lengths (28–31 days), so a given CFS rate
+2. **Monthly aggregation**: Months have different lengths (28-31 days), so a given CFS rate
   produces different volumes in different months. Converting normalizes across months.
 3. **Comparability with demand**: Demand (`AWO_{DU_ID}` from SV input) is already in TAF.
   Shortage cannot be computed as `demand − delivery` unless both are in the same unit.
@@ -180,11 +180,11 @@ The constant `0.001984` = `(1 ft³/s × 1 ac·ft / 43,560 ft³ × 86,400 s/day) 
 
 ### Water year convention
 
-Water month 1 = October, water month 12 = September. Annual totals span October–September.
+Water month 1 = October, water month 12 = September. Annual totals span October-September.
 
 ### Metric 1.Monthly delivery statistics
 
-For each DU and each water month (1–12), across all simulated water years:
+For each DU and each water month (1-12), across all simulated water years:
 
 ```python
 monthly_values = delivery_taf[water_month == m]         # all years for month m
@@ -261,9 +261,9 @@ Two sets of summary statistics are stored for each distribution:
 > - `exc_p95` = value exceeded 95% of time = 5th percentile (a low/dry-year value)
 >
 > This is standard hydrological convention: a Q5 flow is a high flow exceeded only 5% of the
-> time; a Q95 flow is a low flow exceeded 95% of the time (nearly always met). Both band sets
+> time. A Q95 flow is a low flow exceeded 95% of the time (nearly always met). Both band sets
 > are provided because they serve different visualization purposes (percentile bands for ribbon
-> charts; exceedance percentiles for frequency curves). These match the conventions used in all
+> charts. Exceedance percentiles for frequency curves). These match the conventions used in all
 > other COEQWAL ETL modules (`ag`, `mi`, `du_urban`, `reservoirs`).
 
 ---
@@ -279,7 +279,7 @@ Monthly percentile bands for delivery. One row per `(scenario, du_id, water_mont
 | --------------------- | ------------- | ----------------------------------------------------- |
 | `scenario_short_code` | VARCHAR(20)   | e.g., `s0020`                                         |
 | `du_id`               | VARCHAR(20)   | e.g., `08N_PR1`.references `du_refuge_entity.du_id` |
-| `water_month`         | INTEGER       | 1–12 (Oct=1, Sep=12)                                  |
+| `water_month`         | INTEGER       | 1-12 (Oct=1, Sep=12)                                  |
 | `delivery_avg_taf`    | NUMERIC(10,2) | Mean delivery for this month across all years         |
 | `delivery_cv`         | NUMERIC(10,4) | CV of monthly delivery                                |
 | `q0..q100`            | NUMERIC(10,2) | Percentile bands (0,10,30,50,70,90,100th)             |
@@ -362,7 +362,7 @@ that a SW-only unit does not.
 | `08N_PR2` | Delevan NWR                                                     | USFWS          | Reclamation                      | -   | •   | Glenn-Colusa Canal                                           |
 | `08S_PR`  | Colusa NWR                                                      | USFWS          | Reclamation                      | -   | •   | Glenn-Colusa Canal, Colusa Basin Drain                       |
 | `09_PR`   | Llano Seco Unit, Upper Butte Basin WA, Sacramento River NWR     | CDFW, USFWS    | Water rights                     | -   | •   | Sacramento River, Butte Creek                                |
-| `11_PR`   | Upper Butte Basin WA – Little Dry Creek and Howard Slough Units | CDFW           | Western Canal WD, Richvale ID    | •   | •   | Thermalito Afterbay via Western Canal and Sutter-Butte Canal |
+| `11_PR`   | Upper Butte Basin WA - Little Dry Creek and Howard Slough Units | CDFW           | Western Canal WD, Richvale ID    | •   | •   | Thermalito Afterbay via Western Canal and Sutter-Butte Canal |
 | `17N_NR`  | Butte Sink Duck Clubs                                           | Private, USFWS | Water rights, Western Canal WD   | -   | •   | Thermalito Afterbay via Western Canal, Butte Creek           |
 | `17N_PR`  | Gray Lodge WA                                                   | CDFW           | Reclamation, DWR (by exchange)   | •   | •   | Thermalito Afterbay via Biggs-West Gridley WD canals         |
 | `17S_PR`  | Sutter NWR                                                      | USFWS          | Reclamation, Sutter Extension WD | -   | •   | Sutter Bypass, Sutter Extension Canal                        |
@@ -393,7 +393,7 @@ that a SW-only unit does not.
 "08N_PR2","08N","SAC","0","Refuge","PR","5832.93450985","1","Delevan NWR","USFWS","Reclamation","0","1","Glenn-Colusa Canal","geopackage,calsim_report","calsim3","True"
 "08S_PR","08S","SAC","0","Refuge","PR","4099.41153749","1","Colusa NWR","USFWS","Reclamation","0","1","Glenn-Colusa Canal, Colusa Basin Drain","geopackage,calsim_report","calsim3","True"
 "09_PR","09","SAC","0","Refuge","PR","3304.863684099","3","Llano Seco Unit, Upper Butte Basin WA, Sacramento River NWR","CDFW, USFWS","Water rights","0","1","Sacramento River, Butte Creek","geopackage,calsim_report","calsim3","True"
-"11_PR","11","SAC","-1","Refuge","PR","7664.99988766","2","Upper Butte Basin WA – Little Dry Creek and Howard Slough Units","CDFW","Western Canal WD, Richvale ID","1","1","Thermalito Afterbay via Western Canal and Sutter-Butte Canal","geopackage,calsim_report","calsim3","True"
+"11_PR","11","SAC","-1","Refuge","PR","7664.99988766","2","Upper Butte Basin WA - Little Dry Creek and Howard Slough Units","CDFW","Western Canal WD, Richvale ID","1","1","Thermalito Afterbay via Western Canal and Sutter-Butte Canal","geopackage,calsim_report","calsim3","True"
 "17N_NR","17N","SAC","-1","Refuge","NR","7670.82240852","1","Butte Sink Duck Clubs","Private, USFWS","Water rights, Western Canal WD","0","1","Thermalito Afterbay via Western Canal, Butte Creek","geopackage,calsim_report","calsim3","True"
 "17N_PR","17N","SAC","-1","Refuge","PR","8447.60874191","1","Gray Lodge WA","CDFW","Reclamation, DWR (by exchange)","1","1","Thermalito Afterbay via Biggs-West Gridley WD canals","geopackage,calsim_report","calsim3","True"
 "17S_PR","17S","SAC","-1","Refuge","PR","3746.60996333","1","Sutter NWR","USFWS","Reclamation, Sutter Extension WD","0","1","Sutter Bypass, Sutter Extension Canal","geopackage,calsim_report","calsim3","True"
@@ -412,13 +412,13 @@ that a SW-only unit does not.
 **Notes from CalSim 3 Main Report:**
 
 - `09_PR` encompasses Llano Seco Unit (CDFW) and Sacramento River NWR (USFWS).two managing agencies
-- `17N_NR` is the only NR (non-priority) unit; represents private Butte Sink Duck Clubs (see open question #2)
+- `17N_NR` is the only NR (non-priority) unit. Represents private Butte Sink Duck Clubs (see open question #2)
 - `72_PR2` aggregates Kesterson NWR + Freitas Unit + Blue Goose Unit of San Luis NWR into a single DU
 - `72_PR3` aggregates San Luis Unit + West Bear Creek Unit of San Luis NWR
 - `72_PR4` aggregates Los Banos WA + three North Grassland WA units (8 polygons total)
 - `72_PR5` and `72_PR6` are privately managed Grassland Water District lands
 - `91_PR` is in the Tulare Lake hydrologic region but diverts from Fresno Slough (San Joaquin watershed)
-- `91_PR` has no GIS geometry in the database; acreage not recorded
+- `91_PR` has no GIS geometry in the database. Acreage not recorded
 
 ---
 
@@ -486,7 +486,7 @@ data. See `database/scripts/sql/.archive/00_versioning/01_create_audit_trigger_f
   a federally managed refuge. Confirm whether it should be included in refuge delivery reporting
    or treated separately.
 3. **Zero-demand months**: Some demand units have seasonal-only demands (e.g., waterfowl flooding is
-  Oct–Feb only). When `demand_taf == 0`, shortage % is undefined. The ETL sets `shortage_pct = 0`
+  Oct-Feb only). When `demand_taf == 0`, shortage % is undefined. The ETL sets `shortage_pct = 0`
    for zero-demand months.
 4. **Scenarios with refuge-specific operations**: Scenarios s0029, s0031, s0032 modify environmental
   flow requirements that may indirectly affect refuge deliveries. No scenario-specific handling is  

@@ -260,19 +260,19 @@ when `etl/tier_data/scripts/**` changes.
 
 **Constraint:** requires a CI-accessible read-only DB role and a stable
 test bucket. Layer 2 is heavier (recomputes from CSVs) and may be too
-slow for per-PR; start with Layer 3.
+slow for per-PR. Start with Layer 3.
 
-### V7. Layer 4 smoke test (`/verification` page renders)
+### V7. Layer 4 (`/verification` page + smoke test)
 
-**Current:** the public status page at `/verification` is a
-human-readable surface, not a tested one. A backend change that breaks
-the JSON shape of the verification endpoint will not fail any test
-today; it will fail the page silently.
+**Current:** neither the public status page at `/verification` nor the
+backing `/api/verification/status` endpoint exist. Layer 2 / Layer 3 /
+Layer 3-tier write JSON reports to `audits/verification_reports/`, and
+those reports are read only on the developer console.
 
-**Goal:** a Playwright smoke test in the website repo that loads
-`/verification`, asserts the per-scenario PASS / FAIL grid renders for
-at least one scenario, and that the drill-down links resolve. Run in
-CI on every website PR.
+**Goal:** build the page, the API endpoint, and a Playwright smoke test
+in the website repo that loads `/verification`, asserts the per-scenario
+PASS / FAIL grid renders for at least one scenario, and that the
+drill-down links resolve. Run in CI on every website PR.
 
 ### V8. Unit tests on the verifiers themselves
 
@@ -286,7 +286,7 @@ exception) could silently pass bad data.
 PASS / FAIL decisions match expectations for at least:
 - baseline correctness (synthetic match across all sections)
 - known-mismatch detection (synthetic 0.1% drift, must FAIL)
-- NaN handling on both sides (both NaN: PASS; one NaN: FAIL)
+- NaN handling on both sides (both NaN: PASS. One NaN: FAIL)
 - per-section coverage (every section in `etl/verification/README.md`
   has at least one test)
 
@@ -296,7 +296,7 @@ connection from "Caller-injectable connection for testability" above.
 
 ### Sequencing
 
-V1, V2, V3 are local refactors with no external dependencies — they
+V1, V2, V3 are local refactors with no external dependencies - they
 can ship in any order behind a single PR each. V4 depends on V3. V5
 is independent. V6 and V7 require new CI plumbing and stable
 credentials. V8 depends on the caller-injectable connection roadmap

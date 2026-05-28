@@ -6,7 +6,7 @@ FastAPI backend for the COEQWAL project.
 
 The API deploys via **GitHub Actions → ECR → ECS Fargate**. Push changes to `main` on GitHub. The CI pipeline auto-builds a new Docker image and deploys it to ECS when files under `api/` change. No manual steps needed unless CI is broken.
 
-Note that we have `ruff` linting configured — run `ruff check .` before pushing to avoid failed builds. See "Linting" below.
+Note that we have `ruff` linting configured - run `ruff check .` before pushing to avoid failed builds. See "Linting" below.
 
 If the auto-deploy gets stuck, see "Manual Deployment (Troubleshooting)" further down for how to rebuild and push the Docker image from Cloud9.
 

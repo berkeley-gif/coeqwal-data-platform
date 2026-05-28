@@ -128,7 +128,7 @@ CalSim3 outputs monthly time series for SBA029, and the ETL derives a fourth:
 | `D_SBA029_ACWD_PMI` | actual monthly delivery on the arc | CFS |
 | `SHORT_D_SBA029_ACWD_PMI` | DELIVERY-SHORTAGE in CFS | CFS |
 | `PERDV_SWP_3` | monthly SWP allocation fraction | DSS-labeled `PERCENT`, used as a 0-1 fraction in the inversion formula |
-| (derived) `DEM_D_SBA029_ACWD_PMI` | demand, recovered by the ETL via the PERDV inversion ([`calculate_du_statistics_v2.py` L313-L337](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/etl/statistics/du_urban/calculate_du_statistics_v2.py#L313-L337); formula at L336) | TAF (after conversion) |
+| (derived) `DEM_D_SBA029_ACWD_PMI` | demand, recovered by the ETL via the PERDV inversion ([`calculate_du_statistics_v2.py` L313-L337](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/etl/statistics/du_urban/calculate_du_statistics_v2.py#L313-L337). Formula at L336) | TAF (after conversion) |
 
 ### Step 1: recover demand (the PERDV inversion)
 
@@ -197,7 +197,7 @@ The `clip(lower=0)` step removes occasional negative micro-values that CalSim's 
 | `reliability_pct` | actual annual delivery | **recovered annual demand** (PERDV-inverted) | "what fraction of the recovered demand did we get, averaged over years?" |
 | `annual_shortage_avg_taf` | shortfall, summed monthly | **perdv-scaled in-month demand** (CalSim's `SHORT_*` baseline) | "on average each year, how much of the in-month CalSim target went unmet?" |
 
-The two metrics are **not complementary**. `(1 − reliability_pct/100) × demand` will **not** equal `annual_shortage_avg_taf`. For SBA029 / s0020, reliability is 54.99% and shortage is 0.85 TAF - both numbers are correct; they simply measure against different baselines.
+The two metrics are **not complementary**. `(1 − reliability_pct/100) × demand` will **not** equal `annual_shortage_avg_taf`. For SBA029 / s0020, reliability is 54.99% and shortage is 0.85 TAF - both numbers are correct. They simply measure against different baselines.
 
 In `du_period_summary`, the column comments now document this explicitly (see [`02_create_du_statistics_tables.sql` L216-L230](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/database/scripts/sql/.archive/12_mi_statistics/02_create_du_statistics_tables.sql#L216-L230)). The ETL has matching inline comments at the PERDV and reliability_pct blocks.
 
@@ -423,16 +423,17 @@ These are the tables the API reads. Wide (lots of columns: monthly averages, per
 
 ---
 
-### Verification: four concerns, four tools
+### Verification: three concerns, three tools
 
 | # | Concern | Question | Tool |
 | --- | --- | --- | --- |
 | A | Schema structure | Is the DB shaped the way we documented it? | `database/run_audit.sh` + `verify_erd_against_audit.py` + `09_verify_level*.sql` |
 | B | Reference data content | Do layers 00-08 contain the correct records? | `export_layer_tables.py` + diff vs `seed_tables/` |
 | C | ETL statistics accuracy | Do the computed results (layers 10+) match the source? | `etl/statistics/verify_all_sections.py` (CSV→DB), `verify_api.py` (DB→API) |
-| D | Public verification status | Is verified/unverified visible externally? | `/api/verification/status` + frontend `/verification` page |
 
-All four are rolled up monthly by `python database/audit/run_monthly_audit.py` → `audits/monthly_<ts>/report.md` (the May 11 audit is the one we will demo in Section VIII).
+All three are rolled up monthly by `python database/audit/run_monthly_audit.py` → `audits/monthly_<ts>/report.md` (the May 11 audit is the one we will demo in Section VIII).
+
+A fourth concern, "is verified/unverified visible externally?", is on the roadmap. See [`docs/statistics_roadmap.md` V7](statistics_roadmap.md#v7-layer-4-smoke-test-verification-page-renders).
 
 > Source: `database/README.md` § Audit and verification strategy.
 
@@ -482,7 +483,7 @@ psql $DATABASE_URL -c "SELECT session_user, coeqwal_current_operator() AS develo
 
 If `developer_id = 1` you are connected as `postgres` and writes will be attributed to the system account. Fix `DATABASE_URL` and reconnect.
 
-**Why two URLs:** keeps schema migrations (`SUPERUSER_URL`) separate from per-developer attribution (`DATABASE_URL`). A developer cannot accidentally do a DDL change as themselves; an admin cannot accidentally do bulk-data work as the system user.
+**Why two URLs:** keeps schema migrations (`SUPERUSER_URL`) separate from per-developer attribution (`DATABASE_URL`). A developer cannot accidentally do a DDL change as themselves. An admin cannot accidentally do bulk-data work as the system user.
 
 > Source: `database/README.md` § Connection strings, § Connecting as yourself (getting correct attribution).
 
@@ -514,7 +515,7 @@ If `developer_id = 1` you are connected as `postgres` and writes will be attribu
 
 - **14 version families** today - one per domain. Independent so a schema bump in `entity` does not force a bump in `network`.
 - **93 table-to-family mappings** - every table is covered.
-- **`audit_log`** (separate table) - opt-in row-level history with full JSONB diffs. Not active by default because of write volume on bulk tables; enabled on sensitive tables (`scenario`, `developer`, `version`) via `apply_audit_log_trigger_to_table(...)`.
+- **`audit_log`** (separate table) - opt-in row-level history with full JSONB diffs. Not active by default because of write volume on bulk tables. Enabled on sensitive tables (`scenario`, `developer`, `version`) via `apply_audit_log_trigger_to_table(...)`.
 
 > Source: `database/README.md` § Layer 00_VERSIONING schema, § audit_log table (Scripts and Verification queries).
 
@@ -526,7 +527,7 @@ The database has five overlapping defenses. Any one of them failing alone is not
 
 | Layer | Mechanism |
 | --- | --- |
-| 1. Network isolation | RDS in a private VPC subnet; not on the public internet |
+| 1. Network isolation | RDS in a private VPC subnet. Not on the public internet |
 | 2. Firewall (security groups) | RDS port 5432 reachable only from inside the VPC (Cloud9, Fargate, audit Lambda) |
 | 3. Authentication | Per-developer PostgreSQL roles; DDL-only superuser separated into `$SUPERUSER_URL` |
 | 4. Authorization (write attribution) | `set_audit_fields()` BEFORE trigger refuses INSERT/UPDATE from unregistered users |
@@ -549,11 +550,11 @@ Every row in the database can answer four basic questions: where it came from, w
 
 | Provenance question | How the database answers it |
 | --- | --- |
-| Where did the data come from? | `source` + `source_id` (FK to lookup), `model_source_id` on Layer 02 network and Layer 03 entity rows; descriptive columns like `community_agency`, `point_of_diversion`, `provider` carry informal origin notes |
-| Who put it there or changed it? | `created_by`, `updated_by` columns → `developer` table, populated by the `set_audit_fields()` BEFORE trigger; unregistered writes are refused |
+| Where did the data come from? | `source` + `source_id` (FK to lookup), `model_source_id` on Layer 02 network and Layer 03 entity rows. Descriptive columns like `community_agency`, `point_of_diversion`, `provider` carry informal origin notes |
+| Who put it there or changed it? | `created_by`, `updated_by` columns → `developer` table, populated by the `set_audit_fields()` BEFORE trigger. Unregistered writes are refused |
 | When was it put in or changed? | `created_at`, `updated_at` set by the same trigger |
 | What ETL run produced it? | Today: implicit via `created_by`. Planned: `data_load_log` table linking each row to a specific Batch ETL run |
-| What schema version is it under? | `version_family` (14 domains) + `version` + `domain_family_map` (93 tables → families); independent per domain so a change in one domain does not cascade |
+| What schema version is it under? | `version_family` (14 domains) + `version` + `domain_family_map` (93 tables → families). Independent per domain so a change in one domain does not cascade |
 | What CalSim run is it from? | `scenario_short_code` on every statistics row → `scenario` → `hydroclimate` → `model_source` |
 
 **In one sentence:** every row in the database can answer where it came from, who put it there, when, and what schema version it conforms to - by design, without consulting a notebook or asking a person.
@@ -594,7 +595,7 @@ Returns JSON: 8 reservoirs x 12 water months of percentile bands (p5, p25, p50, 
 - **Deployment:** GitHub Actions builds a Docker image, pushes to ECR, ECS Fargate pulls and runs it on `git push origin main`
 - **Routing:** Internet -> Route 53 -> ALB -> ECS Fargate -> PostgreSQL RDS
 - **TLS:** AWS Certificate Manager, terminated at the ALB (`api.coeqwal.org` matches one cert, the website hostnames match another)
-- **Response time:** 50-300 ms typical for spatial and statistics queries; the database's pre-aggregated `*_period_summary` and `*_monthly` tables are what make this fast
+- **Response time:** 50-300 ms typical for spatial and statistics queries. The database's pre-aggregated `*_period_summary` and `*_monthly` tables are what make this fast
 
 ### How the API stays in sync with the database
 

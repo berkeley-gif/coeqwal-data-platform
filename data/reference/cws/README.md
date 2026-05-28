@@ -1,6 +1,6 @@
 # CWS and M&I reference spreadsheets
 
-Canonical home for community water system (CWS) delivery, demand unit (DU),
+Primary location for community water system (CWS) delivery, demand unit (DU),
 and M&I crosswalk spreadsheets the backend consumes. Everything that used
 to live under `etl/tier_data/reference/`, `etl/statistics/reference/`, or
 a top-level `reference/` directory has been consolidated here.
@@ -9,7 +9,7 @@ a top-level `reference/` directory has been consolidated here.
 
 | File | Source | Purpose |
 |---|---|---|
-| `Final_M&Idemandunits_withlatlongs.xlsx` | Kristin Dobson (May 2026) | Canonical M&I demand unit list. Centroids, `gw_su`, `sw_du`, optional `Notes`. Read by `etl/tier_data/scripts/reconcile_gw_sw_sources.py`. |
+| `Final_M&Idemandunits_withlatlongs.xlsx` | Kristin Dobson (May 2026) | M&I demand unit list. Centroids, `gw_su`, `sw_du`, optional `Notes`. Read by `etl/tier_data/scripts/reconcile_gw_sw_sources.py`. |
 | `Systems_served_by_DU_systemname_updated.xlsx` | earlier delivery | PWS list keyed by DU system name. |
 | `Master list of systems served for sw units updated april 13.xlsx` | spring-2026 CWS delivery | PWS master (~476 systems). |
 | `Updated HHS allocations May 6 2026.xlsx` | spring-2026 CWS delivery | HHS allocation list (~76 rows). |

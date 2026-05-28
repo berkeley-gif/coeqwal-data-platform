@@ -204,8 +204,17 @@ def download_ok(row: Dict[str, Any]) -> bool:
 def extract_record_extraction_ok(
     extract_record: Dict[str, Any],
 ) -> Tuple[bool, str]:
+    """True only when both requested CSVs landed in S3.
+
+    `SUCCEEDED_PARTIAL` is treated as a failure here on purpose. It
+    means at least one of the requested SV / DV CSVs did not make it
+    to S3 (see `etl/batch-container/batch_entrypoint.sh` lines
+    310-321), which the downstream stats stage will need. This
+    matches the verdict in `etl/ingestion/tools/audit.py`
+    (`extraction_failures` filter).
+    """
     st = (extract_record.get("status") or "").strip().upper()
-    if st in ("SUCCEEDED", "SUCCEEDED_PARTIAL"):
+    if st == "SUCCEEDED":
         return True, st
     return False, st or "UNKNOWN"
 
