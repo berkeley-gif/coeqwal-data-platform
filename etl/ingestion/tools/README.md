@@ -75,8 +75,8 @@ S3 at `scenario/<id>/run/`.
 ### Very occassionally
 
 - **`refresh_active_scenarios.py`** -- rewrites the active-scenarios
-  block at the top of `etl/README.md` from the live API. Run when that
-  block is visibly stale.
+  block at the top of the top-level `README.md` from the live API. Run
+  when that block is visibly stale.
 
   ```
   python etl/ingestion/tools/refresh_active_scenarios.py

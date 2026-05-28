@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Orchestrator: scenario ingestion -> Batch DSS extraction -> statistics -> verify.
+run_full_pipeline.py: one-click scenario ingestion -> Batch DSS extraction -> statistics -> verify dream.
 
 Stages (continue-on-error -- exits non-zero if any scenario fails any stage):
   scan -> download -> promote -> wait-batch -> statistics -> verify

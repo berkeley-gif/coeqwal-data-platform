@@ -10,7 +10,7 @@ against the API and never mutates the DB itself.
 
 Pulls every short_code where `is_active` is true, sorts them, then:
 
-  1. Rewrites the inline list in `etl/README.md` between the markers:
+  1. Rewrites the inline list in the top-level `README.md` between the markers:
 
        <!-- ACTIVE_SCENARIOS:BEGIN -->
        ...
@@ -42,7 +42,8 @@ from typing import List
 
 DEFAULT_API_URL = "https://api.coeqwal.org"
 ETL_DIR = Path(__file__).resolve().parents[2]
-README_PATH = ETL_DIR / "README.md"
+REPO_ROOT = ETL_DIR.parent
+README_PATH = REPO_ROOT / "README.md"
 ACTIVE_SCENARIOS_PY = ETL_DIR / "common" / "active_scenarios.py"
 
 BEGIN_MARKER = "<!-- ACTIVE_SCENARIOS:BEGIN -->"
@@ -145,7 +146,7 @@ def main():
         datefmt="%Y-%m-%dT%H:%M:%SZ",
     )
     parser = argparse.ArgumentParser(
-        description="Refresh the curated scenario list (etl/README.md block + etl/common/active_scenarios.py) from the live API."
+        description="Refresh the curated scenario list (top-level README block + etl/common/active_scenarios.py) from the live API."
     )
     parser.add_argument("--api-url", default=DEFAULT_API_URL,
                         help=f"API base URL (default: {DEFAULT_API_URL})")
