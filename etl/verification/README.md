@@ -731,11 +731,13 @@ python etl/ingestion/tools/audit.py
 ```
 
 It walks S3, rewrites
-[`etl/ingestion/audit.md`](../ingestion/audit.md), and prints
+[`etl/ingestion/audit.md`](../ingestion/audit.md), and prints two
+console lines. The first is the headline action count:
 `Summary: N active scenarios in S3, M need developer action
 (extraction failures: X, validation failures: Y, convention
-warnings: Z)`. If `M` is zero, Batch finished cleanly and the digest
-is up to date. If `M` is non-zero, the named scenarios are in the
+warnings: Z).` The second is the symmetric breakdown:
+`Validation: K passed, F failed, S skipped, W awaiting extraction.`
+If `M` is zero, Batch finished cleanly and the digest is up to date. If `M` is non-zero, the named scenarios are in the
 digest's "What needs your attention" section with the per-scenario
 action attached (Batch job id, mismatches CSV key, retrigger
 command).
@@ -779,14 +781,18 @@ For per-scenario drill-down on something the audit flagged, fetch
 the extract record directly:
 `aws s3 cp s3://coeqwal-model-run/scenario/<id>/extract_record.json - | python -m json.tool`.
 
-**Validation indicators (today), in triage order.** Four signals
-answer four questions:
+**Validation indicators, in triage order.** Four signals answer
+four questions:
 
-1. **Did anything fail?** The `validation failures: Y` count on the
-   `audit.py` console. `Y == 0` means no failures. This is the
-   headline. It is failure-focused for now. A symmetric
-   `Validation: K passed, F failed, S skipped, W awaiting extraction`
-   line is in progress as a low-risk additive change to `audit.py`.
+1. **Did anything fail, and what was the breakdown?** The `audit.py`
+   console prints two lines. The first is the headline action
+   count: `Summary: N active scenarios in S3, M need developer
+   action (extraction failures: X, validation failures: Y,
+   convention warnings: Z).` The second is the symmetric breakdown:
+   `Validation: K passed, F failed, S skipped, W awaiting
+   extraction.` The same numbers appear in `audit.md`'s `## Run
+   summary` table under `Validation failures` (the count) and
+   `Validation breakdown` (the symmetric line).
 2. **Which scenarios failed and what do I run?** `audit.md`
    `## What needs your attention`. Each failed scenario gets an
    action block naming the diverging file, the mismatch counts, and
@@ -820,11 +826,12 @@ level that gives a clean answer.
    (review)` is non-zero, a `SCENARIOS REQUIRING REVIEW` block lists
    each flagged scenario. The auto-run audit then prints two lines:
    `Audit written to etl/ingestion/audit.md. Review and commit it
-   manually when ready.` and `Summary: N active scenarios in S3, M
-   need developer action (extraction failures: ..., validation
-   failures: ..., convention warnings: ...).` A clean run reads
-   `M = 0` and all parenthesized counts at zero, which is the
-   developer's signal that the digest can be skipped.
+   manually when ready.`, then `Summary: N active scenarios in S3,
+   M need developer action (extraction failures: ..., validation
+   failures: ..., convention warnings: ...).`, then `Validation: K
+   passed, F failed, S skipped, W awaiting extraction.` A clean run
+   reads `M = 0`, all parenthesized counts at zero, and `W` equal to
+   the number of scenarios just staged (still waiting for Batch).
 2. **Open `etl/ingestion/audit.md`.** Top to bottom: `## Run summary`
    (counts including `Validation failures`), `## What needs your
    attention` (each flagged scenario by `short_code` with mismatch
@@ -1104,11 +1111,12 @@ Everything regenerable per-run stays out of git.
   **once generated**. Not present in a fresh clone. A developer
   generates it by running `gdrive_bulk_download.py download` (auto-call
   at the end) or `python etl/ingestion/tools/audit.py`, then commits
-  it. The script prints two lines as a reminder: `Audit written to
-  etl/ingestion/audit.md. Review and commit it manually when ready.`
-  and `Summary: N active scenarios in S3, M need developer action
+  it.   The script prints three lines as a reminder: `Audit written to
+  etl/ingestion/audit.md. Review and commit it manually when ready.`,
+  then `Summary: N active scenarios in S3, M need developer action
   (extraction failures: ..., validation failures: ..., convention
-  warnings: ...)`.
+  warnings: ...)`, then `Validation: K passed, F failed, S skipped,
+  W awaiting extraction.`
 - `data/raw/pdf_tables_from_CalSim_report/` and reference xlsx files
   under `data/reference/cws/`.
 

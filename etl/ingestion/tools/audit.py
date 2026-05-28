@@ -310,7 +310,16 @@ def _render_summary(
     extraction_failure_count: int,
     validation_failure_count: int,
     convention_warn_count: int,
+    validation_passed_count: int,
+    validation_skipped_count: int,
+    validation_awaiting_count: int,
 ) -> str:
+    validation_breakdown = (
+        f"{validation_passed_count} passed, "
+        f"{validation_failure_count} failed, "
+        f"{validation_skipped_count} skipped, "
+        f"{validation_awaiting_count} awaiting extraction"
+    )
     return (
         "## Run summary\n\n"
         "| metric | value |\n"
@@ -321,6 +330,7 @@ def _render_summary(
         f"| Cross-scenario duplicate DV basenames | {len(cross_dupes)} |\n"
         f"| Extraction failures or partials | {extraction_failure_count} |\n"
         f"| Validation failures | {validation_failure_count} |\n"
+        f"| Validation breakdown | {validation_breakdown} |\n"
         f"| Convention warnings | {convention_warn_count} |\n"
     )
 
@@ -640,6 +650,30 @@ def _render(
         if st.get("ingest_record") and st.get("extract_record")
         and (st["extract_record"].get("validation", {}) or {}).get("result") == "failed"
     ]
+    # Counts for the validation breakdown line. Each
+    # filter is independent. `passed` is scenarios where validate_csvs.py
+    # ran cleanly. `skipped` covers the explicit skip results from
+    # `batch_entrypoint.sh` (no SV/DV target, validator script missing,
+    # reference CSV download failed). `awaiting` is scenarios that have
+    # an ingest record but no extract record yet, meaning Batch has not
+    # written its outcome.
+    validation_passed = [
+        st for st in scenario_states
+        if st.get("ingest_record") and st.get("extract_record")
+        and (st["extract_record"].get("validation", {}) or {}).get("result") == "passed"
+    ]
+    validation_skipped = [
+        st for st in scenario_states
+        if st.get("ingest_record") and st.get("extract_record")
+        and (
+            ((st["extract_record"].get("validation", {}) or {}).get("result") or "").startswith("skipped_")
+            or (st["extract_record"].get("validation", {}) or {}).get("result") == "download_failed"
+        )
+    ]
+    validation_awaiting = [
+        st for st in scenario_states
+        if st.get("ingest_record") and not st.get("extract_record")
+    ]
 
     # Cross-scenario DV duplicates (sourced from the ingest records).
     dv_basename_to_scenarios: Dict[str, List[str]] = {}
@@ -678,6 +712,7 @@ def _render(
     parts.append(_render_summary(
         local_state, scenario_states, attention_count, cross_dupes,
         len(extraction_failures), len(validation_failures), convention_warn_count,
+        len(validation_passed), len(validation_skipped), len(validation_awaiting),
     ))
     parts.append("\n")
     parts.append(_render_attention(
@@ -707,6 +742,9 @@ def _render(
         "validation_failure_count": len(validation_failures),
         "extraction_failure_count": len(extraction_failures),
         "convention_warn_count": convention_warn_count,
+        "validation_passed_count": len(validation_passed),
+        "validation_skipped_count": len(validation_skipped),
+        "validation_awaiting_count": len(validation_awaiting),
     }
     return "".join(parts), summary
 
@@ -754,6 +792,12 @@ def regenerate_audit(
         f"(extraction failures: {summary['extraction_failure_count']}, "
         f"validation failures: {summary['validation_failure_count']}, "
         f"convention warnings: {summary['convention_warn_count']})."
+    )
+    print(
+        f"Validation: {summary['validation_passed_count']} passed, "
+        f"{summary['validation_failure_count']} failed, "
+        f"{summary['validation_skipped_count']} skipped, "
+        f"{summary['validation_awaiting_count']} awaiting extraction."
     )
     return None
 
