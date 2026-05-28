@@ -6,18 +6,20 @@ Tech highlights: Python, `rclone`, `boto3`, `pydsstools`, AWS Batch on Fargate S
 
 ## Quick reference for scenario model run data
 
-Eight stages move a scenario from a row on the Water Allocation Modeling team's Google Drive sheet to live data on the public API. Run them in this order. Stage 4 (Lambda + Batch) runs automatically once a ZIP lands in `ready/`. Stages 0-3 and 5-7 are developer-driven. The vision is to have a fully automated pipeline through an orchestrator (see `etl/run_full_pipeline.py`)
+The vision is to have a fully automated pipeline through an orchestrator (see `etl/run_full_pipeline.py`), and it's close (really just needs to be tested and troubleshot), but until then:
 
-| # | Stage | What it does | Direct command | Outputs to read after |
-|---|---|---|---|---|
-| 0 | `working CSV` (setup) | Add or edit one row per scenario in [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv) (`drive_folder_url`, `DV_Path`, `SV_Path`, optionally `pinned_model_run_zip` / `pinned_trend_csv`). Then regenerate the cached `ETL_SCENARIOS` constant that downstream stages gate on. | Edit the CSV, then: `python etl/ingestion/tools/refresh_etl_scenarios.py` | Diff of [`etl/common/etl_scenarios.py`](common/etl_scenarios.py). Commit it. `scan` and `download` will refuse any scenario that is not in this file. |
-| 1 | `scan` | Inventory each scenario against the working CSV and Drive. No downloads, no S3 writes. Writes the `scan` block in `etl/ingestion/audit_reports/ingest_state.json`. | `python etl/ingestion/gdrive_bulk_download.py scan --scenarios s0042 s0043` (or `--all`) | Console (per-row OK / failure). For detail: `python etl/ingestion/tools/show_last_run.py --stage scan`. |
-| 2 | `download` | Pull each scenario's ZIP and trend CSV from Drive via rclone, validate filenames, compute SHA-256, stage to `s3://<bucket>/staging/`. Writes `ingest_record.json` to S3 and updates the `download` block in `etl/ingestion/audit_reports/ingest_state.json`. | `python etl/ingestion/gdrive_bulk_download.py download --scenarios s0042 s0043` (or `--all`) | Console, then `etl/ingestion/audit.md` (auto-rendered at the end). |
-| 3 | `promote` | Move the staged ZIP from `staging/` to `s3://<bucket>/ready/<sid>/<zip>`. The upload to `ready/` is what fires the Lambda. | `python etl/ingestion/gdrive_bulk_download.py promote --scenarios s0042 s0043` (omit `--scenarios` to promote everything currently in staging) | Console, plus `aws s3 ls s3://<bucket>/ready/<sid>/` to confirm the object landed. |
-| 4 | `batch` | Lambda dispatches AWS Batch. The container converts DSS to CSV, runs `validate_csvs.py` against the Trend Report, writes `extract_record.json` and `<sid>_validation_mismatches.csv` to S3 (header-only on pass, populated on fail). Per-job wall time is 5-30 minutes. Jobs run in parallel up to the queue's compute cap. | None locally, wait for Batch. Tail logs as needed: `aws logs tail /aws/lambda/coeqwalEtlTrigger --follow`. | Run `python etl/ingestion/tools/audit.py` once Batch settles. Re-rendered `etl/ingestion/audit.md` now reflects validation results: `## Run summary` has the `Validation failures` count, `## What needs your attention` names each flagged scenario. |
-| 5 | `stats` | Read each scenario's CSVs from S3, compute derived metrics across the 8 per-scenario modules (reservoir, urban DU, ag, M&I, env flow, refuge, delta, CWS aggregates), write to PostgreSQL via UPSERT. Optional post-step `--with-sensitivity` runs cross-scenario sensitivity analysis (*experimental, under development*: labeled experimental in the script header, no `verify_*` coverage). | One scenario: `python etl/statistics/run_all.py --scenario s0042`. Backfill: `python etl/statistics/run_all.py --all-scenarios`. Add `--with-sensitivity` once the per-scenario runs are done. For a custom subset, loop in shell: `for s in s0042 s0043; do python etl/statistics/run_all.py --scenario $s; done`. | Console `ETL PROCESSING SCORECARD`. Per-run scorecard at `etl/statistics/audit_reports/stats_audit_<ts>.csv`. |
-| 6 | `verify` | Recompute statistics from reference CSVs and compare against the database, then compare the public API against direct database queries. The DB-vs-recomputed check is *experimental, under development* (spot check, reference CSVs must be copied into `etl/reference/` first). | DB vs reference (experimental, one scenario at a time): `python etl/statistics/verify_all_sections.py --scenario s0042`. API vs DB (one or all): `python etl/statistics/verify_api.py --scenario s0042` (or `--all-scenarios`, or `--scenarios-override s0042,s0043,s0044`). | Console `VERIFICATION SUMMARY` per scenario. JSON reports at `audits/verification_reports/<sid>_layer2.json` and `<sid>_layer3.json`. See [`etl/verification/README.md`](verification/README.md) for the spot-check scope and maintenance tax. |
-| 7 | `activate` | Add the scenario row to the database with `is_active=1`, regenerate the cached active-scenarios constant. The scenario now appears on the public API. | First-time activation: append the row to `database/seed_tables/06_scenario/scenario.csv` with `is_active=1`, then run `psql "$DATABASE_URL" -f database/scripts/sql/upsert_scenario_data.sql` and `python etl/ingestion/tools/refresh_active_scenarios.py`. Later toggle: `python etl/ingestion/tools/set_scenario_active.py --activate s0042 s0043` (or `--deactivate s0042 s0043`), which flips `is_active` and refreshes the constant in one call. | Confirm against the live API with the curl snippet in [Confirm live scenario coverage](../README.md#confirm-live-scenario-coverage) in the top-level README. |
+| Command | Options / arguments | What it does | Signals to check |
+|---|---|---|---|
+| Download [`coeqwal_cs3_scenario_listing_v7`](https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo) (Dino's spreadsheet, current as of May 28, 2026) as CSV. Save it as [`etl/ingestion/scenario_listing/model_run_file_source.csv`](ingestion/scenario_listing/model_run_file_source.csv), then copy that file into [`model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv). Run `python etl/ingestion/tools/refresh_etl_scenarios.py`. The script rewrites the cached `ETL_SCENARIOS` set in [`etl/common/etl_scenarios.py`](common/etl_scenarios.py) from the working CSV (rows whose `download_status` is `skip` or `retired` are excluded). `ETL_SCENARIOS` is what every downstream `--all-scenarios` flag expands to, so without this refresh, your edits to the working CSV are invisible to any `--all` run. See [Updating the working CSV](#updating-the-working-csv) below for the four sub-steps and the four developer-managed columns. | n/a | Brings the three-way contract (reference CSV, working CSV, `ETL_SCENARIOS` constant) up to date for this run. Downstream stages refuse any scenario not in `ETL_SCENARIOS`. | Diff of `model_run_file_source.csv`, `model_run_file_source_working.csv`, `etl/common/etl_scenarios.py`. Commit them together with the new archive snapshot. |
+| **Step 1.** `python etl/ingestion/gdrive_bulk_download.py scan` | `--scenarios s0042 s0043` (or `--all`) | Inventory each scenario against the working CSV and Drive. No downloads, no S3 writes. Writes the `scan` block of `etl/ingestion/audit_reports/ingest_state.json`. | Console per-row OK / failure. For detail: `python etl/ingestion/tools/show_last_run.py --stage scan`. |
+| **Step 2.** `python etl/ingestion/gdrive_bulk_download.py download` | `--scenarios s0042 s0043` (or `--all`) | Pull each scenario's ZIP and trend CSV from Drive via rclone, validate filenames, compute SHA-256, stage to `s3://<bucket>/staging/`. Writes `ingest_record.json` to S3 and updates the `download` block of `ingest_state.json`. | Console, then [`etl/ingestion/audit.md`](ingestion/audit.md) (auto-rendered at the end). Open the audit's `## What needs your attention` section. |
+| **Step 3.** `python etl/ingestion/gdrive_bulk_download.py promote` | `--scenarios s0042 s0043` (omit to promote everything currently in staging). `--dry-run` to plan only. | Move the staged ZIP from `staging/` to `s3://<bucket>/ready/<sid>/<zip>` in the safe order (`ingest_record.json` -> trend CSV -> ZIP last). The ZIP PUT under `ready/` is the Lambda trigger. | Console copy-by-copy lines. `aws s3 ls s3://<bucket>/ready/<sid>/` to confirm the object landed. |
+| **Step 4 (Batch runs in AWS, then run `audit.py` locally).** `python etl/ingestion/tools/audit.py` after Batch settles. | n/a | Lambda dispatches AWS Batch. The container converts DSS to CSV, runs `validate_csvs.py` against the Trend Report, writes `extract_record.json` and `<sid>_validation_mismatches.csv` to S3 (header-only on pass, populated on fail). Per-job wall time is 5-30 minutes. Jobs run in parallel up to the queue's compute cap. `audit.py` re-renders `etl/ingestion/audit.md` with the extraction outcomes. | `aws logs tail /aws/lambda/coeqwalEtlTrigger --follow` (monitor in flight). [`etl/ingestion/audit.md`](ingestion/audit.md): `## Run summary` for `Validation failures` count, `## What needs your attention` for flagged scenarios. `s3://<bucket>/scenario/<sid>/validation/<sid>_validation_mismatches.csv` for any flagged row. |
+| **Step 5.** `python etl/statistics/run_all.py` | One scenario: `--scenario s0042`. Backfill: `--all-scenarios`. Sensitivity post-step (*experimental, under development*): add `--with-sensitivity` after the per-scenario runs complete. Custom subset: shell loop (`for s in s0042 s0043; do python etl/statistics/run_all.py --scenario $s; done`). | Read each scenario's CSVs from S3, compute derived metrics across the 8 per-scenario modules (reservoir, urban DU, ag, M&I, env flow, refuge, delta, CWS aggregates), write to PostgreSQL via UPSERT. | Console `ETL PROCESSING SCORECARD`. Per-run scorecard at `etl/statistics/audit_reports/stats_audit_<ts>.csv`. |
+| **Step 6a (experimental, under development).** `python etl/statistics/verify_all_sections.py` | `--scenario s0042` (one at a time). Reference CSVs must be in `etl/reference/` first. | Recompute statistics from reference CSVs and compare against the database. Spot check, not exhaustive. See [`etl/verification/README.md`](verification/README.md) for scope and maintenance tax. | Console `VERIFICATION SUMMARY`. JSON report at `audits/verification_reports/<sid>_layer2.json`. |
+| **Step 6b.** `python etl/statistics/verify_api.py` | `--scenario s0042`, `--all-scenarios`, or `--scenarios-override s0042,s0043,s0044`. | Compare the public API responses against direct database queries. | Console `VERIFICATION SUMMARY`. JSON report at `audits/verification_reports/<sid>_layer3.json`. |
+| **Step 7a (first-time activation).** Edit `database/seed_tables/06_scenario/scenario.csv` (append row with `is_active=1`). Then `psql "$DATABASE_URL" -f database/scripts/sql/upsert_scenario_data.sql` and `python etl/ingestion/tools/refresh_active_scenarios.py`. | n/a | Add the scenario row to the database with `is_active=1`. Regenerate the cached `ACTIVE_SCENARIOS` constant. The scenario now appears on the public API. | curl snippet in [Confirm live scenario coverage](../README.md#confirm-live-scenario-coverage) in the top-level README. Diff of `etl/common/active_scenarios.py` and the `<!-- ACTIVE_SCENARIOS:BEGIN -->` block in `README.md`. |
+| **Step 7b (later toggle).** `python etl/ingestion/tools/set_scenario_active.py` | `--activate s0042 s0043` or `--deactivate s0042 s0043` | Flip `is_active` for existing scenario rows. Refresh `ACTIVE_SCENARIOS` in one call. | Same as 7a. |
 
 Tier data verification (`verify_tiers.py`) belongs to the tier pipeline, not this one. See [`etl/tier_data/README.md`](tier_data/README.md) for the tier-data workflow including loading and verification.
 
@@ -50,6 +52,88 @@ python etl/statistics/verify_api.py --all-scenarios
 ```
 
 `run_all.py` and `verify_all_sections.py` take `--scenario` (singular) only. For a custom subset, wrap them in a shell loop, as shown in the row-5 entry above.
+
+### Updating the working CSV
+
+The scenario listing has two CSVs in the repo, both tracked in git. Together with one auto-generated Python module they form the three-way contract that every ingestion stage gates on.
+
+| File | Role | Who writes it |
+|---|---|---|
+| [`etl/ingestion/scenario_listing/model_run_file_source.csv`](ingestion/scenario_listing/model_run_file_source.csv) | Reference snapshot, exported as-is from the WAM team's Google Sheet. 12 columns. | The developer, by hand, when the upstream sheet changes. |
+| [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv) | Developer-editable copy. Same 12 columns plus 4 developer-managed columns. Every ingestion script reads this file, not the reference. | The developer, row-by-row. |
+| [`etl/common/etl_scenarios.py`](common/etl_scenarios.py) (`ETL_SCENARIOS`) | Cached set of scenarios the ETL is intended to process. The downstream stages that take `--all` / `--all-scenarios` gate on this set. | Auto-generated by `python etl/ingestion/tools/refresh_etl_scenarios.py`. |
+
+The 5 essential columns (Index, GoogleDriveFolderName, ModelFilesLink, DV_Path, SV_Path) must be present in the header or `gdrive_bulk_download.py` refuses to start. The 4 developer-managed columns are optional. Authoritative definitions in [`etl/ingestion/lib/config.py`](ingestion/lib/config.py) (`COLUMN_MAP`, `ESSENTIAL_FIELDS`).
+
+Four sub-steps to bring all three artifacts up to date for a new run.
+
+**0.1. Refresh the reference CSV from Dino's spreadsheet.**
+
+The source is informally called "Dino's spreadsheet". Formally it is the WAM team source spreadsheet, hosted on Google Sheets. The URL is pinned in [`etl/ingestion/lib/config.py`](ingestion/lib/config.py) (`SPREADSHEET_URL`) and recorded into every scenario's `ingest_record.json` under `source.spreadsheet_url`:
+
+```
+https://docs.google.com/spreadsheets/d/1pzbVx191VYXgHcZNhAqJEKNn3lN8GCZo/edit?gid=371742646#gid=371742646
+```
+
+Snapshot the existing reference into the archive directory first so the previous state is preserved, then download a fresh copy from the sheet:
+
+```bash
+cp etl/ingestion/scenario_listing/model_run_file_source.csv \
+   etl/ingestion/scenario_listing/model_run_file_source_archive/model_run_file_source_$(date +%Y%m%d).csv
+```
+
+In the browser, open the sheet, switch to the WAM tab (`gid=371742646`), then `File -> Download -> Comma-separated values (.csv, current sheet)`. Save the download as `etl/ingestion/scenario_listing/model_run_file_source.csv`, overwriting the prior copy. There is no scripted refresh yet (see the `Dino's spreadsheet` roadmap entry at the bottom of this file).
+
+**0.2. Bring the working CSV up to date.**
+
+If the working CSV does not exist (fresh clone, accidentally deleted), bootstrap it from the reference. This is the exact command the script prints when the file is missing (see [`etl/ingestion/lib/csv_reader.py`](ingestion/lib/csv_reader.py) `_bootstrap_error_message`):
+
+```bash
+cp etl/ingestion/scenario_listing/model_run_file_source.csv \
+   etl/ingestion/scenario_listing/model_run_file_source_working.csv
+```
+
+That gives a 12-column working CSV. The reader tolerates the 4 developer-managed columns being absent. Add them to the header (or to individual rows) only when you need them.
+
+If the working CSV already exists (the normal case in this repo), reconcile it with the refreshed reference by hand: append rows from the reference for any scenarios that are new to the sheet, and preserve the four developer-managed column values on rows that already existed.
+
+**0.3. Edit the working copy for this run.**
+
+The 4 developer-managed columns. Definitions match the comments in [`etl/ingestion/lib/config.py`](ingestion/lib/config.py) `COLUMN_MAP`:
+
+| Column | What it does | Read by | Set when |
+|---|---|---|---|
+| `pinned_model_run_zip` | Exact basename of the ZIP to pick from the scenario's `Model_Files/` folder. Disambiguator. | `gdrive_bulk_download.py` | The Drive folder contains more than one ZIP. Without a pin, `scan` and `download` refuse the row with `MULTIPLE_ZIPS_NO_PIN`. |
+| `pinned_trend_csv` | Exact basename of the trend report CSV to use as the validation reference. | `gdrive_bulk_download.py` | The Drive folder contains more than one trend CSV. Without a pin, the scenario stages anyway but is flagged `unverified_multi_trend` in the audit. |
+| `download_status` | Informational with two reserved values. **`skip`** or **`retired`** exclude the row from `ETL_SCENARIOS`. Blank, `done`, `needs_review`, or any free-form value is included. | `refresh_etl_scenarios.py` only. `gdrive_bulk_download.py` ignores this column. CLI scope is set with `--scenarios` / `--all`, not by editing this column. | You want to permanently or temporarily remove a row from the `ETL_SCENARIOS` set (legacy scenario, broken upstream data, paused project) without deleting the row from the working CSV. |
+| `notes` | Free-text scratch. Surfaced in the audit. | Audit, for context. Not read by any pipeline step. | Always optional. Useful for explaining why a row was retired or why a pin was set. |
+
+The 12 columns inherited from the reference CSV are read-only from the developer's perspective:
+
+| Column | Internal name | What it is |
+|---|---|---|
+| `Index` | `short_code` | The scenario's identifier (e.g. `s0042`). Joins to every downstream artifact. Essential. |
+| `StudyName` | informational | Human-readable identifier. |
+| `GoogleDriveFolderName` | `drive_folder_name` | The Drive folder name. Essential. |
+| `ModelFilesLink` | `drive_folder_url` | The Drive folder URL. The folder ID is regex-extracted from `/folders/<id>`. Essential. |
+| `HydroClimate`, `ShortDescription` | informational | Scenario assumptions. Surfaces in `audit.md` and `ingest_record.json`. |
+| `DV_Path` | `dv_path` | Full Drive path to the expected DV (CalSim output) DSS file. Only the basename is matched at ingest time. Essential. |
+| `SV_Path` | `sv_path` | Full Drive path to the expected SV (CalSim input) DSS file. Only the basename is matched at ingest time. Essential. |
+| `Start_Date`, `End_Date` | informational | Simulation horizon. |
+| `Source` | informational | Originating agency or study (e.g. `DWR`). |
+| `Metadata` | informational | Optional free-form text. |
+
+**0.4. Regenerate the cached `ETL_SCENARIOS` constant.**
+
+```bash
+python etl/ingestion/tools/refresh_etl_scenarios.py
+```
+
+Rewrites [`etl/common/etl_scenarios.py`](common/etl_scenarios.py) from the working CSV. Rows with `download_status` of `skip` or `retired` are excluded. Everything else is included. The script logs how many rows it kept and excluded.
+
+`ETL_SCENARIOS` is the broader "what the ETL knows how to process" set. `ACTIVE_SCENARIOS` in [`etl/common/active_scenarios.py`](common/active_scenarios.py) is the narrower "what the website serves" set (regenerated from the live API by `refresh_active_scenarios.py`). Both files distinguish themselves in their auto-generated docstrings. Stages 1-6 above use `ETL_SCENARIOS` (or accept `--scenarios` / `--all`). The tier loader and the API verifier use `ACTIVE_SCENARIOS`.
+
+Commit the diff in all three files (`model_run_file_source.csv`, `model_run_file_source_working.csv`, `etl_scenarios.py`) plus the new archive snapshot as one change so the reference, the working copy, and the cached constant move forward together.
 
 ## Cloud9 first-time setup
 
@@ -173,15 +257,15 @@ If any of these is missing, the one-shot preflight in [Cloud9 first-time setup](
 
 ### Step-by-step
 
-**1. Edit the working CSV and refresh `ETL_SCENARIOS`.**
+**1. Sync the spreadsheet, edit the working CSV, refresh `ETL_SCENARIOS`.**
 
-Open [`etl/ingestion/scenario_listing/model_run_file_source_working.csv`](ingestion/scenario_listing/model_run_file_source_working.csv). Each scenario you are loading needs a row with `drive_folder_url`, `DV_Path`, `SV_Path`, and (if the Drive folder has more than one candidate) `pinned_model_run_zip` / `pinned_trend_csv`. Then:
+Follow the four sub-steps in [Updating the working CSV](#updating-the-working-csv) above (download from Dino's spreadsheet, reconcile the working copy, edit the four developer-managed columns, regenerate `etl/common/etl_scenarios.py`). The final command is:
 
 ```bash
 python etl/ingestion/tools/refresh_etl_scenarios.py
 ```
 
-Regenerates [`etl/common/etl_scenarios.py`](common/etl_scenarios.py). Commit the diff.
+Commit the diff of `model_run_file_source.csv`, `model_run_file_source_working.csv`, and `etl_scenarios.py` as one change.
 
 **2. Scan Google Drive (optional pre-flight).**
 
