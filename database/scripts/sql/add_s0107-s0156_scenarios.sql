@@ -36,9 +36,9 @@ INSERT INTO scenario (
     ('s0129', 's0129_DCRadjBL_cqlTAI_2020LU_RelaxFallX2', FALSE, 5, 's0045', 1, 3, 1),
     ('s0130', 's0130_DCRadjHist_cqlTAI_2020LU_EflowsV2', FALSE, 5, 's0046', 1, 3, 1),
     ('s0131', 's0131_DWRadapt25_cqlTAI_2020LU_DCP', FALSE, 5, 's0065', 1, 3, 1),
-    ('s0134', 's0134_DCRbl_cqlECV_2020LU_wTUCP', FALSE, 6, 's0020', 1, 3, 1),
-    ('s0141', 's0141_CVgwLimit_cqlECV_SGMALU_wTUCP', FALSE, 6, 's0028', 1, 3, 1),
-    ('s0150', 's0150_USBRAlt3_cqlECV_2020LU_DeltaOut65', FALSE, 6, 's0039', 1, 3, 1),
-    ('s0156', 's0156_DCRadjHist_cqlECV_2020LU_EflowsV2', FALSE, 6, 's0046', 1, 3, 1);
+    ('s0134', 's0134_DCRbl_cqlECV_2020LU_wTUCP', FALSE, 7, 's0020', 1, 3, 1),
+    ('s0141', 's0141_CVgwLimit_cqlECV_SGMALU_wTUCP', FALSE, 7, 's0028', 1, 3, 1),
+    ('s0150', 's0150_USBRAlt3_cqlECV_2020LU_DeltaOut65', FALSE, 7, 's0039', 1, 3, 1),
+    ('s0156', 's0156_DCRadjHist_cqlECV_2020LU_EflowsV2', FALSE, 7, 's0046', 1, 3, 1);
 
 COMMIT;
