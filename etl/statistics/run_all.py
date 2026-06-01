@@ -229,6 +229,7 @@ def run_module(
     module_name: str,
     scenario_id: str,
     dry_run: bool = False,
+    devdb: bool = False,
     csv_path: Optional[str] = None,
 ) -> Tuple[bool, float]:
     """Run a single ETL module for a scenario.
@@ -254,6 +255,9 @@ def run_module(
 
     if dry_run:
         cmd.append("--dry-run")
+
+    if devdb:
+        cmd.append("--devdb")
 
     if csv_path:
         abs_csv_path = str(Path(csv_path).resolve())
@@ -329,6 +333,7 @@ def run_all_modules(
     scenario_id: str,
     modules: Optional[List[str]] = None,
     dry_run: bool = False,
+    devdb: bool = False,
     csv_path: Optional[str] = None,
     continue_on_error: bool = False,
 ) -> dict:
@@ -350,7 +355,7 @@ def run_all_modules(
     n_dupes = preflight_check_duplicates(scenario_id, csv_path)
 
     for module_name in modules:
-        success, elapsed = run_module(module_name, scenario_id, dry_run, csv_path)
+        success, elapsed = run_module(module_name, scenario_id, dry_run, devdb, csv_path)
         results[module_name] = {
             "status": "success" if success else "failed",
             "elapsed_s": elapsed,
@@ -461,6 +466,9 @@ Examples:
         help=f"Directory to write the per-run stats_audit_*.csv "
         f"(default: {DEFAULT_AUDIT_DIR}). Auto-created if missing.",
     )
+    parser.add_argument(
+        "--devdb", action="store_true", help="Use development Postgres DB, instead of production"
+    )
 
     args = parser.parse_args()
 
@@ -490,9 +498,20 @@ Examples:
                 f"Unknown modules: {', '.join(invalid)}. Available: {', '.join(ETL_MODULES.keys())}"
             )
 
-    # Check DATABASE_URL
-    if not args.dry_run and not os.getenv("DATABASE_URL"):
-        parser.error("DATABASE_URL environment variable required (or use --dry-run)")
+    # Check DB connection
+    database_url = None
+    if args.devdb:
+        database_url = os.getenv("DEVDB_URL")
+        if not database_url:
+            log.error("DEVDB_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
+    else:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            log.error("DATABASE_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
 
     # Determine scenarios
     scenarios = SCENARIOS if args.all_scenarios else [args.scenario]
@@ -553,6 +572,7 @@ Examples:
                     scenario_id,
                     modules=modules,
                     dry_run=args.dry_run,
+                    devdb=args.devdb,
                     csv_path=args.csv_path,
                     continue_on_error=args.continue_on_error,
                 )
@@ -582,6 +602,7 @@ Examples:
                     scenario_id,
                     modules=modules,
                     dry_run=args.dry_run,
+                    devdb=args.devdb,
                     csv_path=args.csv_path,
                     continue_on_error=args.continue_on_error,
                 )
@@ -685,7 +706,7 @@ Examples:
 
     # DB row-count verification (skip for dry runs)
     if not args.dry_run:
-        verify_db_row_counts()
+        verify_db_row_counts(db_url=database_url)
 
     if has_failures:
         sys.exit(1)
@@ -930,13 +951,8 @@ DB_ROW_COUNT_TABLES = [
 
 def verify_db_row_counts(db_url: Optional[str] = None):
     """Print row counts for all statistics tables as a quick sanity check."""
-    url = db_url or os.getenv("DATABASE_URL")
-    if not url:
-        log.info("Skipping DB verification (no DATABASE_URL)")
-        return
-
     try:
-        conn = get_db_connection(db_url=url)
+        conn = get_db_connection(db_url=db_url)
         cur = conn.cursor()
     except Exception as e:
         log.warning(f"Could not connect for verification: {e}")
