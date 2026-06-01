@@ -904,6 +904,11 @@ def main():
         action="store_true",
         help="Use mock mappings for testing (no database required)",
     )
+    parser.add_argument(
+        "--devdb",
+        action="store_true",
+        help="Use development Postgres DB, instead of production",
+    )
 
     args = parser.parse_args()
 
@@ -952,11 +957,19 @@ def main():
                     raise
     else:
         # Connect to database (use --mock-mappings to bypass DB)
-        database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            raise ValueError(
-                "DATABASE_URL environment variable required (or use --mock-mappings for testing)"
-            )
+        database_url = None
+        if args.devdb:
+            database_url = os.getenv("DEVDB_URL")
+            if not database_url:
+                log.error("DEVDB_URL not set. Cannot save to database.")
+                log.info("Use --mock-mappings for testing.")
+                return
+        else:
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                log.error("DATABASE_URL not set. Cannot save to database.")
+                log.info("Use --mock-mappings for testing.")
+                return
         conn = get_db_connection(db_url=database_url)
 
         for scenario_id in scenarios:
