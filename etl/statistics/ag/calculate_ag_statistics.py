@@ -1839,7 +1839,7 @@ def main():
 
     # Save to database
     scenario_ids = list(set(row["scenario_short_code"] for row in all_du_demand))
-    if database_url != None:
+    if database_url is not None:
         save_to_database(
             database_url,
             scenario_ids,
