@@ -149,7 +149,7 @@ def _action_for_local_skip(row: Dict[str, Any]) -> str:
         return (
             f"The expected basename matches multiple non-excluded paths inside "
             f"the ZIP for {sc}. Inspect the ZIP; archived copies should live in "
-            f"a folder named archive/, discard/, old/, or backup/."
+            f"a folder named _archive/, archive/, discard/, old/, or backup/."
         )
     if code in ("MISSING_EXPECTED_DV", "MISSING_EXPECTED_SV"):
         return (
