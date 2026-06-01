@@ -682,6 +682,9 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Calculate but do not save output"
     )
+    parser.add_argument(
+        "--devdb", action="store_true", help="Use development Postgres DB, instead of production"
+    )
 
     args = parser.parse_args()
 
@@ -724,11 +727,19 @@ def main():
         return
 
     # Save to database
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        log.error("DATABASE_URL not set. Cannot save to database.")
-        log.info("Use --output-json to output results as JSON instead.")
-        return
+    database_url = None
+    if args.devdb:
+        database_url = os.getenv("DEVDB_URL")
+        if not database_url:
+            log.error("DEVDB_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
+    else:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            log.error("DATABASE_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
 
     try:
         conn = get_db_connection(db_url=database_url)
