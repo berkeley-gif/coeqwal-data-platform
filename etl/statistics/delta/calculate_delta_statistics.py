@@ -666,9 +666,28 @@ def main():
         action="store_true",
         help="Calculate statistics without writing to database",
     )
+    parser.add_argument(
+        "--devdb",
+        action="store_true",
+        help="Use development Postgres DB, instead of production",
+    )
     args = parser.parse_args()
 
     monthly, summaries = calculate_all_delta_statistics(args.scenario, args.csv_path)
+
+    database_url = None
+    if args.devdb:
+        database_url = os.getenv("DEVDB_URL")
+        if not database_url:
+            log.error("DEVDB_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
+    else:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            log.error("DATABASE_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
 
     if args.output_json:
         import json
@@ -697,7 +716,7 @@ def main():
         log.info("Dry run complete. Statistics calculated but not saved.")
 
     else:
-        save_to_database(args.scenario, monthly, summaries)
+        save_to_database(args.scenario, monthly, summaries, database_url)
 
     log.info(f"Total: {len(monthly)} monthly, {len(summaries)} period summary rows")
 

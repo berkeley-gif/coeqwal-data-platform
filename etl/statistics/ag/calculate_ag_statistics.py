@@ -1380,6 +1380,7 @@ def convert_numpy(val):
 
 
 def save_to_database(
+    database_url: str,
     scenario_ids: List[str],
     du_demand_monthly: List[Dict],
     du_sw_delivery_monthly: List[Dict],
@@ -1400,10 +1401,6 @@ def save_to_database(
     - ag_aggregate_monthly
     - ag_aggregate_period_summary
     """
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        log.error("DATABASE_URL not set. Cannot save to database.")
-        return False
 
     try:
         conn = get_db_connection(db_url=database_url)
@@ -1750,8 +1747,24 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="Calculate but do not save output"
     )
+    parser.add_argument(
+        "--devdb", action="store_true", help="Use development Postgres DB, instead of production"
+    )
 
     args = parser.parse_args()
+
+    database_url = None
+
+    if args.devdb:
+        database_url = os.getenv("DEVDB_URL")
+        if not database_url:
+            log.error("DEVDB_URL not set. Cannot save to database.")
+            return False
+    else:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            log.error("DATABASE_URL not set. Cannot save to database.")
+            return False
 
     if args.csv_path_legacy and not args.dv_path:
         args.dv_path = args.csv_path_legacy
@@ -1826,25 +1839,27 @@ def main():
 
     # Save to database
     scenario_ids = list(set(row["scenario_short_code"] for row in all_du_demand))
-    save_to_database(
-        scenario_ids,
-        all_du_demand,
-        all_du_sw_delivery,
-        all_du_gw_pumping,
-        all_du_shortage,
-        all_du_summary,
-        all_agg_monthly,
-        all_agg_summary,
-    )
+    if database_url is not None:
+        save_to_database(
+            database_url,
+            scenario_ids,
+            all_du_demand,
+            all_du_sw_delivery,
+            all_du_gw_pumping,
+            all_du_shortage,
+            all_du_summary,
+            all_agg_monthly,
+            all_agg_summary,
+        )
 
-    log.info("Total rows saved:")
-    log.info(f"  DU demand monthly: {len(all_du_demand)}")
-    log.info(f"  DU SW delivery monthly: {len(all_du_sw_delivery)}")
-    log.info(f"  DU GW pumping monthly: {len(all_du_gw_pumping)}")
-    log.info(f"  DU shortage monthly: {len(all_du_shortage)}")
-    log.info(f"  DU period summary: {len(all_du_summary)}")
-    log.info(f"  Aggregate monthly: {len(all_agg_monthly)}")
-    log.info(f"  Aggregate period summary: {len(all_agg_summary)}")
+        log.info("Total rows saved:")
+        log.info(f"  DU demand monthly: {len(all_du_demand)}")
+        log.info(f"  DU SW delivery monthly: {len(all_du_sw_delivery)}")
+        log.info(f"  DU GW pumping monthly: {len(all_du_gw_pumping)}")
+        log.info(f"  DU shortage monthly: {len(all_du_shortage)}")
+        log.info(f"  DU period summary: {len(all_du_summary)}")
+        log.info(f"  Aggregate monthly: {len(all_agg_monthly)}")
+        log.info(f"  Aggregate period summary: {len(all_agg_summary)}")
 
 
 if __name__ == "__main__":
