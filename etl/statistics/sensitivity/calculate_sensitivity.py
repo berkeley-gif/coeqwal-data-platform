@@ -977,14 +977,25 @@ def main():
         help=f"Comma-separated modules to include. Available: {', '.join(ALL_MODULES)}",
     )
     parser.add_argument(
-        "--db-url",
-        default=os.getenv("DATABASE_URL"),
-        help="PostgreSQL connection string (default: $DATABASE_URL)",
+        "--devdb",
+        action="store_true",
+        help="Use development Postgres DB, instead of production",
     )
     args = parser.parse_args()
 
-    if not args.db_url and not args.dry_run:
-        parser.error("DATABASE_URL not set and --dry-run not specified")
+    database_url = None
+    if args.devdb:
+        database_url = os.getenv("DEVDB_URL")
+        if not database_url:
+            log.error("DEVDB_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
+    else:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            log.error("DATABASE_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
 
     modules = None
     if args.only:
@@ -994,7 +1005,7 @@ def main():
             parser.error(f"Unknown modules: {', '.join(invalid)}")
 
     run_sensitivity(
-        db_url=args.db_url or "",
+        db_url=database_url,
         modules=modules,
         dry_run=args.dry_run,
     )
