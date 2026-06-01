@@ -58,7 +58,7 @@ INGEST_STATE_PATH = DEFAULT_OUTPUT_DIR / "ingest_state.json"
 INGEST_STATE_SCHEMA_VERSION = 2
 
 # Settings
-EXCLUDED_SUBFOLDERS = ("archive", "discard", "old", "backup")
+EXCLUDED_SUBFOLDERS = ("_archive", "archive", "discard", "old", "backup")
 SCRIPT_VERSION = "2.0.0"
 INGEST_RECORD_SCHEMA_VERSION = 1
 RCLONE_REMOTE = "gdrive"
