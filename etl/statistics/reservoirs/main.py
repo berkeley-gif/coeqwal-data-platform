@@ -53,9 +53,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("statistics_etl")
 
-# Environment config
-DATABASE_URL = os.getenv("DATABASE_URL")
-
 
 def sanitize_value(val):
     """
@@ -93,14 +90,14 @@ def sanitize_row(row_dict: dict) -> dict:
     return {k: sanitize_value(v) for k, v in row_dict.items()}
 
 
-def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any]) -> int:
+def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any], database_url: str) -> int:
     """
     Write percentile data directly to reservoir_monthly_percentile table.
 
     Includes both percent-of-capacity and TAF values.
     Returns number of rows written.
     """
-    conn = get_db_connection()
+    conn = get_db_connection(db_url=database_url)
     cursor = conn.cursor()
 
     rows = []
@@ -169,14 +166,14 @@ def write_percentiles_to_db(scenario_id: str, results: Dict[str, Any]) -> int:
 
 
 def write_statistics_to_db(
-    scenario_id: str, storage_monthly: list, spill_monthly: list, period_summary: list
+    scenario_id: str, storage_monthly: list, spill_monthly: list, period_summary: list, database_url: str
 ) -> Dict[str, int]:
     """
     Write statistics directly to database tables.
 
     Returns dict with counts of rows written to each table.
     """
-    conn = get_db_connection()
+    conn = get_db_connection(db_url=database_url)
     cursor = conn.cursor()
     counts = {}
 
@@ -409,7 +406,7 @@ def write_statistics_to_db(
 
 
 def process_scenario(
-    scenario_id: str, write_to_db: bool = True, csv_path: Optional[str] = None
+    scenario_id: str, write_to_db: bool = True, csv_path: Optional[str] = None, database_url: str = None
 ) -> Dict[str, Any]:
     """
     Process a single scenario: calculate all statistics and optionally write to DB.
@@ -444,7 +441,7 @@ def process_scenario(
 
         if write_to_db:
             result["counts"]["percentiles"] = write_percentiles_to_db(
-                scenario_id, percentile_results
+                scenario_id, percentile_results, database_url
             )
         else:
             result["percentile_data"] = percentile_results
@@ -457,7 +454,7 @@ def process_scenario(
 
         if write_to_db:
             stats_counts = write_statistics_to_db(
-                scenario_id, storage_monthly, spill_monthly, period_summary
+                scenario_id, storage_monthly, spill_monthly, period_summary, database_url
             )
             result["counts"].update(stats_counts)
         else:
@@ -495,6 +492,11 @@ def main():
         action="store_true",
         help="Output results as JSON (implies --dry-run)",
     )
+    parser.add_argument(
+        "--devdb",
+        action="store_true",
+        help="Use development Postgres DB, instead of production",
+    )
 
     args = parser.parse_args()
 
@@ -508,14 +510,27 @@ def main():
 
     write_to_db = not (args.dry_run or args.output_json)
 
-    if write_to_db and not DATABASE_URL:
-        parser.error("DATABASE_URL environment variable required for database writes")
+    database_url = None
+
+    if write_to_db:
+        if args.devdb:
+            database_url = os.getenv("DEVDB_URL")
+            if not database_url:
+                log.error("DEVDB_URL not set. Cannot save to database.")
+                log.info("Use --output-json to output results as JSON instead.")
+                return
+        else:
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                log.error("DATABASE_URL not set. Cannot save to database.")
+                log.info("Use --output-json to output results as JSON instead.")
+                return
 
     all_results = []
     for scenario_id in scenarios:
         try:
             result = process_scenario(
-                scenario_id, write_to_db=write_to_db, csv_path=args.csv_path
+                scenario_id, write_to_db=write_to_db, csv_path=args.csv_path, database_url=database_url
             )
             all_results.append(result)
         except Exception as e:
