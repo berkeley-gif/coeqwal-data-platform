@@ -1298,16 +1298,29 @@ def main() -> None:
         action="store_true",
         help="Print results as JSON (implies --dry-run)",
     )
+    parser.add_argument(
+        "--devdb",
+        action="store_true",
+        help="Use development Postgres DB, instead of production",
+    )
     args = parser.parse_args()
 
     if args.output_json:
         args.dry_run = True
 
-    db_url = os.getenv("DATABASE_URL")
-    if not args.dry_run and not db_url:
-        parser.error(
-            "DATABASE_URL environment variable required unless --dry-run is set"
-        )
+    database_url = None
+    if args.devdb:
+        database_url = os.getenv("DEVDB_URL")
+        if not database_url:
+            log.error("DEVDB_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
+    else:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            log.error("DATABASE_URL not set. Cannot save to database.")
+            log.info("Use --output-json to output results as JSON instead.")
+            return
 
     scenarios = (
         SCENARIOS if args.all_scenarios else [args.scenario] if args.scenario else []
@@ -1339,7 +1352,7 @@ def main() -> None:
                     f"period_summary={len(stats['period_summary'])}"
                 )
             else:
-                save_to_database(scenario_id, stats, db_url)
+                save_to_database(scenario_id, stats, database_url)
 
         except Exception as exc:
             log.error(f"Failed to process scenario {scenario_id}: {exc}")
