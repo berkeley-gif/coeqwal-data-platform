@@ -703,7 +703,7 @@ def verify_ag(
                 """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
-                JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+                JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
             """,
                 (report.scenario_id, var),
@@ -726,7 +726,7 @@ def verify_ag(
                 """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
-                JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+                JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
             """,
                 (report.scenario_id, short_code),
@@ -760,7 +760,7 @@ def verify_ag(
                 """
                 SELECT p.annual_delivery_avg_taf
                 FROM ag_aggregate_period_summary p
-                JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+                JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
                 WHERE p.scenario_short_code = %s AND e.short_code = %s
             """,
                 (report.scenario_id, agg_code),
