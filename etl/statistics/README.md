@@ -91,6 +91,19 @@ All six statistics modules must be run for a scenario to have complete data in t
 - All 8 ETL modules are production-ready
 - Grand backfill is in progress (see "Running the ETL" below)
 
+### Verification notes
+
+Two things to know about `verify_all_sections.py`:
+
+- **Two checks are skipped** (logged as warnings, not failures) because a data
+  value the ETL loads is unconfirmed. It disagrees with the verifier's
+  reference, and confirming it is a question for the Modeling Team: San Luis
+  CVP/SWP `pct_capacity`, and the `GDPUD_NU` delivery variable. Background and
+  how to resolve: see `docs/statistics_roadmap.md`.
+- **Tier checks are opt-in.** Tier results come from a separate ETL, so the tier
+  sections only run with `--with-tiers`. The default stats run never touches
+  them and exits clean for any scenario.
+
 ### Running the ETL
 
 #### Prerequisites
