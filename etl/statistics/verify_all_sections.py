@@ -1282,6 +1282,7 @@ def run_scenario(
     report_dir: Optional[Path],
     csv_only: bool,
     tier_staging_dir: Optional[Path],
+    with_tiers: bool = False,
 ) -> Report:
     report = Report(scenario_id=scenario_id)
 
@@ -1329,7 +1330,13 @@ def run_scenario(
         verify_env_flows(report, dv_df, dv_units, conn)
         verify_refuge(report, conn)
         verify_delta(report, dv_df, dv_units, conn)
-        verify_tiers(report, conn, tier_staging_dir)
+        # Tier results come from a separate ETL, not the statistics batch. Tier
+        # verification is opt-in (--with-tiers) so a stats-only run is not failed
+        # by missing tier data for scenarios whose tier ETL has not been run.
+        if with_tiers:
+            verify_tiers(report, conn, tier_staging_dir)
+        else:
+            log.info("Skipping tier verification (pass --with-tiers to enable)")
     finally:
         if conn:
             conn.close()
@@ -1434,6 +1441,12 @@ def main():
     parser.add_argument(
         "--tier-staging-dir", default=None, help="Path to tier staging CSVs"
     )
+    parser.add_argument(
+        "--with-tiers",
+        action="store_true",
+        help="Also verify tier results (off by default). Tier data is produced by "
+        "a separate ETL, so a stats-only run should leave this off.",
+    )
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument(
         "--no-json",
@@ -1479,7 +1492,14 @@ def main():
         log.info(f"\n{'=' * 70}")
         log.info(f"  SCENARIO: {sid}")
         log.info(f"{'=' * 70}")
-        r = run_scenario(sid, ref_dir, report_dir_for_run, args.csv_only, tier_staging_dir)
+        r = run_scenario(
+            sid,
+            ref_dir,
+            report_dir_for_run,
+            args.csv_only,
+            tier_staging_dir,
+            with_tiers=args.with_tiers,
+        )
         all_reports.append(r)
 
     if args.json_stdout:
