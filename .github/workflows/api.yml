@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - 'api/**'
+      # Documentation-only edits do not change the image, so they don't rebuild
+      # and don't trigger ECS redeploys. A commit that also touches real code (Dockerfile,
+      # requirements, source) still matches the include above and triggers.
+      - '!api/**/*.md'
       - '.github/workflows/api.yml'
     branches:
       - main
