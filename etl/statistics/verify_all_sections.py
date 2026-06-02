@@ -798,19 +798,17 @@ def verify_env_flows(
         act_pct_unimp = None
         act_pct_ff = None
 
-        arc_code = var.replace("C_", "")
-
+        # network_arc_id stores the channel code string ("C_SAC041") directly,
+        # so match the full variable against it. There is no join to network_arc.
         if conn:
             monthly_rows = db_query(
                 conn,
                 """
                 SELECT AVG(m.flow_avg_cfs) as overall_avg_cfs
                 FROM env_flow_channel_monthly m
-                WHERE m.scenario_short_code = %s AND m.network_arc_id = (
-                    SELECT id FROM network_arc WHERE code = %s LIMIT 1
-                )
+                WHERE m.scenario_short_code = %s AND m.network_arc_id = %s
             """,
-                (report.scenario_id, arc_code),
+                (report.scenario_id, var),
             )
             if monthly_rows and monthly_rows[0].get("overall_avg_cfs") is not None:
                 act_avg_cfs = _safe_round(monthly_rows[0]["overall_avg_cfs"])
@@ -820,11 +818,9 @@ def verify_env_flows(
                 """
                 SELECT p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
                 FROM env_flow_channel_period_summary p
-                WHERE p.scenario_short_code = %s AND p.network_arc_id = (
-                    SELECT id FROM network_arc WHERE code = %s LIMIT 1
-                )
+                WHERE p.scenario_short_code = %s AND p.network_arc_id = %s
             """,
-                (report.scenario_id, arc_code),
+                (report.scenario_id, var),
             )
             if period_rows:
                 r = period_rows[0]
