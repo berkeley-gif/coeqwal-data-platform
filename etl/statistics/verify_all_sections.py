@@ -1112,7 +1112,6 @@ def _verify_tier_staging(report: Report, conn, staging_dir: Path) -> None:
             FROM tier_location_result
             WHERE scenario_short_code = %s
               AND tier_short_code = %s
-              AND is_active = TRUE
         """,
             (report.scenario_id, tier_code),
         )
