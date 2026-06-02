@@ -85,6 +85,9 @@ SCENARIO_OVERRIDES = {
     "s0046": {
         "dv": "s0046_dcradjhist_2020lu_eflowsv2_v0.2.dss",
     },
+    "s0107": {
+        "sv": "SV_COEQWAL_TAIESM1_20260309.dss",
+    },
 }
 
 
