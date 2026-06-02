@@ -43,7 +43,7 @@ CAL_TIER2: Tuple[str, ...] = ("out", "output", "results")
 GW_BASENAMES = ("cvgroundwaterbudget.dss", "cvgroundwaterout.dss")
 
 # Subfolder names (lowercased) to skip -- modelers leave old versions here
-EXCLUDED_SUBFOLDERS = ("archive", "discard", "old", "backup")
+EXCLUDED_SUBFOLDERS = ("_archive", "archive", "discard", "old", "backup")
 
 # Scenario-specific file overrides for ZIPs containing multiple SV/DV files.
 # Keys: scenario ID (lowercase). Values: dict with optional "sv" and/or "dv"
