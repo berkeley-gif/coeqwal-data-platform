@@ -52,7 +52,10 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
 
 # pydsstools is built from source against the heclib.a above. Installed
 # after numpy is on disk so the build can find numpy headers.
-RUN pip install --no-cache-dir pydsstools
+# Pinned to 2.4.0: the 3.0.x line ships manylinux wheels and pulls extra
+# geospatial deps (rasterio) that this from-source/heclib build path does
+# not satisfy, so an unpinned install breaks the image.
+RUN pip install --no-cache-dir pydsstools==2.4.0
 
 # Install AWS CLI v2 (official installer)
 RUN curl -L "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
