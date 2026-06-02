@@ -24,11 +24,9 @@ Usage:
     # Run all scenarios
     python run_all.py --all-scenarios
 
-    # Run all scenarios + sensitivity analysis as a post-processing step
+    # Run all scenarios + sensitivity analysis as a post-processing step (experimental)
     python run_all.py --all-scenarios --with-sensitivity
 
-    # Use local CSV instead of S3
-    python run_all.py --scenario s0029 --csv-path /path/to/csv
 """
 
 import argparse
@@ -513,8 +511,10 @@ Examples:
             log.info("Use --output-json to output results as JSON instead.")
             return
 
-    # Determine scenarios
-    scenarios = SCENARIOS if args.all_scenarios else [args.scenario]
+    # Determine scenarios. ETL_SCENARIOS is a frozenset, so sort it into a
+    # list: --start-from needs index/slice, and a stable order keeps batch
+    # boundaries and resume points reproducible across runs.
+    scenarios = sorted(SCENARIOS) if args.all_scenarios else [args.scenario]
 
     if args.start_from:
         if args.start_from not in scenarios:
