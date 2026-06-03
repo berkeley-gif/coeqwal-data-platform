@@ -123,8 +123,9 @@ def pick_simple(candidates: List[str], tier3_token: str, tier2_tokens: Tuple[str
 
 def pick_by_override(candidates: List[str], required_basename: str) -> Optional[str]:
     """Find a candidate whose basename matches the override (case-insensitive)."""
+    target = required_basename.lower()
     for p in candidates:
-        if os.path.basename(p).lower() == required_basename:
+        if os.path.basename(p).lower() == target:
             return p
     return None
 
