@@ -212,13 +212,15 @@ def main():
 
     overrides = SCENARIO_OVERRIDES.get(scen, {})
 
+    # An override is set because the heuristic doesn't work for this
+    # scenario, so on a miss we leave the path blank, which
+    # makes the entrypoint report SUCCEEDED_PARTIAL and the audit flag it.
     if "sv" in overrides:
         sv_path = pick_by_override(sv_candidates, overrides["sv"])
         if sv_path:
             print(f"[INFO] SV override for {scen}: {sv_path}")
         else:
-            print(f"[WARN] SV override '{overrides['sv']}' not found in candidates; falling back to heuristic.")
-            sv_path = pick_simple(sv_candidates, SV_TIER3, SV_TIER2)
+            print(f"[ERROR] SV override '{overrides['sv']}' for {scen} matched no candidate; leaving SV blank. Fix SCENARIO_OVERRIDES or the ZIP.")
     else:
         sv_path = pick_simple(sv_candidates, SV_TIER3, SV_TIER2)
 
@@ -227,8 +229,7 @@ def main():
         if dv_path:
             print(f"[INFO] DV override for {scen}: {dv_path}")
         else:
-            print(f"[WARN] DV override '{overrides['dv']}' not found in candidates; falling back to heuristic.")
-            dv_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
+            print(f"[ERROR] DV override '{overrides['dv']}' for {scen} matched no candidate; leaving DV blank. Fix SCENARIO_OVERRIDES or the ZIP.")
     else:
         dv_path = pick_simple(cal_candidates, CAL_TIER3, CAL_TIER2)
 
