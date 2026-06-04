@@ -468,7 +468,9 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
 # Main
 
 
-def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIReport:
+def run_scenario(
+    sid: str, api_url: str, report_dir: Optional[Path], with_tiers: bool = False
+) -> APIReport:
     report = APIReport(scenario_id=sid, api_url=api_url)
     conn = connect_db()
     if not conn:
@@ -486,9 +488,14 @@ def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIRepor
         ("cws", verify_batch_cws),
         ("ag", verify_batch_ag),
         ("delta", verify_delta),
-        ("tiers", verify_tiers),
         ("env_flow_period", verify_env_flow_period),
     ]
+    # Tier data comes from a separate ETL, so tier verification is opt-in via
+    # --with-tiers.
+    if with_tiers:
+        sections.append(("tiers", verify_tiers))
+    else:
+        log.info("Skipping tier verification (pass --with-tiers to enable)")
     try:
         for name, fn in sections:
             try:
@@ -596,6 +603,13 @@ def main():
     )
     parser.add_argument("--api-url", default=DEFAULT_API_URL)
     parser.add_argument("--report-dir", default=None)
+    parser.add_argument(
+        "--with-tiers",
+        action="store_true",
+        help="Also verify tier results against the API (off by default). Tier "
+        "data is produced by a separate ETL, so a stats-only run should leave "
+        "this off.",
+    )
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument(
         "--no-json",
@@ -629,7 +643,7 @@ def main():
         log.info(f"\n{'=' * 70}")
         log.info(f"  API VERIFY: {sid}")
         log.info(f"{'=' * 70}")
-        r = run_scenario(sid, args.api_url, report_dir_for_run)
+        r = run_scenario(sid, args.api_url, report_dir_for_run, with_tiers=args.with_tiers)
         all_reports.append(r)
 
     if args.json_stdout:
