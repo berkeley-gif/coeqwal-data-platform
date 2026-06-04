@@ -1320,23 +1320,34 @@ def run_scenario(
         conn = connect_db()
         report.db_connected = conn is not None
 
+    # Guard each section so one failure (drifted query, bad CSV) skips just
+    # that section, not the whole run. Rollback clears the failed transaction
+    # so the next section can still query.
+    sections = [
+        ("unit_conversion", lambda: verify_unit_conversion(report, dv_df, dv_units)),
+        ("reservoirs", lambda: verify_reservoirs(report, dv_df, dv_units, conn)),
+        ("cws_aggregates", lambda: verify_cws_aggregates(report, dv_df, dv_units, conn)),
+        ("cws_du", lambda: verify_cws_du(report, dv_df, dv_units, sv_df, sv_units, conn)),
+        ("ag", lambda: verify_ag(report, dv_df, dv_units, conn)),
+        ("mi_contractors", lambda: verify_mi_contractors(report, conn)),
+        ("env_flows", lambda: verify_env_flows(report, dv_df, dv_units, conn)),
+        ("refuge", lambda: verify_refuge(report, conn)),
+        ("delta", lambda: verify_delta(report, dv_df, dv_units, conn)),
+    ]
+    # Tier data is a separate ETL, so tier verification is opt-in (--with-tiers).
+    if with_tiers:
+        sections.append(("tiers", lambda: verify_tiers(report, conn, tier_staging_dir)))
+    else:
+        log.info("Skipping tier verification (pass --with-tiers to enable)")
     try:
-        verify_unit_conversion(report, dv_df, dv_units)
-        verify_reservoirs(report, dv_df, dv_units, conn)
-        verify_cws_aggregates(report, dv_df, dv_units, conn)
-        verify_cws_du(report, dv_df, dv_units, sv_df, sv_units, conn)
-        verify_ag(report, dv_df, dv_units, conn)
-        verify_mi_contractors(report, conn)
-        verify_env_flows(report, dv_df, dv_units, conn)
-        verify_refuge(report, conn)
-        verify_delta(report, dv_df, dv_units, conn)
-        # Tier results come from a separate ETL, not the statistics batch. Tier
-        # verification is opt-in (--with-tiers) so a stats-only run is not failed
-        # by missing tier data for scenarios whose tier ETL has not been run.
-        if with_tiers:
-            verify_tiers(report, conn, tier_staging_dir)
-        else:
-            log.info("Skipping tier verification (pass --with-tiers to enable)")
+        for name, fn in sections:
+            try:
+                fn()
+            except Exception as e:
+                log.error(f"Section '{name}' failed: {e}")
+                report.add("section_error", name, "section", 1.0, 0.0)
+                if conn:
+                    conn.rollback()
     finally:
         if conn:
             conn.close()
