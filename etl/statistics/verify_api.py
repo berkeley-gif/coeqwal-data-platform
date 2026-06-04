@@ -475,13 +475,28 @@ def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIRepor
         log.error("Cannot run API verification without DB connection")
         return report
 
+    # Each section runs under its own guard. A section that raises (a query
+    # that has drifted from the schema, a transient API/DB error) records a
+    # `section_error` fail and the run moves on, so one broken section no
+    # longer aborts the remaining sections or, in --all-scenarios, every later
+    # scenario. The rollback clears the aborted transaction left by a failed
+    # query so the next section can still talk to the database.
+    sections = [
+        ("storage", verify_batch_storage),
+        ("cws", verify_batch_cws),
+        ("ag", verify_batch_ag),
+        ("delta", verify_delta),
+        ("tiers", verify_tiers),
+        ("env_flow_period", verify_env_flow_period),
+    ]
     try:
-        verify_batch_storage(report, conn, api_url, sid)
-        verify_batch_cws(report, conn, api_url, sid)
-        verify_batch_ag(report, conn, api_url, sid)
-        verify_delta(report, conn, api_url, sid)
-        verify_tiers(report, conn, api_url, sid)
-        verify_env_flow_period(report, conn, api_url, sid)
+        for name, fn in sections:
+            try:
+                fn(report, conn, api_url, sid)
+            except Exception as e:
+                log.error(f"Section '{name}' failed: {e}")
+                report.add("section_error", name, "section", 1.0, 0.0)
+                conn.rollback()
     finally:
         conn.close()
 
