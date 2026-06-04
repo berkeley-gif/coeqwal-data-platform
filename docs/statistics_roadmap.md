@@ -147,6 +147,40 @@ is correct and must be preserved. The orchestrator must keep passing
 
 ---
 
+## Unconfirmed data values (two verification checks skipped meanwhile)
+
+Two values the statistics pipeline depends on are unconfirmed: deciding which
+is correct is a modeling question for the Water Allocation Modeling Team, not a
+code fix. Until the team confirms each value,
+`etl/statistics/verify_all_sections.py` skips the affected check (logged as a
+warning) so an unresolved data question does not read as a verification failure.
+
+Two data questions for the Water Allocation Modeling Team:
+
+- **San Luis CVP/SWP capacity split.** What is the correct capacity split
+  between the federal (CVP) and state (SWP) shares of San Luis? `*_pct_capacity`
+  for `SLUIS_CVP` / `SLUIS_SWP` is affected. If `reservoir_entity` is wrong, the
+  ETL's San Luis `pct_capacity` (and the API/frontend values that read it) are
+  wrong.
+
+- **GDPUD_NU delivery variable.** Which CalSim pathname is GDPUD_NU's surface
+  delivery: `DN_GDPUD_NU` (`SW_DELIVERY-NET`) or `DL_GDPUD_NU` (what
+  `du_urban_variable` currently maps)? If the mapping is wrong, this DU's
+  delivery is wrong for every scenario.
+
+Once the team answers, for each item the developer:
+
+1. Fixes the source of truth in the ETL (the seed table, the `du_urban_variable`
+   mapping, or a `CAPACITY_OVERRIDES` entry) and re-runs the affected module so
+   the loaded values are correct. Developer doesn't need to run all of the
+   statistics modules. Just the one pertaining to the change (but for all
+   scenarios).
+2. Updates the expected value in the verification script (`RESERVOIR_VARS` or
+   `verify_cws_du`) to match.
+3. Removes the `KNOWN ISSUE` skip guard so the check runs again.
+
+---
+
 ## Verification streamlining
 
 **Current state (verified May 2026):** verification surface area is now
@@ -293,6 +327,19 @@ PASS / FAIL decisions match expectations for at least:
 **Why deferred:** depends on a fixture-DB pattern that the wider ETL
 test suite does not have today. Could lean on the caller-injectable
 connection from "Caller-injectable connection for testability" above.
+
+### V9. Move tier verification out of the statistics verifier
+
+`verify_all_sections.py` verifies both statistics tables and tier results
+(`verify_tiers`, gated behind `--with-tiers`). Tier results come from a separate
+ETL (`etl/tier_data/`), which already has its own checker (`verify_tiers.py`).
+The two check different things: `verify_all_sections.py` checks the values
+written to the `tier_result` table, while `verify_tiers.py` checks the values
+the API serves.
+
+**Goal:** make `verify_all_sections.py` stats-only and move the tier-result
+table check next to the tier ETL, so the two concerns are separated. The
+`--with-tiers` flag is the interim bridge until then.
 
 ### Sequencing
 
