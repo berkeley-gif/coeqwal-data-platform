@@ -295,7 +295,7 @@ def verify_batch_ag(report: APIReport, conn, api_url: str, sid: str):
         """
         SELECT e.short_code, p.annual_delivery_avg_taf
         FROM ag_aggregate_period_summary p
-        JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+        JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
         WHERE p.scenario_short_code = %s AND e.is_active = TRUE
     """,
         (sid,),
@@ -436,9 +436,8 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
     db_rows = db_query(
         conn,
         """
-        SELECT na.code, p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
+        SELECT p.network_arc_id AS code, p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
         FROM env_flow_channel_period_summary p
-        JOIN network_arc na ON p.network_arc_id = na.id
         WHERE p.scenario_short_code = %s
     """,
         (sid,),
