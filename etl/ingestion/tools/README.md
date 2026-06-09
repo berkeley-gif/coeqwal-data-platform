@@ -81,7 +81,3 @@ S3 at `scenario/<id>/run/`.
   ```
   python etl/ingestion/tools/refresh_active_scenarios.py
   ```
-
-For the one-time backfill of `ingest_record.json` for scenarios that
-landed in S3 before the contract existed, see
-[`etl/archive/oneshot_scripts/backfill_ingest_records.py`](../../archive/oneshot_scripts/backfill_ingest_records.py).

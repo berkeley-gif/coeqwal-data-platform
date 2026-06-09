@@ -21,7 +21,7 @@ to audit and fill geometry gaps related to tier locations and their updates.
 
 Companion writer for demand-unit polygons:
 [`database/scripts/data_processing/load_du_geometries.py`](../../database/scripts/data_processing/load_du_geometries.py)
-(requires the [`56_add_du_geometry_columns.sql`](../../database/scripts/sql/.archive/56_add_du_geometry_columns.sql)
+(requires the [`56_add_du_geometry_columns.sql`](../../database/sql_archive/04_scenario/56_add_du_geometry_columns.sql)
 migration). For data gaps see
 [`docs/du_geometry_gap.md`](../../docs/du_geometry_gap.md).
 

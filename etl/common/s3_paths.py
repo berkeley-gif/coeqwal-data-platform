@@ -9,7 +9,7 @@ Bucket layout (under `etl.common.aws.S3_BUCKET`):
     scenario/<short_code>/run/            ZIP after Lambda moves it (kept here for the presign-download API)
     scenario/<short_code>/verify/         trend report CSV
     scenario/<short_code>/csv/            extracted CSVs
-    scenario/<short_code>/validation/     <id>_validation_mismatches.csv (per-row debug, only when mismatches found)
+    scenario/<short_code>/validation/     <id>_validation_mismatches.csv (per-row debug, written on every validating run, header-only on pass and populated on fail)
 """
 
 from __future__ import annotations
