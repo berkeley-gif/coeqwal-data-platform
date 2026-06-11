@@ -375,6 +375,7 @@ async def get_batch_scenario_tiers(
             tr.norm_tier_3,
             tr.norm_tier_4,
             tr.total_value,
+            tr.total_count,
             tr.single_tier_level
         FROM tier_result tr
         JOIN tier_definition td ON tr.tier_short_code = td.short_code
@@ -399,8 +400,10 @@ async def get_batch_scenario_tiers(
                 norm_2 = safe_float(row["norm_tier_2"])
                 norm_3 = safe_float(row["norm_tier_3"])
                 norm_4 = safe_float(row["norm_tier_4"])
+                total_value = safe_float(row["total_value"])
+                total_count = safe_int(row["total_count"])
 
-                scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
+                scores = calculate_tier_scores(total_value, total_count)
 
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
@@ -424,7 +427,7 @@ async def get_batch_scenario_tiers(
                     normalized = None
                 else:
                     weighted = float(level)
-                    normalized = round((4.0 - weighted) / 3.0, 3)
+                    normalized = round((5.0 - weighted) / 4.0, 3)
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
