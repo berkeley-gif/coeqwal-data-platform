@@ -136,6 +136,53 @@ def calculate_tier_scores(
     }
 
 
+def _shape_tier_row(row: asyncpg.Record) -> Dict[str, Any]:
+    """Build the API tier payload for one `tier_result` row.
+
+    Handles both tier types. A multi_value row carries the per-level
+    distribution and its derived scores. A single_value row carries one overall
+    level. The `data` array is fixed length 4 where index i is tier level i+1,
+    so clients read the tier label off the index rather than receiving
+    "tier1".."tier4" keys on every row.
+    """
+    if row["tier_type"] == "multi_value":
+        norm_1 = safe_float(row["norm_tier_1"])
+        norm_2 = safe_float(row["norm_tier_2"])
+        norm_3 = safe_float(row["norm_tier_3"])
+        norm_4 = safe_float(row["norm_tier_4"])
+
+        scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
+
+        return {
+            "name": row["name"],
+            "type": "multi_value",
+            "weighted_score": scores["weighted_score"],
+            "normalized_score": scores["normalized_score"],
+            "data": [
+                {"value": safe_int(row["tier_1_value"]), "normalized": norm_1},
+                {"value": safe_int(row["tier_2_value"]), "normalized": norm_2},
+                {"value": safe_int(row["tier_3_value"]), "normalized": norm_3},
+                {"value": safe_int(row["tier_4_value"]), "normalized": norm_4},
+            ],
+            "total": safe_int(row["total_value"]),
+        }
+
+    level = safe_int(row["single_tier_level"])
+    if level is None:
+        weighted = None
+        normalized = None
+    else:
+        weighted = float(level)
+        normalized = normalize_tier_score(weighted)
+    return {
+        "name": row["name"],
+        "type": "single_value",
+        "weighted_score": weighted,
+        "normalized_score": normalized,
+        "level": level,
+    }
+
+
 @router.get("/definitions", summary="Get tier descriptions")
 async def get_tier_definitions(
     response: Response,
@@ -297,47 +344,7 @@ async def get_all_scenario_tiers(
         tiers = {}
 
         for row in rows:
-            tier_code = row["tier_short_code"]
-
-            if row["tier_type"] == "multi_value":
-                norm_1 = safe_float(row["norm_tier_1"])
-                norm_2 = safe_float(row["norm_tier_2"])
-                norm_3 = safe_float(row["norm_tier_3"])
-                norm_4 = safe_float(row["norm_tier_4"])
-
-                scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
-
-                tiers[tier_code] = {
-                    "name": row["name"],
-                    "type": "multi_value",
-                    "weighted_score": scores["weighted_score"],
-                    "normalized_score": scores["normalized_score"],
-                    # Fixed-length 4-element array, index i corresponds to
-                    # tier level i+1. Clients derive the tier label from the
-                    # index so we don't ship "tier1".."tier4" on every row
-                    "data": [
-                        {"value": safe_int(row["tier_1_value"]), "normalized": norm_1},
-                        {"value": safe_int(row["tier_2_value"]), "normalized": norm_2},
-                        {"value": safe_int(row["tier_3_value"]), "normalized": norm_3},
-                        {"value": safe_int(row["tier_4_value"]), "normalized": norm_4},
-                    ],
-                    "total": safe_int(row["total_value"]),
-                }
-            else:
-                level = safe_int(row["single_tier_level"])
-                if level is None:
-                    weighted = None
-                    normalized = None
-                else:
-                    weighted = float(level)
-                    normalized = normalize_tier_score(weighted)
-                tiers[tier_code] = {
-                    "name": row["name"],
-                    "type": "single_value",
-                    "weighted_score": weighted,
-                    "normalized_score": normalized,
-                    "level": level,
-                }
+            tiers[row["tier_short_code"]] = _shape_tier_row(row)
 
         return {"scenario": scenario_id, "tiers": tiers}
     except HTTPException:
@@ -414,49 +421,9 @@ async def get_batch_scenario_tiers(
 
         for row in rows:
             scenario_id = row["scenario_short_code"]
-            tier_code = row["tier_short_code"]
-
             if scenario_id not in result:
                 result[scenario_id] = {}
-
-            if row["tier_type"] == "multi_value":
-                norm_1 = safe_float(row["norm_tier_1"])
-                norm_2 = safe_float(row["norm_tier_2"])
-                norm_3 = safe_float(row["norm_tier_3"])
-                norm_4 = safe_float(row["norm_tier_4"])
-
-                scores = calculate_tier_scores(norm_1, norm_2, norm_3, norm_4)
-
-                result[scenario_id][tier_code] = {
-                    "name": row["name"],
-                    "type": "multi_value",
-                    "weighted_score": scores["weighted_score"],
-                    "normalized_score": scores["normalized_score"],
-                    # Fixed-length 4-element array, index i corresponds to
-                    # tier level i+1 (see per-scenario handler for context)
-                    "data": [
-                        {"value": safe_int(row["tier_1_value"]), "normalized": norm_1},
-                        {"value": safe_int(row["tier_2_value"]), "normalized": norm_2},
-                        {"value": safe_int(row["tier_3_value"]), "normalized": norm_3},
-                        {"value": safe_int(row["tier_4_value"]), "normalized": norm_4},
-                    ],
-                    "total": safe_int(row["total_value"]),
-                }
-            else:
-                level = safe_int(row["single_tier_level"])
-                if level is None:
-                    weighted = None
-                    normalized = None
-                else:
-                    weighted = float(level)
-                    normalized = normalize_tier_score(weighted)
-                result[scenario_id][tier_code] = {
-                    "name": row["name"],
-                    "type": "single_value",
-                    "weighted_score": weighted,
-                    "normalized_score": normalized,
-                    "level": level,
-                }
+            result[scenario_id][row["tier_short_code"]] = _shape_tier_row(row)
 
         out = {
             "scenarios": {
