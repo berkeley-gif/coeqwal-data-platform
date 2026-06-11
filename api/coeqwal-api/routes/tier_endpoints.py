@@ -37,6 +37,7 @@ def _catalog_cache_header() -> str:
     """Return the Cache-Control value matching the in-process TTL."""
     return f"public, max-age={api_cache_max_age()}"
 
+
 # =============================================================================
 # PYDANTIC MODELS
 # =============================================================================
@@ -49,7 +50,10 @@ class TierDefinition(BaseModel):
         ..., description="Unique identifier (e.g., 'AG_REV', 'CWS_DEL')"
     )
     name: str = Field(..., description="Display name (e.g., 'Agricultural revenue')")
-    description: Optional[str] = Field(None, description="Detailed description for tooltips. Null when no description was seeded.")
+    description: Optional[str] = Field(
+        None,
+        description="Detailed description for tooltips. Null when no description was seeded.",
+    )
     tier_type: str = Field(..., description="'multi_value' or 'single_value'")
     tier_count: int = Field(..., description="Number of tier levels (usually 4)")
     is_active: bool = Field(..., description="Whether this tier is currently active")
@@ -79,6 +83,15 @@ async def get_db():
         yield connection
 
 
+def normalize_tier_score(weighted_score: float) -> float:
+    """Rescale a weighted tier score onto the 0-1 normalized axis.
+
+    Maps weighted 1.0 (best) to 1.0 and 4.0 (worst) to 0.0, the orientation
+    the radar plot's axis expects.
+    """
+    return round((4.0 - weighted_score) / 3.0, 3)
+
+
 def calculate_tier_scores(
     norm_1: Optional[float],
     norm_2: Optional[float],
@@ -95,8 +108,8 @@ def calculate_tier_scores(
 
     Returns:
     - weighted_score: 1.0 (best) to 4.0 (worst), drives sort comparators
-    - normalized_score: 0.0 to 1.0 (higher = better), Y-axis for the
-      parallel plot
+    - normalized_score: 0.0 to 1.0 (higher = better), axis input for the
+      radar plot
     """
     if norm_1 is None and norm_2 is None and norm_3 is None and norm_4 is None:
         return {"weighted_score": None, "normalized_score": None}
@@ -115,8 +128,7 @@ def calculate_tier_scores(
     weighted_sum = (1 * n1) + (2 * n2) + (3 * n3) + (4 * n4)
     weighted_score = round(weighted_sum / total_pct, 3)
 
-    # Map weighted_score 1.0 to normalized 1.0 (best), 4.0 to 0.0 (worst)
-    normalized_score = round((4.0 - weighted_score) / 3.0, 3)
+    normalized_score = normalize_tier_score(weighted_score)
 
     return {
         "weighted_score": weighted_score,
@@ -318,7 +330,7 @@ async def get_all_scenario_tiers(
                     normalized = None
                 else:
                     weighted = float(level)
-                    normalized = round((4.0 - weighted) / 3.0, 3)
+                    normalized = normalize_tier_score(weighted)
                 tiers[tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
@@ -437,7 +449,7 @@ async def get_batch_scenario_tiers(
                     normalized = None
                 else:
                     weighted = float(level)
-                    normalized = round((4.0 - weighted) / 3.0, 3)
+                    normalized = normalize_tier_score(weighted)
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
@@ -448,8 +460,7 @@ async def get_batch_scenario_tiers(
 
         out = {
             "scenarios": {
-                sid: {"scenario": sid, "tiers": tiers}
-                for sid, tiers in result.items()
+                sid: {"scenario": sid, "tiers": tiers} for sid, tiers in result.items()
             },
             "count": len(result),
         }
