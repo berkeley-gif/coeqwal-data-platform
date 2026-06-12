@@ -54,7 +54,6 @@ import os
 import sys
 import pandas as pd
 from pathlib import Path
-from collections import Counter
 from typing import Dict, List, Tuple
 
 # Add the repo root to sys.path so `etl.common` is importable when this
@@ -271,8 +270,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
             if scenario not in ALLOWED_SCENARIOS:
                 continue
 
-            tier_counts = Counter()
-            valid_count = 0
+            tier_sums = TierSums()
 
             for du_id in du_columns:
                 tier_val = row[du_id]
@@ -280,8 +278,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                     continue
                 tier_continuous = float(tier_val)
                 tier = math.trunc(tier_continuous)
-                tier_counts[tier] += 1
-                valid_count += 1
+                tier_sums.add_value(tier_continuous)
                 location_results.append({
                     'scenario_short_code': scenario,
                     'tier_short_code': 'AG_REV',
@@ -295,8 +292,8 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                     '_source_file': 'AG_REV.csv',
                 })
 
-            if valid_count > 0:
-                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_counts, valid_count)
+            if tier_sums.total_count > 0:
+                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
                 agg['_source_file'] = 'AG_REV.csv'
                 tier_results.append(agg)
 
