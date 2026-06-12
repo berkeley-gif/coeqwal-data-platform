@@ -49,6 +49,7 @@ Usage:
 
 import argparse
 import csv
+import math
 import os
 import sys
 import pandas as pd
@@ -122,6 +123,29 @@ def normalize_scenario_id(raw) -> str:
     except ValueError:
         return s
 
+class TierSums():
+    """
+    Class to keep track of continous tier values for each tier level
+    as well as total sum and total count of tier locations.
+    """
+    total_sum = 0.000
+    total_count = 0
+
+    def __init__(self):
+        self.tier_sums = {
+            1: 0.000,
+            2: 0.000,
+            3: 0.000,
+            4: 0.000
+        }
+
+    def add_value(self, value):
+        self.total_sum += value
+        self.total_count += 1
+        self.tier_sums[math.trunc(value)] += value
+
+    def get_sums(self):
+        return self.tier_sums
 
 # =============================================================================
 # MULTI-VALUE LOADERS
@@ -152,16 +176,15 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_counts = Counter()
-        valid_count = 0
+        tier_sums = TierSums()
 
         for du_id in du_columns:
             tier_val = row[du_id]
             if pd.isna(tier_val) or tier_val == 'NA':
                 continue
-            tier = int(tier_val)
-            tier_counts[tier] += 1
-            valid_count += 1
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_val)
+            tier_sums.add_value(tier_continuous)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'CWS_DEL',
@@ -170,12 +193,13 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': du_id,
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': len(location_results) + 1,
                 '_source_file': 'CWS_DEL.csv',
             })
 
-        if valid_count > 0:
-            agg = _multi_value_aggregate(scenario, 'CWS_DEL', tier_counts, valid_count)
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'CWS_DEL', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'CWS_DEL.csv'
             tier_results.append(agg)
 
@@ -213,7 +237,8 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
             display_order = 1
 
             for _, row in group.iterrows():
-                tier = int(row['tier'])
+                tier_continuous = float(row['tier'])
+                tier = math.trunc(tier_continuous)
                 region = row['region']
                 tier_counts[tier] += 1
                 location_results.append({
@@ -224,6 +249,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                     'location_name': region,
                     'tier_level': tier,
                     'tier_value': 1,
+                    'tier_continuous': tier_continuous,
                     'display_order': display_order,
                     '_source_file': 'AG_REV.csv',
                 })
@@ -252,7 +278,8 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                 tier_val = row[du_id]
                 if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                     continue
-                tier = int(tier_val)
+                tier_continuous = float(tier_val)
+                tier = math.trunc(tier_continuous)
                 tier_counts[tier] += 1
                 valid_count += 1
                 location_results.append({
@@ -263,6 +290,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                     'location_name': du_id,
                     'tier_level': tier,
                     'tier_value': 1,
+                    'tier_continuous': tier_continuous,
                     'display_order': len(location_results) + 1,
                     '_source_file': 'AG_REV.csv',
                 })
@@ -410,7 +438,8 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 tier_val = df.loc[station, scenario]
                 if pd.isna(tier_val):
                     continue
-                tier = int(tier_val)
+                tier_continuous = float(tier_val)
+                tier = math.trunc(tier_continuous)
                 tier_counts[tier] += 1
                 loc_rows_for_scenario.append({
                     'scenario_short_code': scenario,
@@ -420,6 +449,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                     'location_name': TIER_LOCATION_NAMES.get('ENV_FLOWS', {}).get(station, station),
                     'tier_level': tier,
                     'tier_value': 1,
+                    'tier_continuous': tier_continuous,
                     'display_order': display_order,
                     '_source_file': label,
                 })
@@ -486,7 +516,8 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
             tier_val = row[res_col]
             if pd.isna(tier_val):
                 continue
-            tier = int(tier_val)
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
             tier_counts[tier] += 1
             res_id = _res_stor_location_id(res_col)
             res_name = TIER_LOCATION_NAMES.get('RES_STOR', {}).get(res_id, res_id)
@@ -498,6 +529,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': res_name,
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': display_order,
                 '_source_file': 'RES_STOR.csv',
             })
@@ -543,8 +575,10 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             tier_val = row[wba_col]
             if pd.isna(tier_val):
                 continue
-            tier = int(tier_val)
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
             if tier == 0:
+                tier_continuous = float(1)
                 tier = 1  # tier 0 maps to tier 1 (no impact)
             tier_counts[tier] += 1
             mapbox_id = convert_wba_id_to_mapbox_format(wba_col)
@@ -556,6 +590,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': TIER_LOCATION_NAMES.get('GW_STOR', {}).get(mapbox_id, wba_col),
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': display_order,
                 '_source_file': 'GW_STOR.csv',
             })
