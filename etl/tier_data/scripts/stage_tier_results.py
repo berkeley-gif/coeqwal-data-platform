@@ -78,8 +78,8 @@ def _write(df: pd.DataFrame, out_path: Path, dry_run: bool, label: str) -> None:
 
 
 def stage_cws_del(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """community/20260413_all_scenarios_through_cc95_tiers_categorical.csv -> CWS_DEL.csv"""
-    src = _find_single(source_dir / "community", "20260413_all_scenarios_through_cc95_tiers_categorical.csv")
+    """community/20260603_all_scenarios_through_ecearth_tiers_continuous.csv -> CWS_DEL.csv"""
+    src = _find_single(source_dir / "community", "20260603_all_scenarios_through_ecearth_tiers_continuous.csv")
     if src is None:
         matches = _find_glob(source_dir / "community", "*.csv")
         if not matches:
