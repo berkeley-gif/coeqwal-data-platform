@@ -4,10 +4,10 @@ Preprocess team-delivered tier CSVs into the canonical flat filenames that
 load_all_tier_results.py expects in etl/tier_data/staging/.
 
 The data team drops raw tier result CSVs into etl/tier_data/staging/tier_results/
-organized by subdirectory (ag/, community/, eflows/, delta_ecology/, salmon/)
-or as flat Hist+CC50+CC95 files at the root of tier_results/. The loader, on
+organized by subdirectory (CWS_DEL/, AG_REV/, ENV_FLOWS/, RES_STOR/,
+GW_STOR/, DELTA_ECO/, FW_DELTA_USES/, FW_EXP/, WRC_SALMON_AB/). The loader, on
 the other hand, expects nine canonical flat filenames directly under staging/
-(CWS_DEL.csv, AG_REV.csv, ENV_FLOWS_{historical,cc50,cc95}.csv, RES_STOR.csv,
+(CWS_DEL.csv, AG_REV.csv, ENV_FLOWS.csv, RES_STOR.csv,
 GW_STOR.csv, DELTA_ECO.csv, FW_DELTA_USES.csv, FW_EXP.csv, WRC_SALMON_AB.csv).
 
 This script bridges the two: it reads from staging/tier_results/** and writes
@@ -78,10 +78,10 @@ def _write(df: pd.DataFrame, out_path: Path, dry_run: bool, label: str) -> None:
 
 
 def stage_cws_del(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """community/20260603_all_scenarios_through_ecearth_tiers_continuous.csv -> CWS_DEL.csv"""
-    src = _find_single(source_dir / "community", "20260603_all_scenarios_through_ecearth_tiers_continuous.csv")
+    """CWS_DEL/20260603_all_scenarios_through_ecearth_tiers_continuous.csv -> CWS_DEL.csv"""
+    src = _find_single(source_dir / "CWS_DEL", "20260603_all_scenarios_through_ecearth_tiers_continuous.csv")
     if src is None:
-        matches = _find_glob(source_dir / "community", "*.csv")
+        matches = _find_glob(source_dir / "CWS_DEL", "*.csv")
         if not matches:
             print("  CWS_DEL: no source under community/, skipped")
             return False
@@ -91,17 +91,17 @@ def stage_cws_del(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     df = pd.read_csv(src)
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
-    _write(df, out_dir / "CWS_DEL.csv", dry_run, f"from community/{src.name}")
+    _write(df, out_dir / "CWS_DEL.csv", dry_run, f"from CWS_DEL/{src.name}")
     return True
 
 
 def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """ag/continuous_tiers.csv -> AG_REV.csv"""
-    src = _find_single(source_dir / "ag", "continuous_tiers.csv")
+    """AG_REV/continuous_tiers.csv -> AG_REV.csv"""
+    src = _find_single(source_dir / "AG_REV", "continuous_tiers.csv")
     if src is None:
-        matches = _find_glob(source_dir / "ag", "*.csv")
+        matches = _find_glob(source_dir / "AG_REV", "*.csv")
         if not matches:
-            print("  AG_REV: no source under ag/, skipped")
+            print("  AG_REV: no source under AG_REV/, skipped")
             return False
         src = matches[-1]
         print(f"  AG_REV: no exact match, using {src.name}")
@@ -110,17 +110,17 @@ def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     df = df.transpose()
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
-    _write(df, out_dir / "AG_REV.csv", dry_run, f"from ag/{src.name}")
+    _write(df, out_dir / "AG_REV.csv", dry_run, f"from AG_REV/{src.name}")
     return True
 
 
 def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """eflows/Continuous_Tier_Table.csv -> ENV_FLOWS.csv"""
-    src = _find_single(source_dir / "eflows", "Continuous_Tier_Table.csv")
+    """ENV_FLOWS/Continuous_Tier_Table.csv -> ENV_FLOWS.csv"""
+    src = _find_single(source_dir / "ENV_FLOWS", "Continuous_Tier_Table.csv")
     if src is None:
-        matches = _find_glob(source_dir / "eflows", "*.csv")
+        matches = _find_glob(source_dir / "ENV_FLOWS", "*.csv")
         if not matches:
-            print("  ENV_FLOWS: no source under eflows/, skipped")
+            print("  ENV_FLOWS: no source under ENV_FLOWS/, skipped")
             return False
         src = matches[-1]
         print(f"  ENV_FLOWS: no exact match, using {src.name}")
@@ -128,17 +128,17 @@ def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     df = pd.read_csv(src)
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
-    _write(df, out_dir / "ENV_FLOWS.csv", dry_run, f"from eflows/{src.name}")
+    _write(df, out_dir / "ENV_FLOWS.csv", dry_run, f"from ENV_FLOWS/{src.name}")
     return True
 
 
 def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """res/Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv -> RES_STOR.csv"""
-    src = _find_single(source_dir / "res", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
+    """RES_STOR/Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv -> RES_STOR.csv"""
+    src = _find_single(source_dir / "RES_STOR", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
     if src is None:
-        matches = _find_glob(source_dir / "res", "*.csv")
+        matches = _find_glob(source_dir / "RES_STOR", "*.csv")
         if not matches:
-            print("  RES_STOR: no source under res/, skipped")
+            print("  RES_STOR: no source under RES_STOR/, skipped")
             return False
         src = matches[-1]
         print(f"  RES_STOR: no exact match, using {src.name}")
@@ -146,16 +146,16 @@ def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     df = pd.read_csv(src)
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
-    _write(df, out_dir / "RES_STOR.csv", dry_run, f"from res/{src.name}")
+    _write(df, out_dir / "RES_STOR.csv", dry_run, f"from RES_STOR/{src.name}")
 
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """gw/Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv -> GW_STOR.csv"""
-    src = _find_single(source_dir / "gw", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
+    """GW_STOR/Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv -> GW_STOR.csv"""
+    src = _find_single(source_dir / "GW_STOR", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
     if src is None:
-        matches = _find_glob(source_dir / "gw", "*.csv")
+        matches = _find_glob(source_dir / "GW_STOR", "*.csv")
         if not matches:
-            print("  GW_STOR: no source under gw/, skipped")
+            print("  GW_STOR: no source under GW_STOR/, skipped")
             return False
         src = matches[-1]
         print(f"  GW_STOR: no exact match, using {src.name}")
@@ -163,23 +163,19 @@ def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     df = pd.read_csv(src)
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
-    _write(df, out_dir / "GW_STOR.csv", dry_run, f"from gw/{src.name}")
+    _write(df, out_dir / "GW_STOR.csv", dry_run, f"from GW_STOR/{src.name}")
 
 
 def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """
-    delta_ecology/TierOutcomes_{Historical,CC50,CC95}.csv -> DELTA_ECO.csv.
-
-    Concatenate; keep only Scenario and TierScore.
-    """
-    de_dir = source_dir / "delta_ecology"
+    """DELTA_ECO/TierOutcomes_{Historical,CC50,CC95}.csv -> DELTA_ECO.csv."""
+    de_dir = source_dir / "DELTA_ECO"
     parts: List[Path] = []
     for tag in ("Historical", "CC50", "CC95", "TieESM"): # TaiESM misspelled
         p = de_dir / f"TierOutcomes_{tag}.csv"
         if p.exists():
             parts.append(p)
     if not parts:
-        print("  DELTA_ECO: no source files under delta_ecology/, skipped")
+        print("  DELTA_ECO: no source files under DELTA_ECO/, skipped")
         return False
 
     df = _concat_csvs(parts)
@@ -189,7 +185,7 @@ def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
         return False
     df = df[keep].drop_duplicates(subset=["Scenario"], keep="last")
     _write(df, out_dir / "DELTA_ECO.csv", dry_run,
-           f"from delta_ecology/TierOutcomes_{{{','.join(p.stem.split('_')[-1] for p in parts)}}}.csv")
+           f"from DELTA_ECO/TierOutcomes_{{{','.join(p.stem.split('_')[-1] for p in parts)}}}.csv")
     return True
 
 
