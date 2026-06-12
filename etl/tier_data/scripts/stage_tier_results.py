@@ -270,7 +270,7 @@ def main() -> int:
         "--source-dir",
         type=Path,
         default=DEFAULT_SOURCE_DIR,
-        help=f"Directory containing team-delivered CSVs (default: {DEFAULT_SOURCE_DIR})",
+        help=f"Directory containing team-delivered CSV subdirs (default: {DEFAULT_SOURCE_DIR})",
     )
     parser.add_argument(
         "--out-dir",
