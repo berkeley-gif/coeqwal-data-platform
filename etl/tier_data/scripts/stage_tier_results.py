@@ -96,72 +96,40 @@ def stage_cws_del(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """ag/{historical,cc50,cc95}.csv -> AG_REV.csv (concatenated, wide format)."""
-    ag_dir = source_dir / "ag"
-    parts: List[Path] = []
-    for tag in ("historical", "cc50", "cc95"):
-        p = ag_dir / f"{tag}.csv"
-        if p.exists():
-            parts.append(p)
-    if not parts:
-        print("  AG_REV: no source files under ag/, skipped")
-        return False
+    """ag/continuous_tiers.csv -> AG_REV.csv"""
+    src = _find_single(source_dir / "ag", "continuous_tiers.csv")
+    if src is None:
+        matches = _find_glob(source_dir / "ag", "*.csv")
+        if not matches:
+            print("  AG_REV: no source under ag/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  AG_REV: no exact match, using {src.name}")
 
-    df = _concat_csvs(parts)
-    df = df.drop_duplicates(subset=[df.columns[0]], keep="last")
-    _write(df, out_dir / "AG_REV.csv", dry_run,
-           f"from ag/{{{','.join(p.stem for p in parts)}}}.csv")
+    df = pd.read_csv(src)
+    df = df.transpose()
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
+    _write(df, out_dir / "AG_REV.csv", dry_run, f"from ag/{src.name}")
     return True
 
 
 def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """
-    eflows/*.csv -> ENV_FLOWS_{historical,cc50,cc95}.csv.
+    """eflows/Continuous_Tier_Table.csv -> ENV_FLOWS.csv"""
+    src = _find_single(source_dir / "eflows", "Continuous_Tier_Table.csv")
+    if src is None:
+        matches = _find_glob(source_dir / "eflows", "*.csv")
+        if not matches:
+            print("  ENV_FLOWS: no source under eflows/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  ENV_FLOWS: no exact match, using {src.name}")
 
-    The loader's _discover_env_flows_files globs ENV_FLOWS_*.csv and sorts
-    historical -> cc50 -> cc95 so that later files overwrite earlier ones
-    for overlapping scenarios. We preserve the three-file split here.
-
-    Column-0 header on input may be either `Scenario` or `Station` (the
-    eFLOW's team's historical convention). Both are accepted.
-
-    `load_all_tier_results.py:_load_one_env_flows_file` auto-detects
-    row/column orientation.
-    """
-    eflows_dir = source_dir / "eflows"
-
-    wrote_any = False
-    for tag, patterns in (
-        ("historical", ("Historical_Scenarios_Eflows_*.csv",)),
-        ("cc50",       ("Climate_Scenarios_50_Eflows_*.csv",)),
-        ("cc95",       ("Climate_Scenarios_95_Eflows_*.csv",)),
-    ):
-        src = None
-        for pat in patterns:
-            matches = _find_glob(eflows_dir, pat)
-            if matches:
-                src = matches[-1]
-                break
-        if src is None:
-            print(f"  ENV_FLOWS_{tag}: no source in eflows/, skipped")
-            continue
-        df = pd.read_csv(src)
-        if len(df.columns) == 0:
-            print(f"  ENV_FLOWS_{tag}: source {src.name} has no columns, skipped")
-            continue
-        header = df.columns[0]
-        if header not in ENV_FLOWS_SCENARIO_COL_ALIASES:
-            print(
-                f"  ENV_FLOWS_{tag}: WARNING column-0 header {header!r} in "
-                f"{src.name} is not one of "
-                f"{list(ENV_FLOWS_SCENARIO_COL_ALIASES)}; treating it as the "
-                "scenario column and normalizing to 'Scenario'"
-            )
-        if header != "Scenario":
-            df = df.rename(columns={header: "Scenario"})
-        _write(df, out_dir / f"ENV_FLOWS_{tag}.csv", dry_run, f"from eflows/{src.name}")
-        wrote_any = True
-    return wrote_any
+    df = pd.read_csv(src)
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
+    _write(df, out_dir / "ENV_FLOWS.csv", dry_run, f"from eflows/{src.name}")
+    return True
 
 
 def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
