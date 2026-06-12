@@ -179,11 +179,9 @@ def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
         return False
 
     df = _concat_csvs(parts)
-    keep = [c for c in ("Scenario", "TierScore") if c in df.columns]
-    if keep != ["Scenario", "TierScore"]:
-        print(f"  DELTA_ECO: expected Scenario+TierScore, got {list(df.columns)}")
-        return False
-    df = df[keep].drop_duplicates(subset=["Scenario"], keep="last")
+    df = df.drop_duplicates(subset=["Scenario"], keep="last")
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
     _write(df, out_dir / "DELTA_ECO.csv", dry_run,
            f"from DELTA_ECO/TierOutcomes_{{{','.join(p.stem.split('_')[-1] for p in parts)}}}.csv")
     return True
