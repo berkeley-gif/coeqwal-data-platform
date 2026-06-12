@@ -603,20 +603,21 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _multi_value_aggregate(scenario: str, short_code: str, tier_counts: Counter, total: int) -> Dict:
+def _multi_value_aggregate(scenario: str, short_code: str, tier_sums: dict, total_sum: float, total_count: int) -> Dict:
     """Build a tier_result row for a multi-value tier."""
     return {
         'scenario_short_code': scenario,
         'tier_short_code': short_code,
-        'tier_1_value': tier_counts.get(1, 0),
-        'tier_2_value': tier_counts.get(2, 0),
-        'tier_3_value': tier_counts.get(3, 0),
-        'tier_4_value': tier_counts.get(4, 0),
-        'norm_tier_1': round(tier_counts.get(1, 0) / total, 4),
-        'norm_tier_2': round(tier_counts.get(2, 0) / total, 4),
-        'norm_tier_3': round(tier_counts.get(3, 0) / total, 4),
-        'norm_tier_4': round(tier_counts.get(4, 0) / total, 4),
-        'total_value': total,
+        'tier_1_value': tier_sums[1],
+        'tier_2_value': tier_sums[2],
+        'tier_3_value': tier_sums[3],
+        'tier_4_value': tier_sums[4],
+        'norm_tier_1': round(tier_sums[1] / total_sum, 4),
+        'norm_tier_2': round(tier_sums[2] / total_sum, 4),
+        'norm_tier_3': round(tier_sums[3] / total_sum, 4),
+        'norm_tier_4': round(tier_sums[4] / total_sum, 4),
+        'total_value': total_sum,
+        'total_count': total_count,
         'single_tier_level': None,
     }
 
