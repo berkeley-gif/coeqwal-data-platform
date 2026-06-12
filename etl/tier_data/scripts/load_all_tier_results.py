@@ -233,14 +233,14 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
             if scenario not in ALLOWED_SCENARIOS:
                 continue
 
-            tier_counts = Counter()
+            tier_sums = TierSums()
             display_order = 1
 
             for _, row in group.iterrows():
                 tier_continuous = float(row['tier'])
                 tier = math.trunc(tier_continuous)
+                tier_sums.add_value(tier_continuous)
                 region = row['region']
-                tier_counts[tier] += 1
                 location_results.append({
                     'scenario_short_code': scenario,
                     'tier_short_code': 'AG_REV',
@@ -257,7 +257,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
 
             total = len(group)
             if total > 0:
-                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_counts, total)
+                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
                 agg['_source_file'] = 'AG_REV.csv'
                 tier_results.append(agg)
         print(f"  AG_REV.csv: long format, {len(set(r['scenario_short_code'] for r in tier_results))} scenarios")
