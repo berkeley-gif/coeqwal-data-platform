@@ -506,7 +506,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_counts = Counter()
+        tier_sums = TierSums()
         display_order = 1
 
         for res_col in res_columns:
@@ -515,7 +515,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_counts[tier] += 1
+            tier_sums.add_value(tier_continuous)
             res_id = _res_stor_location_id(res_col)
             res_name = TIER_LOCATION_NAMES.get('RES_STOR', {}).get(res_id, res_id)
             location_results.append({
@@ -534,7 +534,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
 
         total = len(res_columns)
         if total > 0:
-            agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_counts, total)
+            agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'RES_STOR.csv'
             tier_results.append(agg)
 
