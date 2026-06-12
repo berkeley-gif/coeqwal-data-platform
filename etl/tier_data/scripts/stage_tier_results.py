@@ -151,7 +151,7 @@ def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """GW_STOR/Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv -> GW_STOR.csv"""
-    src = _find_single(source_dir / "GW_STOR", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
+    src = _find_single(source_dir / "GW_STOR", "Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv")
     if src is None:
         matches = _find_glob(source_dir / "GW_STOR", "*.csv")
         if not matches:
