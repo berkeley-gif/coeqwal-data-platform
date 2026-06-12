@@ -565,7 +565,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_counts = Counter()
+        tier_sums = TierSums()
         display_order = 1
 
         for wba_col in wba_columns:
@@ -577,7 +577,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             if tier == 0:
                 tier_continuous = float(1)
                 tier = 1  # tier 0 maps to tier 1 (no impact)
-            tier_counts[tier] += 1
+            tier_sums.add_value(tier_continuous)
             mapbox_id = convert_wba_id_to_mapbox_format(wba_col)
             location_results.append({
                 'scenario_short_code': scenario,
@@ -595,7 +595,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
 
         total = len(wba_columns)
         if total > 0:
-            agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_counts, total)
+            agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'GW_STOR.csv'
             tier_results.append(agg)
 
