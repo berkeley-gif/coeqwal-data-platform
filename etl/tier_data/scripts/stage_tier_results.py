@@ -189,7 +189,7 @@ def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_fw_delta_uses(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """FW_DELTA_USES/Continuous_InDeltaSalinity_Tiers_CC50_CC95_TAI.csv -> FW_DELTA_USES.csv"""
-    src = _find_single(source_dir / "FW_DELTA_USES", "InDeltaSalinity_Tiers_Hist_CC50_CC95.csv")
+    src = _find_single(source_dir / "FW_DELTA_USES", "Continuous_InDeltaSalinity_Tiers_CC50_CC95_TAI.csv")
     if src is None:
         matches = _find_glob(source_dir / "FW_DELTA_USES", "*.csv")
         if not matches:
@@ -206,13 +206,20 @@ def stage_fw_delta_uses(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_fw_exp(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """ExportSalinity_Tiers_Hist_CC50_CC95.csv -> FW_EXP.csv (identity)."""
-    src = _find_single(source_dir, "ExportSalinity_Tiers_Hist_CC50_CC95.csv")
+    """FW_EXP/Continuous_ExportSalinity_Tiers_CC50_CC95_TAI.csv -> FW_EXP.csv"""
+    src = _find_single(source_dir / "FW_EXP", "Continuous_ExportSalinity_Tiers_CC50_CC95_TAI.csv")
     if src is None:
-        print("  FW_EXP: no source, skipped")
-        return False
+        matches = _find_glob(source_dir / "FW_EXP", "*.csv")
+        if not matches:
+            print("  FW_EXP: no source under FW_EXP/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  FW_EXP: no exact match, using {src.name}")
+
     df = pd.read_csv(src)
-    _write(df, out_dir / "FW_EXP.csv", dry_run, f"from {src.name}")
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
+    _write(df, out_dir / "FW_EXP.csv", dry_run, f"from FW_EXP/{src.name}")
     return True
 
 
