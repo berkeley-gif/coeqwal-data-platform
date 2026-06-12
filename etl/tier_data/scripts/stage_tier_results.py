@@ -225,21 +225,26 @@ def stage_fw_exp(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_salmon(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """
-    salmon/TIERS_WRLCM_01_BestYearSummary_*.csv -> WRC_SALMON_AB.csv.
+    WRC_SALMON_AB/TIERS_WRLCM_01_BestYearSummary_ForDataDashboard_2026-04-17.csv -> WRC_SALMON_AB.csv
 
     Schema: scenario, Hydroclimate, Tier_range, tier_score_cont.
-    load_all_tier_results.py parses Tier_range (e.g. "Tier 4") into an integer
-    tier_level; tier_score_cont is passed through but not currently stored.
+    Keep: scenario, tier_score_cont.
     """
-    matches = _find_glob(source_dir / "salmon", "TIERS_WRLCM_01_BestYearSummary_*.csv")
-    if not matches:
-        matches = _find_glob(source_dir / "salmon", "*.csv")
-    if not matches:
-        print("  WRC_SALMON_AB: no source under salmon/, skipped")
-        return False
-    src = matches[-1]
+    src = _find_single(source_dir / "WRC_SALMON_AB", "TIERS_WRLCM_01_BestYearSummary_ForDataDashboard_2026-04-17.csv")
+    if src is None:
+        matches = _find_glob(source_dir / "WRC_SALMON_AB", "*.csv")
+        if not matches:
+            print("  WRC_SALMON_AB: no source under WRC_SALMON_AB/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  WRC_SALMON_AB: no exact match, using {src.name}")
+
     df = pd.read_csv(src)
-    _write(df, out_dir / "WRC_SALMON_AB.csv", dry_run, f"from salmon/{src.name}")
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
+    keep = [c for c in ("scenario", "tier_score_cont") if c in df.columns]
+    df = df[keep]
+    _write(df, out_dir / "WRC_SALMON_AB.csv", dry_run, f"from WRC_SALMON_AB/{src.name}")
     return True
 
 
