@@ -693,7 +693,8 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
         scenario = normalize_scenario_id(row['ScenarioID'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier = int(row['Salinity_Tier'])
+        tier_continuous = float(row['Salinity_Tier'])
+        tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'FW_DELTA_USES', tier)
         agg['_source_file'] = 'FW_DELTA_USES.csv'
         tier_results.append(agg)
@@ -706,6 +707,7 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': names.get(loc_id, loc_id),
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': order,
                 '_source_file': 'FW_DELTA_USES.csv',
             })
