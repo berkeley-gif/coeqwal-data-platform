@@ -182,7 +182,7 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
             if pd.isna(tier_val) or tier_val == 'NA':
                 continue
             tier_continuous = float(tier_val)
-            tier = math.trunc(tier_val)
+            tier = math.trunc(tier_continuous)
             tier_sums.add_value(tier_continuous)
             location_results.append({
                 'scenario_short_code': scenario,
@@ -647,7 +647,8 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
         scenario = normalize_scenario_id(row['Scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier = int(row['TierValue'])
+        tier_continuous = float(row['TierValue'])
+        tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'DELTA_ECO', tier)
         agg['_source_file'] = 'DELTA_ECO.csv'
         tier_results.append(agg)
@@ -659,6 +660,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
             'location_name': TIER_LOCATION_NAMES.get('DELTA_ECO', {}).get('DETAW', 'DETAW'),
             'tier_level': tier,
             'tier_value': 1,
+            'tier_continuous': tier_continuous,
             'display_order': 1,
             '_source_file': 'DELTA_ECO.csv',
         })
