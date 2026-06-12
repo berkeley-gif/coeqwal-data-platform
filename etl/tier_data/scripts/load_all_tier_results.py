@@ -894,7 +894,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
         "",
         "INSERT INTO tier_location_result (",
         "    scenario_short_code, tier_short_code, location_type, location_id,",
-        "    location_name, tier_level, tier_value, display_order, tier_version_id",
+        "    location_name, tier_level, tier_value, tier_continuous, display_order, tier_version_id",
         ") VALUES",
     ]
 
@@ -903,7 +903,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
         values.append(
             f"    ({escape_sql(r['scenario_short_code'])}, {escape_sql(r['tier_short_code'])}, "
             f"{escape_sql(r['location_type'])}, {escape_sql(r['location_id'])}, "
-            f"{escape_sql(r['location_name'])}, {r['tier_level']}, {r['tier_value']}, "
+            f"{escape_sql(r['location_name'])}, {r['tier_level']}, {r['tier_value']}, {r['tier_continuous']}, "
             f"{r['display_order']}, {TIER_VERSION_ID})"
         )
 
@@ -914,6 +914,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
     lines.append("    location_name = EXCLUDED.location_name,")
     lines.append("    tier_level = EXCLUDED.tier_level,")
     lines.append("    tier_value = EXCLUDED.tier_value,")
+    lines.append("    tier_continuous = EXCLUDED.tier_continuous,")
     lines.append("    display_order = EXCLUDED.display_order;")
     lines.append("")
     return '\n'.join(lines)
