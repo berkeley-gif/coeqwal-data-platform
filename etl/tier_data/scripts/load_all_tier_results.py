@@ -467,7 +467,6 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                     ]
                 seen_scenarios[scenario] = label
                 location_results.extend(loc_rows_for_scenario)
-                total = len(df.index)
                 agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
                 agg['_source_file'] = label
                 tier_results.append(agg)
