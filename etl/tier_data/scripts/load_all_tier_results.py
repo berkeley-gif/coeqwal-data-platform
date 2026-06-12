@@ -427,7 +427,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 skipped.append(scenario)
                 continue
 
-            tier_counts = Counter()
+            tier_sums = TierSums()
             display_order = 1
             loc_rows_for_scenario = []
 
@@ -437,7 +437,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                     continue
                 tier_continuous = float(tier_val)
                 tier = math.trunc(tier_continuous)
-                tier_counts[tier] += 1
+                tier_sums.add_value(tier_continuous)
                 loc_rows_for_scenario.append({
                     'scenario_short_code': scenario,
                     'tier_short_code': 'ENV_FLOWS',
@@ -452,7 +452,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 })
                 display_order += 1
 
-            if tier_counts:
+            if tier_sums.total_count > 0:
                 if scenario in seen_scenarios:
                     location_results = [
                         r for r in location_results
@@ -467,7 +467,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 seen_scenarios[scenario] = label
                 location_results.extend(loc_rows_for_scenario)
                 total = len(df.index)
-                agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_counts, total)
+                agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
                 agg['_source_file'] = label
                 tier_results.append(agg)
                 file_count += 1
