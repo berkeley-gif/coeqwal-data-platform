@@ -824,7 +824,8 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             skipped_scenarios.append(scenario)
             continue
         try:
-            tier = _parse_tier_range(row['Tier_range'])
+            tier_continuous = row['tier_score_cont']
+            tier = math.trunc(tier_continuous)
         except ValueError as exc:
             parse_errors.append(f"{scenario}: {exc}")
             continue
@@ -839,6 +840,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             'location_name': TIER_LOCATION_NAMES.get('WRC_SALMON_AB', {}).get('SAC299', 'SAC299'),
             'tier_level': tier,
             'tier_value': 1,
+            'tier_continuous': tier_continuous,
             'display_order': 1,
             '_source_file': csv_path.name,
         })
