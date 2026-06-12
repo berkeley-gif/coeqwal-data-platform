@@ -150,26 +150,31 @@ def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """GroundWater_Tiers_Hist_CC50_CC95.csv -> GW_STOR.csv (identity copy)."""
-    src = _find_single(source_dir, "GroundWater_Tiers_Hist_CC50_CC95.csv")
+    """gw/Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv -> GW_STOR.csv"""
+    src = _find_single(source_dir / "gw", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
     if src is None:
-        print("  GW_STOR: no source, skipped")
-        return False
+        matches = _find_glob(source_dir / "gw", "*.csv")
+        if not matches:
+            print("  GW_STOR: no source under gw/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  GW_STOR: no exact match, using {src.name}")
+
     df = pd.read_csv(src)
-    _write(df, out_dir / "GW_STOR.csv", dry_run, f"from {src.name}")
-    return True
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
+    _write(df, out_dir / "GW_STOR.csv", dry_run, f"from gw/{src.name}")
 
 
 def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """
     delta_ecology/TierOutcomes_{Historical,CC50,CC95}.csv -> DELTA_ECO.csv.
 
-    Concatenate; keep only Scenario and TierValue (loader ignores the other
-    stats columns Mean/SD/TierScore, so dropping them keeps the flat file tidy).
+    Concatenate; keep only Scenario and TierScore.
     """
     de_dir = source_dir / "delta_ecology"
     parts: List[Path] = []
-    for tag in ("Historical", "CC50", "CC95"):
+    for tag in ("Historical", "CC50", "CC95", "TieESM"): # TaiESM misspelled
         p = de_dir / f"TierOutcomes_{tag}.csv"
         if p.exists():
             parts.append(p)
@@ -178,9 +183,9 @@ def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
         return False
 
     df = _concat_csvs(parts)
-    keep = [c for c in ("Scenario", "TierValue") if c in df.columns]
-    if keep != ["Scenario", "TierValue"]:
-        print(f"  DELTA_ECO: expected Scenario+TierValue, got {list(df.columns)}")
+    keep = [c for c in ("Scenario", "TierScore") if c in df.columns]
+    if keep != ["Scenario", "TierScore"]:
+        print(f"  DELTA_ECO: expected Scenario+TierScore, got {list(df.columns)}")
         return False
     df = df[keep].drop_duplicates(subset=["Scenario"], keep="last")
     _write(df, out_dir / "DELTA_ECO.csv", dry_run,
