@@ -133,14 +133,20 @@ def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """ReservoirStorage_Tiers_Hist_CC50_CC95.csv -> RES_STOR.csv (identity copy)."""
-    src = _find_single(source_dir, "ReservoirStorage_Tiers_Hist_CC50_CC95.csv")
+    """res/Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv -> RES_STOR.csv"""
+    src = _find_single(source_dir / "res", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
     if src is None:
-        print("  RES_STOR: no source, skipped")
-        return False
+        matches = _find_glob(source_dir / "res", "*.csv")
+        if not matches:
+            print("  RES_STOR: no source under res/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  RES_STOR: no exact match, using {src.name}")
+
     df = pd.read_csv(src)
-    _write(df, out_dir / "RES_STOR.csv", dry_run, f"from {src.name}")
-    return True
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
+    _write(df, out_dir / "RES_STOR.csv", dry_run, f"from res/{src.name}")
 
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
