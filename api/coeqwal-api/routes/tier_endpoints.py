@@ -568,6 +568,7 @@ async def get_scenario_tier_locations(
             tlr.location_name,
             tlr.tier_level,
             tlr.tier_value,
+            tlr.tier_continuous,
             td.name AS tier_name,
             td.tier_type
         FROM tier_location_result tlr
@@ -610,6 +611,7 @@ async def get_scenario_tier_locations(
                     "location_type": row["location_type"],
                     "tier_level": row["tier_level"],
                     "tier_value": row["tier_value"],
+                    "tier_continuous": row["tier_continuous"],
                 }
             )
             bucket["_location_types"].add(row["location_type"])
