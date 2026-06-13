@@ -147,6 +147,7 @@ def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
     _write(df, out_dir / "RES_STOR.csv", dry_run, f"from RES_STOR/{src.name}")
+    return True
 
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
@@ -164,6 +165,7 @@ def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
     _write(df, out_dir / "GW_STOR.csv", dry_run, f"from GW_STOR/{src.name}")
+    return True
 
 
 def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
