@@ -264,31 +264,6 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _discover_env_flows_files() -> List[Tuple[Path, str]]:
-    """
-    Find ENV_FLOWS CSV files in staging. Returns (path, label) pairs.
-    Ordered so historical is processed first, then cc50, then cc95
-    (later files overwrite earlier ones for overlapping scenarios).
-    """
-    priority = {'historical': 0, 'cc50': 1, 'cc95': 2}
-
-    def sort_key(p: Path) -> int:
-        name_lower = p.stem.lower()
-        for tag, order in priority.items():
-            if tag in name_lower:
-                return order
-        return 99
-
-    files = []
-    legacy = STAGING_DIR / 'ENV_FLOWS.csv'
-    if legacy.exists():
-        files.append((legacy, 'ENV_FLOWS.csv'))
-    split = sorted(STAGING_DIR.glob('ENV_FLOWS_*.csv'), key=sort_key)
-    for p in split:
-        files.append((p, p.name))
-    return files
-
-
 def _ensure_unique_axes(df: pd.DataFrame, csv_path: Path) -> pd.DataFrame:
     """Detect duplicate row or column labels in a tier staging frame.
 
@@ -336,31 +311,6 @@ def _ensure_unique_axes(df: pd.DataFrame, csv_path: Path) -> pd.DataFrame:
         )
         df = df.loc[:, ~df.columns.duplicated(keep='first')]
 
-    return df
-
-
-def _load_one_env_flows_file(csv_path: Path) -> pd.DataFrame:
-    """
-    Load a single ENV_FLOWS CSV and return a DataFrame with
-    index=station IDs, columns=scenario IDs (canonical orientation).
-
-    Auto-detects whether rows are scenarios or stations by inspecting
-    the first-column values.
-    """
-    df = pd.read_csv(csv_path, index_col=0)
-    df = _ensure_unique_axes(df, csv_path)
-    first_vals = [str(v) for v in df.index[:5]]
-    rows_are_scenarios = all(v.startswith('s0') for v in first_vals)
-    if rows_are_scenarios:
-        df = df.T
-    else:
-        scenario_mapping = {}
-        for col in df.columns:
-            base = col.split('(')[0].strip()
-            if base not in scenario_mapping:
-                scenario_mapping[base] = col
-        if scenario_mapping:
-            df = df.rename(columns={v: k for k, v in scenario_mapping.items()})
     return df
 
 
