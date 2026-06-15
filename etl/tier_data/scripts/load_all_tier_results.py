@@ -468,8 +468,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
             })
             display_order += 1
 
-        total = len(res_columns)
-        if total > 0:
+        if tier_sums.total_count > 0:
             agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'RES_STOR.csv'
             tier_results.append(agg)
@@ -481,7 +480,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
 def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
     """
     GW_STOR — Groundwater Storage.
-    Format: rows = scenarios (col 'scenario'), columns = WBA IDs + DETAW, values = tier 0-4.
+    Format: rows = scenarios (col 'scenario'), columns = WBA IDs + DETAW, values = tier 0.0-5.0.
     Tier 0 is treated as tier 1 (no impact).
     """
     csv_path = STAGING_DIR / 'GW_STOR.csv'
