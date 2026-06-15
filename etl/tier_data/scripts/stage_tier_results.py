@@ -170,7 +170,7 @@ def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """DELTA_ECO/TierOutcomes_{Historical,CC50,CC95}.csv -> DELTA_ECO.csv."""
+    """DELTA_ECO/TierOutcomes_{Historical,CC50,CC95,TieESM}.csv -> DELTA_ECO.csv."""
     de_dir = source_dir / "DELTA_ECO"
     parts: List[Path] = []
     for tag in ("Historical", "CC50", "CC95", "TieESM"): # TaiESM misspelled
