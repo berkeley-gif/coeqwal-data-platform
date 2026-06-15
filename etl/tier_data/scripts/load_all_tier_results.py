@@ -528,8 +528,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             })
             display_order += 1
 
-        total = len(wba_columns)
-        if total > 0:
+        if tier_sums.total_count > 0:
             agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'GW_STOR.csv'
             tier_results.append(agg)
