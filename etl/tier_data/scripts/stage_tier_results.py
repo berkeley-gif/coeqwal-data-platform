@@ -107,8 +107,10 @@ def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
         print(f"  AG_REV: no exact match, using {src.name}")
 
     df = pd.read_csv(src)
-    if df.columns[0] != "scenario":
-        df = df.rename(columns={df.columns[0]: "scenario"})
+    df = df.transpose()
+    df.columns = df.iloc[0]
+    df = df[1:]
+    df = df.reset_index().rename(columns={"index": "scenario"})
     _write(df, out_dir / "AG_REV.csv", dry_run, f"from AG_REV/{src.name}")
     return True
 
