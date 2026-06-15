@@ -487,7 +487,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
 def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
     """
     RES_STOR — Reservoir Storage.
-    Format: rows = scenarios (col 'Scenario'), columns = reservoir tier names.
+    Format: rows = scenarios (col 'scenario'), columns = reservoir tier names.
     """
     csv_path = STAGING_DIR / 'RES_STOR.csv'
     if not csv_path.exists():
@@ -496,13 +496,13 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
 
     df = pd.read_csv(csv_path)
     df = _ensure_unique_axes(df, csv_path)
-    res_columns = [c for c in df.columns if c != 'Scenario']
+    res_columns = [c for c in df.columns if c != 'scenario']
 
     location_results = []
     tier_results = []
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['Scenario'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
@@ -629,7 +629,7 @@ def _multi_value_aggregate(scenario: str, short_code: str, tier_sums: dict, tota
 def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
     """
     DELTA_ECO — Delta Ecology.
-    Format: Scenario (numeric, e.g. '11' for s0011), TierValue.
+    Format: scenario (numeric, e.g. '11' for s0011), TierValue.
     One location row per scenario: wba DETAW.
     """
     csv_path = STAGING_DIR / 'DELTA_ECO.csv'
@@ -644,10 +644,10 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
     tier_results = []
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['Scenario'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier_continuous = float(row['TierValue'])
+        tier_continuous = float(row['TierScore'])
         tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'DELTA_ECO', tier)
         agg['_source_file'] = 'DELTA_ECO.csv'
@@ -672,7 +672,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
 def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
     """
     FW_DELTA_USES — Freshwater for In-Delta Uses.
-    Format: ScenarioID (s0XXX), Salinity_Tier.
+    Format: scenario (s0XXX), Salinity_Tier.
     Two compliance station locations per scenario: Emmaton (EM) and Jersey Point (JP).
     """
     csv_path = STAGING_DIR / 'FW_DELTA_USES.csv'
@@ -690,10 +690,10 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
     names = TIER_LOCATION_NAMES.get('FW_DELTA_USES', {})
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['ScenarioID'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier_continuous = float(row['Salinity_Tier'])
+        tier_continuous = float(row['Salinity_InDelta_Tier'])
         tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'FW_DELTA_USES', tier)
         agg['_source_file'] = 'FW_DELTA_USES.csv'
@@ -719,7 +719,7 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
 def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     """
     FW_EXP — Freshwater for Delta Exports.
-    Format: Scenario (s0XXX), Salinity_Export_Tier.
+    Format: scenario (s0XXX), Salinity_Export_Tier.
     Two network node locations per scenario: Banks (CAA003) and Jones (DMC000).
     """
     csv_path = STAGING_DIR / 'FW_EXP.csv'
@@ -737,7 +737,7 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     names = TIER_LOCATION_NAMES.get('FW_EXP', {})
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['Scenario'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
         tier_continuous = float(row['Salinity_Export_Tier'])
@@ -763,32 +763,13 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _parse_tier_range(raw) -> int:
-    """
-    Parse the salmon CSV Tier_range column into an integer tier level.
-    Accepts values like 'Tier 4', 'tier 3', '4', 4. Returns the integer
-    or raises ValueError for unrecognized input.
-    """
-    if pd.isna(raw):
-        raise ValueError("Tier_range is NaN")
-    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return int(raw)
-    s = str(raw).strip()
-    if s.isdigit():
-        return int(s)
-    parts = s.split()
-    if len(parts) == 2 and parts[0].lower() == 'tier' and parts[1].isdigit():
-        return int(parts[1])
-    raise ValueError(f"Cannot parse Tier_range: {raw!r}")
-
-
 def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
     """
     WRC_SALMON_AB - Salmon Abundance.
 
     Reads staging/WRC_SALMON_AB.csv (produced by stage_tier_results.py from
     the data team's salmon/TIERS_WRLCM_01_BestYearSummary_*.csv drop).
-    Expected columns: scenario, Hydroclimate, Tier_range, tier_score_cont.
+    Expected columns: scenario, tier_score_cont.
 
     All scenarios filtered through ALLOWED_SCENARIOS. Single representative
     location per scenario: network node SAC299 (Sacramento River at Keswick).
@@ -806,7 +787,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
 
     df = pd.read_csv(csv_path)
     df = _ensure_unique_axes(df, csv_path)
-    missing_cols = [c for c in ('scenario', 'Tier_range') if c not in df.columns]
+    missing_cols = [c for c in ('scenario', 'tier_score_cont') if c not in df.columns]
     if missing_cols:
         raise ValueError(
             f"{csv_path.name} missing expected columns {missing_cols}; "
