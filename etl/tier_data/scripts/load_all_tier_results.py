@@ -740,6 +740,7 @@ def _single_value_aggregate(scenario: str, short_code: str, tier_level: int) -> 
         'norm_tier_3': None,
         'norm_tier_4': None,
         'total_value': None,
+        'total_count': None,
         'single_tier_level': tier_level,
     }
 
