@@ -225,78 +225,40 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
     location_results = []
     tier_results = []
 
-    is_long_format = 'region' in df.columns and 'tier' in df.columns
+    scenario_col = df.columns[0]
+    du_columns = [c for c in df.columns[1:] if c]
 
-    if is_long_format:
-        for scenario, group in df.groupby('scenario'):
-            scenario = normalize_scenario_id(scenario)
-            if scenario not in ALLOWED_SCENARIOS:
+    for _, row in df.iterrows():
+        scenario = normalize_scenario_id(row[scenario_col])
+        if scenario not in ALLOWED_SCENARIOS:
+            continue
+
+        tier_sums = TierSums()
+
+        for du_id in du_columns:
+            tier_val = row[du_id]
+            if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                 continue
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
+            tier_sums.add_value(tier_continuous)
+            location_results.append({
+                'scenario_short_code': scenario,
+                'tier_short_code': 'AG_REV',
+                'location_type': 'demand_unit',
+                'location_id': du_id,
+                'location_name': du_id,
+                'tier_level': tier,
+                'tier_value': 1,
+                'tier_continuous': tier_continuous,
+                'display_order': len(location_results) + 1,
+                '_source_file': 'AG_REV.csv',
+            })
 
-            tier_sums = TierSums()
-            display_order = 1
-
-            for _, row in group.iterrows():
-                tier_continuous = float(row['tier'])
-                tier = math.trunc(tier_continuous)
-                tier_sums.add_value(tier_continuous)
-                region = row['region']
-                location_results.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'AG_REV',
-                    'location_type': 'demand_unit',
-                    'location_id': region,
-                    'location_name': region,
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'tier_continuous': tier_continuous,
-                    'display_order': display_order,
-                    '_source_file': 'AG_REV.csv',
-                })
-                display_order += 1
-
-            total = len(group)
-            if total > 0:
-                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
-                agg['_source_file'] = 'AG_REV.csv'
-                tier_results.append(agg)
-        print(f"  AG_REV.csv: long format, {len(set(r['scenario_short_code'] for r in tier_results))} scenarios")
-    else:
-        scenario_col = df.columns[0]
-        du_columns = [c for c in df.columns[1:] if c]
-        print(f"  AG_REV.csv: wide format, {len(du_columns)} DU regions")
-
-        for _, row in df.iterrows():
-            scenario = normalize_scenario_id(row[scenario_col])
-            if scenario not in ALLOWED_SCENARIOS:
-                continue
-
-            tier_sums = TierSums()
-
-            for du_id in du_columns:
-                tier_val = row[du_id]
-                if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
-                    continue
-                tier_continuous = float(tier_val)
-                tier = math.trunc(tier_continuous)
-                tier_sums.add_value(tier_continuous)
-                location_results.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'AG_REV',
-                    'location_type': 'demand_unit',
-                    'location_id': du_id,
-                    'location_name': du_id,
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'tier_continuous': tier_continuous,
-                    'display_order': len(location_results) + 1,
-                    '_source_file': 'AG_REV.csv',
-                })
-
-            if tier_sums.total_count > 0:
-                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
-                agg['_source_file'] = 'AG_REV.csv'
-                tier_results.append(agg)
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+            agg['_source_file'] = 'AG_REV.csv'
+            tier_results.append(agg)
 
     print(f"AG_REV: {len(location_results)} location records, {len(tier_results)} scenario aggregates")
     return location_results, tier_results
