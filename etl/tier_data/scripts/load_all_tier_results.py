@@ -556,7 +556,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
 def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
     """
     FW_DELTA_USES — Freshwater for In-Delta Uses.
-    Format: scenario (s0XXX), Salinity_Tier.
+    Format: scenario (s0XXX), Salinity_InDelta_Tier.
     Two compliance station locations per scenario: Emmaton (EM) and Jersey Point (JP).
     """
     csv_path = STAGING_DIR / 'FW_DELTA_USES.csv'
