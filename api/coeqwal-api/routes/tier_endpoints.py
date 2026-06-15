@@ -291,12 +291,12 @@ async def get_all_scenario_tiers(
                     # tier level i+1. Clients derive the tier label from the
                     # index so we don't ship "tier1".."tier4" on every row
                     "data": [
-                        {"value": safe_int(row["tier_1_value"]), "normalized": norm_1},
-                        {"value": safe_int(row["tier_2_value"]), "normalized": norm_2},
-                        {"value": safe_int(row["tier_3_value"]), "normalized": norm_3},
-                        {"value": safe_int(row["tier_4_value"]), "normalized": norm_4},
+                        {"value": safe_float(row["tier_1_value"]), "normalized": norm_1},
+                        {"value": safe_float(row["tier_2_value"]), "normalized": norm_2},
+                        {"value": safe_float(row["tier_3_value"]), "normalized": norm_3},
+                        {"value": safe_float(row["tier_4_value"]), "normalized": norm_4},
                     ],
-                    "total": safe_int(row["total_value"]),
+                    "total": safe_float(row["total_value"]),
                 }
             else:
                 level = safe_int(row["single_tier_level"])
@@ -304,7 +304,7 @@ async def get_all_scenario_tiers(
                     weighted = None
                     normalized = None
                 else:
-                    weighted = float(level)
+                    weighted = int(level)
                     normalized = round((5.0 - weighted) / 4.0, 3)
                 tiers[tier_code] = {
                     "name": row["name"],
