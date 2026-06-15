@@ -154,7 +154,7 @@ class TierSums():
 def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
     """
     CWS_DEL — Community Water System Deliveries.
-    Format: rows = scenarios, columns = demand unit short codes, values = tier 1-4 or NA.
+    Format: rows = scenarios, columns = demand unit short codes, values = tier 1.0-5.0 or NA.
     """
     csv_path = STAGING_DIR / 'CWS_DEL.csv'
     if not csv_path.exists():
@@ -180,7 +180,7 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
 
         for du_id in du_columns:
             tier_val = row[du_id]
-            if pd.isna(tier_val) or tier_val == 'NA':
+            if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
@@ -367,82 +367,56 @@ def _load_one_env_flows_file(csv_path: Path) -> pd.DataFrame:
 def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
     """
     ENV_FLOWS — Environmental Flows.
-    Discovers ENV_FLOWS.csv and/or ENV_FLOWS_*.csv split files.
-    Auto-detects orientation (rows=stations or rows=scenarios).
+    Format: rows = scenarios, columns = demand unit short codes, values = tier 1.0-5.0 or NA.
     """
-    files = _discover_env_flows_files()
-    if not files:
-        print("WARNING: No ENV_FLOWS*.csv found in staging, skipping ENV_FLOWS")
+    csv_path = STAGING_DIR / 'ENV_FLOWS.csv'
+    if not csv_path.exists():
+        print(f"WARNING: {csv_path} not found, skipping ENV_FLOWS")
         return [], []
+
+    df = pd.read_csv(csv_path)
+    df.columns = [c.strip().replace('\n', '') for c in df.columns]
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
-    seen_scenarios: Dict[str, str] = {}
-    skipped: List[str] = []
 
-    for csv_path, label in files:
-        df = _load_one_env_flows_file(csv_path)
-        file_count = 0
+    scenario_col = df.columns[0]
+    du_columns = [c for c in df.columns[1:] if c]
 
-        for scenario in sorted(df.columns):
-            scenario = str(scenario).strip()
-            if scenario not in ALLOWED_SCENARIOS:
-                skipped.append(scenario)
+    for _, row in df.iterrows():
+        scenario = normalize_scenario_id(row[scenario_col])
+        if scenario not in ALLOWED_SCENARIOS:
+            continue
+
+        tier_sums = TierSums()
+
+        for du_id in du_columns:
+            tier_val = row[du_id]
+            if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                 continue
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
+            tier_sums.add_value(tier_continuous)
+            location_results.append({
+                'scenario_short_code': scenario,
+                'tier_short_code': 'ENV_FLOWS',
+                'location_type': 'demand_unit',
+                'location_id': du_id,
+                'location_name': TIER_LOCATION_NAMES.get('ENV_FLOWS', {}).get(du_id, du_id),
+                'tier_level': tier,
+                'tier_value': 1,
+                'tier_continuous': tier_continuous,
+                'display_order': len(location_results) + 1,
+                '_source_file': 'ENV_FLOWS.csv',
+            })
 
-            tier_sums = TierSums()
-            display_order = 1
-            loc_rows_for_scenario = []
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+            agg['_source_file'] = 'ENV_FLOWS.csv'
+            tier_results.append(agg)
 
-            for station in df.index:
-                tier_val = df.loc[station, scenario]
-                if pd.isna(tier_val):
-                    continue
-                tier_continuous = float(tier_val)
-                tier = math.trunc(tier_continuous)
-                tier_sums.add_value(tier_continuous)
-                loc_rows_for_scenario.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'ENV_FLOWS',
-                    'location_type': 'network_node',
-                    'location_id': station,
-                    'location_name': TIER_LOCATION_NAMES.get('ENV_FLOWS', {}).get(station, station),
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'tier_continuous': tier_continuous,
-                    'display_order': display_order,
-                    '_source_file': label,
-                })
-                display_order += 1
-
-            if tier_sums.total_count > 0:
-                if scenario in seen_scenarios:
-                    location_results = [
-                        r for r in location_results
-                        if not (r['tier_short_code'] == 'ENV_FLOWS'
-                                and r['scenario_short_code'] == scenario)
-                    ]
-                    tier_results = [
-                        r for r in tier_results
-                        if not (r['tier_short_code'] == 'ENV_FLOWS'
-                                and r['scenario_short_code'] == scenario)
-                    ]
-                seen_scenarios[scenario] = label
-                location_results.extend(loc_rows_for_scenario)
-                agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
-                agg['_source_file'] = label
-                tier_results.append(agg)
-                file_count += 1
-
-        print(f"  {label}: {file_count} scenarios loaded")
-
-    unique_skipped = sorted(set(skipped) - ALLOWED_SCENARIOS)
-    if unique_skipped:
-        print(f"  ENV_FLOWS skipped (not in ALLOWED_SCENARIOS): {', '.join(unique_skipped[:10])}{'...' if len(unique_skipped) > 10 else ''}")
-
-    env_loc = [r for r in location_results if r['tier_short_code'] == 'ENV_FLOWS']
-    env_agg = [r for r in tier_results if r['tier_short_code'] == 'ENV_FLOWS']
-    print(f"ENV_FLOWS: {len(env_loc)} location records, {len(env_agg)} scenario aggregates")
+    print(f"ENV_FLOWS: {len(location_results)} location records, {len(tier_results)} scenario aggregates")
     return location_results, tier_results
 
 
