@@ -2,7 +2,7 @@
 -- inserts new records into scenario table for new set of scenarios: s0107 through s0156
 --
 -- Run from the repository root:
---   psql $DATABASE_URL -f database/scripts/sql/2_add_s0107-s0156_scenarios.sql
+--   psql $DATABASE_URL -f database/scripts/sql/actions/2_add_s0107-s0156_scenarios.sql
 --
 -- Created by Eric Lehmer 5/29/2026
 

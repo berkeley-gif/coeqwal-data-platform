@@ -2,7 +2,7 @@
 -- inserts new record into hydroclimate table for Warmer and Wetter (EC-Earth3-Veg SSP370)
 --
 -- Run from the repository root:
---   psql $DATABASE_URL -f database/scripts/sql/1_add_warmer_wetter_hydroclimate.sql
+--   psql $DATABASE_URL -f database/scripts/sql/actions/1_add_warmer_wetter_hydroclimate.sql
 --
 -- Created by Eric Lehmer 5/29/2026
 
