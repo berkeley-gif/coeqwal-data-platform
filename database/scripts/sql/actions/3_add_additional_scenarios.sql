@@ -15,7 +15,6 @@ INSERT INTO scenario (
     scenario_author_id, model_source_id
 ) VALUES
     ('s0133', 's0133_adjBL_cqlECV_wTUCP', FALSE, 7, 's0011', 1, 3, 1),
-    ('s0134', 's0134_DCRbl_cqlECV_2020LU_wTUCP', FALSE, 7, 's0020', 1, 3, 1),
     ('s0135', 's0135_DCRbl_cqlECV_2020LU_woTUCP', FALSE, 7, 's0021', 1, 3, 1),
     ('s0136', 's0136_USBR24Alt2V1_cqlECV_2020LU_woTUCP', FALSE, 7, 's0023', 1, 3, 1),
     ('s0137', 's0137_USBR24Alt2V1_cqlECV_2020LU_wTUCP', FALSE, 7, 's0024', 1, 3, 1),
