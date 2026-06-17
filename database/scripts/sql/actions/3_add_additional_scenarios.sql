@@ -3,7 +3,7 @@
 -- Additions needed as spreadsheet has changed since last addition.
 --
 -- Run from the repository root:
---   psql $DATABASE_URL -f database/scripts/sql/3_add_additional_scenarios.sql
+--   psql $DATABASE_URL -f database/scripts/sql/actions/3_add_additional_scenarios.sql
 --
 -- Created by Eric Lehmer 6/17/2026
 
