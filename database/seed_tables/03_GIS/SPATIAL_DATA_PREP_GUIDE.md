@@ -1,150 +1,42 @@
-# SPATIAL DATA PREPARATION GUIDE
-## For Tier Map Visualization
+# Spatial data (03_GIS)
 
-### **📂 Directory: database/seed_tables/03_GIS/**
+Geometry seed data for the tier map visualization and for demand-unit polygons. The CSVs here were prepared from raw GIS sources (see "Source data" below) and loaded into dedicated PostGIS tables. The "files to create" task this guide originally described is done.
 
----
+All geometries are in SRID 4326 (EPSG:4326).
 
-## **SUMMARY - WHAT WE HAVE:**
+## Files
 
-### **✅ TIER LOCATIONS FOUND IN NETWORK:**
+| File | Loads into | Loader |
+|------|-----------|--------|
+| `reservoirs.csv` | `reservoirs` table | [`../../sql_archive/02_network_layer/load_spatial_tables.sql`](../../sql_archive/02_network_layer/load_spatial_tables.sql) |
+| `wba.csv` | `wba` table | same |
+| `compliance_stations.csv` | `compliance_stations` table | same |
+| `du_4326.gpkg` | geometry columns on `du_urban_entity`, `du_agriculture_entity`, `du_refuge_entity` | [`../../scripts/data_processing/load_du_geometries.py`](../../scripts/data_processing/load_du_geometries.py) |
 
-**RES_STOR (Reservoir Storage):**
-- ✅ SHSTA (Shasta) - Point in network_gis
-- ✅ TRNTY (Trinity) - Point in network_gis
-- ✅ OROVL (Oroville) - Point in network_gis
-- ✅ FOLSM (Folsom) - Point in network_gis
-- ✅ MELON (New Melones) - Point in network_gis
-- ✅ MLRTN (Millerton) - Point in network_gis
-- ✅ SLUIS (San Luis) - Point in network_gis (use for both CVP/SWP)
+## Spatial tables
 
-**ENV_FLOWS (Environmental Flows):**
-- ✅ All 17 nodes found with GIS points:
-  AMR004, FTR003, FTR029, MCD005, MOK028, SAC000, SAC049, SAC122, SAC148, 
-  SAC257, SAC289, SJR070, SJR127, STS011, TRN111, TUO003, YUB002
+`load_spatial_tables.sql` creates `reservoirs`, `wba`, and `compliance_stations`, loads the matching CSV, then converts the `geom_wkt` column to a PostGIS `geom` with `ST_GeomFromText(geom_wkt, srid)` and builds a GIST index. These are visualization tables, distinct from the Layer 03 entity tables `reservoir` and `compliance_station`. The loader uses the older `aws_s3.table_import_from_s3` path. The rest of the repo has moved to `\copy`, so a from-scratch rebuild needs the CSVs reachable by that import or the load rewritten to `\copy`.
 
-**FW_EXP (Delta Exports):**
-- ✅ CAA003 (Harvey O. Banks Pumping Plant) - Has GIS point
-- ✅ DMC000 (C.W. "Bill" Jones Pumping Plant) - Has GIS point
+Columns by file:
 
----
+- `reservoirs.csv`: `calsim_short_code`, `reservoir_name`, `geom_wkt`, `srid`, `area_sqkm`, `elevation_m`, `gnis_id`, `nhd_permanent_id`, `data_source`. `MULTIPOLYGON` geometries. For reservoirs with multiple NHD polygons (Shasta, Folsom) the largest was kept.
+- `wba.csv`: `wba_id`, `wba_name`, `geom_wkt`, `srid`, `area_acres`, `hydrologic_region`, `comments`, `data_source`. `MULTIPOLYGON` Water Budget Area geometries.
+- `compliance_stations.csv`: `station_code`, `station_name`, `latitude`, `longitude`, `srid`, `tier_use`, `geom_wkt`, `data_source`, `notes`. Jersey Point (`JP`) and Emmaton (`EM`), both `tier_use = FW_DELTA_USES`, added manually because they are not nodes in the CalSim network.
 
-## **❌ TIER LOCATIONS NOT IN NETWORK:**
+## Demand-unit geometries (du_4326.gpkg)
 
-**FW_DELTA_USES (In-Delta Uses):**
-- ❌ Jersey Point (JP) - Need to add manually
-- ❌ Emmaton (EM) - Need to add manually
+A GeoPackage with a `demandunits` layer of dissolved `MULTIPOLYGON` features, one per `DU_ID`. The schema migration [`../../sql_archive/04_scenario/56_add_du_geometry_columns.sql`](../../sql_archive/04_scenario/56_add_du_geometry_columns.sql) adds `geom_wkt`, `srid`, a `geometry(MultiPolygon, 4326)` column, and a GIST index to each of `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity`. The loader strips the GeoPackage GPB header from each blob and writes the WKB to whichever entity table holds the matching `du_id` via `ST_GeomFromWKB(wkb, 4326)`. Dry-run with `--dry-run` first.
 
-**Coordinates (approximate):**
-- Jersey Point: 38.056°N, 121.745°W
-- Emmaton: 38.053°N, 121.694°W
+Not every demand unit has a polygon. The covered, missing, and gpkg-only IDs (and the `26N_NA` urban / agriculture overlap) are enumerated in [`demand_unit_geometry.md`](../../topic_docs/demand_unit_geometry.md#coverage).
 
----
+## Tier coverage
 
-## **🗺️ ADDITIONAL SPATIAL DATA AVAILABLE:**
+The spatial tables back the tier map. Reservoir storage tiers (`RES_STOR`) use `reservoirs`, groundwater storage tiers (`GW_STOR`) use `wba`, and in-Delta use tiers (`FW_DELTA_USES`) use `compliance_stations`. Environmental-flow (`ENV_FLOWS`) and Delta-export (`FW_EXP`) tier locations resolve to existing CalSim network nodes in `network_gis`, so they need no separate geometry file here.
 
-### **1. Reservoir Polygons** 
-**Source:** `data/raw/from_geopackage/GIS_coords_from_other_sources/reservoirs_from_nhd.csv`
+## Source data
 
-**Contains:**
-- Shasta Lake: 3 polygons (use 50.25 km² - largest)
-- Folsom Lake: 2 polygons (use 27.68 km² - largest)
-- Trinity Lake, Oroville, New Melones, Millerton, San Luis: 1 polygon each
+The CSVs were derived from raw GIS exports under `data/raw/from_geopackage/`:
 
-**Units:** 
-- Area: km² (square kilometers)
-- Elevation: meters
-- WKT: Polygon geometries in SRID 4326
-
-### **2. WBA (Aquifer) Polygons**
-**Source:** `data/raw/from_geopackage/wba_4326.csv`
-
-**Contains:**
-- 42 Water Budget Area polygons
-- WBA_IDs: DETAW, 02, 03, 04, 05, 06, 07N, 07S, 08N, 08S, etc.
-
-**Units:**
-- GIS_Acres: acres
-- Shape_Area: square degrees (needs conversion)
-- WKT: Polygon geometries in SRID 4326
-
-### **3. Demand-Unit Polygons (du_4326.gpkg)**
-**Source:** `database/seed_tables/03_GIS/du_4326.gpkg` (this directory, 4.2 MB)
-
-**Contains:**
-- Layer `demandunits`, 236 rows (one row has a NULL `DU_ID` and is ignored)
-- 235 dissolved `MULTIPOLYGON` features, one per `DU_ID`
-- CRS: EPSG:4326
-- Columns: `DU_ID`, `OBJECTID`, `Shape_Leng`, `Shape_Area`, `geom`
-
-**Load path:**
-- Schema: `database/scripts/sql/.archive/56_add_du_geometry_columns.sql` adds
-  `geom_wkt TEXT`, `srid INTEGER`, `geom geometry(MultiPolygon, 4326)`,
-  and `idx_<table>_geom USING GIST` to each of `du_urban_entity`,
-  `du_agriculture_entity`, and `du_refuge_entity`.
-- Loader: `database/scripts/data_processing/load_du_geometries.py`
-  reads this gpkg, strips the GeoPackage GPB header from each `geom`
-  blob, and writes the resulting WKB to whichever entity tables
-  contain the `du_id` via `ST_GeomFromWKB(wkb, 4326)`. Dry-run with
-  `--dry-run` first.
-
-**Coverage gap:** 232 of 286 distinct `DU_ID`s in the three entity
-tables are covered (81.1%). The 54 missing IDs, the 3 gpkg-only IDs,
-and the `26N_NA` urban / agriculture overlap are enumerated in
-[`docs/du_geometry_gap.md`](../../../docs/du_geometry_gap.md).
-
----
-
-## **📋 FILES TO CREATE:**
-
-### **1. reservoirs.csv** → `03_GIS/reservoirs.csv`
-
-```csv
-calsim_short_code,reservoir_name,geom_wkt,srid,area_sqkm,elevation_m,data_source
-SHSTA,Shasta Lake,MULTIPOLYGON(...),4326,50.25,324.6,NHD
-TRNTY,Trinity Lake,MULTIPOLYGON(...),4326,63.08,XXX,NHD
-OROVL,Lake Oroville,MULTIPOLYGON(...),4326,42.94,XXX,NHD
-FOLSM,Folsom Lake,MULTIPOLYGON(...),4326,27.68,XXX,NHD
-MELON,New Melones Lake,MULTIPOLYGON(...),4326,36.25,XXX,NHD
-MLRTN,Millerton Lake,MULTIPOLYGON(...),4326,13.41,XXX,NHD
-SLUIS,San Luis Reservoir,MULTIPOLYGON(...),4326,51.93,XXX,NHD
-```
-
-**Extract:** Largest polygon for Shasta and Folsom, single polygon for others
-
-### **2. wba.csv** → `03_GIS/wba.csv`
-
-```csv
-wba_id,wba_name,geom_wkt,srid,area_acres,hydrologic_region,data_source
-DETAW,DETAW,MULTIPOLYGON(...),4326,XXX,DELTA,CalSim_Geopackage
-02,WBA 02,MULTIPOLYGON(...),4326,XXX,SAC,CalSim_Geopackage
-03,WBA 03,MULTIPOLYGON(...),4326,XXX,SAC,CalSim_Geopackage
-...
-```
-
-**Extract:** All 42 WBAs from wba_4326.csv
-
-### **3. compliance_stations.csv** → `03_GIS/compliance_stations.csv`
-
-```csv
-station_code,station_name,latitude,longitude,srid,tier_use,data_source
-JP,Jersey Point,38.056,-121.745,4326,FW_DELTA_USES,Manual
-EM,Emmaton,38.053,-121.694,4326,FW_DELTA_USES,Manual
-```
-
-**Create:** Manually with researched coordinates
-
----
-
-## **🚀 NEXT STEPS:**
-
-**I can create Python scripts to:**
-1. Extract largest reservoir polygons → reservoirs.csv
-2. Process WBA data → wba.csv  
-3. Create compliance stations file
-4. Create SQL loading scripts for all 3 tables
-
-**Ready to proceed?**
-
-
-
+- Reservoir polygons: [`../../../data/raw/from_geopackage/GIS_coords_from_other_sources/reservoirs_from_nhd.csv`](../../../data/raw/from_geopackage/GIS_coords_from_other_sources/reservoirs_from_nhd.csv)
+- WBA polygons: [`../../../data/raw/from_geopackage/wba_4326.csv`](../../../data/raw/from_geopackage/wba_4326.csv)
+- Compliance-station coordinates were researched and entered by hand.

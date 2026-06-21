@@ -29,7 +29,7 @@ Conceptual layer scheme to organize the tables. Two top-level categories:
 
 ```
 00  VERSIONING (audit + versioning infrastructure)
-    version_family, version, developer, audit_log, domain_family_map
+    version_family, version, developer, domain_family_map
 
 01  LOOKUP (shared lookups and code lists)
     hydrologic_region, source, model_source, unit, spatial_scale, temporal_scale,
@@ -94,7 +94,7 @@ Conceptual layer scheme to organize the tables. Two top-level categories:
     sensitivity_climate, sensitivity_operational
 ```
 
-**Coverage.** This ERD documents 96 tables (including one extension-managed table, `spatial_ref_sys`) plus 4 planned tables. `scenario_backup` is slated for removal and not included. Planned tables use the same column-table format with a `[PLANNED]` label and a paragraph explaining intent.
+**Coverage:** This ERD documents 96 tables (including one extension-managed table, `spatial_ref_sys`) plus 4 planned tables. `scenario_backup` is slated for removal and not included. Planned tables use the same column-table format with a `[PLANNED]` label and a paragraph explaining intent.
 
 ---
 
@@ -125,21 +125,11 @@ The database has one application-level trigger function in active use, plus a se
 
 ### `set_audit_fields` (BEFORE INSERT OR UPDATE, row-level)
 
-**Status: active.** Attached to 91 of the 93 tables that carry the audit columns (`created_at`, `updated_at`, `created_by`, `updated_by`). The two current gaps are the obsolete `scenario_backup` (can be dropped by `database/scripts/sql/audit_cleanup.sql` § 1) and `tier_location` (relatively new table that I forgot to attach the trigger to).
+**Status:** active. Attached to 91 of the 93 tables that carry the audit columns (`created_at`, `updated_at`, `created_by`, `updated_by`). The two current gaps are the obsolete `scenario_backup` (can be dropped by `database/scripts/sql/audit_cleanup.sql` § 1) and `tier_location` (relatively new table that I forgot to attach the trigger to).
 
 Fires on every row-level INSERT or UPDATE, including UPSERTs, `INSERT ... SELECT`, `COPY`, and `MERGE`. Reads the current developer via `coeqwal_current_operator()` and writes it to the audit columns.
 
 **Known issue:** ETL pipelines connect via the shared postgres role. When `session_user = 'postgres'`, `coeqwal_current_operator()` returns `1` (System). That is correct for DDL migrations run via `$SUPERUSER_URL`, but for DML it means any write performed as `postgres` attributes to System and the operator is lost. See `database/README.md` § "Connecting as yourself" for how to switch to your own registered role. Resolution strategies are detailed in `database/VERSIONING.md`.
-
-### `log_audit_changes` (AFTER INSERT OR UPDATE OR DELETE, row-level)
-
-Designed to write a row to `audit_log` capturing the operation, before/after JSONB snapshots, changed columns, and the responsible developer. Fires `AFTER` the row change so the captured state is what was actually committed.
-
-**Status: in-progress, defined but not attached.** The trigger function exists in the database and the `audit_log` table exists, but the trigger is not attached to any table and `audit_log` has zero rows. When applied via `apply_audit_log_trigger_to_table('<table>')`, the resulting trigger is named `audit_log_<table>`. See the `audit_log` description in Layer 00 and the versioning status block above it.
-
-Do we want to/need to do this? 🤔
-
-Consider: [`database/ROADMAP.md`](../ROADMAP.md) § "Wish list / optional" > "Versioning subsystem".
 
 ---
 
@@ -150,21 +140,19 @@ The versioning layer tracks:
 - Which domain tables belong to which "version family" (e.g. "theme", "scenario", "network", "entity").
 - The active version per family.
 - The developer registry that anchors the audit-attribution convention (`created_by` / `updated_by` FKs to `developer.id`).
-- A row-level change log.
 
-**Status: in-progress.** Non-blocking for current operations, but the subsystem needs further development to be useful. Tracked in `database/ROADMAP.md` § "Wish list / optional". The full discussion lives in `database/VERSIONING.md`.
+**Status:** in-progress. Non-blocking for current operations, but the subsystem needs further development to be useful. Tracked in `database/SCHEMA_BACKLOG.md` § 9. The full discussion lives in `database/VERSIONING.md`.
 
 **Status details:**
 
-- **Developer registry and audit attribution.** `coeqwal_current_operator()` resolves `session_user` to a `developer.id`, and the `set_audit_fields` trigger uses it to populate `created_by` / `updated_by` on 91 of the 93 audit-bearing tables (see § Triggers above for the two gaps).
-- **Version catalog seeded.** All 14 families have an initial row in `version` at `1.0.0` with `is_active = true`.
-- **`*_version_id` coverage.** Domain tables that participate in row-level version tracking carry a `<family>_version_id` FK to `version.id`. `domain_family_map` records family membership for every domain table. See `database/ROADMAP.md` § "Versioning subsystem" > "How the versioning is supposed to work" for which families and tables carry the column.
+- **Developer registry and audit attribution:** `coeqwal_current_operator()` resolves `session_user` to a `developer.id`, and the `set_audit_fields` trigger uses it to populate `created_by` / `updated_by` on 91 of the 93 audit-bearing tables (see § Triggers above for the two gaps).
+- **Version catalog seeded:** All 14 families have an initial row in `version` at `1.0.0` with `is_active = true`.
+- **`*_version_id` coverage:** Domain tables that participate in row-level version tracking carry a `<family>_version_id` FK to `version.id`. `domain_family_map` records family membership for every domain table. See `database/SCHEMA_BACKLOG.md` § 9 for which families and tables carry the column.
 
 **What could be developed:**
 
-- **The bump workflow has never been exercised.** No family has been bumped past 1.0.0. The intended workflow (insert new `version` row, flip `is_active` on the old one, load new domain rows with the new `version.id`, update consumers to use `get_active_version('<family>')`) is documented but not exercised end-to-end. There is no DB-level constraint enforcing one-active-per-family.
-- **`audit_log` is not wired up.** The `audit_log` table and the `log_audit_changes()` trigger function exist, but the trigger is not attached to any table and the log has zero rows. Could be developed by attaching `log_audit_changes` to a curated set of high-value tables (see § `audit_log` below for the candidate list) via `apply_audit_log_trigger_to_table('table_name')`.
-- **`VersioningManager` is not wired up.** `database/utils/versioning_utils.py` defines two Python classes (`VersioningManager` and `TableManager`) that resolve the active version for a given table. Neither is imported by any other code in the repository. Reference scaffolding for now (see `database/VERSIONING.md` for the design discussion).
+- **The version bump workflow has never been exercised:** No family has been bumped past 1.0.0. The intended workflow (insert new `version` row, flip `is_active` on the old one, load new domain rows with the new `version.id`, update consumers to use `get_active_version('<family>')`) is documented but not exercised end-to-end. There is no DB-level constraint enforcing one-active-per-family.
+- **`VersioningManager` is not wired up:** `database/utils/versioning_utils.py` defines two Python classes (`VersioningManager` and `TableManager`) that resolve the active version for a given table. Neither is imported by any other code in the repository. Reference scaffolding for now (see `database/VERSIONING.md` for the design discussion).
 
 ### Table schema
 
@@ -256,7 +244,7 @@ The composite unique index doubles as the `version_family_id` lookup path (left-
 
 #### `domain_family_map`
 
-Maps every tracked domain table to its `version_family`. The PK is the `(schema_name, table_name)` pair, so each table appears at most once. One known gap: `tier_location` is not yet mapped (tracked in `database/ROADMAP.md` § `version_family` table > "Family map gaps").
+Maps every tracked domain table to its `version_family`. The PK is the `(schema_name, table_name)` pair, so each table appears at most once. One known gap: `tier_location` is not yet mapped (tracked in `database/SCHEMA_BACKLOG.md` § 9).
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -284,7 +272,7 @@ Maps every tracked domain table to its `version_family`. The PK is the `(schema_
 
 #### `developer`
 
-Developer registry. Domain rows' `created_by` / `updated_by` columns FK here. FK coverage is incomplete in the live DB. `audit_cleanup.sql` § 9 completes it by adding the `created_by` / `updated_by` -> `developer.id` These adds are data-dependent: each column is pre-checked for integer type and for orphan values (any non-NULL audit id not present in `developer.id`), and a column failing either check is skipped and reported rather than erroring the run, so the section can land partially. The "intended FK `developer.id`, not enforced" notes throughout this ERD mark columns still awaiting this step. `id = 1` is the system bootstrap account, used when DDL is applied as the shared `postgres` superuser. Other rows are individual developers added by direct `INSERT`.
+Developer registry. Domain rows' `created_by` / `updated_by` columns FK here. FK coverage is incomplete in the live DB. `audit_cleanup.sql` § 9 completes it by adding the `created_by` / `updated_by` -> `developer.id` These adds are data-dependent. Each column is pre-checked for integer type and for orphan values (any non-NULL audit id not present in `developer.id`), and a column failing either check is skipped and reported rather than erroring the run, so the section can land partially. The "intended FK `developer.id`, not enforced" notes throughout this ERD mark columns still awaiting this step. `id = 1` is the system bootstrap account, used when DDL is applied as the shared `postgres` superuser. Other rows are individual developers added by direct `INSERT`.
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -323,41 +311,6 @@ Developer registry. Domain rows' `created_by` / `updated_by` columns FK here. FK
 - `developer_aws_sso_username_key` (aws_sso_username)
 - `developer_email_key` (email)
 
-#### `audit_log`
-
-**Dormant, ready to activate.** The table, the trigger function `log_audit_changes()`, and the helper `apply_audit_log_trigger_to_table(text)` all exist. No table has the trigger attached, and `audit_log` has 0 rows. Activating per-table is one call: `SELECT apply_audit_log_trigger_to_table('<table>')`. Plan is to attach it to the ~9 curated tables where edits are hand-made and consequential (`scenario`, `theme`, `assumption_definition`, `operation_definition`, `tier_definition`, `version`, `version_family`, `domain_family_map`, `developer`), not to result tables where ETL re-runs would drown the log. Tracked in `database/ROADMAP.md` § "Wish list / optional".
-
-**Known gap.** The trigger function populates `record_id` from `NEW.id` / `OLD.id` but never populates `record_key`. Tables with composite primary keys (e.g. `domain_family_map`, `tier_location`) would log changes without a usable row identifier. Eight of the nine tables in the recommended attach list have integer PKs; `domain_family_map` is the exception (composite PK on `schema_name`, `table_name`). Fix `record_key` (or defer `domain_family_map`) before attaching that one.
-
-| column | type | nullable | default | notes |
-|---|---|---|---|---|
-| `id` | integer | NO | `nextval('audit_log_id_seq')` | PK |
-| `table_name` | text | NO |  |  |
-| `record_id` | integer | YES |  | PK of the changed row |
-| `record_key` | jsonb | YES |  | natural key, e.g. `{"short_code":"s0020"}` |
-| `operation` | text | NO |  | `INSERT`, `UPDATE`, `DELETE` |
-| `old_values` | jsonb | YES |  | row before change |
-| `new_values` | jsonb | YES |  | row after change |
-| `changed_fields` | ARRAY | YES |  | text[] of column names that changed |
-| `changed_by` | integer | YES |  | FK `developer.id` |
-| `changed_at` | timestamptz | NO | `now()` |  |
-| `session_user_name` | text | YES | `SESSION_USER` |  |
-| `application_name` | text | YES | `current_setting('application_name')` |  |
-| `client_addr` | inet | YES | `inet_client_addr()` |  |
-
-**Foreign keys:**
-
-- `changed_by` -> `developer.id` (delete: RESTRICT, update: CASCADE)
-
-**Indexes:**
-
-- `audit_log_pkey` (id) [PRIMARY]
-- `idx_audit_log_changed_at` (changed_at)
-- `idx_audit_log_changed_by` (changed_by)
-- `idx_audit_log_record` (table_name, record_id)
-
-This table does not carry the `set_audit_fields` trigger (it's an event log).
-
 ---
 
 ## Layer 01 - LOOKUP
@@ -366,7 +319,7 @@ Shared reference data and code lists: `hydrologic_region`, `source`, `model_sour
 
 Layer 01 tables play two roles. Some are **catalogs**, useful as reference documentation of a controlled vocabulary that a researcher, analyst or developer can consult, with no FK enforcement needed. Some are **keys**, referenced by FK from other layers. Not every lookup must be a key.
 
-Lookup linkage is uneven by layer. Layer 02 (network) has high coverage: arcs, nodes, types, subtypes, regions, sources, and model sources are all wired up to the appropriate Layer 01 catalog. Layer 03 (entity) is mixed. Layers 10-12 (results) less so. A nice intermediate-stage task is to take one layer at a time and bring its lookup linkage up to a uniform standard, deciding per-lookup along the way whether the lookup is a key or stays as an informational catalog. See: `database/ROADMAP.md` § 9.
+Lookup linkage is uneven by layer. Layer 02 (network) has high coverage: arcs, nodes, types, subtypes, regions, sources, and model sources are all wired up to the appropriate Layer 01 catalog. Layer 03 (entity) is mixed. Layers 10-12 (results) less so. A nice intermediate-stage task is to take one layer at a time and bring its lookup linkage up to a uniform standard, deciding per-lookup along the way whether the lookup is a key or stays as an informational catalog. See `database/SCHEMA_BACKLOG.md` § 8.
 
 Tables whose data originated from a specific external source (geopackage, NHD, CalSim report) carry a `source_id` FK to `source.id`.
 
@@ -534,7 +487,7 @@ Catalog of upstream model providers. Currently a single row for CalSim-3. Design
 | `mm` | millimeters | length |
 | `km` | kilometers | length |
 
-**Status:** Catalog covers TAF, CFS, acres, mm, km. Missing `umhos_cm` (microsiemens per centimeter), the unit for the EC salinity variables that `etl/statistics/delta/calculate_delta_statistics.py` reads (Emmaton, Jersey Point, Rock Slough, Collinsville, Banks, Tracy). Tracked in `ROADMAP.md` § 6.
+**Status:** Catalog covers TAF, CFS, acres, mm, km. Missing `umhos_cm` (microsiemens per centimeter), the unit for the EC salinity variables that `etl/statistics/delta/calculate_delta_statistics.py` reads (Emmaton, Jersey Point, Rock Slough, Collinsville, Banks, Tracy). Tracked in `database/README.md` § Roadmap > "Layer 04 variable layer".
 
 #### `spatial_scale`
 
@@ -738,9 +691,9 @@ The top of the three-level network classification hierarchy. Distinguishes arcs 
 
 **Foreign keys:**
 
-- `created_by` -> `developer.id` (delete: RESTRICT, update: CASCADE) - duplicate of the constraint below, clean up
+- `created_by` -> `developer.id` (delete: RESTRICT, update: CASCADE): duplicate of the constraint below, clean up
 - `created_by` -> `developer.id` (delete: NO ACTION, update: NO ACTION)
-- `updated_by` -> `developer.id` (delete: RESTRICT, update: CASCADE) - duplicate of the constraint below, clean up
+- `updated_by` -> `developer.id` (delete: RESTRICT, update: CASCADE): duplicate of the constraint below, clean up
 - `updated_by` -> `developer.id` (delete: NO ACTION, update: NO ACTION)
 
 **Indexes:**
@@ -748,7 +701,7 @@ The top of the three-level network classification hierarchy. Distinguishes arcs 
 - `network_entity_type_pkey` (id) [PRIMARY]
 - `network_entity_type_short_code_key` (short_code) [UNIQUE]
 - `idx_network_entity_type_active` (is_active, short_code)
-- `idx_network_entity_type_short_code` (short_code) - duplicates the unique index's left-prefix, cleanup
+- `idx_network_entity_type_short_code` (short_code): duplicates the unique index's left-prefix, cleanup
 
 **Unique constraints:**
 
@@ -795,7 +748,7 @@ The middle of the three-level network classification hierarchy. Subdivides arcs 
 
 - `network_type_short_code_network_entity_type_id_key` (short_code, network_entity_type_id)
 
-The two unique indexes on `(short_code, network_entity_type_id)` are duplicates - cleanup candidate.
+The two unique indexes on `(short_code, network_entity_type_id)` are duplicates, cleanup candidate.
 
 #### `network_subtype`
 
@@ -887,7 +840,7 @@ Referenced by `channel_entity.watershed_short_code` -> `watershed.short_code` (L
 
 Sacramento mainstem channels at or below rm 257 use `SAC_LOWER` / `UNIMP_SRBB`. Channels above (`SAC289`, `KSWCK`, `SHSTA`) use `SAC_UPPER` / `UNIMP_SHAS`. `UPPER_MOKELUMNE` has no `UNIMP_MOK` in CalSim SV. The % unimpaired metric is not computable for MOK reaches without a natural flow reference.
 
-**Status:** The `region` column reflects the current live DB. Four rows are mislabeled `SJR` and should be `SAC`: `BEAR_RIVER`, `UPPER_AMERICAN`, `UPPER_FEATHER`, and `YUBA_RIVER` are all Sacramento-basin drainages. The `channel_entity`'s per-channel region tags both place these in `SAC`, so the live values drifted from manual edits. `UPPER_MOKELUMNE` is `SJR` in both seed and live (eastside-Delta tributary) and is not part of the drift. Tracked in `ROADMAP.md` § 1. The corrective one-shot:
+**Status:** The `region` column reflects the current live DB. Four rows are mislabeled `SJR` and should be `SAC`: `BEAR_RIVER`, `UPPER_AMERICAN`, `UPPER_FEATHER`, and `YUBA_RIVER` are all Sacramento-basin drainages. The `channel_entity`'s per-channel region tags both place these in `SAC`, so the live values drifted from manual edits. `UPPER_MOKELUMNE` is `SJR` in both seed and live (eastside-Delta tributary) and is not part of the drift. Tracked in `database/README.md` § Roadmap > "Correctness bugs (do regardless)". The corrective one-shot:
 
 ```sql
 UPDATE watershed SET hydrologic_region_id = 1
@@ -993,8 +946,8 @@ The master element registry. Every CalSim infrastructure element has exactly one
 - `idx_network_entity_type` (entity_type_id)
 - `idx_network_has_gis` (has_gis)
 - `idx_network_hydrologic_region` (hydrologic_region_id)
-- `idx_network_model_list` (model_list) - GIN, array containment
-- `idx_network_source_list` (source_list) - GIN, array containment
+- `idx_network_model_list` (model_list): GIN, array containment
+- `idx_network_source_list` (source_list): GIN, array containment
 - `idx_network_strm_code` (strm_code)
 - `idx_network_type` (type_id)
 - `idx_network_version` (network_version_id)
@@ -1038,7 +991,7 @@ Arc-specific attributes. Each row references its parent `network` row via `netwo
 
 - `network_arc_pkey` (id) [PRIMARY]
 - `network_arc_short_code_key` (short_code) [UNIQUE]
-- `idx_network_arc_connectivity` (from_node, to_node) - topology traversal
+- `idx_network_arc_connectivity` (from_node, to_node): topology traversal
 - `idx_network_arc_from_node` (from_node)
 - `idx_network_arc_network_id` (network_id)
 - `idx_network_arc_river` (river)
@@ -1127,7 +1080,7 @@ PostGIS geometry per network element. The unique index on `network_id` enforces 
 
 - `network_gis_pkey` (id) [PRIMARY]
 - `idx_network_gis_network_id` (network_id) [UNIQUE] - enforces 1:1 with network
-- `idx_network_gis_geom` (geom) - GiST spatial index
+- `idx_network_gis_geom` (geom): GiST spatial index
 - `idx_network_gis_precision` (precision_level)
 - `idx_network_gis_short_code` (short_code)
 - `idx_network_gis_version` (network_version_id)
@@ -1138,17 +1091,17 @@ PostGIS geometry per network element. The unique index on `network_id` enforces 
 
 Lists of real-world "things" in the model: reservoirs, channels, demand units, M&I contractors, water budget areas, compliance stations, project-level aggregate categories. Statistics tables in Layers 10-12 reference rows in this layer by `<entity>_id` or `<entity>_short_code`. The entity-attribute pattern is documented in [`database/README.md`](../README.md) § "The entity-attribute pattern".
 
-**On Layer 03 inconsistencies.** Layer 03 was built first, table by table, while the schema conventions were still being settled. Later layers (network in Layer 02, scenario in Layer 06, theme in Layer 08, tier in Layer 09) were built after the conventions stabilized, so they show fewer legacy patterns. Layer 03 carries the heavier load. The patterns the rest of the ERD documents as conventions were learned on these tables.
+**On Layer 03 inconsistencies:** Layer 03 was built first, table by table, while the schema conventions were still being settled. Later layers (network in Layer 02, scenario in Layer 06, theme in Layer 08, tier in Layer 09) were built after the conventions stabilized, so they show fewer legacy patterns. Layer 03 carries the heavier load. The patterns the rest of the ERD documents as conventions were learned on these tables.
 
 Specific gaps that recur across Layer 03:
 
 - **Manual `id` assignment** on five tables (`reservoir_entity`, `reservoir_group`, `reservoir_group_member`, `du_urban_group`, `mi_contractor_group`). Every other entity-catalog in the schema uses a sequence-backed default. Explicit `id` values are required at insert time, until that is changed. These represent early tables where the thought was that catalog entries were canonical and static, which didn't prove to be true.
-- **Unenforced FK-style columns.** 14 of the 19 Layer 03 tables lack the `created_by` / `updated_by` -> `developer.id` FKs that the audit trigger relies on. The trigger populates the values. No constraint validates them. Several tables also carry `entity_type_id`, `hydrologic_region_id`, and `entity_version_id` integer columns that point at a Layer 01 / Layer 00 row by id but aren't FK-enforced.
-- **Type drift.** `has_gis_data integer (0/1)` on `reservoir_entity`, `source_ids text` (comma-separated string) instead of `integer[]` on `reservoir_entity`, `hydrologic_region_id varchar` on `channel_entity` where every peer uses `integer`.
+- **Unenforced FK-style columns:** 14 of the 19 Layer 03 tables lack the `created_by` / `updated_by` -> `developer.id` FKs that the audit trigger relies on. The trigger populates the values. No constraint validates them. Several tables also carry `entity_type_id`, `hydrologic_region_id`, and `entity_version_id` integer columns that point at a Layer 01 / Layer 00 row by id but aren't FK-enforced.
+- **Type drift:** `has_gis_data integer (0/1)` on `reservoir_entity`, `source_ids text` (comma-separated string) instead of `integer[]` on `reservoir_entity`, `hydrologic_region_id varchar` on `channel_entity` where every peer uses `integer`.
 
-None of this is broken in the operational sense. The API and ETL work today. The consolidated cleanup work for this layer is tracked in `ROADMAP.md` § "Layer 03 entity-table cleanup".
+None of this is broken in the operational sense. The API and ETL work today. The consolidated cleanup work for this layer is tracked in `database/SCHEMA_BACKLOG.md` § 7.
 
-**Developer-FK reminder.** The unenforced `created_by` / `updated_by` -> `developer.id` FKs noted above are added by `audit_cleanup.sql` § 9 (see the `developer` table note in Layer 00 for the mechanism). The live Layer 03 data is clean (audit ids fall within `developer.id`, integer type), so the constraints add without orphans.
+**Developer-FK reminder:** The unenforced `created_by` / `updated_by` -> `developer.id` FKs noted above are added by `audit_cleanup.sql` § 9 (see the `developer` table note in Layer 00 for the mechanism). The live Layer 03 data is clean (audit ids fall within `developer.id`, integer type), so the constraints add without orphans.
 
 ### Table schema
 
@@ -1192,7 +1145,7 @@ The companion `reservoir_entity` table (below) holds the operational attributes 
 - `reservoir_pkey` (id) [PRIMARY]
 - `idx_reservoir_calsim_code` (calsim_short_code) [UNIQUE] - duplicate of below, cleanup candidate
 - `reservoir_calsim_short_code_key` (calsim_short_code) [UNIQUE]
-- `idx_reservoir_geom` (geom) - GiST spatial index
+- `idx_reservoir_geom` (geom): GiST spatial index
 
 **Unique constraints:**
 
@@ -1216,7 +1169,7 @@ All seven rows come from NHD (`data_source = 'NHD'`, `source_id = 10`). `elevati
 
 Catalog of CalSim reservoirs with operational attributes: capacity (TAF), dead pool storage, surface area, hydrologic region, operational purpose (CVP / SWP / Local), and entity-classification fields. Joins to the `reservoir` table by `short_code` for the rows that have an NHD polygon. Joins to the network by `network_node_id` (which currently mirrors `short_code` on every row).
 
-This was one of the earliest Layer 03 tables and predates several conventions the rest of the schema later settled on. It carries **no foreign-key constraints in the live schema**, despite having columns that look like FKs (`entity_type_id`, `hydrologic_region_id`, `entity_version_id`, `created_by`, `updated_by`). It uses a manually-assigned `id integer NOT NULL` instead of the sequence-backed default used by every other entity-catalog table (`channel_entity`, `du_*_entity`, `mi_contractor`, etc.). New inserts must supply an `id` explicitly. Both gaps and other table-specific items are tracked in `ROADMAP.md` § 1 under "`reservoir_entity` modernization".
+This was one of the earliest Layer 03 tables and predates several conventions the rest of the schema later settled on. It carries **no foreign-key constraints in the live schema**, despite having columns that look like FKs (`entity_type_id`, `hydrologic_region_id`, `entity_version_id`, `created_by`, `updated_by`). It uses a manually-assigned `id integer NOT NULL` instead of the sequence-backed default used by every other entity-catalog table (`channel_entity`, `du_*_entity`, `mi_contractor`, etc.). New inserts must supply an `id` explicitly. Both gaps and other table-specific items are tracked in `database/SCHEMA_BACKLOG.md` § 7 under "`reservoir_entity` modernization".
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -1251,7 +1204,7 @@ This was one of the earliest Layer 03 tables and predates several conventions th
 - `idx_reservoir_entity_has_tiers` (has_tiers)
 - `idx_reservoir_entity_is_main` (is_main)
 - `idx_reservoir_entity_region` (hydrologic_region_id)
-- `idx_reservoir_entity_short_code` (short_code) - duplicates left-prefix of unique index
+- `idx_reservoir_entity_short_code` (short_code): duplicates left-prefix of unique index
 
 **Unique constraints:**
 
@@ -1280,7 +1233,7 @@ Analytical groupings of reservoirs (e.g. `major` for the CVP/SWP storage reservo
 
 - `reservoir_group_pkey` (id) [PRIMARY]
 - `reservoir_group_short_code_key` (short_code) [UNIQUE]
-- `idx_reservoir_group_short_code` (short_code) - duplicates left-prefix of unique index
+- `idx_reservoir_group_short_code` (short_code): duplicates left-prefix of unique index
 
 **Unique constraints:**
 
@@ -1322,7 +1275,7 @@ M:N membership between `reservoir_group` and `reservoir_entity`. Both FKs cascad
 
 ##### `channel_entity`
 
-Per-arc channel entity. `network_arc_id` is the unique join key into `network_arc.short_code` - but stored as `varchar` with no FK constraint (cleanup candidate). Channels can carry minimum-instream-flow (`has_mif`) and environmental-flow (`has_eflows`) flags that gate the env-flow Layer 11 tables.
+Per-arc channel entity. `network_arc_id` is the unique join key into `network_arc.short_code`, but stored as `varchar` with no FK constraint (cleanup candidate). Channels can carry minimum-instream-flow (`has_mif`) and environmental-flow (`has_eflows`) flags that gate the env-flow Layer 11 tables.
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -1368,7 +1321,7 @@ Per-arc channel entity. `network_arc_id` is the unique join key into `network_ar
 - `idx_channel_entity_channel_class` (channel_class)
 - `idx_channel_entity_has_eflows` (has_eflows)
 - `idx_channel_entity_has_mif` (has_mif)
-- `idx_channel_entity_network_arc` (network_arc_id) - duplicates left-prefix of unique index
+- `idx_channel_entity_network_arc` (network_arc_id): duplicates left-prefix of unique index
 - `idx_channel_entity_watershed` (watershed_short_code)
 
 **Unique constraints:**
@@ -1535,7 +1488,7 @@ Per-CalSim urban / community-water-system demand unit. 145 rows. Each row may FK
 - `du_urban_entity_pkey` (id) [PRIMARY]
 - `du_urban_entity_du_id_key` (du_id) [UNIQUE]
 - `idx_du_urban_entity_contractor` (primary_contractor_short_code)
-- `idx_du_urban_entity_du_id` (du_id) - duplicates left-prefix of unique index
+- `idx_du_urban_entity_du_id` (du_id): duplicates left-prefix of unique index
 - `idx_du_urban_entity_geom` (geom)
 - `idx_du_urban_entity_region` (hydrologic_region)
 - `idx_du_urban_entity_type` (cs3_type)
@@ -1598,7 +1551,7 @@ Analytical groupings of urban DUs (e.g. SWP/CVP rollups).
 
 - `du_urban_group_pkey` (id) [PRIMARY]
 - `du_urban_group_short_code_key` (short_code) [UNIQUE]
-- `idx_du_urban_group_short_code` (short_code) - duplicates left-prefix
+- `idx_du_urban_group_short_code` (short_code): duplicates left-prefix
 
 **Unique constraints:**
 
@@ -1667,7 +1620,7 @@ SWP/CVP municipal-and-industrial contractor catalog.
 - `mi_contractor_short_code_key` (short_code) [UNIQUE]
 - `idx_mi_contractor_project` (project)
 - `idx_mi_contractor_region` (region)
-- `idx_mi_contractor_short_code` (short_code) - duplicates left-prefix of unique index
+- `idx_mi_contractor_short_code` (short_code): duplicates left-prefix of unique index
 - `idx_mi_contractor_type` (contractor_type)
 
 **Unique constraints:**
@@ -1676,7 +1629,7 @@ SWP/CVP municipal-and-industrial contractor catalog.
 
 ##### `mi_contractor_delivery_arc`
 
-Per-contractor delivery-arc list. Multiple arcs may sum into a contractor's delivery; `arc_type` distinguishes the arc kind (e.g. main canal, branch).
+Per-contractor delivery-arc list. Multiple arcs may sum into a contractor's delivery. `arc_type` distinguishes the arc kind (e.g. main canal, branch).
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -1698,7 +1651,7 @@ Per-contractor delivery-arc list. Multiple arcs may sum into a contractor's deli
 
 - `mi_contractor_delivery_arc_pkey` (id) [PRIMARY]
 - `uq_delivery_arc` (delivery_arc) [UNIQUE]
-- `idx_mi_contractor_delivery_arc_arc` (delivery_arc) - duplicates left-prefix
+- `idx_mi_contractor_delivery_arc_arc` (delivery_arc): duplicates left-prefix
 - `idx_mi_contractor_delivery_arc_contractor` (mi_contractor_id)
 
 **Unique constraints:**
@@ -1831,7 +1784,7 @@ Community-water-system (M&I) project-level rollups. 6 rows: SWP and CVP NOD/SOD 
 - `cws_aggregate_entity_pkey` (id) [PRIMARY]
 - `cws_aggregate_entity_short_code_key` (short_code) [UNIQUE]
 - `idx_cws_aggregate_entity_project` (project)
-- `idx_cws_aggregate_entity_short_code` (short_code) - duplicates left-prefix
+- `idx_cws_aggregate_entity_short_code` (short_code): duplicates left-prefix
 
 **Unique constraints:**
 
@@ -1873,7 +1826,7 @@ Compliance monitoring stations used for delta-region tier indicators (e.g. `FW_D
 - `compliance_station_pkey` (id) [PRIMARY]
 - `compliance_station_station_code_key` (station_code) [UNIQUE]
 - `idx_compliance_code` (station_code) [UNIQUE] - duplicate of above, cleanup candidate
-- `idx_compliance_geom` (geom) - GiST spatial index
+- `idx_compliance_geom` (geom): GiST spatial index
 - `idx_compliance_tier` (tier_use)
 
 **Unique constraints:**
@@ -1887,7 +1840,7 @@ Water budget areas. 42 rows. **Non-standard entity pattern:** uses `wba_id varch
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
 | `id` | integer | NO | `nextval('wba_id_seq')` | PK |
-| `wba_id` | varchar | NO |  | unique, e.g. `DETAW`, `02N`, `06S` - used as human-readable code |
+| `wba_id` | varchar | NO |  | unique, e.g. `DETAW`, `02N`, `06S`, used as human-readable code |
 | `wba_name` | varchar | NO |  |  |
 | `geom_wkt` | text | NO |  |  |
 | `srid` | integer | YES | `4326` |  |
@@ -1914,7 +1867,7 @@ Water budget areas. 42 rows. **Non-standard entity pattern:** uses `wba_id varch
 - `wba_pkey` (id) [PRIMARY]
 - `idx_wba_id` (wba_id) [UNIQUE] - duplicate of below, cleanup candidate
 - `wba_wba_id_key` (wba_id) [UNIQUE]
-- `idx_wba_geom` (geom) - GiST spatial index
+- `idx_wba_geom` (geom): GiST spatial index
 
 **Unique constraints:**
 
@@ -1928,7 +1881,7 @@ The three DU entity tables (`du_agriculture_entity`, `du_urban_entity`, `du_refu
 
 CalSim variable definitions and type classifications. The intent is one `*_variable` table per ETL calculation domain [from the Content Platform Outcomes tab](https://docs.google.com/spreadsheets/d/1xcQIR_J96-cs7BuCrXjznwkinLgxl-Pf9tA3mJ2GiyA/edit?gid=1094338461#gid=1094338461), each carrying an FK to its Layer 03 entity table. Then the ETL can also use these lists to calculate statistics for the outcomes instead of the current ad hoc methods.
 
-**Status today.** `du_urban_variable` is built and actively consumed by the production ETL. `etl/statistics/du_urban/calculate_du_statistics_v2.py` loads one row per `du_id` and uses `delivery_variable`, `shortage_variable`, `demand_variable`, `demand_mode`, `demand_params`, and `requires_sum` to drive per-DU demand-calculation logic. `channel_variable` is also built but no ETL calc consumes it yet. As an intermediate step, the env-flow calc instead reads the seed table `channel_entity.csv` directly, treating it as a per-entity variable-mapping table. See [`database/ROADMAP.md`](../ROADMAP.md) § "Layer 04 variable layer"
+**Status today:** `du_urban_variable` is built and actively consumed by the production ETL. `etl/statistics/du_urban/calculate_du_statistics_v2.py` loads one row per `du_id` and uses `delivery_variable`, `shortage_variable`, `demand_variable`, `demand_mode`, `demand_params`, and `requires_sum` to drive per-DU demand-calculation logic. `channel_variable` is also built but no ETL calc consumes it yet. As an intermediate step, the env-flow calc instead reads the seed table `channel_entity.csv` directly, treating it as a per-entity variable-mapping table. See [`database/README.md`](../README.md) § Roadmap > "Layer 04 variable layer"
 
 It is a key roadmap item to figure out the proper variable lists for the ETL along with the project team and Water Allocation Modeling Team, load them into the database, use them in the ETL, and eventually apply FK's to link those variables with definition and attribute data to create a rich and FK-traceable variable graph that links each statistic back to the CalSim variable, entity, unit, and version it relates to. 
 
@@ -2097,7 +2050,7 @@ CalSim variable definitions for channel arcs. Each row maps a CalSim variable na
 
 - `channel_variable_pkey` (id) [PRIMARY]
 - `channel_variable_calsim_id_key` (calsim_id) [UNIQUE]
-- `idx_channel_variable_calsim_id` (calsim_id) - duplicates left-prefix of unique index
+- `idx_channel_variable_calsim_id` (calsim_id): duplicates left-prefix of unique index
 - `idx_channel_variable_entity` (channel_entity_id)
 - `idx_channel_variable_is_regulatory` (is_regulatory)
 - `idx_channel_variable_type` (variable_type)
@@ -2106,7 +2059,7 @@ CalSim variable definitions for channel arcs. Each row maps a CalSim variable na
 
 - `channel_variable_calsim_id_key` (calsim_id)
 
-**Legacy column.** `variable_id uuid` is a nullable column from an earlier design that proposed a master `variable` registry to give every row a stable cross-domain identifier. The master registry was not built and the column has no FK target. All rows carry populated UUIDs in case the design is ever revived. Safe to ignore for current use. Safe to drop if the design is abandoned.
+**Legacy column:** `variable_id uuid` is a nullable column from an earlier design that proposed a master `variable` registry to give every row a stable cross-domain identifier. The master registry was not built and the column has no FK target. All rows carry populated UUIDs in case the design is ever revived. Safe to ignore for current use. Safe to drop if the design is abandoned.
 
 The 20 MIF variables (migration 23): `AMR004`, `FTR003`, `FTR029`, `FTR059`, `KSWCK`, `MCD005`, `MOK028`, `NTOMA`, `SAC049`, `SAC122`, `SAC148`, `SAC257`, `SAC289`, `SJR070`, `SJR127`, `STS011`, `STS059`, `TRN111`, `TUO003`, `YUB002`. `C_SAC000_MIF` is absent from CalSim DV (no MIF for the delta confluence reach).
 
@@ -2142,7 +2095,7 @@ CalSim variable mapping per urban demand unit. Read by the urban DU calc (`etl/s
 
 - `du_urban_variable_pkey` (id) [PRIMARY]
 - `uq_du_urban_variable_du_id` (du_id) [UNIQUE]
-- `idx_du_urban_variable_du_id` (du_id) - duplicates left-prefix of unique index
+- `idx_du_urban_variable_du_id` (du_id): duplicates left-prefix of unique index
 - `idx_du_urban_variable_type` (variable_type)
 
 **Unique constraints:**
@@ -2252,9 +2205,9 @@ Each type has a category table and a definition table. The scenario -> definitio
 
 **Status:** This layer is populated and wired (`assumption_definition` and `operation_definition` carry the vocabulary, and the Layer 06 link tables connect scenarios to both), but the database-populated values are provisional. They were assumed before the water-allocation modeling team produced the [metadata](https://docs.google.com/document/d/1D5mkb7sxZDSk-JZgh4Hhh_Q6vj0mgHCaWK06EYhYoBI/edit?tab=t.0#heading=h.qgbml6o5wma9). To get data onto the website quickly, the per-scenario assumptions and operations were authored directly in the frontend (`coeqwal-website`) as a hardcoded map in `apps/main/app/features/scenarios/components/shared/opsIcons.tsx` (`ICON_REGISTRY` plus `SCENARIO_ICONS`, keyed by hydroclimate sibling-group id in the frontend). In the database these attach per scenario through the Layer 06 link tables, not to the sibling group. A next step is to load that data into these tables and use the API to deliver to the website.
 
-That frontend map is the current source of truth and has been hand-checked for accuracy as of March 6, 2026. That said, this is a working document and the Water Allocation Modeling Team may have altered the metadata since. Worth a check in Google versioning and a check-in with the WAM team. Note that the frontend uses its own icon-id vocabulary that does not match the DB short_codes (`cws_hhs` vs `comm_delivery_HHS`, `tunnel` vs `DCP_6000`, and so on), is this has to be sorted. The API doesn't expose opperations or assumptions yet. Tracked in `ROADMAP.md` § 4.
+That frontend map is the current source of truth and has been hand-checked for accuracy as of March 6, 2026. That said, this is a working document and the Water Allocation Modeling Team may have altered the metadata since. Worth a check in Google versioning and a check-in with the WAM team. Note that the frontend uses its own icon-id vocabulary that does not match the DB short_codes (`cws_hhs` vs `comm_delivery_HHS`, `tunnel` vs `DCP_6000`, and so on), is this has to be sorted. The API doesn't expose opperations or assumptions yet. Tracked in `database/README.md` § Roadmap > "Scenario assumptions and operations metadata".
 
-**Developer-FK reminder.** All four tables carry `created_by` / `updated_by` columns whose `developer.id` FK is not yet enforced in the live DB. `audit_cleanup.sql` § 9 adds them (see the `developer` table note in Layer 00 for the mechanism).
+**Developer-FK reminder:** All four tables carry `created_by` / `updated_by` columns whose `developer.id` FK is not yet enforced in the live DB. `audit_cleanup.sql` § 9 adds them (see the `developer` table note in Layer 00 for the mechanism).
 
 ### Table schema
 
@@ -2290,13 +2243,13 @@ That frontend map is the current source of truth and has been hand-checked for a
 | `land_use` | Land Use | Agricultural and urban land use assumptions |
 | `gw_model` | Groundwater Model | Groundwater model coupling assumptions (e.g. C2VSimFG) |
 
-**Status.** The `land_use` description was written prematurely. I'm not sure it covers urban. Check with WAM team.
+**Status:** The `land_use` description was written prematurely. I'm not sure it covers urban. Check with WAM team.
 
 #### `assumption_definition`
 
 Specific assumption instances
 
-**Frontend-data note:** The corrected assumption metadata and per-scenario assumption assignments currently live in the frontend (`coeqwal-website`, `opsIcons.tsx`), which is the present source of truth (see the Layer 05 description) as of March 6, 2026. They should migrate into this table and `scenario_key_assumption_link`. See `ROADMAP.md` "Data to move from the front end to the backend once it settles."
+**Frontend-data note:** The corrected assumption metadata and per-scenario assumption assignments currently live in the frontend (`coeqwal-website`, `opsIcons.tsx`), which is the present source of truth (see the Layer 05 description) as of March 6, 2026. They should migrate into this table and `scenario_key_assumption_link`. See `database/README.md` § Roadmap > "Scenario assumptions and operations metadata".
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -2449,7 +2402,7 @@ Specific operational policies
 | `TUCP_TUCO` | TUCP's and TUCO's | tucp |
 | `tucp_not_active` | Temporary Urgency Change Petitions and Orders not active | tucp |
 
-**Status:** These are the values currently in the DB. They are provisional (see the Layer 05 description above). They were assumed before the water-allocation modeling team produced the metadata. The corrected per-scenario operations were authored in the frontend to meet a frontend deadline (`coeqwal-website`, `opsIcons.tsx` `ICON_REGISTRY` plus `SCENARIO_ICONS`), are accurate as of March 6, 2026, and are the current source of truth. The frontend uses its own icon-id vocabulary that does not match these `short_code`s (`tunnel` vs `DCP_6000`, and so on), so this needs to be sorted. The API does not expose operations yet. A next step is to reconcile the frontend metadata back into this table and deliver it through the API. Tracked in `ROADMAP.md` § 4 and "Data to move from the front end to the backend once it settles."
+**Status:** These are the values currently in the DB. They are provisional (see the Layer 05 description above). They were assumed before the water-allocation modeling team produced the metadata. The corrected per-scenario operations were authored in the frontend to meet a frontend deadline (`coeqwal-website`, `opsIcons.tsx` `ICON_REGISTRY` plus `SCENARIO_ICONS`), are accurate as of March 6, 2026, and are the current source of truth. The frontend uses its own icon-id vocabulary that does not match these `short_code`s (`tunnel` vs `DCP_6000`, and so on), so this needs to be sorted. The API does not expose operations yet. A next step is to reconcile the frontend metadata back into this table and deliver it through the API. Tracked in `database/README.md` § Roadmap > "Scenario assumptions and operations metadata".
 
 ---
 
@@ -2457,17 +2410,17 @@ Specific operational policies
 
 The scenario layer defines individual model runs and the linkages from each scenario to its operational assumptions, operations, and classification tags. Theme definitions and theme-scenario links are in Layer 08.
 
-This is a catalog layer: it holds each scenario's identity and metadata, not its model run results. The computed outputs keyed to a scenario live in later layers. Per-scenario statistics are in Layer 11 and cross-scenario analysis is in Layer 12. Similarly, tier definitions are in Layer 09 and tier results in Layer 10. Those downstream tables reference a scenario by `scenario_short_code`.
+This is a catalog layer. It holds each scenario's identity and metadata, not its model run results. The computed outputs keyed to a scenario live in later layers. Per-scenario statistics are in Layer 11 and cross-scenario analysis is in Layer 12. Similarly, tier definitions are in Layer 09 and tier results in Layer 10. Those downstream tables reference a scenario by `scenario_short_code`.
 
-**`is_active` semantics.** The `scenario.is_active` boolean controls API visibility, and therefore website visibility, for every scenario. `GET /api/scenarios` filters for `is_active = TRUE`. `GET /api/tiers/{code}` returns 404 for inactive scenarios. There is **no automated process that flips this flag**. After ETL completes for a new scenario, an operator manually flips it via `etl/ingestion/tools/set_scenario_active.py`. The ETL orchestrator (`etl/statistics/run_all.py`) does not touch it. Treat the flag as the deploy gate: nothing the website surfaces about a scenario is visible until someone runs the tool.
+**`is_active` semantics:** The `scenario.is_active` boolean controls API visibility, and therefore website visibility, for every scenario. `GET /api/scenarios` filters for `is_active = TRUE`. `GET /api/tiers/{code}` returns 404 for inactive scenarios. There is **no automated process that flips this flag**. After ETL completes for a new scenario, an operator manually flips it via `etl/ingestion/tools/set_scenario_active.py`. The ETL orchestrator (`etl/statistics/run_all.py`) does not touch it. Treat the flag as the deploy gate. Nothing the website surfaces about a scenario is visible until someone runs the tool.
 
-**Developer-FK reminder.** `scenario`, `scenario_author`, and `scenario_hydroclimate_sibling` carry `created_by` / `updated_by` columns whose `developer.id` FK is not yet enforced. `audit_cleanup.sql` § 9 adds them (see the `developer` table note in Layer 00). The live data is clean (integer type, audit ids within `developer.id`), so the constraints add without orphans.
+**Developer-FK reminder:** `scenario`, `scenario_author`, and `scenario_hydroclimate_sibling` carry `created_by` / `updated_by` columns whose `developer.id` FK is not yet enforced. `audit_cleanup.sql` § 9 adds them (see the `developer` table note in Layer 00). The live data is clean (integer type, audit ids within `developer.id`), so the constraints add without orphans.
 
 ### Table schema
 
 #### `scenario`
 
-The catalog of individual model runs. Each scenario is one model run for one hydroclimate. This is a catalog layer: it holds each scenario's identity and per-run attributes, not its results, and not its operations and assumptions. Operations and assumptions attach to each individual scenario through the Layer 06 link tables (`scenario_key_operation_link`, `scenario_key_assumption_link`), not to the sibling group. So far it has been the case that the operations and assumptions are consistent between siblings, but it may not always be the case.
+The catalog of individual model runs. Each scenario is one model run for one hydroclimate. This is a catalog layer. It holds each scenario's identity and per-run attributes, not its results, and not its operations and assumptions. Operations and assumptions attach to each individual scenario through the Layer 06 link tables (`scenario_key_operation_link`, `scenario_key_assumption_link`), not to the sibling group. So far it has been the case that the operations and assumptions are consistent between siblings, but it may not always be the case.
 
 How the scenario catalog connects to its sibling group and to operations and assumptions (read left to right):
 
@@ -2537,7 +2490,7 @@ How the scenario catalog connects to its sibling group and to operations and ass
 
 Connects the hydroclimate siblings of an operational configuration. A set of hydroclimate siblings is the same or similar operational configuration run under each hydroclimate (historical, cc50, cc95, etc.), differing in hydroclimate inputs. This table groups those siblings and holds the values common to them: the display `name`, `short_description`, `long_description`, and the `baseline_group` lineage. These names and descriptions are intended to surface on the website via the API (see the left scenario sidebar in the Tools section). Each `scenario` points here through its `hydroclimate_sibling` code. The PK is `short_code` (varchar), which reuses the founding scenario's `short_code` (e.g. `s0020`). Operations and assumptions are not stored or linked here. They attach to each individual scenario through the Layer 06 link tables, the thought being that some details could potentially be different between siblings.
 
-**Frontend-data note:** Per-sibling display extras (`shortLabel`, `iconPath`) currently live in the frontend (`coeqwal-website`, `apps/main/app/content/scenarios.ts` `scenarioMetadata`). Somem may belong here alongside `name` and the descriptions, and all should migrate once they settle. See `ROADMAP.md` "Data to move from the front end to the backend once it settles."
+**Frontend-data note:** Per-sibling display extras (`shortLabel`, `iconPath`) currently live in the frontend (`coeqwal-website`, `apps/main/app/content/scenarios.ts` `scenarioMetadata`). Somem may belong here alongside `name` and the descriptions, and all should migrate once they settle. See `database/README.md` § Roadmap > "Frontend-hardcoded data that should move into the DB".
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -2726,15 +2679,15 @@ Link table: which scenarios carry which operations. Composite PK `(scenario_id, 
 
 Hydroclimate conditions (historical and projected) plus a companion sea-level-rise catalog (`slr`). The `slr` table is built and seeded but not yet linked to scenarios or hydroclimates. A planned `hydroclimate_slr_link` table would connect sea-level rise to hydroclimates (see the SLR status and the planned-table note below).
 
-The previously planned `hydroclimate_source` table (a dedicated catalog of hydroclimate data sources) was never built; `hydroclimate.source_id` still FKs notionally to the generic `source` table.
+The previously planned `hydroclimate_source` table (a dedicated catalog of hydroclimate data sources) was never built. `hydroclimate.source_id` still FKs notionally to the generic `source` table.
 
-**Developer-FK reminder.** `hydroclimate` is the one table in the whole schema whose audit-FK fix needs pre-work. Its `created_by` / `updated_by` are `numeric` (not integer) and one `created_by` row is NULL, so it is excluded from `audit_cleanup.sql` § 9 and handled by the § 11 (numeric -> integer) -> § 13 (NULL backfill) -> § 14 (add FK) chain instead. See the `developer` table note in Layer 00.
+**Developer-FK reminder:** `hydroclimate` is the one table in the whole schema whose audit-FK fix needs pre-work. Its `created_by` / `updated_by` are `numeric` (not integer) and one `created_by` row is NULL, so it is excluded from `audit_cleanup.sql` § 9 and handled by the § 11 (numeric -> integer) -> § 13 (NULL backfill) -> § 14 (add FK) chain instead. See the `developer` table note in Layer 00.
 
 ### Table schema
 
 #### `hydroclimate`
 
-**Frontend-data note:** The hydroclimate UI labels and id maps (`HYDROCLIMATE_ID_MAP`, `HYDROCLIMATE_LABEL_MAP`) currently live in the frontend (`coeqwal-website`, `apps/main/app/content/scenarios.ts`). They should migrate into this table. See `ROADMAP.md` "Data to move from the front end to the backend once it settles."
+**Frontend-data note:** The hydroclimate UI labels and id maps (`HYDROCLIMATE_ID_MAP`, `HYDROCLIMATE_LABEL_MAP`) currently live in the frontend (`coeqwal-website`, `apps/main/app/content/scenarios.ts`). They should migrate into this table. See `database/README.md` § Roadmap > "Frontend-hardcoded data that should move into the DB".
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -2758,7 +2711,7 @@ The previously planned `hydroclimate_source` table (a dedicated catalog of hydro
 
 **Foreign keys:** none yet. `source_id`, `hydroclimate_version_id`, `created_by`, and `updated_by` are notional FK columns whose constraints were deferred while the table is being settled (see Status).
 
-**Status.** Tracked in `ROADMAP.md` "Hydroclimate layer: settle FKs and add the SLR linkage."
+**Status:** Tracked in `database/SCHEMA_BACKLOG.md` § 1 (hydroclimate FKs and the `slr` linkage).
 
 **Indexes:**
 
@@ -2803,7 +2756,7 @@ Earlier columns `slr_value` and `slr_unit_id` were dropped from this table. SLR 
 **Foreign keys:**
 
 - `created_by` -> `developer.id` (delete: RESTRICT, update: CASCADE)
-- `source` -> `source.source` (delete: NO ACTION, update: NO ACTION) - text-to-text FK
+- `source` -> `source.source` (delete: NO ACTION, update: NO ACTION): text-to-text FK
 - `updated_by` -> `developer.id` (delete: RESTRICT, update: CASCADE)
 
 **Indexes:**
@@ -2825,7 +2778,7 @@ Earlier columns `slr_value` and `slr_unit_id` were dropped from this table. SLR 
 | `slr_30` | 30mm sea level rise | 30mm sea level rise scenario |
 | `slr_60` | 60mm sea level rise | 60mm sea level rise scenario |
 
-**Status.** The `slr` catalog is built and seeded (4 rows) with enforced audit and `source` FKs, but nothing links to it yet (no scenario, hydroclimate, ETL, API, or frontend reference). The plan is to connect sea-level-rise conditions to hydroclimates through a new `hydroclimate_slr_link` table, documented below as planned. Tracked in `ROADMAP.md` "Hydroclimate layer: settle FKs and add the SLR linkage."
+**Status:** The `slr` catalog is built and seeded (4 rows) with enforced audit and `source` FKs, but nothing links to it yet (no scenario, hydroclimate, ETL, API, or frontend reference). The plan is to connect sea-level-rise conditions to hydroclimates through a new `hydroclimate_slr_link` table, documented below as planned. Tracked in `database/SCHEMA_BACKLOG.md` § 1 (hydroclimate FKs and the `slr` linkage).
 
 #### `hydroclimate_slr_link` (planned, not yet built)
 
@@ -2840,7 +2793,7 @@ Planned junction table to attach sea-level-rise conditions to hydroclimates. It 
 | `created_at` | timestamptz | NO | `now()` |
 | `updated_at` | timestamptz | NO | `now()` |
 
-Intended PK `(hydroclimate_id, slr_id)`. The cardinality is being settled with the current `hydroclimate` rework: if each hydroclimate carries exactly one SLR condition, a single `hydroclimate.slr_id` column would replace the link table. Tracked in `ROADMAP.md` "Hydroclimate layer: settle FKs and add the SLR linkage."
+Intended PK `(hydroclimate_id, slr_id)`. The cardinality is being settled with the current `hydroclimate` rework. If each hydroclimate carries exactly one SLR condition, a single `hydroclimate.slr_id` column would replace the link table. Tracked in `database/SCHEMA_BACKLOG.md` § 1 (hydroclimate FKs and the `slr` linkage).
 
 ---
 
@@ -2848,15 +2801,15 @@ Intended PK `(hydroclimate_id, slr_id)`. The cardinality is being settled with t
 
 Research themes organize the scenarios. Each theme links to one or more scenarios.
 
-**Status.** These tables were built before the themes were finalized. The themes themselves, along with their names and descriptions, are still being developed, so the current rows and the theme-to-scenario assignments are provisional. The working copy currently lives in the frontend (see the Frontend-data note on `theme`).
+**Status:** These tables were built before the themes were finalized. The themes themselves, along with their names and descriptions, are still being developed, so the current rows and the theme-to-scenario assignments are provisional. The working copy currently lives in the frontend (see the Frontend-data note on `theme`).
 
-**Developer-FK reminder.** `theme` carries `created_by` / `updated_by` columns whose `developer.id` FK is not yet enforced. `audit_cleanup.sql` § 9 adds them (see the `developer` table note in Layer 00). The live data is clean (integer type, audit ids within `developer.id`), so the constraints add without orphans.
+**Developer-FK reminder:** `theme` carries `created_by` / `updated_by` columns whose `developer.id` FK is not yet enforced. `audit_cleanup.sql` § 9 adds them (see the `developer` table note in Layer 00). The live data is clean (integer type, audit ids within `developer.id`), so the constraints add without orphans.
 
 ### Table schema
 
 #### `theme`
 
-**Frontend-data note:** Theme narrative copy and the theme-to-scenario assignment currently live in the frontend (`coeqwal-website`, `apps/main/app/content/themes.ts` `WATER_THEMES` and `apps/main/app/content/scenarios.ts` `scenarioMetadata[...].theme`). No theme API endpoint exists today. They should migrate into this table and `theme_scenario_link`. See `ROADMAP.md` "Data to move from the front end to the backend once it settles."
+**Frontend-data note:** Theme narrative copy and the theme-to-scenario assignment currently live in the frontend (`coeqwal-website`, `apps/main/app/content/themes.ts` `WATER_THEMES` and `apps/main/app/content/scenarios.ts` `scenarioMetadata[...].theme`). No theme API endpoint exists today. They should migrate into this table and `theme_scenario_link`. See `database/README.md` § Roadmap > "Frontend-hardcoded data that should move into the DB".
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -2888,7 +2841,7 @@ Research themes organize the scenarios. Each theme links to one or more scenario
 - `theme_pkey` (id) [PRIMARY]
 - `theme_short_code_key` (short_code) [UNIQUE]
 - `idx_theme_active` (is_active)
-- `idx_theme_short_code_active` (short_code, is_active) - redundant against the unique `short_code` index, dropped by `audit_cleanup.sql` § 8
+- `idx_theme_short_code_active` (short_code, is_active): redundant against the unique `short_code` index, dropped by `audit_cleanup.sql` § 8
 
 **Unique constraints:**
 
@@ -2928,7 +2881,7 @@ M:N membership between `theme` and `scenario`. Composite PK `(scenario_id, theme
 **Indexes:**
 
 - `theme_scenario_link_pkey` (scenario_id, theme_id) [PRIMARY]
-- `idx_theme_scenario_reverse` (scenario_id, theme_id) - redundant: its columns match the PK exactly. The name implies a reverse `(theme_id, scenario_id)` lookup, but it was created in PK column order, so it never served that purpose. Dropped by `audit_cleanup.sql` § 8
+- `idx_theme_scenario_reverse` (scenario_id, theme_id): redundant, its columns match the PK exactly. The name implies a reverse `(theme_id, scenario_id)` lookup, but it was created in PK column order, so it never served that purpose. Dropped by `audit_cleanup.sql` § 8
 
 ---
 
@@ -2949,7 +2902,7 @@ The per-scenario tier outputs (`tier_result`, `tier_location_result`) live in La
 
 The catalog of tier indicators.
 
-**Frontend-data note:** What the frontend calls a *key outcome* is one tier indicator, that is, one `tier_definition` row (on the website "tiers" are surfaced as "key outcomes", see the layer description above). The frontend's outcome codes are this table's `short_code` values. `outcomes.ts` labels `OUTCOME_NAMES` as a map from "API short codes" to display names, and its nine codes (`CWS_DEL`, `AG_REV`, `ENV_FLOWS`, `RES_STOR`, `GW_STOR`, `DELTA_ECO`, `FW_EXP`, `FW_DELTA_USES`, `WRC_SALMON_AB`) are exactly this table's nine rows. The vocabulary differs but the entities are the same. By column: `OUTCOME_NAMES[code]` is the display name, which already exists here as `name`, though the frontend uses shorter wording (e.g. DB `Community water system deliveries` vs frontend `Community deliveries`). `OUTCOME_CODE_ORDER` is the display order, which has no column here yet. Migrating means reconciling `name` with the frontend labels and adding a display-order column. See `ROADMAP.md` "Data to move from the front end to the backend once it settles."
+**Frontend-data note:** What the frontend calls a *key outcome* is one tier indicator, that is, one `tier_definition` row (on the website "tiers" are surfaced as "key outcomes", see the layer description above). The frontend's outcome codes are this table's `short_code` values. `outcomes.ts` labels `OUTCOME_NAMES` as a map from "API short codes" to display names, and its nine codes (`CWS_DEL`, `AG_REV`, `ENV_FLOWS`, `RES_STOR`, `GW_STOR`, `DELTA_ECO`, `FW_EXP`, `FW_DELTA_USES`, `WRC_SALMON_AB`) are exactly this table's nine rows. The vocabulary differs but the entities are the same. By column: `OUTCOME_NAMES[code]` is the display name, which already exists here as `name`, though the frontend uses shorter wording (e.g. DB `Community water system deliveries` vs frontend `Community deliveries`). `OUTCOME_CODE_ORDER` is the display order, which has no column here yet. Migrating means reconciling `name` with the frontend labels and adding a display-order column. See `database/README.md` § Roadmap > "Frontend-hardcoded data that should move into the DB".
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -2986,7 +2939,7 @@ The catalog of tier indicators.
 
 #### `tier_location`
 
-Catalog of (tier, location) pairs, i.e. which Layer 03 entities each tier indicator applies to and aggregates. **Does not carry the `set_audit_fields` trigger**, a known gap (the trigger was never attached when the table was recently added :P). The four audit columns are present and populated by the sync script. `audit_cleanup.sql` § 4 attaches `audit_fields_tier_location`. Also tracked in `ROADMAP.md` § 1.
+Catalog of (tier, location) pairs, i.e. which Layer 03 entities each tier indicator applies to and aggregates. **Does not carry the `set_audit_fields` trigger**, a known gap (the trigger was never attached when the table was recently added :P). The four audit columns are present and populated by the sync script. `audit_cleanup.sql` § 4 attaches `audit_fields_tier_location`. Also tracked in `database/SCHEMA_BACKLOG.md` § 4 Corrections.
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -3061,7 +3014,7 @@ Per-scenario, per-location tier values. **Three unique indexes/constraints cover
 - `tier_location_result_unique` (scenario_short_code, tier_short_code, location_id, tier_version_id) [UNIQUE] - duplicate of the constraint above, dropped by `audit_cleanup.sql` § 8
 - `idx_tier_location_combined` (scenario_short_code, tier_short_code)
 - `idx_tier_location_level` (tier_level)
-- `idx_tier_location_scenario` (scenario_short_code) - left-prefix duplicate of `idx_tier_location_combined`, dropped by `audit_cleanup.sql` § 8
+- `idx_tier_location_scenario` (scenario_short_code): left-prefix duplicate of `idx_tier_location_combined`, dropped by `audit_cleanup.sql` § 8
 - `idx_tier_location_tier` (tier_short_code)
 - `idx_tier_location_type` (location_type)
 
@@ -3131,11 +3084,11 @@ Statistics computed by the ETL pipeline from CalSim DV/SV files, one row per `(s
 
 The website-facing API endpoints in `api/coeqwal-api/routes/` filter by `scenario.is_active = TRUE` before returning result rows. None of the result tables carry their own `is_active` per-row except a small set noted in their entries below.
 
-**Developer-FK reminder.** `audit_cleanup.sql` § 9 adds the missing `created_by` / `updated_by` -> `developer.id` FKs to the result tables that lack them (see the `developer` table note in Layer 00).
+**Developer-FK reminder:** `audit_cleanup.sql` § 9 adds the missing `created_by` / `updated_by` -> `developer.id` FKs to the result tables that lack them (see the `developer` table note in Layer 00).
 
-**Redundant indexes.** Each result table was created with overlapping indexes: a combined/unique index on `(scenario_short_code, <entity>)` plus a left-prefix index on `(scenario_short_code)` alone, and in a few cases an abbreviated exact-duplicate index. `audit_cleanup.sql` drops both the exact and the left-prefix duplicates.
+**Redundant indexes:** Each result table was created with overlapping indexes: a combined/unique index on `(scenario_short_code, <entity>)` plus a left-prefix index on `(scenario_short_code)` alone, and in a few cases an abbreviated exact-duplicate index. `audit_cleanup.sql` drops both the exact and the left-prefix duplicates.
 
-**Coverage.** Every modeled demand/supply sector has a result family here, and each maps to one ETL module in `etl/statistics/` and one route module in `api/coeqwal-api/routes/`. Two domains are intentionally absent: `compliance_station` results surface through tier indicators (Layer 09/10, e.g. `FW_DELTA_USES`) rather than a statistics table, and WBA / groundwater results have no family yet. Groundwater appears only as DU-level `ag_du_gw_pumping_monthly`. The planned `wba_variable` table and the DU-WBA crosswalk are tracked in [`database/README.md`](../README.md) § Roadmap.
+**Coverage:** Every modeled demand/supply sector has a result family here, and each maps to one ETL module in `etl/statistics/` and one route module in `api/coeqwal-api/routes/`. Two domains are intentionally absent: `compliance_station` results surface through tier indicators (Layer 09/10, e.g. `FW_DELTA_USES`) rather than a statistics table, and WBA / groundwater results have no family yet. Groundwater appears only as DU-level `ag_du_gw_pumping_monthly`. The planned `wba_variable` table and the DU-WBA crosswalk are tracked in [`database/README.md`](../README.md) § Roadmap.
 
 ### Table schema
 
@@ -3232,7 +3185,7 @@ Per-month spill statistics.
 
 ##### `reservoir_monthly_percentile`
 
-Per-month storage percentile bands (raw % of capacity and TAF) plus a mean (`mean_value` / `mean_taf`). Its seven `q*` bands (raw and TAF) and `capacity_taf` duplicate the same columns in `reservoir_storage_monthly`. It omits that table's exceedance, `storage_cv`, `storage_pct_capacity`, `storage_avg_taf`, and `sample_count` columns, and uniquely adds the two mean columns. The overlapping band columns are a historical redundancy from the two tables being built separately, tracked for consolidation in `ROADMAP.md` § 1.
+Per-month storage percentile bands (raw % of capacity and TAF) plus a mean (`mean_value` / `mean_taf`). Its seven `q*` bands (raw and TAF) and `capacity_taf` duplicate the same columns in `reservoir_storage_monthly`. It omits that table's exceedance, `storage_cv`, `storage_pct_capacity`, `storage_avg_taf`, and `sample_count` columns, and uniquely adds the two mean columns. The overlapping band columns are a historical redundancy from the two tables being built separately, tracked for consolidation in `database/SCHEMA_BACKLOG.md` § 6 Corrections.
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -3281,7 +3234,7 @@ Per-scenario, per-reservoir whole-simulation-period summary. Carries flood-pool 
 | `reservoir_entity_id` | integer | NO |  | FK `reservoir_entity.id` |
 | `simulation_start_year`, `simulation_end_year`, `total_years` | integer | NO |  |  |
 | `storage_exc_p5`..`storage_exc_p95` | numeric | YES |  | storage exceedance percentiles |
-| `dead_pool_taf`, `dead_pool_pct` | numeric | YES |  | `dead_pool_taf` denormalized from `reservoir_entity`; `dead_pool_pct` computed as `dead_pool_taf / capacity_taf * 100` |
+| `dead_pool_taf`, `dead_pool_pct` | numeric | YES |  | `dead_pool_taf` denormalized from `reservoir_entity`, `dead_pool_pct` computed as `dead_pool_taf / capacity_taf * 100` |
 | `spill_threshold_pct`, `spill_years_count`, `spill_frequency_pct` | various | YES |  |  |
 | `spill_mean_cfs`, `spill_peak_cfs` | numeric | YES |  |  |
 | `annual_spill_avg_taf`, `annual_spill_cv`, `annual_spill_max_taf` | numeric | YES |  |  |
@@ -3320,7 +3273,7 @@ Per-scenario, per-reservoir whole-simulation-period summary. Carries flood-pool 
 
 #### Delta result family
 
-Two tables holding per-scenario delta outflow and X2 statistics. Keyed by `(scenario_short_code, variable_code)` rather than by a Layer-03 entity FK; `variable_code` is the CalSim/derived variable name (e.g. `NDO`, `X2`). These two tables do **not** carry an `is_active` column.
+Two tables holding per-scenario delta outflow and X2 statistics. Keyed by `(scenario_short_code, variable_code)` rather than by a Layer-03 entity FK. `variable_code` is the CalSim/derived variable name (e.g. `NDO`, `X2`). These two tables do **not** carry an `is_active` column.
 
 ##### `delta_monthly`
 
@@ -3391,7 +3344,7 @@ Per-scenario, per-variable whole-simulation-period summary. Uses a single `jsonb
 
 #### Urban demand-unit result family
 
-The DU urban result tables are keyed by `(scenario_short_code, du_id, water_month)` (monthly) or `(scenario_short_code, du_id)` (period). `du_id varchar` references `du_urban_entity.du_id` (or any DU domain) but **no FK is enforced** - the columns are textual. M&I and refuge result tables share the same shape.
+The DU urban result tables are keyed by `(scenario_short_code, du_id, water_month)` (monthly) or `(scenario_short_code, du_id)` (period). `du_id varchar` references `du_urban_entity.du_id` (or any DU domain) but **no FK is enforced**. The columns are textual. M&I and refuge result tables share the same shape.
 
 ##### `du_delivery_monthly`
 
@@ -3707,7 +3660,7 @@ The agriculture DU pipeline splits the supply / demand breakdown across five tab
 
 ##### `ag_du_demand_monthly`
 
-Per-DU monthly demand statistics. Note the sequence is named `ag_du_delivery_monthly_id_seq` - the table was renamed during a migration but the sequence was not.
+Per-DU monthly demand statistics. Note the sequence is named `ag_du_delivery_monthly_id_seq`. The table was renamed during a migration but the sequence was not.
 
 | column | type | nullable | default | notes |
 |---|---|---|---|---|
@@ -3731,7 +3684,7 @@ Per-DU monthly demand statistics. Note the sequence is named `ag_du_delivery_mon
 
 - `ag_du_delivery_monthly_pkey` (id) [PRIMARY] - PK index name matches the legacy table name
 - `uq_ag_du_demand_monthly` (scenario_short_code, du_id, water_month) [UNIQUE]
-- `idx_ag_du_delivery_scenario_du` (scenario_short_code, du_id) - legacy index name
+- `idx_ag_du_delivery_scenario_du` (scenario_short_code, du_id): legacy index name
 - `idx_ag_du_demand_monthly_combined` (scenario_short_code, du_id)
 - `idx_ag_du_demand_monthly_du` (du_id)
 - `idx_ag_du_demand_monthly_scenario` (scenario_short_code)
@@ -4226,9 +4179,9 @@ Cross-scenario sensitivity analysis produced by `etl/statistics/sensitivity/calc
 - **`sensitivity_climate`** holds climate sensitivity within each hydroclimate sibling group (scenarios sharing identical operations). For each `(sibling_group, module, entity, metric, water_month)` it stores the historical / cc50 / cc95 values plus absolute and percent change for the two climate-change levels.
 - **`sensitivity_operational`** holds operational sensitivity within each hydroclimate level (e.g. all historical-hydrology scenarios). For each `(hydroclimate_id, module, entity, metric, water_month)` it stores min / max / mean / std / range / `pct_range` across the operational variants in that level, along with `scenario_count`.
 
-Both tables are flagged "Experimental" in the calculation script. Neither carries a `set_audit_fields` trigger. The trigger was never attached at table creation, and the tables use a minimal audit shape: a single `updated_at` column and no `created_at` / `created_by` / `updated_by`. Attaching the trigger and reshaping the audit columns is tracked in `database/ROADMAP.md` § 1.
+Both tables are flagged "Experimental" in the calculation script. Neither carries a `set_audit_fields` trigger. The trigger was never attached at table creation, and the tables use a minimal audit shape: a single `updated_at` column and no `created_at` / `created_by` / `updated_by`. Attaching the trigger and reshaping the audit columns is tracked in `database/SCHEMA_BACKLOG.md` § 4 Corrections.
 
-**Redundant indexes.** As in Layer 11, each table carries a left-prefix index covered by its unique constraint (`idx_sensitivity_climate_sibling`, `idx_sensitivity_operational_hydro`); `audit_cleanup.sql` drops them.
+**Redundant indexes:** As in Layer 11, each table carries a left-prefix index covered by its unique constraint (`idx_sensitivity_climate_sibling`, `idx_sensitivity_operational_hydro`). `audit_cleanup.sql` drops them.
 
 ##### `sensitivity_climate`
 
@@ -4309,16 +4262,14 @@ Operational-sensitivity rollups across the operational variants within each hydr
 
 ## Database functions
 
-Beyond what PostGIS and pgcrypto provide, the database owns 13 `postgres`-role functions. They split into four groups: audit-trigger infrastructure, versioning helpers, developer registration, and network-topology walks. The trigger functions (`set_audit_fields`, `log_audit_changes`) are wired by `apply_audit_*` and fire on every tracked table - they are not called directly.
+Beyond what PostGIS and pgcrypto provide, the database owns 11 `postgres`-role functions. They split into four groups: audit-trigger infrastructure, versioning helpers, developer registration, and network-topology walks. The trigger function `set_audit_fields` is wired by `apply_audit_trigger_to_table` and fires on every tracked table. It is not called directly.
 
 ### Audit-trigger infrastructure
 
 | function | language | security definer | purpose |
 |---|---|---|---|
 | `set_audit_fields()` returns trigger | plpgsql | no | Trigger function. Fills `created_by` / `updated_by` (from `coeqwal_current_operator()`) and `created_at` / `updated_at` on INSERT / UPDATE. |
-| `log_audit_changes()` returns trigger | plpgsql | no | Trigger function. Writes a row to `audit_log` for every INSERT / UPDATE / DELETE on tables it is wired to (see Layer 00 note - `audit_log` is currently unused). |
 | `apply_audit_trigger_to_table(p_table_name text) returns text` | plpgsql | no | One-shot helper. Drops and re-creates a `BEFORE INSERT OR UPDATE` trigger on `p_table_name` that calls `set_audit_fields()`. Used during migrations. |
-| `apply_audit_log_trigger_to_table(p_table_name text) returns text` | plpgsql | no | One-shot helper. Drops and re-creates an `AFTER INSERT OR UPDATE OR DELETE` trigger that calls `log_audit_changes()`. Used during migrations. |
 
 ### Operator / versioning helpers
 

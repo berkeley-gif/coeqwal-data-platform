@@ -72,7 +72,7 @@ pip install psycopg2-binary pandas
 
 ### How it works internally
 
-The script is self-contained - all schema snapshot, layer export, and sampling logic is built in. The only sibling import is `verify_erd_against_audit.py` for ERD comparison (same `database/audit/` directory). No Lambda, no `sys.path` hacks, no AWS dependencies.
+The script is self-contained. All schema snapshot, layer export, and sampling logic is built in. The only sibling import is `verify_erd_against_audit.py` for ERD comparison (same `database/audit/` directory). No Lambda, no `sys.path` hacks, no AWS dependencies.
 
 Database connections are opened as `readonly=True`. The script never writes to the database.
 
@@ -84,16 +84,16 @@ These standalone tools can also be used independently.
 
 ### `verify_erd_against_audit.py`
 
-Compares ERD documentation against a database audit snapshot. Used by the monthly audit for section 1b, but can also be run directly:
+Compares ERD documentation against a database audit snapshot. Imported by the monthly audit for section 1b, but **has drifted**. It hardcodes the old ERD filename and its parser expects the old tree-format ERD while `database/schema/ERD.md` is now Markdown tables, so the comparison is silently skipped. See [`../SCHEMA_BACKLOG.md`](../SCHEMA_BACKLOG.md) § 10 before relying on it.
 
 ```bash
 python database/audit/verify_erd_against_audit.py \
-    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
+    database/schema/ERD.md \
     audits/latest.json
 
 # JSON output for scripting
 python database/audit/verify_erd_against_audit.py \
-    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
+    database/schema/ERD.md \
     audits/latest.json --json
 ```
 
@@ -135,4 +135,31 @@ bash database/run_audit.sh
 | After editing seed data | `python database/scripts/export_layer_tables.py --layer NN` |
 | After running ETL | `python etl/statistics/verify_all_sections.py --scenario {id}` |
 | After deploying API changes | `python etl/statistics/verify_api.py --scenario {id}` |
-| ERD out of sync | `python database/audit/verify_erd_against_audit.py` |
+| Check ERD against the DB | Read § 1b of the monthly audit report. The standalone `verify_erd_against_audit.py` has drifted (see below) |
+
+---
+
+## Maintaining the audit
+
+The audit's table coverage is hand-maintained in two lists at the top of `run_monthly_audit.py`, and they drift as the schema grows. Section 1a (table inventory) still counts every table from the live snapshot, so a missing layer only shows up as a gap in the content export and result samples, not in the headline counts. That makes the drift easy to miss.
+
+- **`LAYERS`:** the reference layers exported in full to `layer_exports/` (sections 1c and 1d). Today it runs `00_versioning` through `08_theme`.
+- **`RESULTS_TABLES`:** the result tables sampled head/tail into `results_samples/` (section 1e).
+
+### Known gap, Layer 09 (TIER)
+
+Layer 09 falls between the two lists.
+
+- `LAYERS` stops at `08_theme`, so there is no `09_tier` bucket. The Layer 09 tables are never exported as reference data.
+- `tier_definition` (the Layer 09 rubric, a small reference table) is sampled as a result in `RESULTS_TABLES` instead of exported in full like the other reference layers.
+- `tier_location` (Layer 09 location-to-tier membership, around 280 rows) is in neither list, so it is absent from the content export entirely.
+
+Suggested fix when someone touches the audit next:
+
+- Add a `09_tier` entry to `LAYERS` with `tier_definition` and `tier_location`, so the rubric exports in full and `tier_location` stops being invisible.
+- Drop `tier_definition` from `RESULTS_TABLES` (keep `tier_result` and `tier_location_result`, which are the Layer 10 results).
+- Update the `layers 00-08` / `layers 10+` wording in this file and in the report so it reflects the real coverage.
+
+### Standing rule
+
+When a new layer or reference table is added to the schema, update `LAYERS` and `RESULTS_TABLES` to match, then refresh the `00-08` / `10+` wording in the docs. The audit will silently skip anything that is not in one of the two lists.

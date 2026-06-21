@@ -4,164 +4,97 @@ PostgreSQL database for COEQWAL scenario data, network, tiers, and statistics to
 
 ## Table of contents
 
-1. [Making changes to the database](#making-changes-to-the-database)
+1. [Getting started](#getting-started)
+   - [Prerequisites](#prerequisites)
    - [Connection strings](#connection-strings)
-   - [Turning on the Cloud9 environment](#turning-on-the-cloud9-environment)
+   - [First-time setup](#first-time-setup-6-steps)
+   - [Turning on the Cloud9 environment](#turning-on-the-cloud9-environment-to-run-scripts-on-the-database)
+   - [Cloud9 development workflow](#cloud9-development-workflow)
+   - [Running SQL scripts in Cloud9](#running-sql-scripts-in-cloud9)
+   - [Database access](#database-access)
+   - [Setting up a new developer](#setting-up-a-new-developer)
+   - [Cloud9 cheatsheet](#cloud9-cheatsheet)
+   - [Key resources](#key-resources)
+2. [Making changes to the database](#making-changes-to-the-database)
+   - [Creating a new table](#creating-a-new-table)
    - [Adding new scenarios](#adding-new-scenarios)
-   - [Adding new scenario data (results/statistics)](#adding-new-scenario-data-resultsstatistics)
-   - [Adding new tiers (future)](#adding-new-tiers-future)
-   - [Adding tier data for new scenarios](#adding-tier-data-for-new-scenarios)
-   - [Redeploying the API](#redeploying-the-api)
-2. [Running the database audit](#running-the-database-audit)
-   - [Running the monthly audit](#running-the-monthly-audit)
-   - [What it produces](#what-it-produces)
-   - [Report sections](#report-sections)
-   - [Other audit tools](#other-audit-tools)
+   - [Adding new scenario data (statistics)](#adding-new-scenario-data-statistics)
+   - [Adding tiers and tier outcome data](#adding-tiers-and-tier-outcome-data)
+3. [Schema layers](#schema-layers)
+4. [Schema implementation status](#schema-implementation-status)
+5. [Layer details](#layer-details)
+   - [02_NETWORK](#02_network-network-topology)
+   - [03_ENTITY](#03_entity-entity-tables-and-the-entity-attribute-pattern)
+   - [00_VERSIONING](#00_versioning-audit-trails-and-version-control)
+6. [Audit and verification](#audit-and-verification)
+   - [Standalone tools](#standalone-tools)
    - [Lambda S3 archive](#lambda-s3-archive)
-3. [Getting started](#getting-started)
-4. [Directory structure](#directory-structure)
-5. [Schema layers](#schema-layers)
-6. [Schema implementation status](#schema-implementation-status)
-7. [Layer details](#layer-details)
-8. [Best practices checklist](#best-practices-checklist)
-9. [Layer 00_VERSIONING schema](#layer-00_versioning-schema)
-10. [Automatic audit triggers](#automatic-audit-triggers)
-11. [Audit and verification strategy](#audit-and-verification-strategy)
-12. [Data validation tools](#data-validation-tools)
-
-## Making changes to the database
-
-### Connection strings
-
-All database operations use one of two connection strings stored in `~/.bashrc` on Cloud9:
-
-- **`$DATABASE_URL`** - a developer's own connection (their registered PostgreSQL role). Used for queries, seed loads, ETL, API, audits. Each developer should have their own. See "Setting up a new developer" below.
-- **`$SUPERUSER_URL`** - the RDS master (`postgres`) user. Required only for DDL migrations (`ALTER TABLE`, `CREATE INDEX`, `GRANT`). Shared among admins. Password is in AWS Secrets Manager.
-
-See "First-time setup" below for how to set these up. See "When to use which" for the full decision table.
-
-**The two URLs at a glance**
-
-| URL | Who they connect as | What it's for | Audit attribution? |
-|---|---|---|---|
-| `$DATABASE_URL` | Their own named role (e.g. `alice`) | Daily work: SELECTs, INSERTs, UPDATEs, running ETL scripts | Yes - works correctly |
-| `$SUPERUSER_URL` | Shared `postgres` account (everyone uses the same password) | DDL only: `CREATE TABLE`, `ALTER`, `GRANT`, migrations | No - all writes attributed to `id=1` (system). That's fine for migrations because the relevant info is "the migration ran," not "who typed `psql`." |
-
-Practical rule: if you are typing DML, use `$DATABASE_URL` so your name lands in the audit log. If you are typing DDL, use `$SUPERUSER_URL` and don't worry that it shows up as `id=1` - that's the intended trade-off.
-
-### Turning on the Cloud9 environment
-
-Because most of the backend development is finished, the EC2 instance `aws-cloud9-coeqwal-db-admin-48dc921ad0fd48ea93c2a2e218bd8ace` is normally turned off to save costs. To make database changes:
-
-1. Go to the AWS EC2 console and start the instance
-2. Open Cloud9 from the AWS console
-3. `cd ~/environment/coeqwal-backend && git pull origin main`
-4. Run your scripts
-5. Stop the instance when done
-
-For bulk operations (e.g., loading batches of scenario statistics data), the ETL scripts support multi-threading. If loads are slow, consider temporarily upgrading the EC2 instance type - see [AWS EC2 instance types](https://aws.amazon.com/ec2/instance-types/) for options.
-
-### Adding new scenarios
-
-1. Prepare scenario metadata (short_code, run_name, name, descriptions, hydroclimate_id, baseline_scenario_id, sibling_group, etc.) - see the [ERD](schema/COEQWAL_SCENARIOS_DB_ERD.md) for the full `scenario` table schema
-2. Write a migration SQL script (historical archive lives under `database/scripts/sql/.archive/migrations/` if you want naming precedents). Apply it from wherever you keep it.
-3. Run the migration against `$SUPERUSER_URL` with `psql -f <path>`.
-4. Verify: `psql $DATABASE_URL -c "SELECT short_code, hydroclimate_id, sibling_group FROM scenario ORDER BY short_code;"`
-5. Run a fresh audit: `python database/audit/run_monthly_audit.py`
-
-Reference: Migration 45 (`45_baseline_and_sibling_expansion.sql`) added 48 cc50/cc95 sibling scenarios using this pattern.
-
-### Adding new scenario data (results/statistics)
-
-1. Upload the scenario's CalSim3 DSS output to S3
-2. Update the ETL path configuration to include the new scenario's S3 paths
-3. Run the ETL pipeline (supports multi-threading for bulk loads)
-4. Verify accuracy: `python etl/statistics/verify_all_sections.py --scenario <short_code>`
-5. Verify API: `python etl/statistics/verify_api.py --scenario <short_code>`
-
-### Adding new tiers (future)
-
-Tier definitions live in the `tier_definition` table (seeded from
-[`database/seed_tables/10_tier/tier_definition.csv`](../database/seed_tables/10_tier/tier_definition.csv)).
-The per-scenario tier values and per-location tier rows are project
-data, populated by the ETL pipeline. Adding a new tier requires:
-
-1. INSERT the tier definition row (update `tier_definition.csv` and re-seed, or
-   `INSERT` directly)
-2. Add a `staging/<TIER_SHORT_CODE>.csv` file under [`etl/tier_data/staging/`](../etl/tier_data/staging/) and
-   wire a loader function into
-   [`etl/tier_data/scripts/load_all_tier_results.py`](../etl/tier_data/scripts/load_all_tier_results.py)
-3. Run the loader to populate `tier_result` and `tier_location_result`. See
-   [`etl/tier_data/README.md`](../etl/tier_data/README.md) for the full workflow
-4. Update the frontend tier configuration to display the new tier
-
-### Adding tier data for new scenarios
-
-After new scenarios are loaded into the `scenario` table and their statistics ETL is complete:
-
-1. Update the tier-team staging CSVs in [`etl/tier_data/staging/`](../etl/tier_data/staging/) with
-   rows for the new scenarios
-2. Run the loader (see [`etl/tier_data/README.md`](../etl/tier_data/README.md)) to UPSERT into
-   `tier_result` and `tier_location_result`
-3. Verify with the monthly audit's per-scenario ETL coverage check
-
-### Redeploying the API
-
-If you changed the API endpoint code (anything under `api/`), including query logic, response fields, or CORS settings, you need to redeploy. Push the changes to `main` on GitHub - the CI pipeline handles the rest. See the [API README](../../api/coeqwal-api/README.md) for details and manual deployment fallback.
-
----
+7. [Running the database audit](#running-the-database-audit)
+   - [Running the monthly audit](#running-the-monthly-audit)
+   - [Report sections](#report-sections)
+   - [After a run, what to read](#after-a-run-what-to-read)
+   - [Skipping sections](#skipping-sections)
+8. [Roadmap](#roadmap)
+   - [Product-driven](#product-driven)
+   - [Data pipeline / ETL](#data-pipeline--etl)
+   - [Correctness bugs](#correctness-bugs-do-regardless)
 
 ## Getting started
-
-### Supported path
-
-Cloud9 (or VPN) -> production RDS. `DATABASE_URL` is set per "First-time setup" below. This is the only supported workflow for developer work, monthly audits, seed loads, and DDL migrations on the live DB.
-
-> **Seed CSV `is_active` is bootstrap-only for `scenario.csv`.** [`database/seed_tables/06_scenario/scenario.csv`](seed_tables/06_scenario/scenario.csv) introduces new scenario rows into the DB via [`database/scripts/sql/upsert_scenario_data.sql`](scripts/sql/upsert_scenario_data.sql). Once a row exists, flip `is_active` with [`etl/ingestion/tools/set_scenario_active.py`](../etl/ingestion/tools/set_scenario_active.py), not by editing the CSV and re-upserting. The seed CSV's `is_active` value is allowed to drift from the live `scenario` table by design. The DB is the source of truth for live publication state, exposed by the API as [`/api/scenarios`](../api/coeqwal-api/routes/scenario_endpoints.py) and cached for ETL consumers in [`etl/common/active_scenarios.py`](../etl/common/active_scenarios.py).
-
-> **Tier location membership is owned by the tier-team staging CSVs.** `tier_location` is a narrow database catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The tier teams' staging CSVs in `etl/tier_data/staging/` are the source of truth for membership. There is no seed CSV. To reconcile, run [`etl/tier_data/scripts/diff_tier_locations.py`](../etl/tier_data/scripts/diff_tier_locations.py) for the diff and [`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](../etl/tier_data/scripts/sync_tier_locations_from_staging.py) to apply (inserts active rows, soft-deletes rows that left staging). Display names are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py). The public API uses the same join map in [`/api/tiers/scenarios/{scenario_id}/locations`](../api/coeqwal-api/routes/tier_endpoints.py) for per-location tier assignments. Geometry is not served from the API. The frontend joins `location_id` to Mapbox vector tile features for map rendering (see "API conventions, geometry" in the TODO section).
 
 ### Prerequisites
 
 - AWS account access (to reach the RDS instance via Cloud9 or VPN)
 - Database credentials (ask a team member)
 
-### First-time setup (5 steps)
+### Connection strings
 
-**1. Set your connection strings** in `~/.bashrc` on Cloud9:
+Database operations use one of two connection strings stored in `~/.bashrc` on Cloud9:
+
+- **`$DATABASE_URL`:** a developer's own connection (their personal PostgreSQL login role). Used for queries, seed loads, ETL, API, audits. Each developer has their own. See "Setting up a new developer" below.
+- **`$SUPERUSER_URL`:** the RDS master (`postgres`) user. Required only for DDL migrations (`ALTER TABLE`, `CREATE INDEX`, `GRANT`). Shared among admins. Password is in AWS Secrets Manager.
+
+The **dev** database (`coeqwal-scenario-database-dev`) has its own pair, **`$DEVDB_URL`** and **`$DEVSU_URL`** (the developer and superuser connections to the dev RDS, same roles as above). If you set up your identity before the dev database existed, repeat the first-login password step against `$DEVDB_URL`.
+
+See "First-time setup" below for how to set these up.
+
+**The two URLs at a glance**
+
+| URL | Who they connect as | What it's for | Audit attribution? |
+|---|---|---|---|
+| `$DATABASE_URL` | Their own named role (e.g. `alice`) | Daily work: queries, seed loads, INSERT/UPDATE, ETL, API, running the monthly audit | Yes, attributed to you |
+| `$SUPERUSER_URL` | Shared `postgres` account (everyone uses the same password) | DDL only: `CREATE TABLE`, `ALTER`, `GRANT`, migrations (`database/sql_archive/`) | No, all writes attributed to `id=1` (system) |
+
+Practical rule: if you are writing DML, use `$DATABASE_URL` so your name lands in the audit log. If you are writing DDL, use `$SUPERUSER_URL`.
+
+### First-time setup
+
+**1. Get registered:** ask an admin to set up your personal database identity: a login role, a row in the `developer` table, `coeqwal_developer` group membership, and a per-user env file (`~/.coeqwal-env-<name>`, mode 600) seeded with a temporary password on the Cloud9 EC2. See [Setting up a new developer](#setting-up-a-new-developer) below. You need this before your writes are attributed to you by the audit trigger.
+
+**2. Activate your personal connection:** Run `become<name>` at the start of each Cloud9 session to load your personal `DATABASE_URL` from your `~/.coeqwal-env-<name>` file, then `whoami_coeqwal` to confirm which identity is active. Use `$DATABASE_URL` for queries, ETL, and inserts (audited to you) and `$SUPERUSER_URL` for DDL and migrations (audited to system).
 
 ```bash
-# Your personal developer connection. Used for everything day-to-day
-export DATABASE_URL="postgresql://your_username:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
-
-# RDS master user - only needed for DDL migrations (ALTER TABLE, CREATE/DROP INDEX, GRANT)
-# Retrieve the postgres password from AWS Secrets Manager (ask an admin or see below)
-export SUPERUSER_URL="postgresql://postgres:PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
-
-
-source ~/.bashrc
+become<name>          # load your personal DATABASE_URL for this session
+whoami_coeqwal        # confirm DATABASE_URL shows your username
 ```
 
-Alternatively, the `setup_db_connection.sh` script will prompt you for both and test each connection:
-```bash
-bash database/setup_db_connection.sh
-```
+On your first login, rotate the temporary password your admin set (see [Setting up a new developer](#setting-up-a-new-developer)).
 
-**When to use which:**
+**Finding the postgres password:** `SUPERUSER_URL` uses the shared `postgres` master password. If it is not already set in your shell, retrieve it from AWS Secrets Manager and export it:
 
-| Task | Variable |
-|---|---|
-| Queries, seed loads, inspect scripts, ETL, API | `$DATABASE_URL` |
-| DDL migrations (historical, `database/scripts/sql/.archive/migrations/`) | `$SUPERUSER_URL` |
-| Running the audit (`python database/audit/run_monthly_audit.py`) | `$DATABASE_URL`
-
-**Finding the postgres password:** If you forget the password, it is stored in AWS Secrets Manager. To find it:
 ```bash
 aws secretsmanager list-secrets --query "SecretList[*].Name" --output table
 aws secretsmanager get-secret-value --secret-id <secret-name> --query SecretString --output text
 ```
 
-**2. Get registered** - ask an admin to run `register_developer()` for you (see "Setting up a new developer" below). You need a named PostgreSQL role and a row in the `developer` table before you can write anything.
+```bash
+export SUPERUSER_URL="postgresql://postgres:PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
+```
+
+Alternatively, on the Cloud9 instance `SUPERUSER_URL` is already exported, so you can read the password straight from the environment instead of going to Secrets Manager:
+
+```bash
+echo "$SUPERUSER_URL"
+```
 
 **3. Verify you're connected as yourself:**
 
@@ -172,252 +105,273 @@ SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id,
 FROM developer d WHERE d.id = coeqwal_current_operator();"
 ```
 
-Your username should appear, with `developer_id` matching your row in the `developer` table. If `developer_id = 1` you are connected as `postgres`  and all your writes will be attributed to the system account. Please contact an admin if there are issues or we need to run corrections (not a big deal). We are working to set up SSO auth but it's still on the TODO list.
+Your username should appear, with `developer_id` matching your row in the `developer` table. If `developer_id = 1` you are connected as `postgres`  and all your writes will be attributed to the system account. Please contact an admin if there are issues. Setting up SSO auth is still on the TODO list.
 
-**4. Read the ERD** before writing anything:
+**4. (optional) Reference the ERD**:
 
 ```
-database/schema/COEQWAL_SCENARIOS_DB_ERD.md
+database/schema/ERD.md
 ```
 
-**5. Run the monthly audit:**
+**5. Activate the Python virtual environment** before running any Python script. On Cloud9, the shared venv lives at the repo root:
+
+```bash
+cd ~/environment/coeqwal-backend
+source venv/bin/activate
+```
+
+It already has the project dependencies installed (`psycopg2-binary`, `pandas`, `numpy`, `boto3`, ...). Re-run `source venv/bin/activate` in each new terminal session.
+
+**6. (optional/test) Run the monthly audit:**
 
 ```bash
 python database/audit/run_monthly_audit.py
 ```
 
-This single command produces a comprehensive report covering schema, content, verification, health, and cost - plus CSV exports for all reference tables. Output goes to `audits/monthly_YYYYMMDD_HHMMSS/`. See `database/audit/README.md` for details and options.
+This command produces a comprehensive report covering schema, content, verification, health, and cost, plus CSV exports for all reference tables. Output goes to `audits/monthly_YYYYMMDD_HHMMSS/`. See `database/audit/README.md` for details and options.
 
-Before running, confirm you are connected as yourself:
+### Turning on the Cloud9 environment to run scripts
 
-```bash
-psql $DATABASE_URL -c "SELECT session_user, coeqwal_current_operator() AS developer_id;"
+The EC2 instance `aws-cloud9-coeqwal-db-admin-48dc921ad0fd48ea93c2a2e218bd8ace` is normally turned off to save costs. If you want to use it to make database changes:
+
+1. Go to the AWS EC2 console and start the instance
+2. Open Cloud9 from the AWS console
+3. `cd ~/environment/coeqwal-backend && git pull origin main`
+4. Activate the Python virtual environment (needed for Python scripts like the audit): `source venv/bin/activate`
+5. Run your scripts
+6. Stop the instance when done
+
+For bulk operations (e.g., loading batches of scenario statistics data), the ETL scripts support multi-threading. If loads are slow, consider temporarily upgrading the EC2 instance type. See [AWS EC2 instance types](https://aws.amazon.com/ec2/instance-types/) for options.
+
+### Cloud9 development workflow
+
+The Cloud9 workflow for running scripts:
+
+```
+┌──────────────┐     git push     ┌──────────────┐     git pull     ┌──────────────┐
+│   Local Dev  │ ───────────────> │    GitHub    │ <─────────────── │   Cloud9     │
+│  (your IDE)  │                  │  (main repo) │                  │   (AWS)      │
+└──────────────┘                  └──────────────┘                  └──────┬───────┘
+                                                                          │
+                                                                          │ psql
+                                                                          v
+                                                                   ┌──────────────┐
+                                                                   │   RDS        │
+                                                                   │  (Postgres)  │
+                                                                   └──────────────┘
 ```
 
-`developer_id` should be your id (e.g. `2`), not `1`. If it returns `1` you are connected as the system user - check your `DATABASE_URL`.
+1. **Local**: Edit SQL scripts in your editor
+2. **GitHub**: Push changes to main branch
+3. **Cloud9**: Pull latest from GitHub
+4. **RDS**: Run SQL scripts via psql
 
-To inspect a specific layer's full table contents:
+### Running SQL scripts in Cloud9
 
-```bash
-psql $DATABASE_URL -f database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
-psql $DATABASE_URL -f database/scripts/sql/01_lookup/inspect_layer01.sql
-```
-
-### Sharing the Cloud9 environment across developers
-
-Cloud9 backs a single EC2 instance that all collaborators share as the OS user `ec2-user`. That means `~/.bashrc`, `~/.gitconfig`, `~/.ssh/`, and shell history are shared. AWS Cloud9 also injects `$C9_USER` into every shell, but it reflects whichever IAM principal most recently attached via the browser IDE - it does not change per concurrent collaborator and cannot be used to identify the current user. The default Cloud9 PS1 renders `$C9_USER`, which is why every collaborator sees the same name in their prompt regardless of who is actually typing.
-
-Two more things to know before onboarding:
-
-- `ec2-user` has passwordless `sudo`. Every collaborator can become root on this EC2. That is acceptable for a small trusted team but it is not a security boundary. Treat the EC2 as collectively administered.
-- `aws sts get-caller-identity` from inside the shell returns the EC2's instance profile role (`AWSCloud9SSMAccessRole/<instance-id>`), the same string for every collaborator. It does not identify the human user. The AWS CLI on this EC2 has no `iam:*` perms anyway. For AWS admin commands use CloudShell from the AWS console (see `docs/INFRASTRUCTURE.md` §9.3).
-
-To keep each developer's `DATABASE_URL` (and audit attribution) correct without overwriting each other:
-
-1. **Shared `~/.bashrc`** (set up once by the lead) defines a `become<name>` alias for each collaborator and exports the shared `SUPERUSER_URL`.
-2. **Each developer creates `~/.coeqwal-env-<their_name>`** (mode 600) with their personal `DATABASE_URL`, `COEQWAL_USER`, and a `PS1` that uses their name.
-3. **At the start of each session, the developer runs `become<their_name>`.** That sources their env file and gives them the correct prompt, `DATABASE_URL`, and identity for that shell.
-
-#### A) Shared `~/.bashrc` addition (one-time, by the lead)
-
-Append to `/home/ec2-user/.bashrc` after the existing Cloud9 default block:
+Step 1: in the bash shell (`$` prompt), pull latest and connect:
 
 ```bash
-# --- COEQWAL multi-developer setup ---
-# Each developer runs their own 'become<name>' alias at the start of a session.
-# That sources ~/.coeqwal-env-<name>, which exports their personal DATABASE_URL,
-# sets COEQWAL_USER, and overrides PS1 so the prompt matches the active identity.
-
-export SUPERUSER_URL="postgresql://postgres:PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
-
-alias becomemelijimenez='source ~/.coeqwal-env-melijimenez'
-alias becomebkallay='source ~/.coeqwal-env-bkallay'
-alias becomeelehmer='source ~/.coeqwal-env-elehmer'
-alias becomebgaley='source ~/.coeqwal-env-bgaley'
-alias becomejfantauzza='source ~/.coeqwal-env-jfantauzza'
-
-whoami_coeqwal() {
-  echo "OS user:        $(whoami)"
-  echo "Cloud9 C9_USER: ${C9_USER:-<unset>} (last IDE attacher, ignore)"
-  echo "COEQWAL_USER:   ${COEQWAL_USER:-<not set - run becomeXXXX>}"
-  if [ -n "$DATABASE_URL" ]; then
-    echo "DATABASE_URL:   $(echo "$DATABASE_URL" | sed -E 's|^(postgresql://)([^:]+):[^@]*@|\1\2:***@|')"
-  else
-    echo "DATABASE_URL:   <not set>"
-  fi
-}
-# --- end COEQWAL ---
+$ cd ~/environment/coeqwal-backend
+$ git pull origin main
+$ psql $DATABASE_URL
 ```
 
-`SUPERUSER_URL` lives in shared `~/.bashrc` because the master password is intentionally shared by all five collaborators (anyone with `sudo` could read it from any per-user file anyway). Personal Postgres passwords stay in each dev's own env file (`mode 600`) to keep them at least notionally compartmented from casual `cat ~/.bashrc` reads.
+Step 2: once inside psql (`coeqwal_scenario=>` prompt), run a script with `\i`. This read-only integrity check runs fine as your own role:
 
-#### B) Per-user env file (one-time, by each developer)
+```sql
+coeqwal_scenario=> \i database/scripts/sql/validate_data_integrity.sql
+```
 
-Each developer creates one file in their home directory on Cloud9. Example for `melijimenez`:
+Or from the bash shell, pass the script directly without entering psql:
 
 ```bash
-# ~/.coeqwal-env-melijimenez
-export COEQWAL_USER="melijimenez"
-export DATABASE_URL="postgresql://melijimenez:HER_PASSWORD@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
-export PS1='\[\033[01;32m\]'"${COEQWAL_USER}"'\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1 " (%s)" 2>/dev/null) $ '
+$ psql $DATABASE_URL -f database/scripts/sql/validate_data_integrity.sql
 ```
 
-Then `chmod 600 ~/.coeqwal-env-melijimenez` so the password is owner-readable only.
+### Database access
 
-#### C) Per-session use (every developer, every Cloud9 session)
+The database is **not publicly accessible**. Access requires:
 
-Open a Cloud9 terminal tab. The prompt initially shows whoever was the last IDE attacher (currently `elehmer`). Ignore it. Run:
+1. **Network access:** The RDS database is in a private AWS VPC
+   - Cloud9 (within AWS) has direct access
+   - Local access requires VPN or SSH tunnel through a bastion host
+
+2. **Database credentials:** Host, port, username, password
+   - Stored in environment variables or AWS Secrets Manager
+   - Never committed to the repository
+
+3. **AWS account access:** Required to use Cloud9 or retrieve credentials
+
+**Security layers:**
+- AWS VPC (network isolation)
+- Security groups (firewall rules)
+- Database authentication (username/password)
+- Application-level checks (`coeqwal_current_operator()` for writes)
+
+### Setting up a new developer
+
+Each developer gets a **personal PostgreSQL identity** (a login role) on the RDS instance, so their writes are attributed to them in the audit log. There are two parts: an admin provisions the identity, then the developer claims it on first login.
+
+**Admin: provision the identity:** Create the developer's login role, register them in the `developer` table, and add them to the `coeqwal_developer` group, which grants RW on `public` (including future tables) via the `ALTER DEFAULT PRIVILEGES` installed by [`57_install_coeqwal_developer_role.sql`](sql_archive/04_scenario/57_install_coeqwal_developer_role.sql). Set a temporary password and load it into the developer's `~/.coeqwal-env-<name>` file on the Cloud9 EC2. The `developer` row's `aws_sso_username` must match the login role name so `coeqwal_current_operator()` can resolve `session_user` to their `developer.id`. Despite the name, `aws_sso_username` currently just holds the PostgreSQL login role name. There is no SSO integration yet. The column name is forward-looking.
+
+> The helper function `register_developer()` (in `04_create_developer_users.sql`) does the role-plus-row creation in one step. `list_developers()` is a read-only listing of the `developer` table. In practice the live `developer` rows were created by direct `INSERT`. Either path produces the same result.
+
+> **The `role` column is informational:** It has no `CHECK` constraint and is not read by any authorization logic, RLS policy, or privilege check (`list_developers()` only returns it for display). Its documented values are `admin`, `user`, and `system`. Actual privileges come from the login role plus membership in `coeqwal_developer`.
+
+**Developer: first login:** In a Cloud9 terminal, replacing `<name>` with your username and choosing a new password:
 
 ```bash
-becomejfantauzza      # or your own become<name>
-whoami_coeqwal        # confirm the identity
+become<name>
+psql $DATABASE_URL -c "ALTER USER <name> WITH PASSWORD 'YOUR_NEW_PASSWORD'"
+sed -i "s|YOUR_TEMP_PASSWORD|YOUR_NEW_PASSWORD|" /home/ec2-user/.coeqwal-env-<name>
+become<name> && whoami_coeqwal && psql $DATABASE_URL -c "SELECT session_user, coeqwal_current_operator();"
 ```
 
-After that the prompt switches to your name, `DATABASE_URL` is your role, and `coeqwal_current_operator()` in Postgres will return your developer id. If you forget to run your `become<name>`, `whoami_coeqwal` will say `COEQWAL_USER: <not set - run becomeXXXX>`.
+The last command should print your username and your `developer_id`. If it shows `developer_id = 1`, you are connected as `postgres` (System). Check your `DATABASE_URL`.
+
+**Choosing a password:** Stick to characters bash does not interpret, or the commands above will fail or misbehave:
+
+```
+Allowed:  letters  digits  -  .  _  +  =
+Avoid:    !  $  `  "  '  \  ;  &  |  *  <  >  and spaces
+```
+
+**Attribution mechanics:** Every write performed via `$DATABASE_URL` resolves through `coeqwal_current_operator()`, which matches `session_user` to a `developer.id` (by `aws_sso_username`, then email, then name, then display_name). Writes performed as `postgres` (the `$SUPERUSER_URL` path) attribute to `developer.id = 1` (System). That is the right call for DDL migrations but means DML run as `postgres` loses the operator. SSO-based auth is planned but not yet in place. See [`database/VERSIONING.md`](VERSIONING.md) for the full attribution model and its gaps.
+
+### Cloud9 cheatsheet
+
+**Prompt key:**
+- `$` at the end of your prompt means you are in the **bash shell**. Use `psql`, `export`, `git`, etc.
+- `coeqwal_scenario=>` means you are **inside psql**. Only SQL and `\` meta-commands work here. Type `\q` to exit back to bash.
+
+```bash
+# Show all environment variables currently set in the session
+printenv | sort
+
+# Show only database and AWS connection variables
+printenv | grep -E "DATABASE|PG|AWS|DB_"
+
+# Show what is persisted across sessions (saved in shell profile and env files)
+grep -n "export" ~/.bashrc ~/.bash_profile ~/.profile ~/.coeqwal-env-* 2>/dev/null
+```
+
+`printenv | sort` is a quick check to confirm `DATABASE_URL` is set and see what username it contains.
+
+`printenv | grep -E "DATABASE|PG|AWS|DB_"` narrows to connection-relevant variables only: `DATABASE_URL`, any `PG*` overrides (`PGUSER`, `PGPASSWORD`, `PGHOST`), and AWS credentials.
+
+`grep -n "export" ~/.bashrc ...` shows what is saved and will reload on the next login. Your personal `DATABASE_URL` lives in `~/.coeqwal-env-<name>` (loaded by `become<name>`), and the shared `SUPERUSER_URL` lives in `~/.bashrc`. Edit those files to change a value permanently. `printenv` only shows what is active right now. Edits to env files require re-running `become<name>` (or `source`) to take effect in the current session.
+
+**Python virtual environment:** Activate it before running any Python script (the monthly audit, ETL, utilities):
+
+```bash
+cd ~/environment/coeqwal-backend
+source venv/bin/activate   # prompt gains a (venv) prefix
+which python               # confirm it points into venv/
+deactivate                 # leave the venv when done
+```
+
+Re-run `source venv/bin/activate` in each new terminal session.
 
 ### Key resources
 
 | Resource | Location |
 |----------|----------|
-| **Monthly audit (primary tool)** | `database/audit/run_monthly_audit.py` |
+| **Database audit (primary tool)** | `database/audit/run_monthly_audit.py` |
 | Audit tool docs | `database/audit/README.md` |
-| Schema documentation (ERD) | `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` |
-| Quick schema snapshot | `database/run_audit.sh` |
-| ERD vs DB comparison | `database/audit/verify_erd_against_audit.py` |
-| Reference data export (layers 00-08) | `database/scripts/export_layer_tables.py` |
-| Per-layer SQL verification | `database/scripts/sql/NN_layer/09_verify_levelNN.sql` |
+| Schema documentation (ERD) | `database/schema/ERD.md` |
 | Seed data | `database/seed_tables/<layer>/` |
-| Applied migrations | `database/scripts/sql/.archive/migrations/` |
+| Applied migrations | `database/sql_archive/` |
 | ETL accuracy verification | `etl/statistics/verify_all_sections.py` |
 | API accuracy verification | `etl/statistics/verify_api.py` |
 
 ---
 
-## Directory structure
+## Making changes to the database
 
-```
-database/
-├── audit/                          # All audit tools and documentation
-│   ├── run_monthly_audit.py        #   ★ primary tool - content, verification, health, cost
-│   ├── generate_erd_from_audit.py  #   generate draft ERD from live audit snapshot
-│   ├── verify_erd_against_audit.py #   diff ERD docs vs. live schema
-│   └── README.md                   #   audit documentation and usage guide
-├── schema/                         # ERD and schema documentation
-│   └── COEQWAL_SCENARIOS_DB_ERD.md
-├── seed_tables/                    # CSV seed data, one folder per schema layer
-│   ├── 00_versioning/
-│   ├── 01_lookup/
-│   ├── 02_network/
-│   ├── 03_entity/
-│   ├── 04_variable/
-│   ├── 05_assumptions_operations/
-│   ├── 06_scenario/
-│   ├── 07_hydroclimate/
-│   ├── 08_theme/
-│   └── 10_tier/
-├── scripts/                        # Runnable scripts (Python + SQL)
-│   ├── export_layer_tables.py      #   export layers 00-08 to CSV for content review
-│   └── sql/
-│       ├── 01_lookup/              #   lookup table verification + inspector
-│       ├── 02_network/             #   network layer verification
-│       ├── create_scenario_tables.sql            # active superuser DDL
-│       ├── create_tier_location_table.sql        # active superuser DDL
-│       ├── create_tier_location_result_table.sql # active superuser DDL
-│       ├── find_tier_locations.sql               # ad-hoc query utility
-│       ├── upsert_scenario_data.sql              # scenario-data UPSERT
-│       ├── validate_data_integrity.sql           # post-ETL integrity check
-│       └── .archive/               #   historical one-shot DDL already applied to RDS
-│           ├── 00_versioning/      #     versioning + audit-trigger DDL
-│           ├── 11_reservoir_statistics/
-│           ├── 12_mi_statistics/
-│           ├── 13_ag_statistics/
-│           ├── 14_channel_entity/
-│           ├── migrations/         #     numbered ALTER TABLE migration history
-│           └── 00_create_helper_functions.sql, 46-57_*.sql  # top-level migrations
-├── run_audit.sh                    # Quick schema-only snapshot to audits/ JSON+CSV
-├── run_local_audit.py              # Python: collects schema snapshot (used by run_audit.sh)
-├── setup_db_connection.sh          # Interactive connection string setup
-└── utils/
-    ├── versioning_utils.py
-    └── sync_aws_sso_users.py
-```
+All database work runs from Cloud9 using the connection strings described in [Getting started](#getting-started). Quick rule: **DML** (INSERT/UPDATE of data) runs against `$DATABASE_URL` so your name lands in the audit log. **DDL** (CREATE/ALTER/GRANT) runs against `$SUPERUSER_URL`. See [Connection strings](#connection-strings).
 
-**Audit output** lives at the repo root (not inside `database/`):
+### Creating a new table
 
-```
-audits/                             # gitignored - all audit outputs land here
-├── monthly_YYYYMMDD_HHMMSS/        #   monthly audit output (from run_monthly_audit.py)
-│   ├── report.md                   #     the Markdown report you read
-│   ├── schema_snapshot.json        #     full schema snapshot
-│   ├── tables_summary.csv          #     per-table row counts + audit field status
-│   ├── layer_exports/              #     full CSV exports for layers 00-08
-│   └── results_samples/            #     head/tail CSVs for layers 10+
-├── audit_YYYYMMDD_HHMMSS.json      #   quick schema snapshot (from run_audit.sh)
-├── tables_summary_YYYYMMDD_HHMMSS.csv  # quick per-table summary
-├── latest.json                     #   symlink to most recent JSON snapshot
-├── verification_reports/           #   ETL accuracy reports (Layer 2 + Layer 3)
-│   ├── {scenario_id}_layer2.json
-│   └── {scenario_id}_layer3.json
-└── validation_mismatches/          #   DSS extraction records (Layer 1)
-    ├── {scenario_id}_extract_record.json
-    └── {scenario_id}_validation_mismatches.csv
+Use [`database/CHECKLIST_TABLE_STANDARDS.md`](CHECKLIST_TABLE_STANDARDS.md) as the authoritative checklist. The essential steps, in order:
 
-exports/                            # gitignored - layer table CSV exports
-└── layer_tables/                   #   from export_layer_tables.py
-    ├── 00_versioning/
-    ├── 01_lookup/
-    ...
-    └── summary.csv
-```
+1. **Pick the layer and version family:** Decide where the table lives in the schema layer scheme (see [`schema/ERD.md`](schema/ERD.md) § Layer scheme) and which `version_family` it belongs to (see [`database/VERSIONING.md`](VERSIONING.md)). If no existing family fits, talk to the team before inventing a new one.
+2. **Include the standard audit columns:** Every COEQWAL domain table carries `created_at TIMESTAMPTZ`, `created_by INTEGER REFERENCES developer(id)`, `updated_at TIMESTAMPTZ`, `updated_by INTEGER REFERENCES developer(id)`. Most tables also carry `is_active BOOLEAN DEFAULT TRUE` for soft deletes and `short_code TEXT UNIQUE NOT NULL` if the table is reference data with a stable human-readable key. Default-quality column types: `text` (not `VARCHAR(n)`), `timestamptz` (not `TIMESTAMP`), `integer` for FKs.
+3. **Reference lookups by their key:** The key is sometimes the integer `id` (`hydrologic_region(id)`, `source(id)`, `unit(id)`), but newer tables FK on a `short_code` where that is the lookup's join target. The [CHECKLIST](CHECKLIST_TABLE_STANDARDS.md) has the full lookup list.
+4. **Attach the audit trigger** with `SELECT apply_audit_trigger_to_table('your_table_name');`. This wires up `set_audit_fields` so `created_*` and `updated_*` auto-populate from the connecting developer. See [`database/VERSIONING.md`](VERSIONING.md) § "The authoring audit" for how attribution actually resolves.
+5. **Register the table in `domain_family_map`** with the appropriate `version_family_id` and `database_level` (the two-digit layer code, e.g. `'03'`, populated on every existing row). Then add the table name to the matching layer bucket in the hard-coded `LAYERS` dict in [`database/audit/run_monthly_audit.py`](audit/run_monthly_audit.py). The audit still finds any new public table in the schema snapshot, but a table missing from `LAYERS` is labelled layer `other` in the report inventory and is skipped from the per-layer CSV exports.
+6. **Document the table in [`schema/ERD.md`](schema/ERD.md):** Add the column table, FK list, indexes, unique constraints, and a short narrative paragraph.
+7. **Verify with the audit:** Run `python database/audit/run_monthly_audit.py` and confirm the new table shows up in `tables_summary.csv` with `has_audit_trigger = True` and a sensible `created_by_values` after your first load.
+
+The CHECKLIST also covers data-population patterns (FK subqueries vs literal IDs), the standard developer-attribution sanity check (`SELECT session_user, coeqwal_current_operator();`), and the audit query you can run against an existing table to confirm it follows the conventions.
+
+### Adding new scenarios
+
+Every scenario belongs to a **hydroclimate sibling group** (`scenario_hydroclimate_sibling`): one operational configuration run under each hydroclimate (historical, cc50, cc95, ...). Each `scenario` row carries `hydroclimate_sibling`, a varchar FK to `scenario_hydroclimate_sibling.short_code` (the founding scenario's code, e.g. `s0011`). The shared display `name`, descriptions, and `baseline_group` lineage live on the group row, not on the scenario. See the [ERD](schema/ERD.md) `scenario` and `scenario_hydroclimate_sibling` sections for the full schema.
+
+1. Prepare scenario metadata: `short_code`, `run_name`, `is_active`, `hydroclimate_id`, `hydroclimate_sibling`, `scenario_version_id`, `scenario_author_id`, `model_source_id`. Insert new scenarios with `is_active = FALSE`. They stay hidden from the API until an operator flips the flag with [`etl/ingestion/tools/set_scenario_active.py`](../etl/ingestion/tools/set_scenario_active.py) after their ETL completes.
+2. If the scenario starts a **new** operational configuration, first `INSERT` its `scenario_hydroclimate_sibling` row (PK `short_code` = the founding scenario's code, plus `name`, descriptions, and `baseline_group`). The `hydroclimate_sibling` FK is enforced, so the group row must exist before any scenario can point at it. If the scenario is just another hydroclimate variant of an existing config, reuse that group's `short_code`.
+3. `INSERT` the scenario row(s) with `hydroclimate_sibling` set to the group code. This is DML, so run it against `$DATABASE_URL` with `psql -f <path>` (your name lands in the audit log). See [`database/scripts/sql/actions/3_add_additional_scenarios.sql`](scripts/sql/actions/3_add_additional_scenarios.sql) for the current pattern. The historical archive lives under [`database/sql_archive/04_scenario/`](sql_archive/04_scenario/) for naming precedents.
+4. Verify: `psql $DATABASE_URL -c "SELECT short_code, hydroclimate_id, hydroclimate_sibling FROM scenario ORDER BY short_code;"`
+5. Run a fresh audit: `python database/audit/run_monthly_audit.py`
+
+### Adding new scenario data (statistics)
+
+We load scenario's results (statistics) via the ETL. The full pipeline (pull from Drive, stage to S3, AWS Batch extraction, statistics, verification, activation) lives in [`etl/README.md`](../etl/README.md). After it completes, the new rows land in the Layer 10-12 result tables. Confirm per-scenario coverage with the monthly audit (`python database/audit/run_monthly_audit.py`).
+
+### Adding tiers and tier outcome data
+
+Tier definitions live in the `tier_definition` table, seeded from [`database/seed_tables/10_tier/tier_definition.csv`](seed_tables/10_tier/tier_definition.csv). The per-scenario `tier_result` and per-location `tier_location_result` rows are loaded by the tier ETL pipeline. The full workflow for adding a new tier or backfilling tier data for new scenarios lives in [`etl/tier_data/README.md`](../etl/tier_data/README.md). Confirm coverage with the monthly audit's per-scenario tier check.
+
+> **Tier location membership is owned by the tier-team staging CSVs:** `tier_location` is a narrow database catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). The tier teams' staging CSVs in `etl/tier_data/staging/` are the source of truth for membership. There is no seed CSV. To reconcile, run [`etl/tier_data/scripts/diff_tier_locations.py`](../etl/tier_data/scripts/diff_tier_locations.py) for the diff and [`etl/tier_data/scripts/sync_tier_locations_from_staging.py`](../etl/tier_data/scripts/sync_tier_locations_from_staging.py) to apply (inserts active rows, soft-deletes rows that left staging). Display names are resolved at query time by joining `location_id` to the entity tables in the registry at [`etl/common/tier_location_entities.py`](../etl/common/tier_location_entities.py). The public API uses the same join map in [`/api/tiers/scenarios/{scenario_short_code}/locations`](../api/coeqwal-api/routes/tier_endpoints.py) for per-location tier assignments. Geometry is not served from the API. The frontend joins `location_id` to Mapbox vector tile features created vis MTS (Mapbox Tile Service) from the COEQWAL Geopackage for map rendering (see "API conventions, geometry" in the TODO section).
+
+---
 
 ## Schema layers
 
-The database follows a layered architecture separating **foundational data** (00-08) from **derived results** (10+).
+The database follows a layered architecture separating **foundational data** (00-09) from **derived results** (10+).
 Each layer depends on all layers with a lower number.
 
-```
-00  VERSIONING       version_family, version, developer, domain_family_map
-01  LOOKUP           hydrologic_region, source, model_source, unit, spatial_scale,
-                     temporal_scale, statistic_category, statistic_type, geometry_type,
-                     network_type, network_subtype, watershed, wba
-02  NETWORK          network, network_gis, network_arc, network_node
-03  ENTITY           reservoir, compliance_station,
-                     du_agriculture_entity, du_urban_entity, du_refuge_entity
-04  VARIABLE         calsim_model_variable_type, derived_variable_type, variable_type
-                     channel_variable, reservoir_variable, inflow_variable, derived_variable
-05  ASSUMPTIONS      assumption_category, assumption_definition        ← land_use, gw_model only
-    + OPERATIONS     operation_category, operation_definition          ← TUCP, SGMA, BiOps, flows,
-                     scenario_key_assumption_link                         infrastructure, delta regs,
-                     scenario_key_operation_link                          allocation priorities
-06  SCENARIO         scenario, scenario_author, scenario_source_link
-07  HYDROCLIMATE     hydroclimate, slr
-08  THEME            theme, theme_scenario_link, theme_source_link
-09  (reserved)
-─────────────────────────────────────────────────────────────────────────
-10+ RESULTS          tier_definition, tier_result, tier_location_result
-                     reservoir_storage_monthly, reservoir_spill_monthly
-                     du_delivery_monthly, du_shortage_monthly
-                     ag/cws aggregate statistics
-```
+The full table inventory per layer:
+
+- **00 VERSIONING:** `version_family`, `version`, `developer`, `domain_family_map`
+- **01 LOOKUP:** `hydrologic_region`, `source`, `model_source`, `unit`, `spatial_scale`, `temporal_scale`, `statistic_category`, `statistic_type`, `geometry_type`, `network_type`, `network_subtype`, `network_entity_type`, `watershed`, `env_flow_season`
+- **02 NETWORK:** `network`, `network_arc`, `network_node`, `network_gis`
+- **03 ENTITY:** `reservoir`, `reservoir_entity`, `reservoir_group`, `reservoir_group_member`, `channel_entity`, `du_agriculture_entity`, `du_refuge_entity`, `du_urban_entity`, `du_urban_delivery_arc`, `du_urban_group`, `du_urban_group_member`, `mi_contractor`, `mi_contractor_delivery_arc`, `mi_contractor_group`, `mi_contractor_group_member`, `ag_aggregate_entity`, `cws_aggregate_entity`, `compliance_station`, `wba`
+- **04 VARIABLE:** `calsim_model_variable_type`, `derived_variable_type`, `variable_type`, `channel_variable`, `du_urban_variable` (planned: `variable`, `delta_variable`, `reservoir_variable`, `inflow_variable`)
+- **05 ASSUMPTIONS + OPS:** `assumption_category`, `assumption_definition` (land_use, gw_model), `operation_category`, `operation_definition` (TUCP, SGMA, BiOps, flows, infrastructure, delta regs, allocation priorities)
+- **06 SCENARIO:** `scenario`, `scenario_hydroclimate_sibling`, `scenario_author`, `scenario_key_assumption_link`, `scenario_key_operation_link`, `scenario_tag`, `scenario_tag_link`
+- **07 HYDROCLIMATE:** `hydroclimate`, `slr`
+- **08 THEME:** `theme`, `theme_scenario_link`
+- **09 TIER:** `tier_definition`, `tier_location`
+- **10 TIER RESULTS:** `tier_result`, `tier_location_result`
+- **11 PER-SCENARIO STATISTICS:** `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_monthly_percentile`, `reservoir_period_summary`, `delta_monthly`, `delta_period_summary`, `du_delivery_monthly`, `du_shortage_monthly`, `du_period_summary`, `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary`, `cws_aggregate_monthly`, `cws_aggregate_period_summary`, `ag_du_demand_monthly`, `ag_du_sw_delivery_monthly`, `ag_du_gw_pumping_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary`, `ag_aggregate_monthly`, `ag_aggregate_period_summary`, `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary`, `env_flow_channel_monthly`, `env_flow_channel_seasonal`, `env_flow_channel_period_summary`
+- **12 CROSS-SCENARIO ANALYSIS:** `sensitivity_climate`, `sensitivity_operational`
+
+`wba` lives in Layer 03 because Water Budget Areas are entities with their own groundwater variables and data, not a pure lookup. See the WBA gaps in [`database/SCHEMA_BACKLOG.md`](SCHEMA_BACKLOG.md) § 7 for the issues that follow from this placement.
 
 ## Schema implementation status
 
-| Layer | Key Tables | Seed directory | Status |
+| Layer | Key Tables | Primary seed / source location | Status |
 |-------|------------|----------------|--------|
 | 00 VERSIONING | version_family, version, developer | seed_tables/00_versioning/ | Implemented |
-| 01 LOOKUP | hydrologic_region, source, unit, network_type, watershed, wba | seed_tables/01_lookup/ | Implemented |
+| 01 LOOKUP | hydrologic_region, source, unit, network_type, watershed, env_flow_season | seed_tables/01_lookup/ | Implemented |
 | 02 NETWORK | network, network_gis, network_arc, network_node | seed_tables/02_network/ | Implemented |
-| 03 ENTITY | reservoir, compliance_station, du_* | seed_tables/03_entity/ | Implemented |
-| 04 VARIABLE | calsim_model_variable_type, derived_variable_type, variable_type, *_variable | seed_tables/04_variable/ | Implemented |
+| 03 ENTITY | reservoir, channel_entity, compliance_station, du_*, mi_contractor, ag_aggregate_entity, cws_aggregate_entity, wba | seed_tables/03_GIS/ + seed_tables/04_calsim_data/. The `*_aggregate_entity` tables are SQL-seeded under sql_archive/03_entity_layers/ (no seed CSV) | Implemented (see WBA roadmap) |
+| 04 VARIABLE | calsim_model_variable_type, derived_variable_type, variable_type, channel_variable, du_urban_variable | seed_tables/04_variable/ | Partial (see Roadmap) |
 | 05 ASSUMPTIONS + OPS | assumption_definition, operation_definition | seed_tables/05_assumptions_operations/ | Partial |
 | 06 SCENARIO | scenario, scenario_author | seed_tables/06_scenario/ | Partial |
 | 07 HYDROCLIMATE | hydroclimate, slr | seed_tables/07_hydroclimate/ | Partial |
 | 08 THEME | theme, theme_scenario_link | seed_tables/08_theme/ | Implemented |
-| 10+ RESULTS | tier_result, reservoir_storage_monthly, du_delivery_monthly | scripts/sql/1*_statistics/ | Implemented |
+| 09 TIER | tier_definition, tier_location | seed_tables/10_tier/ (legacy directory numbering, holds `tier_definition` only, `tier_location` is loaded via `etl/tier_data/`) | Implemented |
+| 10+ RESULTS | tier_result, reservoir_storage_monthly, du_delivery_monthly | loaded by ETL (`etl/statistics/`, tiers via `etl/tier_data/`) | Implemented |
+
+> **"Implemented" means the tables exist and are populated, not that every layer is free of known issues:** A backlog of schema-hygiene corrections (missing audit triggers and FKs, drifted ID sequences, duplicate indexes, stale artifacts) is batched in [`database/scripts/sql/audit_cleanup.sql`](scripts/sql/audit_cleanup.sql). See [`database/SCHEMA_BACKLOG.md`](SCHEMA_BACKLOG.md) for the full list.
 
 ---
 
 ## Layer details
+
+Deep dives on the layers with the most involved structure. Other layers are covered by the [Schema layers](#schema-layers) inventory and the [ERD](schema/ERD.md).
 
 ### 02_NETWORK: network topology
 
@@ -532,54 +486,41 @@ Every domain in the database follows the same five-piece shape. Use this pattern
 
 ```
 Layer 01 - lookups        hydrologic_region, source, model_source, unit, statistic_type, ...
-                              ▲
+                              ^
                               │ FK
 Layer 03 - entity         <domain>_entity                 (the "thing": one row per real-world object)
                           <domain>_group                   (optional; analytical groupings)
                           <domain>_group_member            (M:N membership)
                           <domain>_delivery_arc            (optional; multi-arc CalSim sums)
-                          <related>_<domain>_link          (M:N to other entities, e.g. CWS↔DU)
-                              ▲
-                              │ FK
-Layer 04 - variables      <domain>_variable                (CalSim variable names per entity)
-                              ▲
-                              │ FK (entity_id) + scenario_short_code
-Layer 10+ - statistics    <domain>_<period>                (e.g. *_monthly, *_period_summary)
+                          <related>_<domain>_link          (M:N to other entities, e.g. CWS<->DU)
+                              ^                                  ^
+                              │ FK (<entity>_id)                 │ FK (<entity>_id) + scenario_short_code
+                              │                                  │
+Layer 04 - variables      <domain>_variable          Layer 11 - statistics   <domain>_<period>
+                          (CalSim variable names              (e.g. *_monthly, *_period_summary)
+                           per entity; consumed by
+                           the ETL, NOT referenced
+                           by the statistics tables)
 ```
-
-**Required columns on every entity table** (per `database/CHECKLIST_TABLE_STANDARDS.md`):
+**Common columns on entity tables** (per `database/CHECKLIST_TABLE_STANDARDS.md`):
 - `id SERIAL PRIMARY KEY`
-- `short_code TEXT UNIQUE NOT NULL` - stable, machine-readable code used by ETL and API
-- Domain attributes (FK IDs to lookup tables - never store text values for things that have a lookup)
-- `is_active BOOLEAN NOT NULL DEFAULT TRUE` - soft delete
-- `created_at`, `created_by`, `updated_at`, `updated_by` - populated automatically by the `set_audit_fields()` trigger
+- `short_code TEXT UNIQUE NOT NULL`: stable, machine-readable code used by ETL and API
+- Domain attributes (FK IDs to lookup tables)
+- `is_active BOOLEAN NOT NULL DEFAULT TRUE`: soft delete
+- `created_at`, `created_by`, `updated_at`, `updated_by`: populated automatically by the `set_audit_fields()` trigger
 - A row in `domain_family_map` so the versioning system knows which `version_family` governs the table
 
-**The `aggregate` adjective.** Several entity tables carry the suffix `_aggregate_entity` (`ag_aggregate_entity`, `cws_aggregate_entity`). It denotes a CalSim **project-level rollup** - one row per pre-computed CalSim variable that already sums many demand units (`DEL_SWP_PMI`, `DEL_CVP_PAG_N`, `DEL_SWP_MWD`, etc.). It does NOT mean "an aggregation of community water systems". It means "this table holds the entities CalSim itself reports as aggregates rather than per-DU." The naming is accurate and stays as-is.
+**The `aggregate` adjective:** Several entity tables carry the suffix `_aggregate_entity` (`ag_aggregate_entity`, `cws_aggregate_entity`). It denotes a CalSim **project-level rollup**, i.e. one row per pre-computed CalSim variable that already sums many demand units (`DEL_SWP_PMI`, `DEL_CVP_PAG_N`, `DEL_SWP_MWD`, etc.). It does NOT mean "an aggregation of community water systems". It means "this table holds the entities CalSim itself reports as aggregates rather than per-DU."
 
-**Standard prefixes.** The COEQWAL team uses these short prefixes everywhere - in tables, columns, ETL, API routes, and frontend hooks. Pick the right prefix for any new table in this domain.
-
-| Prefix | Meaning | Example tables |
-|---|---|---|
-| `cws_` | Community water system domain (urban / M&I / drinking water) | `cws_aggregate_entity`, `cws_entity` (planned), `cws_du_link` (planned), `cws_list` (planned) |
-| `du_urban_` | Per-CalSim-DU rows in the CWS domain | `du_urban_entity`, `du_urban_variable`, `du_urban_group` |
-| `mi_` | Per-M&I-contractor rows (subset of CWS domain) | `mi_contractor`, `mi_delivery_monthly` |
-| `ag_` | Agricultural domain | `ag_aggregate_entity`, `ag_du_demand_monthly` |
-| `du_agriculture_`, `du_refuge_` | Per-DU rows in the ag and refuge domains | `du_agriculture_entity`, `du_refuge_entity` |
-| `reservoir_` | Reservoir domain | `reservoir_entity`, `reservoir_storage_monthly` |
-| `channel_` | Channel domain | `channel_entity`, `env_flow_channel_monthly` |
-
-> **Rule of thumb for new tables in the CWS domain:** use `cws_*` for things that are scoped to a community water system (e.g. PWSID-keyed entity, lookup, link). Keep `du_urban_*` for things scoped to a CalSim urban demand unit, and `mi_*` for things scoped to an M&I contractor. Do not introduce new prefixes.
-
-**Concept guide:** how urban DUs, M&I contractors, CWS aggregates, and drinking-water utility names relate in the live schema is documented in [`docs/water_user_categories.md`](../docs/water_user_categories.md) (verified against monthly audit CSVs).
+**Concept guide:** how urban DUs, M&I contractors, CWS aggregates, and drinking-water utility names relate in the live schema is documented in [`water_user_categories.md`](topic_docs/cws/water_user_categories.md) (verified against monthly audit CSVs).
 
 #### Implemented entity tables
 
 Counts are from the most recent monthly audit (run `python database/audit/run_monthly_audit.py` to refresh).
 
-| Domain | Entity table | Records | Variable / link / group tables | Statistics tables (Layer 10+) |
+| Domain | Entity table | Records | Variable / link / group tables | Statistics tables (Layer 11) |
 |---|---|---:|---|---|
-| Reservoirs | `reservoir_entity` | 92 | `reservoir_group`, `reservoir_group_member`; `reservoir_variable` (planned) | `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_monthly_percentile`, `reservoir_period_summary` |
+| Reservoirs | `reservoir_entity` | 92 | `reservoir_group`, `reservoir_group_member`, `reservoir_variable` (planned) | `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_monthly_percentile`, `reservoir_period_summary` |
 | Channels | `channel_entity` | 669 | `channel_variable` | `env_flow_channel_monthly`, `env_flow_channel_seasonal`, `env_flow_channel_period_summary` |
 | Compliance stations | `compliance_station` | 2 | - | (Delta tables, indirectly) |
 | Water budget areas | `wba` | 42 | (referenced by DU tables via `wba_id`) | - |
@@ -591,9 +532,17 @@ Counts are from the most recent monthly audit (run `python database/audit/run_mo
 | CWS project aggregates | `cws_aggregate_entity` | 6 | (delivery + shortage variables on entity row) | `cws_aggregate_monthly`, `cws_aggregate_period_summary` |
 | Reservoir (legacy) | `reservoir` | 7 | - | (predates `reservoir_entity`. Kept for FK compatibility) |
 
-**Project-level aggregates currently in the DB.** These are CalSim's pre-computed project-level totals - useful for "which DUs are SWP vs CVP" and "NOD vs SOD" questions at the **project** level. (Per-DU SWP/CVP/NOD/SOD membership lives in `du_urban_group_member` for urban DUs and is derivable from `du_agriculture_entity` for ag DUs.)
+**Project-level aggregates currently in the DB:**
 
-`cws_aggregate_entity` (6 rows) - CWS / M&I rollups:
+NOD/SOD and SWP/CVP are not yet first-class per-DU attributes. NOD/SOD lives in three places, none of them a clean per-DU classification:
+
+- As free-text `region` values on the two aggregate tables: `cws_aggregate_entity.region` (`total` / `nod` / `sod` / empty) and `ag_aggregate_entity.region` (`TOTAL` / `NOD` / `SOD`). These are rollups, not per-DU. (Note the case mismatch between the two tables 😜.)
+- Empty placeholder rows in `du_urban_group` (`nod`, `sod`) that are defined but have no members (see the group breakdown below).
+- Implicitly, via `hydrologic_region` on the DU entity tables.
+
+**NOD/SOD and hydrologic-region convention.** Where NOD/SOD is derived from `hydrologic_region`, the rule is **NOD = `SAC`** and **SOD = `SJR` + `TULARE`**. That covers only three of the seven regions in the `hydrologic_region` lookup. The remaining four (`DELTA`, `SOCAL`, `NC`, `EXPORT`) have no defined NOD/SOD assignment. Ask the Water Allocation Modeling Team what to do about those.
+
+`cws_aggregate_entity` (6 rows), CWS / M&I rollups:
 
 | short_code | label | project | region | delivery_var | shortage_var |
 |---|---|---|---|---|---|
@@ -604,7 +553,7 @@ Counts are from the most recent monthly audit (run `python database/audit/run_mo
 | `cvp_sod` | CVP South | CVP | sod | `DEL_CVP_PMI_S` | `SHORT_CVP_PMI_S` |
 | `mwd` | Metropolitan WD | MWD | - | `DEL_SWP_MWD` | `SHORT_SWP_MWD` |
 
-`ag_aggregate_entity` (9 rows) - agricultural rollups:
+`ag_aggregate_entity` (9 rows), agricultural rollups:
 
 | short_code | label | project | region | delivery_var |
 |---|---|---|---|---|
@@ -618,214 +567,60 @@ Counts are from the most recent monthly audit (run `python database/audit/run_mo
 | `nod_ag` | Total NOD AG | - | NOD | `COMPUTED` (sum) |
 | `sod_ag` | Total SOD AG | - | SOD | `COMPUTED` (sum) |
 
-`mi_contractor_group` (6 rows) - contractor-level groupings: `swp`, `cvp_nod`, `cvp_sod`, `all_mi`, `swp_mi`, `swp_ag`.
+`mi_contractor_group` (6 rows), contractor-level groupings: `swp`, `cvp_nod`, `cvp_sod`, `all_mi`, `swp_mi`, `swp_ag`.
 
-`du_urban_group` (11 rows) - per-DU groupings: `tier` (71 members - the existing focal set), `nod` (0), `sod` (0), `swp_served` (0), `cvp_served` (0), `swp_delivery_point` (0), `var_wba` (40), `var_gw_only` (3), `var_swp_contractor` (11), `var_named_locality` (15), `var_missing` (2). The 5 zero-member groups need to be backfilled.
+`du_urban_group` (11 rows), per-DU groupings: `tier` (71 members, the existing focal set), `nod` (0), `sod` (0), `swp_served` (0), `cvp_served` (0), `swp_delivery_point` (0), `var_wba` (40), `var_gw_only` (3), `var_swp_contractor` (11), `var_named_locality` (15), `var_missing` (2). The 5 zero-member groups need to be backfilled.
 
-> **No other aggregate-style tables exist.** Reservoir / channel / refuge / wba domains do not have `*_aggregate_entity` tables. Their roll-ups are computed at query / API time when needed.
+> **No other aggregate-style tables exist:** Reservoir / channel / refuge / wba domains do not have `*_aggregate_entity` tables. Their roll-ups are computed at query / API time when needed. Talk to the Water Allocation Modeling Team.
 
-#### Planned entity tables (in ERD, not yet in DB)
+#### Planned tables (not yet in DB)
 
-Per the audit's "Tables in ERD but NOT in DB" section, these are documented but not implemented:
+These are documented or partially designed but not implemented in the database. The **In ERD?** column reflects the current `database/schema/ERD.md`.
 
-| Domain | Planned table | Notes |
-|---|---|---|
-| Inflows | `inflow_entity` | Watershed inflow nodes. See ERD for column list. Variable side already partly designed (`inflow_variable.csv` seed exists). |
-| Reservoirs | `reservoir_variable` | Variable mapping for reservoirs (storage, spill, levels). Currently the ETL uses hardcoded `S_*`, `C_*_FLOOD`, `S_*LEVELxDV` patterns. Promoting these to a table would match the channel / DU pattern. |
-| Network attribution | `network_arc_attribute`, `network_node_attribute`, `network_source_attribution` | Per-network typed attribute extensions. |
-| Network connectivity | `network_physical_connectivity`, `network_computational_connectivity`, `network_operational_connectivity` | Three connectivity perspectives planned in the ERD. |
-| Network variables | `network_variable`, `variable_prefix` | Variable catalog at the network level. |
-| Watershed | `river_watershed` | Watershed↔river crosswalk. |
-| Hydroclimate | `hydroclimate_source` | Source attribution for hydroclimate scenarios. |
-| Themes | `theme_source_link` | Source attribution for themes (parallel to `scenario_source_link`). |
-| Outcomes | `outcome_category`, `outcome_statistic` | Outcome-framework tables (see `database/seed_tables/03_outcome_framework/` for partial seed). |
-| ETL provenance | `data_load_log` | Batch-level load tracking. Flagged as TODO in this README. |
+| Domain | Planned table | In ERD? | Notes |
+|---|---|---|---|
+| Inflows | `inflow_entity` | Yes | Watershed inflow nodes. See ERD for column list. Variable side already partly designed (`inflow_variable.csv` seed exists). |
+| Reservoirs | `reservoir_variable` | Yes | Variable mapping for reservoirs (storage, spill, levels). Currently the ETL uses hardcoded `S_*`, `C_*_FLOOD`, `S_*LEVELxDV` patterns. Promoting these to a table would match the channel / DU pattern. A `reservoir_variable.csv` seed exists. |
+| Watershed | `river_watershed` | No | Watershed<->river crosswalk. |
+| Hydroclimate | `hydroclimate_source` | Yes | Source attribution for hydroclimate scenarios. |
+| Themes | `theme_source_link` | No | Source attribution for themes (parallel to `scenario_source_link`). A `theme_source_link.csv` seed exists. |
+| Outcomes | `outcome_category`, `outcome_measure` | Partial (`outcome_category` only) | Outcome-framework tables. Partial seed in `database/seed_tables/03_outcome_framework/` (`outcome_category.csv`, `outcome_measure_samples.csv`). |
 
-New tables coming from the spring-2026 CWS data delivery (see plan in `database/seed_tables/03_entity/cws/` once staged):
+**Forward-looking design note:** The tables and columns below are what the team plans to add to support the Community Water Systems dataset. **None of it exists in the database yet:** The source spreadsheets are staged in [`data/reference/cws/`](../data/reference/cws/) (the spring-2026 delivery: `Master list of systems served for sw units updated april 13.xlsx`, `Updated HHS allocations May 6 2026.xlsx`, `Updated Master crosswalk SW DUs M&I May7 2026.xlsx`, plus `Final_M&Idemandunits_withlatlongs.xlsx`). See [`data/reference/cws/README.md`](../data/reference/cws/README.md). No seed CSVs have been converted into `seed_tables/` yet. Check with the CWS team to make sure this is the latest before proceeding.
+
+**"CWS" vs "DU":**
+
+- **CWS = Community Water System:** a drinking-water utility, identified by a **PWSID** (Public Water System ID). Think "City of Anderson water department."
+- **DU = Demand Unit:** CalSim's modeling abstraction. The model does not know about individual utilities. It lumps water demand into ~145 urban demand units (`du_urban_entity`).
+
+Today the database only has the CalSim DUs (classified as "urban" demand units). The four planned tables plus the new `du_urban_entity` columns add the real-world water-system layer and relate it to the model's DUs:
 
 | Planned table | Layer | Purpose |
 |---|---|---|
 | `cws_entity` | 03_entity | One row per California Public Water System (PWSID): `pwsid`, `system_name`, `pop_served`, `system_lat`, `system_lon`, `hydrologic_region_id`, `source_id`. ~476 systems from the 2026-04-13 master list. |
-| `cws_du_link` | 03_entity | M:N junction `cws_entity` ↔ `du_urban_entity` (a system may serve multiple DUs and a DU may be served by multiple systems). One row per system-DU pair (~586 rows). |
-| `cws_list` | 01_lookup | List/registry catalog (e.g. `coeqwal_master_du`, `coeqwal_focal_sw_du`, `calsim_urban_du`, `tier_matrix`, `hhs_allocation`). One row per named list. |
-| `cws_list_du_member` | 03_entity | M:N junction `cws_list` ↔ `du_urban_entity`. Indicates which list(s) each DU belongs to (replaces / generalizes `du_urban_group_member` for CWS lists. See *Project list vs CalSim list* below). |
+| `cws_du_link` | 03_entity | M:N junction `cws_entity` <-> `du_urban_entity` (a system may serve multiple DUs and a DU may be served by multiple systems). One row per system-DU pair (~586 rows). |
+| `cws_list` | 03_entity | List/registry catalog (e.g. `coeqwal_master_du`, `coeqwal_focal_sw_du`, `calsim_urban_du`, `tier_matrix`, `hhs_allocation`). One row per named list. A grouping/registry entity (referenced only by `cws_list_du_member`), so it sits in Layer 03 next to the DUs it groups, matching `du_urban_group`, not a broadly shared Layer 01 lookup. |
+| `cws_list_du_member` | 03_entity | M:N junction `cws_list` <-> `du_urban_entity`: which list(s) each DU belongs to. Carries optional per-membership values (e.g. an `allocation_taf` column for the `hhs_allocation` list). See the open questions below. |
 
-Plus new attribute columns on `du_urban_entity`: `is_sw_du`, `is_gw_du`, `largest_system_centroid_lat`, `largest_system_centroid_lon`, `calsim_centroid_lat`, `calsim_centroid_lon`, `hhs_allocation_taf`. And an updated delivery-variable crosswalk merged into `du_urban_variable`.
+Plus an updated delivery-variable crosswalk merged into `du_urban_variable`.
 
-#### Project list vs CalSim list (community water systems)
+The CWS delivery also carries per-DU attributes from the master / crosswalk spreadsheets. In this plan they are deliberately **not** added as new wide columns on `du_urban_entity`:
 
-The COEQWAL project's CWS focus list (delivered in `data/reference/cws/`) is **not** identical to the full CalSim urban DU list now in the database. The team needs to know which list any given DU belongs to. Numbers below are from the audit + reference CSVs as of 2026-05-11:
+- **SW / GW flags:** reuse the existing `du_urban_entity.gw` / `.sw` columns (pending their `VARCHAR` -> `BOOLEAN` migration). Do not add `is_sw_du` / `is_gw_du`, which would duplicate them.
+- **HHS allocation (TAF):** store on the `cws_list_du_member` row for the `hhs_allocation` list (an `allocation_taf` column), not on the entity. Additional allocation programs then become new lists rather than new entity columns.
+- **Centroids:** geographic, so they belong in the GIS layer.
 
-| List | Source | DUs |
-|---|---|---:|
-| `calsim_urban_du` | `du_urban_entity` (current DB) | 145 |
-| `coeqwal_master_du` | `Final_M&Idemandunits_withlatlongs.xlsx` | 124 |
-| `coeqwal_focal_sw_du` | SW DUs in master list | 75 |
-| `coeqwal_focal_gw_du` | GW DUs in master list | 83 |
-| `hhs_allocation` | `Updated HHS allocations May 6 2026.xlsx` | 76 |
-| `mi_delivery_crosswalk` | `Updated Master crosswalk SW DUs M&I May7 2026.xlsx` | 75 |
-| `tier_matrix` | `du_urban_group` row `tier` | 71 |
+**Open questions to resolve before staging:**
 
-**Set differences:**
-- **In project master AND CalSim DB:** 117 DUs (the overlap)
-- **In project master but NOT in CalSim DB (7):** `ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION` - these need to be **added to `du_urban_entity`** (or reconciled to existing rows under different `du_id`s).
-- **In CalSim DB but NOT in project master (28):** `26N_NA`, `26N_NU513`, `50_PA1`, `50_PA2`, `60N_PA`, `60N_PU1`, `60S_PA`, `60S_PU`, `61_PA`, `61_PU1`, `61_PU2`, `63_PA`, `63_PR`, `64_PA`, `64_PU`, `65_PA`, `65_PU`, `70_PA`, `70_PU1`, `71_PA`, `72_PU1`, `72_PU2`, `90_PU5`, `CCWDI`, `CLLPT`, `CWD`, `ESB415`, `PINES` - flagged as **out-of-scope for the CWS focus** but kept for full CalSim compatibility.
-- **In HHS list but NOT in project master (1):** `ESB355` - needs reconciliation (typo? `ESB315`/`ESB415`?).
-- **HHS vs M&I crosswalk:** identical except `ESB355`.
+- **List-registry consolidation:** `cws_list` / `cws_list_du_member` and the existing `du_urban_group` / `du_urban_group_member` are structurally identical (a named set of DUs plus M:N membership). Pick one mechanism rather than shipping both. Either generalize `du_urban_group` into a single DU-list registry and fold the CWS lists into it, or keep `du_urban_group` for the ETL `var_*` classification groups and use `cws_list` only for project lists with clearly disjoint purposes. Either way requires a migration and an ETL update, and the 5 empty `du_urban_group` rows (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) should be resolved in the same pass.
+- **`gw` / `sw` boolean migration:** (roadmap R1 in `data/reference/cws/README.md`) must land before those columns can serve as the SW/GW flags.
+- **GIS home for centroids:** Decide which GIS table holds `largest_system_centroid_*`, and confirm `calsim_centroid_*` is computed from `geom` rather than stored.
+- **Data reconciliation:** 7 master DUs missing from CalSim (`ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION`) and the `ESB355` entry in the HHS list must be reconciled before load.
+- **`cws_du_link`:** Confirm the system-to-DU mapping (~586 pairs) against `Systems_served_by_DU_systemname_updated.xlsx` / the master list.
 
-The project master and the M&I crosswalk also carry **per-DU attributes that are not in CalSim** (`is_sw_du`, `is_gw_du`, two centroid pairs, HHS allocation in TAF). Those become columns on `du_urban_entity`.
+**Related downstream work:** merging in the M&I delivery-variable crosswalk means changing the `du_urban_variable` list, or creating a new list for the statistic etl and re-running `etl/statistics/du_urban/run_all.py` for each active scenario. You can run it only for the `du_urban` ETL module or other module that you create.
 
-**How to record list membership in the DB.** Two compatible patterns:
-
-1. **Lookup + junction (recommended for the CWS list registry):**
-
-   ```
-   01_lookup/cws_list                        - id, short_code, label, description, source_id, is_active, audit fields
-   03_entity/cws_list_du_member              - cws_list_id (FK), du_id (FK to du_urban_entity), is_active, audit fields
-                                              UNIQUE (cws_list_id, du_id)
-   ```
-
-   This generalizes nicely if PWSID-level lists arrive later (`cws_list_system_member` keyed by `cws_entity_id`).
-
-2. **Existing `du_urban_group` pattern:** the four new lists could just be added as new rows in `du_urban_group` and populated in `du_urban_group_member`. That is the lowest-friction path because the table already exists, but the prefix `du_urban_group` reads as "groupings of DUs" rather than "registries of CWS lists" - fine if the team accepts that. Note that 5 of the 11 existing `du_urban_group` rows (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) currently have **0 members** and need to be backfilled either way.
-
-> **Recommendation.** Use option 1 (`cws_list` + `cws_list_du_member`) for the new project lists, and backfill the legacy `du_urban_group` rows in the same migration. Both tables are queryable, both reference `du_urban_entity` by `du_id`, and the registry is explicit about its purpose.
-
-#### How the database represents lists, subsets, and group memberships
-
-Eight distinct patterns are in use today. New work should pick the one that best fits the cardinality and stability of the relationship.
-
-| # | Pattern | Where it's used | Populated? |
-|---|---|---|---|
-| 1 | **`X_group` + `X_group_member` junction** (M:N) | `reservoir_group` (4 rows) + `reservoir_group_member` (24 rows) - `major`, `cvp`, `swp`, `tier`. `du_urban_group` (11 rows) + `du_urban_group_member` (142 rows) - `tier`, `nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`, `var_*`. `mi_contractor_group` (6 rows) + `mi_contractor_group_member` (60 rows) - `swp`, `cvp_nod`, `cvp_sod`, `all_mi`, `swp_mi`, `swp_ag`. | Reservoirs: fully populated. Urban DUs: 6 of 11 groups populated (5 geographic/project groups `nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point` are **empty**). MI: 3 of 6 groups populated (`swp` 30, `swp_mi` 23, `swp_ag` 7); `cvp_nod`, `cvp_sod` empty because no CVP contractors are loaded yet; `all_mi` empty (missed seed step). |
-| 2 | **Aggregate-entity table** (one row per pre-summed CalSim variable) | `cws_aggregate_entity` (6 rows: `swp_total`, `swp_nod`, `swp_sod`, `cvp_nod`, `cvp_sod`, `mwd`). `ag_aggregate_entity` (9 rows: SWP/CVP PAG NOD/SOD, settlement, exchange, two computed totals). | Yes. **No** companion junction table mapping individual DUs to the aggregate they roll up into - that mapping is implicit in CalSim variable naming today. |
-| 3 | **Lookup table + FK column on entity** | `hydrologic_region` (7 rows) → `*_entity.hydrologic_region_id`; `source` (12) → `*.source_id`; `model_source` (1) → `*.model_source_id`; `network_type` (21) / `network_subtype` (28) → `network.type_id`/`subtype_ids[]`; `geometry_type`, `network_entity_type`, `statistic_category`, `statistic_type`, `temporal_scale`, `spatial_scale`, `unit`, `variable_type`, `derived_variable_type`, `calsim_model_variable_type`, `assumption_category`, `operation_category`, `env_flow_season`, `slr`. | Yes - this is the most common subset pattern in the DB. |
-| 4 | **Tag + tag-link junction** (M:N) | `scenario_tag` (10 rows) + `scenario_tag_link` (109 rows) - free-form labels like `baseline`, `dcr`, `dcp`. | Yes. |
-| 5 | **Direct M:N link table** (named relation, no separate "list" lookup) | `theme_scenario_link` (79 rows), `scenario_key_assumption_link` (73), `scenario_key_operation_link` (514), `scenario_hydroclimate_sibling` (27). | Yes. |
-| 6 | **Boolean / categorical column on entity** | `channel_entity.has_mif`, `.has_eflows`, `.has_tiers`, `.has_gis_data`, `.is_main`, `.boundary_condition`, `.channel_class`. `du_urban_entity.gw`/`.sw`. `du_agriculture_entity.gw`/`.sw`/`.cs3_type`/`.bank`/`.agency`/`.provider`. `du_refuge_entity.refuge_or_wildlife_area`/`.managed_by`/`.provider`. `reservoir_entity.is_main`/`.has_tiers`/`.operational_purpose`. | Yes - denormalized. Fast to query, but multi-membership / re-grouping is awkward. |
-| 7 | **Free-text "registry" column** (no FK) | `du_urban_entity.community_agency`, `du_agriculture_entity.agency`/`.provider`/`.river_reach`/`.demand_unit`, `du_refuge_entity.refuge_or_wildlife_area`/`.managed_by`. `network_arc.river` (459 distinct strings). | Yes but un-normalized. Good candidates for promotion to lookup tables. |
-| 8 | **Multi-arc sub-entity** (one entity expanded into N arcs) | `du_urban_delivery_arc` (57 rows for 145 DUs), `mi_contractor_delivery_arc` (39 rows for 30 contractors). | Yes. Used when one entity sums multiple CalSim arcs. |
-
-**Where this maps to recurring user questions:**
-
-| User question | Pattern | Today |
-|---|---|---|
-| "Which reservoirs are SWP / CVP / major?" | (1) | Live: `reservoir_group` |
-| "Which urban DUs are NOD/SOD/SWP-served?" | (1) | Designed but **5 groups empty** in `du_urban_group_member` |
-| "Which contractors are SWP M&I vs CVP NOD?" | (1) | Live: `mi_contractor_group` (CVP groups empty because no CVP contractors loaded) |
-| "What's the SWP total CWS delivery this scenario?" | (2) | Live: `cws_aggregate_entity.swp_total` |
-| "Which ag DUs roll up into SWP PAG South?" | (2) needs companion (1) | **Implicit only** - no junction. Either add `ag_du_aggregate_member` (1) or compute from CalSim variable names at ETL time. |
-| "Which urban DUs are in the COEQWAL focal SW list?" | (1) - proposed `cws_list` | **Planned** (`cws_list` + `cws_list_du_member`). |
-| "Which channels have MIF?" | (6) | Live: `channel_entity.has_mif` flag. |
-| "Which ag DUs are in the SAC region?" | (3) | Live: `du_agriculture_entity.hydrologic_region_id`. |
-| "Which ag DUs are 'project-ag'?" | (6) | Implicit via `du_agriculture_entity.cs3_type` (`PA`/`SA`/`NA`/`PR`) - not normalized. |
-| "Which ag DUs are CVP vs SWP service area?" | (6) | Implicit via `du_agriculture_entity.provider` text - not normalized. |
-
-#### Per-sector aggregates: tying the DB to the website's Data Explorer
-
-The site's `apps/main/app/features/scenarioExplorer/dataExplorer/` already has the entity-level toggle wired up for CWS (project totals / contractors / DUs) and AG (project totals / DUs / region filter - coded but currently suppressed in the UI). Endpoints used today:
-
-- CWS: `/api/statistics/cws-aggregates`, `/api/statistics/mi-contractors`, `/api/statistics/demand-units`
-- AG: `/api/statistics/ag-aggregates`, `/api/statistics/ag-demand-units`
-- Refuge: `/api/statistics/refuge-demand-units`
-- Reservoir: `/api/statistics/reservoirs`, `/api/statistics/scenarios/{id}/storage-monthly?group=major`
-- Channels: `/api/statistics/channels`
-- Delta: `/api/statistics/scenarios/{id}/delta/monthly`
-
-**What we can already report per-sector without any new DB work:**
-
-| Sector | Available aggregates | API + table |
-|---|---|---|
-| CWS - SWP total | `swp_total` | `/cws-aggregates` → `cws_aggregate_entity` |
-| CWS - SWP NOD vs SOD | `swp_nod`, `swp_sod` | same |
-| CWS - CVP NOD vs SOD | `cvp_nod`, `cvp_sod` | same |
-| CWS - MWD | `mwd` | same |
-| CWS - per-contractor (30 - all SWP today) | M&I contractor table | `/mi-contractors` → `mi_contractor` |
-| CWS - contractor groups (3 populated, 3 empty) | Populated: `swp` (30), `swp_mi` (23), `swp_ag` (7). Empty: `cvp_nod`, `cvp_sod` (no CVP contractors loaded yet), `all_mi` (missed seed step - should equal SWP-MI + CVP-MI when CVP contractors land). | `mi_contractor_group(_member)` - needs API exposure |
-| Ag - SWP NOD/SOD/total | `swp_pag`, `swp_pag_n`, `swp_pag_s` | `/ag-aggregates` |
-| Ag - CVP NOD/SOD | `cvp_pag_n`, `cvp_pag_s` | same |
-| Ag - Settlement / Exchange | `cvp_psc_n`, `cvp_pex_s` | same |
-| Ag - total NOD / SOD | `nod_ag`, `sod_ag` (computed) | same |
-| Reservoir - major / CVP / SWP / tier | 4 groups, fully populated | `?group=...` parameter on storage endpoints |
-
-**Gaps to fill so the data explorer can show richer per-sector views (do this in three small tranches):**
-
-1. **Backfill the 5 empty `du_urban_group_member` rows.** Once `nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point` have members, the website can offer "Show me only NOD CWS DUs" / "Show me only SWP-served CWS DUs" without any API change beyond exposing `du_urban_group_member` membership on the existing `/demand-units` endpoint.
-2. **Add ag DU groups to mirror the urban side.** Create `du_agriculture_group` + `du_agriculture_group_member` with at least: `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-region groups (`sac`, `sjr`, `tulare`). All can be populated by a one-time SQL pass over the `cs3_type`/`provider`/`hydrologic_region_id` columns already on `du_agriculture_entity`. This unlocks the suppressed Ag region filter in the UI without any frontend change.
-3. **Add `cws_list` + `cws_list_du_member` (already in the planned-tables section).** Lets the data explorer expose the focal-SW-DU list, the HHS-allocation list, and the M&I crosswalk list as filters.
-
-After steps 1-3, the data explorer can offer per-sector aggregate views (NOD/SOD, SWP/CVP, M&I/Ag, Project/Contractor/DU, region) directly from the DB without any client-side hardcoding. No new statistics tables are needed - the existing `du_*_monthly` tables can be filtered by membership.
-
-#### Per-layer verification
-
-`database/scripts/sql/02_network/09_verify_level02.sql` is the template. A `09_verify_level03.sql` is on the TODO list (see "Verification gaps" below) and should cover, at minimum:
-1. Every entity table has the standard audit columns and the `set_audit_fields` trigger applied.
-2. Every entity row resolves to a real `developer.id` for `created_by` / `updated_by`.
-3. Every `<domain>_variable.<entity>_id` and every `<domain>_group_member.<entity>_id` resolves to a real entity row (no orphans).
-4. Every `<domain>_entity.short_code` is unique and non-empty.
-5. Row counts match the expected targets in `database/audit/run_monthly_audit.py` (these targets live in the `EXPECTED_COUNTS` dict).
-
----
-
-## Best practices checklist
-
-### Database best practices
-
-- [ ] **Referential Integrity** - All FKs reference valid PKs
-  - Implemented: All tables use explicit FK constraints with `REFERENCES` clause
-  - Audit: `validate_data_integrity.sql` checks for orphaned records
-
-- [ ] **Constraints** - CHECK constraints for valid ranges, NOT NULL for required fields
-  - Implemented: `water_month BETWEEN 1 AND 12`, `tier_level BETWEEN 1 AND 4`
-  - Implemented: `is_active`, `short_code` are NOT NULL where required
-
-- [x] **Audit Fields** - `created_at`, `created_by`, `updated_at`, `updated_by` on all tables
-  - Implemented: All domain tables include audit fields
-  - Implemented: `set_audit_fields()` trigger auto-populates all audit fields on INSERT/UPDATE
-  - Implemented: `coeqwal_current_operator()` function identifies current user via SSO
-  - Implemented: `audit_log` table tracks all INSERT/UPDATE/DELETE with old/new values
-
-- [ ] **Indexes** - On FKs, frequently queried columns, unique constraints
-  - Implemented: All `short_code` columns have unique indexes
-  - Implemented: FK columns indexed for join performance
-
-- [ ] **Naming Conventions** - Consistent table/column naming
-  - Implemented: `snake_case` for all tables and columns
-  - Implemented: `*_id` suffix for FK columns, `*_entity` suffix for entity tables
-
-### Data integrity best practices
-
-- [ ] **Completeness** - No unexpected NULLs, all required records present
-  - Audit: Check record counts match expected (see layer audits)
-  - Audit: Check required fields are populated
-
-- [ ] **Consistency** - References match across tables, no orphans
-  - Audit: `validate_data_integrity.sql` orphan checks
-  - Audit: Version family consistency (each family has exactly 1 active version)
-
-- [ ] **Validity** - Values within expected ranges/enums
-  - Implemented: CHECK constraints enforce ranges
-  - Audit: Validate `water_month`, `tier_level`, `location_type`
-
-- [ ] **Accuracy** - Data matches source of truth
-  - Audit: Compare database records against seed CSVs
-  - Audit: ERD verification against actual schema
-
-### API best practices
-
-- [ ] **Validation** - Reject invalid data at API layer before DB
-  - Implemented: FastAPI Pydantic models validate input
-  - Implemented: Type checking and range validation
-
-- [ ] **Error Handling** - Clear error messages, proper HTTP codes
-  - Implemented: Structured error responses with details
-
-- [ ] **Consistency** - Same response format across endpoints
-  - Implemented: Standard response envelope with `data`, `meta`, `errors`
-
----
-
-## Layer 00_VERSIONING schema
+### 00_VERSIONING: audit trails and version control
 
 The versioning layer provides audit trails and version control for all other layers.
 
@@ -837,14 +632,14 @@ The versioning layer provides audit trails and version control for all other lay
 │ email (UNIQUE)                  │       │ short_code (UNIQUE, NOT NULL)   │
 │ display_name (NOT NULL)         │       │ label                           │
 │ role                            │       │ description                     │
-│ aws_sso_username (UNIQUE)       │◄──────│ created_by (FK)                 │
+│ aws_sso_username (UNIQUE)       │<──────│ created_by (FK)                 │
 │ is_bootstrap                    │       │ updated_by (FK)                 │
 │ sync_source                     │       │ is_active                       │
 │ is_active                       │       │ created_at, updated_at          │
 │ created_at, updated_at          │       └─────────────────────────────────┘
 └─────────────────────────────────┘                      │
-         ▲                                               │ 1:N
-         │                                               ▼
+         ^                                               │ 1:N
+         │                                               v
          │                           ┌─────────────────────────────────┐
          │                           │          version                │
          │                           ├─────────────────────────────────┤
@@ -858,7 +653,7 @@ The versioning layer provides audit trails and version control for all other lay
                                      └─────────────────────────────────┘
                                                          │
                                                          │ 1:N
-                                                         ▼
+                                                         v
                                      ┌─────────────────────────────────┐
                                      │     domain_family_map           │
                                      ├─────────────────────────────────┤
@@ -871,9 +666,9 @@ The versioning layer provides audit trails and version control for all other lay
 ```
 
 **Key functions:**
-- `coeqwal_current_operator()` - Returns developer.id for audit fields (SSO-aware)
-- `get_active_version(family)` - Returns active version.id for a family
-- `set_audit_fields()` - Trigger function for automatic audit field population
+- `coeqwal_current_operator()`: Returns developer.id for audit fields (SSO-aware)
+- `get_active_version(family)`: Returns active version.id for a family
+- `set_audit_fields()`: Trigger function for automatic audit field population
 
 **Expected records:**
 - `developer`: 2+ (system + admin bootstrap users + SSO users)
@@ -881,624 +676,66 @@ The versioning layer provides audit trails and version control for all other lay
 - `version`: 13 (one active version per family)
 - `domain_family_map`: 11+ (maps tables to version families)
 
----
-
-## Automatic audit triggers
-
-All tables have automatic audit field population via database triggers.
-
-### How it works
-
-The full chain from a SQL write to recorded attribution:
-
-```
-INSERT/UPDATE on any table
-  BEFORE trigger fires: set_audit_fields()
-    calls: coeqwal_current_operator()
-      reads: session_user  (PostgreSQL session variable - set at connection time)
-                           (NOT current_user: this function is SECURITY DEFINER,
-                            so current_user always returns the function owner)
-      looks up: developer.id  (4 strategies, in order - see below)
-      returns: INTEGER (the developer.id)
-    writes:
-      NEW.created_by / NEW.updated_by = developer.id
-      NEW.created_at / NEW.updated_at = NOW()
-```
-
-Field behavior by event:
+**Audit field behavior:** The `set_audit_fields()` trigger fires `BEFORE INSERT OR UPDATE` on every table with audit columns and fills the four audit fields from `coeqwal_current_operator()`. See [`VERSIONING.md`](VERSIONING.md) for the full operator-resolution chain.
 
 | Event | `created_at` | `created_by` | `updated_at` | `updated_by` |
 |-------|-------------|-------------|-------------|-------------|
 | INSERT | `NOW()` | `coeqwal_current_operator()` | `NOW()` | `coeqwal_current_operator()` |
 | UPDATE | preserved (from original INSERT) | preserved | `NOW()` | `coeqwal_current_operator()` |
 
-### Developer detection (it's strict)
+---
 
-`coeqwal_current_operator()` resolves `current_user` to a `developer.id` using these strategies in order:
+## Audit and verification
 
-| Priority | Field checked | Match condition |
-|----------|--------------|-----------------|
-| 0 (special) | - | If `current_user = 'postgres'`, return id=1 (`system@coeqwal.local`) |
-| 1 | `aws_sso_username` | Exact match: `aws_sso_username = current_user` |
-| 2 | `email` | Substring match: `email LIKE '%current_user%'` |
-| 3 | `name` | Case-insensitive substring: `LOWER(name) LIKE '%current_user%'` |
-| 4 | `display_name` | Case-insensitive substring: `LOWER(display_name) LIKE '%current_user%'` |
-| fail | - | `RAISE EXCEPTION` - unregistered users cannot write to the database |
+The database has three audit concerns. **`run_monthly_audit.py` is the only tool you need to run by hand:** One command rolls up all three concerns, adds database health and cost checks, and writes everything to a single `audits/monthly_<ts>/report.md`.
 
-**Important:** Each developer must have their own database user registered in the `developer` table before making changes.
+| # | Concern | Question | Covered by `run_monthly_audit.py` | When |
+|---|---------|----------|-----------------------------------|------|
+| A | **Schema structure** | Is the DB shaped the way we documented it? | §1 | After any schema change |
+| B | **Reference data content** | Do layers 00-08 contain the correct records? | §1c-1e | When adding or editing seed data |
+| C | **ETL statistics accuracy** | Are the computed results (layers 10+) correct? | §2c, which reads back the Layer 2/3 verification reports produced during each ETL run | After each ETL run |
 
-### Connecting as yourself (getting correct attribution)
-
-The trigger reads `session_user` - the PostgreSQL role you authenticated as at connection time. **You cannot change `session_user` with a session variable.** If your `DATABASE_URL` uses `postgres` as the username, every write is attributed to developer id=1 (system account), regardless of who you are.
-
-**Check who you are** - two ways to do this:
-
-From the bash shell (`$` prompt):
-
-```bash
-$ psql $DATABASE_URL -c "SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id;"
-```
-
-From inside a psql session (`coeqwal_scenario=>` prompt):
-
-```sql
-coeqwal_scenario=> SELECT
-    session_user                    AS db_role,
-    coeqwal_current_operator()      AS developer_id,
-    d.email,
-    d.display_name
-FROM developer d
-WHERE d.id = coeqwal_current_operator();
-```
-
-If `developer_id` is `1` you are connected as `postgres` and writes will be attributed to the system account. If the function raises an exception your username is not registered in the `developer` table.
-
-**To get correct attribution, connect as your own registered database user:**
-
-```bash
-# Update the username in your connection string
-export DATABASE_URL="postgresql://username:password@rds-endpoint:5432/coeqwal_scenario"
-psql $DATABASE_URL
-```
-
-Strategy 2 (`email LIKE '%username%'`) will match `username@domain.ext`, so no `aws_sso_username` is needed as long as your email is registered.
-
-**Correcting mis-attributed rows (trigger-disable required):**
-
-The trigger preserves `created_by` on every UPDATE (`NEW.created_by := OLD.created_by`), so a normal `UPDATE ... SET created_by = 2` will be silently overwritten back to the old value. To correct attribution you must disable user-defined triggers as postgres.
-
-Step 1 - open a new psql session connected as postgres (bash shell `$` prompt):
-
-```bash
-$ psql "postgresql://postgres:password@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
-```
-
-Step 2 - once inside psql (`coeqwal_scenario=#` prompt), paste this whole block:
-
-```sql
-BEGIN;
-ALTER TABLE some_table DISABLE TRIGGER USER;
-UPDATE some_table SET created_by = 2, updated_by = 2 WHERE created_by = 1;
-ALTER TABLE some_table ENABLE TRIGGER USER;
-COMMIT;
-```
-
-> **Note:** Use `DISABLE TRIGGER USER`, not `DISABLE TRIGGER ALL`. On AWS RDS the postgres user cannot disable system FK triggers (`RI_ConstraintTrigger_*`), only user-defined ones. `USER` disables only the audit trigger, which is all you need.
-
-**Verifying attribution after corrections:**
-
-Run this to confirm all versioning tables are correctly attributed. The result shows each developer's share of rows per table with a percentage breakdown:
-
-```sql
-SELECT
-    t.tbl,
-    d.display_name      AS attributed_to,
-    d.id                AS developer_id,
-    COUNT(*)            AS rows,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY t.tbl), 1) AS pct
-FROM (
-    SELECT 'version_family'    AS tbl, created_by FROM version_family
-    UNION ALL
-    SELECT 'version',                  created_by FROM version
-    UNION ALL
-    SELECT 'domain_family_map',        created_by FROM domain_family_map
-    UNION ALL
-    SELECT 'developer',                created_by FROM developer
-) t
-LEFT JOIN developer d ON d.id = t.created_by
-GROUP BY t.tbl, d.id, d.display_name
-ORDER BY t.tbl, developer_id;
-```
-
-Expected result after corrections: all rows show your own name/id, except the `developer` table which correctly has one row for the system account (id=1) and one for you.
-
-### Database access
-
-The database is **not publicly accessible**. Access requires:
-
-1. **Network access** - The RDS database is in a private AWS VPC
-   - Cloud9 (within AWS) has direct access
-   - Local access requires VPN or SSH tunnel through a bastion host
-
-2. **Database credentials** - Host, port, username, password
-   - Stored in environment variables or AWS Secrets Manager
-   - Never committed to the repository
-
-3. **AWS account access** - Required to use Cloud9 or retrieve credentials
-
-#### Database quick start
-
-Get connection details and store the connection string in shell profile:
-
-```
-export DATABASE_URL="postgresql://username:password@your-rds-endpoint:5432/coeqwal_scenario"
-psql $DATABASE_URL
-```
-
-**Access summary:**
-
-| User | Network Access | Query (SELECT) | Modify (INSERT/UPDATE/DELETE) |
-|------|----------------|----------------|-------------------------------|
-| Berkeley GIF team | Cloud9 | ✅ | ✅ (as registered developer) |
-| Registered developer | Cloud9 or VPN | ✅ | ✅ (as themselves) |
-| postgres superuser | Cloud9 or VPN | ✅ | ✅ (as system account) |
-| Unregistered db user | Cloud9 or VPN | ✅ | ❌ (blocked by trigger) |
-| General public | ❌ None | ❌ | ❌ |
-
-**Security layers:**
-- AWS VPC (network isolation)
-- Security groups (firewall rules)  
-- Database authentication (username/password)
-- Application-level checks (`coeqwal_current_operator()` for writes)
-
-### Setting up a new developer
-
-Run as postgres (`$SUPERUSER_URL`). Two SQL steps, then one EC2 step.
-
-```sql
--- (1) Create the PostgreSQL login role + register them in the developer table.
-SELECT register_developer(
-    'jdoe',                    -- database username (matches their EC2 alias)
-    'jdoe@berkeley.edu',       -- email
-    'Jane Doe',                -- display name
-    'secure_password_here',    -- temp password (they ALTER USER on first login)
-    'developer'                -- role: 'admin' or 'developer'
-);
-
--- (2) Add them to the coeqwal_developer group so they inherit RW on every
---     table, including future ones (via the ALTER DEFAULT PRIVILEGES installed
---     by 57_install_coeqwal_developer_role.sql). Skip this and they will hit
---     "permission denied" on tables created after their registration.
-GRANT coeqwal_developer TO jdoe;
-
--- Verify
-SELECT * FROM list_developers();
-```
-
-> **About the `role` value:** `'admin'` vs `'developer'` is a **placeholder
-> label only**. The `developer.role` column has no `CHECK` constraint and is
-> not read by any SQL function, RLS policy, or application code today. Actual
-> privileges come from three independent things:
->
-> 1. The PostgreSQL `LOGIN` role created by `register_developer()`
-> 2. Membership in `coeqwal_developer` (granted in step 2 above) -- this is
->    what gates table reads and writes
-> 3. Knowledge of the shared `postgres` password used by `$SUPERUSER_URL`
->    for DDL / migrations (exported globally on the Cloud9 EC2)
->
-> So setting `role='admin'` today is purely informational. Use it to flag
-> developers who are intended to be power users, on the assumption that a
-> future role-based check (e.g. `WHERE role='admin'`) may be added. Switching
-> between `'admin'` and `'developer'` changes no current behavior.
-
-Then on the Cloud9 EC2, as `ec2-user`, create their personal env file so the
-`becomejdoe` alias (already wired into `/home/ec2-user/.bashrc`) points at
-their connection string:
-
-```bash
-cat > /home/ec2-user/.coeqwal-env-jdoe <<'COEQWAL_ENV_EOF'
-export COEQWAL_USER="jdoe"
-export DATABASE_URL="postgresql://jdoe:secure_password_here@coeqwal-scenario-database-1.clai4yqcyzxh.us-west-2.rds.amazonaws.com:5432/coeqwal_scenario"
-export PS1='\[\033[01;32m\]'"${COEQWAL_USER}"'\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1 " (%s)" 2>/dev/null) $ '
-COEQWAL_ENV_EOF
-chmod 600 /home/ec2-user/.coeqwal-env-jdoe
-```
-
-On first login they should rotate the temp password and update their env file:
-
-```bash
-becomejdoe
-psql $DATABASE_URL -c "ALTER USER jdoe WITH PASSWORD 'their_new_password';"
-# then edit /home/ec2-user/.coeqwal-env-jdoe to use the new password
-
-# Sanity check: their writes will land in audit logs as their developer.id, not 1
-psql $DATABASE_URL -c "SELECT session_user AS db_role, coeqwal_current_operator() AS developer_id;"
-```
-
-**Important:** Unregistered users cannot make database changes. The
-`coeqwal_current_operator()` function will raise an exception. Users who are
-registered (step 1) but not granted `coeqwal_developer` (step 2) will be able
-to connect but will hit "permission denied" on tables created after their
-registration.
-
-### Cloud9 cheatsheet
-
-**Prompt key:**
-- `$` at the end of your prompt to you are in the **bash shell** - use `psql`, `export`, `git`, etc.
-- `coeqwal_scenario=>` to you are **inside psql** - only SQL and `\` meta-commands work here. Type `\q` to exit back to bash.
-
-```bash
-# Show all environment variables currently set in the session
-printenv | sort
-
-# Show only database and AWS connection variables
-printenv | grep -E "DATABASE|PG|AWS|DB_"
-
-# Show what is persisted across sessions (saved in shell profile files)
-grep -n "export" ~/.bashrc ~/.bash_profile ~/.profile 2>/dev/null
-```
-
-`printenv | sort` is the quick sanity check - use it to confirm `DATABASE_URL` is set and see what username it contains.
-
-`printenv | grep -E "DATABASE|PG|AWS|DB_"` narrows to connection-relevant variables only: `DATABASE_URL`, any `PG*` overrides (`PGUSER`, `PGPASSWORD`, `PGHOST`), and AWS credentials.
-
-`grep -n "export" ~/.bashrc ...` shows what is **saved** and will reload on the next login. This is the file to edit when you want to change `DATABASE_URL` permanently. `printenv` only shows what is active right now - edits to profile files require `source ~/.bashrc` to take effect in the current session.
-
-### audit_log table
-
-All changes are recorded in the `audit_log` table:
-
-```sql
--- Recent changes
-SELECT table_name, operation, changed_fields, changed_by, changed_at
-FROM audit_log
-ORDER BY changed_at DESC
-LIMIT 20;
-
--- Changes to a specific table
-SELECT * FROM audit_log WHERE table_name = 'scenario';
-
--- Changes by a specific user
-SELECT * FROM audit_log WHERE changed_by = 2;
-```
-
-### Scripts
-
-Scrips in `scripts/sql/00_versioning/` run in numbered order:
-
-**`00_create_versioning_tables.sql`**
-Creates the four foundational versioning tables: `developer`, `version_family`, `version`,
-and `domain_family_map`. This must run before any other script in this folder - the audit
-trigger functions and all domain tables have FK references to `developer`.
-Handles the chicken-and-egg bootstrap: inserts the system user (id=1) before adding the
-self-referencing FK constraints on `developer.created_by` and `updated_by`.
-
-**`01_create_audit_trigger_function.sql`**
-Defines `set_audit_fields()` - the BEFORE INSERT/UPDATE trigger function that auto-populates
-`created_at/by` and `updated_at/by` on every write. This is the core of the audit system.
-Also contains the note on why `session_user` must be used instead of `current_user` (SECURITY DEFINER).
-
-**`02_create_audit_log_table.sql`**
-Creates the `audit_log` table and its indexes. This table stores a full row-level change history
-(old values, new values, changed fields, who, when, from where) as JSONB. The table exists in the
-database but is **not active by default** - see `03_` below for how to enable it.
-
-**`03_apply_audit_triggers.sql`**
-Does two things:
-1. Applies the `set_audit_fields()` trigger to every table that has audit columns - **this runs
-   automatically and is always active.**
-2. Defines `log_audit_changes()` and the helper `apply_audit_log_trigger_to_table(p_table_name)`,
-   which write full change records into `audit_log`. This is **opt-in per table** - it is not
-   applied by default because the write volume on bulk data tables would be large. Enable it on
-   sensitive tables with:
-   ```sql
-   SELECT apply_audit_log_trigger_to_table('scenario');
-   SELECT apply_audit_log_trigger_to_table('version');
-   ```
-
-**`04_create_developer_users.sql`**
-Defines `register_developer()` and `list_developers()` - utility functions for creating a new
-PostgreSQL role, granting it the right permissions, and registering it in the `developer` table
-in one step. See the "Setting up a new developer" section above.
-
-**`05_populate_domain_family_map.sql`**
-Seeds the `domain_family_map` table, which maps every database table to a `version_family`. This
-is what the versioning system uses to know which version governs each table's data. Contains the
-full current set of 70 mappings. The seed CSV (`seed_tables/00_versioning/domain_family_map.csv`)
-is out of date (34 rows) and should not be used for loading - see the seed README for how to
-regenerate it from the live database.
-
-**`06_load_seed_data.sql`**
-Loads bootstrap data into `developer`, `version_family`, and `version`. Uses `ON CONFLICT DO
-NOTHING` throughout, so it is safe to re-run on an existing database. `domain_family_map` is
-intentionally skipped here - it is populated by `05_populate_domain_family_map.sql`.
-Note: `developer` data is inline (not `\copy`) because the seed CSV is missing the `name` and
-`aws_sso_username` columns.
-
-**`09_verify_level00.sql`**
-Verification queries for the versioning layer - checks that triggers are applied, audit fields
-are populated, and domain_family_map entries are present. Run this after any schema changes to
-the versioning layer to confirm everything is wired up correctly.
-
-### Verification queries
-
-```sql
--- Check triggers are applied
-SELECT trigger_name, event_object_table 
-FROM information_schema.triggers 
-WHERE trigger_name LIKE 'audit_%';
-
--- Check audit log entries
-SELECT table_name, operation, COUNT(*) 
-FROM audit_log 
-GROUP BY table_name, operation;
-
--- Enable audit logging on sensitive tables (run once)
-SELECT apply_audit_log_trigger_to_table('developer');
-SELECT apply_audit_log_trigger_to_table('version');
-SELECT apply_audit_log_trigger_to_table('version_family');
-SELECT apply_audit_log_trigger_to_table('scenario');
-```
+See [Running the database audit](#running-the-database-audit) for how to run it and read the report. The standalone scripts behind each concern exist for one-off use but are not required for a normal audit. They are listed under [Standalone tools](#standalone-tools).
 
 ---
 
-## Audit and verification strategy
+### Standalone tools
 
-The database has four distinct audit concerns. Each uses different tools and answers a different question. They are **not redundant** - run them together for full confidence.
+The monthly audit is the primary audit tool and is self-contained. These scripts can also be run on their own. Many of them were developed to check the database while it was in its early development stages, and are still around and helpful when needed.
 
-| # | Concern | Question | Tools | When |
-|---|---------|----------|-------|------|
-| A | **Schema structure** | Is the DB shaped the way we documented it? | `run_audit.sh` + `verify_erd_against_audit.py` + `09_verify_level*.sql` | After any schema change |
-| B | **Reference data content** | Do layers 00-08 contain the correct records? | `export_layer_tables.py` + manual diff vs `seed_tables/` | When adding or editing seed data |
-| C | **ETL statistics accuracy** | Are the computed results (layers 10+) correct? | `verify_all_sections.py` (Layer 2) + `verify_api.py` (Layer 3) | After each ETL run |
+| Tool | Command | In monthly audit? | Use case |
+|------|---------|-------------------|----------|
+| `run_audit.sh` | `bash database/run_audit.sh` | No (the audit takes its own snapshot) | Quick schema-only snapshot (`audits/*.json` + `*.csv`) |
+| `verify_erd_against_audit.py` | `python database/audit/verify_erd_against_audit.py database/schema/ERD.md audits/latest.json` | Imported, but **has drifted** (see [SCHEMA_BACKLOG](SCHEMA_BACKLOG.md) § 10) | ERD docs vs live schema diff |
+| `generate_erd_from_audit.py` | `python database/audit/generate_erd_from_audit.py audits/latest.json database/schema/GENERATED_ERD.md` | No | Draft an ERD from a live snapshot |
+| `export_layer_tables.py` | `python database/scripts/export_layer_tables.py [--layer NN]` | No (the audit has its own export) | Standalone CSV export of layers 00-08 |
+| `validate_data_integrity.sql` | `psql $DATABASE_URL -f database/scripts/sql/validate_data_integrity.sql` | No | FK orphan checks |
+| `verify_all_sections.py` | `python etl/statistics/verify_all_sections.py --scenario {id}` | Reports read back (§2c) | ETL accuracy, CSV -> DB (Layer 2) |
+| `verify_api.py` | `python etl/statistics/verify_api.py --scenario {id}` | Reports read back (§2c) | API accuracy, DB -> API (Layer 3) |
+| `db_audit_lambda.py` | scheduled (see [Lambda S3 archive](#lambda-s3-archive)) | Separate (Lambda) | Schema snapshot to `s3://coeqwal-model-run/database_audits/` |
 
----
+### Lambda S3 archive
 
-### A. Schema structure audit
-
-Answers: "Does the live database schema match the documented ERD? Are all triggers, indexes, and FK rules in place?"
-
-**Step 1 - Capture a live schema snapshot** (run from repo root as postgres for full table visibility):
-
-```bash
-$ bash database/run_audit.sh
-# Writes: audits/audit_YYYYMMDD_HHMMSS.json
-#         audits/tables_summary_YYYYMMDD_HHMMSS.csv
-#         audits/latest.json  (symlink)
-```
-
-**Step 2 - Compare snapshot against ERD documentation:**
+`coeqwal-database-audit` is a bare-bones AWS Lambda that snapshots the schema to `s3://coeqwal-model-run/database_audits/` as dated JSON. It is manually invoked, there is no schedule, and `run_monthly_audit.py` produces a more complete audit. The Lambda is useful mainly for pulling a historical dated snapshot from S3.
 
 ```bash
-$ python database/audit/verify_erd_against_audit.py \
-    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
-    audits/latest.json
+# Invoke manually
+aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
 
-# Add --verbose to see full column lists for mismatched tables
-$ python database/audit/verify_erd_against_audit.py \
-    database/schema/COEQWAL_SCENARIOS_DB_ERD.md \
-    audits/latest.json --verbose
+# Pull archived snapshots
+aws s3 ls s3://coeqwal-model-run/database_audits/ --recursive | tail -5
+aws s3 cp s3://coeqwal-model-run/database_audits/audit_YYYYMMDD_HHMMSS.json ./audits/
 ```
 
-**Step 3 - Run per-layer structural verification** (checks triggers, FKs, naming conventions, row counts):
-
-```bash
-$ psql $DATABASE_URL -f database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
-$ psql $DATABASE_URL -f database/scripts/sql/01_lookup/09_verify_level01.sql
-$ psql $DATABASE_URL -f database/scripts/sql/02_network/09_verify_level02.sql
-```
-
-Each `09_verify_level*.sql` script checks:
-
-| # | Check |
-|---|-------|
-| 1 | Audit columns present (`created_at/by`, `updated_at/by`) |
-| 2 | Audit triggers applied (`audit_fields_*`) |
-| 3 | Version family mapping registered in `domain_family_map` |
-| 4 | FK relationships to `developer` and lookup tables |
-| 5 | Row counts match expected |
-| 6 | Key columns exist and are correctly typed |
-| 7 | No orphaned FK references |
-| 8 | Naming conventions (snake_case, no plural table names) |
-| 9 | Layer-specific checks (e.g. network connectivity, subtype hierarchy) |
-
-**Layer audit modus operandi:**
-
-1. Run verification script - identify issues
-2. Write a migration script for each issue found (precedents in `database/scripts/sql/.archive/migrations/`)
-3. Execute migration, re-run verification
-4. Delete the migration script after it has run (keep repo clean)
-5. Update ERD documentation if the schema changed
-
-**If the ERD is out of sync**, regenerate a draft from the live snapshot and merge manually:
-
-```bash
-$ python database/audit/generate_erd_from_audit.py \
-    audits/latest.json \
-    database/schema/GENERATED_ERD.md
-```
-
-See [audit/README.md](audit/README.md) for more detail on these tools.
-
----
-
-### B. Reference data content audit (layers 00-08)
-
-Answers: "Do the foundational tables contain the correct records - the right scenarios, entities, variables, assumptions, and themes?"
-
-This is distinct from schema structure: the tables can have all the right columns and triggers while still containing incorrect, missing, or stale data. The seed CSVs in `database/seed_tables/` are the source of truth for layers 00-08, with one carve-out: `scenario.is_active` is owned by the live DB after a row's initial bootstrap (see the "Seed CSV `is_active` is bootstrap-only" callout in [Getting started](#getting-started)).
-
-**Export all layer 00-08 tables to CSV:**
-
-```bash
-# Export all layers (writes to exports/layer_tables/)
-$ python database/scripts/export_layer_tables.py
-
-# Export a single layer
-$ python database/scripts/export_layer_tables.py --layer 06
-
-# Custom output directory
-$ python database/scripts/export_layer_tables.py --output-dir /tmp/review
-```
-
-Output structure:
-
-```
-exports/layer_tables/
-├── 00_versioning/   developer.csv, version_family.csv, version.csv, domain_family_map.csv
-├── 01_lookup/       hydrologic_region.csv, source.csv, unit.csv, ...
-├── 02_network/      network.csv, network_arc.csv, network_node.csv, network_gis.csv, ...
-├── 03_entity/       reservoir.csv, du_urban_entity.csv, mi_contractor.csv, ...
-├── 04_variable/     calsim_model_variable_type.csv, channel_variable.csv, ...
-├── 05_assumptions_operations/  assumption_definition.csv, operation_definition.csv, ...
-├── 06_scenario/     scenario.csv, scenario_author.csv, scenario_source_link.csv, ...
-├── 07_hydroclimate/ hydroclimate.csv, slr.csv
-├── 08_theme/        theme.csv, theme_scenario_link.csv, theme_source_link.csv
-└── summary.csv      row counts for all tables
-```
-
-**Compare exported CSVs against seed files:**
-
-The exported CSVs and seed CSVs won't be identical column-for-column (the live DB has audit columns. Seeds may not), but the domain columns should match. Spot-check key fields:
-
-```bash
-# Quick row-count comparison using the summary
-cat exports/layer_tables/summary.csv
-
-# Diff a specific table (ignore audit columns)
-diff \
-  <(cut -d, -f1-5 exports/layer_tables/06_scenario/scenario.csv) \
-  <(cut -d, -f1-5 database/seed_tables/06_scenario/scenario.csv)
-```
-
-> **Note on `domain_family_map`:** The seed CSV at `database/seed_tables/00_versioning/domain_family_map.csv` is out of date (34 rows). The live database has 70+ entries populated by `05_populate_domain_family_map.sql`. Use the export as the current source of truth for this table.
-
-**SQL data integrity checks** (run in psql after ETL runs):
-
-```sql
--- Orphaned statistics (no matching scenario)
-SELECT 'reservoir_period_summary' AS table_name, COUNT(*) AS orphans
-FROM reservoir_period_summary rps
-WHERE NOT EXISTS (SELECT 1 FROM scenario s WHERE s.id = rps.scenario_id)
-UNION ALL
-SELECT 'mi_contractor_period_summary', COUNT(*)
-FROM mi_contractor_period_summary mps
-WHERE NOT EXISTS (SELECT 1 FROM scenario s WHERE s.id = mps.scenario_id)
-UNION ALL
-SELECT 'ag_aggregate_period_summary', COUNT(*)
-FROM ag_aggregate_period_summary aps
-WHERE NOT EXISTS (SELECT 1 FROM scenario s WHERE s.id = aps.scenario_id);
-
--- Statistics coverage per scenario
-SELECT s.id, s.short_code,
-       (SELECT COUNT(*) FROM reservoir_period_summary  WHERE scenario_id = s.id) AS reservoir,
-       (SELECT COUNT(*) FROM mi_contractor_period_summary WHERE scenario_id = s.id) AS mi,
-       (SELECT COUNT(*) FROM ag_aggregate_period_summary  WHERE scenario_id = s.id) AS ag
-FROM scenario s ORDER BY s.id;
-
--- NULL audit fields (should all be 0)
-SELECT 'reservoir_entity missing created_by' AS check,
-       COUNT(*) FILTER (WHERE created_by IS NULL) AS count
-FROM reservoir_entity
-UNION ALL
-SELECT 'du_urban_entity missing created_by',
-       COUNT(*) FILTER (WHERE created_by IS NULL)
-FROM du_urban_entity;
-
--- Invalid water_month values (should be 0)
-SELECT COUNT(*) AS invalid_water_months
-FROM du_delivery_monthly
-WHERE water_month NOT BETWEEN 1 AND 12;
-```
-
----
-
-### C. ETL statistics accuracy verification (layers 10+)
-
-Answers: "Do the computed statistics in the results tables match the source DSS/CSV data?"
-
-This is fully documented in `etl/README.md`. Summary:
-
-```
-DSS Files ──► S3 CSVs ──► PostgreSQL ──► JSON API ──► Frontend
-  Layer 1      Layer 2      Layer 2b       Layer 3     Layer 4
-```
-
-```bash
-# Layer 2: verify CSV to DB statistics accuracy (one scenario)
-$ python etl/statistics/verify_all_sections.py --scenario s0020
-
-# Layer 2: all scenarios, write JSON reports
-$ python etl/statistics/verify_all_sections.py --all-scenarios \
-    --report-dir audits/verification_reports
-
-# Layer 3: verify DB to API accuracy
-$ python etl/statistics/verify_api.py --scenario s0020
-```
-
-Reports land in `audits/verification_reports/{scenario_id}_layer2.json` and `_layer3.json`.
-
----
-
-### D. Public verification status (not built)
-
-Layer 2 and Layer 3 write per-scenario JSON reports to `audits/verification_reports/{scenario_id}_layer2.json` and `_layer3.json`. Today these reports are read only on the developer console. There is no public API endpoint and no `/verification` page on the frontend.
-
-A `/verification` page on the frontend, backed by an `/api/verification/status` endpoint, is on the roadmap, see [`docs/statistics_roadmap.md` V7](../docs/statistics_roadmap.md#v7-layer-4-smoke-test-verification-page-renders).
-
----
-
-### Audit schedule
-
-| Cadence | What to run | Command |
-|---------|------------|---------|
-| **Monthly** | Full audit (schema, content, health, cost) | `python database/audit/run_monthly_audit.py` |
-| **After any schema change** | Per-layer SQL structural checks | `psql $DATABASE_URL -f database/scripts/sql/NN_layer/09_verify_levelNN.sql` |
-| **After any seed data edit** | Reference data content export | `python database/scripts/export_layer_tables.py --layer NN` |
-| **After every ETL run** | ETL statistics accuracy (Layer 2) | `python etl/statistics/verify_all_sections.py --scenario {id}` |
-| **After every ETL run** | API accuracy (Layer 3) | `python etl/statistics/verify_api.py --scenario {id}` |
-| **Automated (Lambda)** | Schema snapshot to S3 | CloudWatch scheduled event to `coeqwal-database-audit` Lambda |
-
-### Audit script inventory
-
-All runnable scripts related to audit, verification, and data quality:
-
-| Script | Location | Purpose | Output |
-|--------|----------|---------|--------|
-| `run_monthly_audit.py` | `database/audit/` | **Primary audit** - schema, content, ERD comparison, health, cost | `audits/monthly_YYYYMMDD_HHMMSS/` |
-| `run_audit.sh` | `database/` | Quick schema-only snapshot | `audits/*.json`, `audits/*.csv` |
-| `verify_erd_against_audit.py` | `database/audit/` | Diff ERD docs vs. live schema snapshot | stdout / exit code |
-| `generate_erd_from_audit.py` | `database/audit/` | Generate draft ERD from live snapshot | `database/schema/GENERATED_ERD.md` |
-| `export_layer_tables.py` | `database/scripts/` | Export layers 00-08 reference tables to CSV | `exports/layer_tables/` |
-| `09_verify_level*.sql` | `database/scripts/sql/NN_layer/` | Per-layer structural invariants | psql output |
-| `validate_data_integrity.sql` | `database/scripts/sql/` | FK orphan checks | psql output |
-| `verify_all_sections.py` | `etl/statistics/` | ETL accuracy: CSV to DB (Layer 2) | `audits/verification_reports/*_layer2.json` |
-| `verify_api.py` | `etl/statistics/` | API accuracy: DB to API (Layer 3) | `audits/verification_reports/*_layer3.json` |
-| `db_audit_lambda.py` | `database/utils/db_audit_lambda/` | Schema snapshot (Lambda / scheduled) | `s3://coeqwal-model-run/database_audits/` |
-
-### Audit output locations
-
-| Output | Location | Gitignored? |
-|--------|----------|-------------|
-| **Monthly audit folder** | `audits/monthly_YYYYMMDD_HHMMSS/` | Yes |
-| - Markdown report | `audits/monthly_.../report.md` | Yes |
-| - Schema snapshot | `audits/monthly_.../schema_snapshot.json` | Yes |
-| - Table summary | `audits/monthly_.../tables_summary.csv` | Yes |
-| - Layer CSV exports | `audits/monthly_.../layer_exports/` | Yes |
-| - Results samples | `audits/monthly_.../results_samples/` | Yes |
-| Quick schema snapshot | `audits/audit_YYYYMMDD_HHMMSS.json` | Yes |
-| Lambda snapshots (archived) | `s3://coeqwal-model-run/database_audits/` | S3 |
-| Layer table exports (standalone) | `exports/layer_tables/` | Yes |
-| ETL verification reports | `audits/verification_reports/{scenario}_layer2.json` | Yes |
-| API verification reports | `audits/verification_reports/{scenario}_layer3.json` | Yes |
+See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md) for setup details.
 
 ---
 
 ## Running the database audit
 
-The primary audit tool is `run_monthly_audit.py`. It produces a comprehensive report covering schema structure, ERD comparison, data content, ETL coverage, database health, and cost - all in one run.
+The primary audit tool is `run_monthly_audit.py`. It produces a comprehensive report covering schema structure, ERD comparison, data content, ETL coverage, database health, and cost.
 
-See [audit/README.md](audit/README.md) for full documentation of all audit tools.
+The standalone scripts are listed under [Standalone tools](#standalone-tools). See [audit/README.md](audit/README.md) for full documentation of all audit tools.
 
 ### Running the monthly audit
 
@@ -1510,27 +747,10 @@ source venv/bin/activate
 python database/audit/run_monthly_audit.py
 ```
 
-Running as your own user works for most tables. To get full visibility (including tables where your role lacks SELECT), use the superuser connection:
+To get full visibility (including tables where your role lacks SELECT), use the superuser connection:
 
 ```bash
 DATABASE_URL=$SUPERUSER_URL python database/audit/run_monthly_audit.py
-```
-
-### What it produces
-
-A timestamped folder under `audits/`:
-
-```
-audits/monthly_YYYYMMDD_HHMMSS/
-├── report.md                       Markdown report (the main thing to read)
-├── schema_snapshot.json            Full schema snapshot
-├── tables_summary.csv              Per-table row counts + audit field status
-├── layer_exports/                  Full CSV exports for layers 00-08
-│   ├── 00_versioning/
-│   └── ...through 08_theme/
-└── results_samples/                First 10 + last 10 rows for layers 10+
-    ├── reservoir_storage_monthly_head.csv
-    └── ...
 ```
 
 ### Report sections
@@ -1538,7 +758,7 @@ audits/monthly_YYYYMMDD_HHMMSS/
 | # | Section | What it checks |
 |---|---------|----------------|
 | 1a | Table inventory | Every table: name, layer, columns, rows, size |
-| 1b | Schema vs. ERD | Tables/columns in DB but not ERD, and vice versa |
+| 1b | Schema vs. ERD | Tables/columns in DB but not ERD, and vice versa. **Currently skipped**, the ERD comparator is broken (see [SCHEMA_BACKLOG](SCHEMA_BACKLOG.md) § 10) |
 | 1c | Row counts vs. expected | Layers 00-08 counts against known targets |
 | 1d | Reference data downloads | Full CSV export of layers 00-08 |
 | 1e | Results data samples | Head/tail CSV samples of layers 10+ |
@@ -1549,6 +769,16 @@ audits/monthly_YYYYMMDD_HHMMSS/
 | 4a-c | Database cost | Table sizes, unused indexes, total storage |
 | 5 | Audit summary | PASS/FAIL for each check, with details on failures |
 
+### After a run, what to read
+
+Read top-down, and stop at the first level that gives you your answer:
+
+| Level | Where | What it tells you |
+|---|---|---|
+| **Console** | terminal | Ends with a `MONTHLY AUDIT COMPLETE` block naming the output directory and the report filename. |
+| **Digest** | `audits/monthly_<ts>/report.md` | The top-level summary: row counts, schema-vs-ERD diff, audit-field checks, ETL coverage, health, and cost. The §5 audit summary flags any PASS/FAIL. |
+| **Forensic** | `audits/monthly_<ts>/layer_exports/`, `results_samples/` | Open the per-layer CSVs only when the report flags a section. |
+
 ### Skipping sections
 
 ```bash
@@ -1558,261 +788,156 @@ python database/audit/run_monthly_audit.py --skip health --skip cost
 
 Valid sections: `content`, `verification`, `health`, `cost`.
 
-### Other audit tools
-
-These standalone tools can be run independently for quick one-off checks, but the monthly audit already calls them internally:
-
-| Tool | Command | Use case |
-|------|---------|----------|
-| Schema-only snapshot | `bash database/run_audit.sh` | Quick schema check without health/cost/content |
-| ERD comparison | `python database/audit/verify_erd_against_audit.py <erd.md> <snapshot.json>` | After editing ERD docs |
-| Generate draft ERD | `python database/audit/generate_erd_from_audit.py <snapshot.json> <output.md>` | When ERD needs updating |
-| Layer CSV export | `python database/scripts/export_layer_tables.py --layer NN` | Quick spot-check of seed data |
-
-### Lambda S3 archive
-
-An AWS Lambda (`coeqwal-database-audit`) runs on a CloudWatch schedule and archives schema snapshots to S3 independently of anyone being logged in. **Do not decommission it** - its S3 output provides a dated archive.
-
-```bash
-# Invoke manually
-aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 response.json
-
-# Pull archived snapshots
-aws s3 ls s3://coeqwal-model-run/database_audits/ --recursive | tail -5
-aws s3 cp s3://coeqwal-model-run/database_audits/audit_YYYYMMDD_HHMMSS.json ./audits/
-```
-
-See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md) for Lambda setup details.
-
 ---
 
-## Data validation tools
+## Roadmap
 
-### ETL validation
 
-CSV validation script for verifying ETL output:
+Schema-level hygiene and audit-derived corrections live in [`SCHEMA_BACKLOG.md`](SCHEMA_BACKLOG.md).
 
-```bash
-python etl/batch-container/python-code/validate_csvs.py \
-  --ref data/reference/expected.csv \
-  --file data/output/actual.csv \
-  --out-json validation_summary.json \
-  --out-csv validation_mismatches.csv \
-  --show-unmatched
-```
+### Product-driven
 
-### Database constraints
+#### Community water systems (CWS) dataset
 
-Tables include CHECK constraints for data validation:
-- `water_month` must be 1-12
-- `tier_level` must be 1-4 (enforced: `CHECK (tier_level BETWEEN 1 AND 4 OR tier_level IS NULL)`)
-- `location_type` must be valid enum value
+The design, planned tables, design decisions, and open questions can be found in [Planned tables (not yet in DB)](#planned-tables-not-yet-in-db) above.
 
----
+#### Demand-unit group membership (Data Explorer filters)
 
-## Development setup
+The `du_*_group` / `du_*_group_member` tables let the website filter demand units by membership (NOD/SOD, SWP/CVP served, hydrologic region). The plumbing is partly in place but not enough to query, for example, for tier outcome and data in depth statistics.
 
-### Cloud9 development workflow
+- **Backfill the 5 empty `du_urban_group` rows** (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) so the existing per-DU SWP/CVP/NOD/SOD memberships are queryable. (These are the per-DU relatives of the project-level rollups in `cws_aggregate_entity`.)
+- **Add the ag-side counterpart:** There is no `du_agriculture_group` / `du_agriculture_group_member` yet. Create them and populate `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-hydrologic-region groups (`sac`, `sjr`, `tulare`), all derivable from the existing `cs3_type` / `provider` / `hydrologic_region_id` columns on `du_agriculture_entity`.
+- **Expose these in the API:** Surfacing group membership in the `/demand-units` (urban) and `/ag-demand-units` responses is one join in the existing FastAPI route handlers, and lets the website filter without per-group queries.
 
-The recommended workflow for database changes:
+#### Scenario assumptions and operations metadata, align DB with the website
 
-```
-┌──────────────┐     git push     ┌──────────────┐     git pull     ┌──────────────┐
-│   Local Dev  │ ───────────────► │    GitHub    │ ◄─────────────── │   Cloud9     │
-│  (your IDE)  │                  │  (main repo) │                  │   (AWS)      │
-└──────────────┘                  └──────────────┘                  └──────┬───────┘
-                                                                          │
-                                                                          │ psql
-                                                                          ▼
-                                                                   ┌──────────────┐
-                                                                   │   RDS        │
-                                                                   │  (Postgres)  │
-                                                                   └──────────────┘
-```
+Metadata for operations, assumptions, and themes was hardcoded on the frontend while those values were still settling with the team (the same was true of other data, such as scenario and tier definitions). Because the definitions kept shifting, the final database entries and API shapes were never locked in. So today the per-scenario operation/assumption icons live in `apps/main/app/features/scenarios/components/shared/opsIcons.tsx` (`ICON_REGISTRY` + `SCENARIO_ICONS`), and that file is the current source of truth for which icons belong to which scenario. The database already has the parallel tables and fields (`operation_definition`, `assumption_definition`, `scenario_key_operation_link`, `scenario_key_assumption_link`), but its rows need to catch up to the frontend before the website can read them from the API instead of the hardcoded json.
 
-1. **Local**: Edit SQL scripts in your editor
-2. **GitHub**: Push changes to main branch
-3. **Cloud9**: Pull latest from GitHub
-4. **RDS**: Run SQL scripts via psql
+Equivalently, the per-scenario theme is currently inferred from `sibling_group` via a hardcoded `scenarioMetadata` map in `apps/main/app/content/scenarios.ts`. The DB has a `theme` table linked through `theme_scenario_link`.
 
-### Running SQL scripts in Cloud9
-
-Step 1 - in the bash shell (`$` prompt), pull latest and connect:
-
-```bash
-$ cd ~/environment/coeqwal-backend
-$ git pull origin main
-$ psql $DATABASE_URL
-```
-
-Step 2 - once inside psql (`coeqwal_scenario=>` prompt), run scripts with `\i`:
-
-```sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_create_helper_functions.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/00_create_versioning_tables.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/01_create_audit_trigger_function.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/02_create_audit_log_table.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/03_apply_audit_triggers.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/04_create_developer_users.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/06_load_seed_data.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/05_populate_domain_family_map.sql
-coeqwal_scenario=> \i database/scripts/sql/.archive/00_versioning/09_verify_level00.sql
-```
-
-Or from the bash shell, pass the script directly without entering psql:
-
-```bash
-$ psql $DATABASE_URL -f database/scripts/sql/.archive/00_create_helper_functions.sql
-```
-
-### Connect to production (read-only)
-
-```bash
-# Set up SSO credentials
-aws sso login --profile coeqwal-dev
-
-# Connect via psql
-psql "postgresql://user:pass@coeqwal-db.xxxxx.us-west-2.rds.amazonaws.com:5432/coeqwal"
-```
-
----
-
-## Troubleshooting
-
-### Potential issues
-
-**Missing statistics for scenario**
-- Check ETL pipeline completed successfully
-- Verify scenario_id exists in scenario table
-- Run data integrity checks above
-
-**ERD out of sync**
-- Run ERD verification script
-- Update COEQWAL_SCENARIOS_DB_ERD.md
-- Document changes in schema/.archive/
-
-**Audit Lambda fails**
-- Check VPC configuration
-- Verify security group allows Lambda to RDS
-- See [utils/db_audit_lambda/README.md](utils/db_audit_lambda/README.md)
-
----
-
-## TODO
-
-Known improvements and cleanup tasks for future work.
-
-### Infrastructure
-
-- **Lambda audit and `run_audit.sh` serve different purposes - keep both.** See "Running the database audit" below for details on when to use each.
-- **Update `domain_family_map` seed CSV** - `database/seed_tables/00_versioning/domain_family_map.csv` is stale (34 rows vs. 70+ in the live DB). Use `export_layer_tables.py --layer 00` to export the current state and overwrite the seed file.
-
-### Verification gaps
-
-- **Extend per-layer SQL verification** - only layers 00, 01, and 02 have `09_verify_level*.sql` scripts. Add scripts for layers 03 through 08 following the same pattern.
-- **`data_load_log` is still PLANNED** - see "ETL batch tracking" in the ERD Layer 00 section. This table would provide batch-level provenance for bulk ETL loads instead of per-row `created_by` attribution.
-- **Section 1b "Tables with column mismatches" was a noisy false positive** - the verifier now skips tables whose ERD entry is just a stub (no column tree) and ignores the six implicit standard columns (`id`, `is_active`, `created_at`, `created_by`, `updated_at`, `updated_by`). Anything still flagged in section 1b after the next audit is real drift. The follow-up is to flesh out the ~60 stub tables in `database/schema/COEQWAL_SCENARIOS_DB_ERD.md` so they get column-level checks too - listed separately under "ERD documentation gaps" below.
-- **ERD documentation gaps.** Roughly 60 of the ~96 tables in the live DB are documented in stub form in `COEQWAL_SCENARIOS_DB_ERD.md` (just `Table:` / `Records:` / `Columns:` and no column tree). They pass the ERD-DB synchronization check trivially. Filling them in would let `verify_erd_against_audit.py` catch column-level drift for those tables too. Track per-table progress against the latest audit report's section 1b "stub" list.
-
-### Community water systems (CWS) - spring-2026 work
-
-Source data is in [`data/reference/cws/`](../data/reference/cws/). See the entity-pattern section above for the full plan. Sequenced TODOs:
-
-1. **Stage and reconcile new CSVs** under `database/seed_tables/03_entity/cws/` and `database/seed_tables/01_lookup/cws_list/`. Strip the trailing newlines in `DWUC_*` headers and resolve the `ESB355` discrepancy (HHS list contains it but project master does not).
-2. **Add the 7 missing project DUs to `du_urban_entity`** (`ACFC`, `KCWA`, `MHILL_NU`, `SBCWD`, `SVWRD`, `TLMNE`, `UNION`) - or document why each one maps to an existing DU under a different `du_id`.
-3. **`ALTER TABLE du_urban_entity` to add the 7 new attribute columns** (`is_sw_du`, `is_gw_du`, `largest_system_centroid_lat/lon`, `calsim_centroid_lat/lon`, `hhs_allocation_taf`).
-4. **Reload `du_urban_variable`** with the M&I delivery-variable crosswalk for the 75 SW DUs, then **re-run `etl/statistics/du_urban/run_all.py`** for every active scenario (only this ETL module is affected).
-5. **Create `cws_entity` (Layer 03)** with one row per PWSID. Load the ~476 systems.
-6. **Create `cws_du_link` (Layer 03)** as M:N junction `cws_entity` ↔ `du_urban_entity`. Load the ~586 system-DU rows.
-7. **Create `cws_list` (Layer 01) + `cws_list_du_member` (Layer 03)** to hold the registry of named CWS lists. Initial seed rows: `coeqwal_master_du`, `coeqwal_focal_sw_du`, `coeqwal_focal_gw_du`, `calsim_urban_du`, `tier_matrix`, `hhs_allocation`, `mi_delivery_crosswalk`. Populate `cws_list_du_member` from the reference CSVs.
-8. **Backfill the 5 zero-member `du_urban_group` rows** (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) so the existing per-DU SWP/CVP/NOD/SOD memberships are queryable. (These are the per-DU twin of the project-level rollups already in `cws_aggregate_entity`.)
-9. **Mirror the group pattern on the ag side** - create `du_agriculture_group` + `du_agriculture_group_member` and populate `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-region groups (`sac`, `sjr`, `tulare`) from the existing `cs3_type` / `provider` / `hydrologic_region_id` columns on `du_agriculture_entity`. Unlocks the suppressed Ag region filter in the website's Data Explorer without frontend changes.
-10. **Expose group-membership in the `/demand-units` and `/ag-demand-units` API responses** so the website can filter by membership without re-issuing per-group queries. (One join in the existing FastAPI route handlers.)
-11. **Add `09_verify_level03.sql`** - verify `cws_*` integrity, `du_urban_entity ↔ cws_du_link ↔ cws_entity` referential integrity, and that every `cws_list` and `du_*_group` row has at least one member.
-12. **Re-run `database/audit/run_monthly_audit.py` and `verify_erd_against_audit.py`** to confirm zero drift.
-
-### Developer access and authentication
-
-- **SSO user attribution** - currently developers connect to the database using a named PostgreSQL role (e.g. `jfantauzza`). The long-term goal is to use AWS SSO identity for authentication so that the `aws_sso_username` field in the `developer` table is used automatically, without requiring a separate PostgreSQL password per developer.
-- **Role-based table permissions** - shipped in [`database/scripts/sql/.archive/57_install_coeqwal_developer_role.sql`](scripts/sql/.archive/57_install_coeqwal_developer_role.sql). The `coeqwal_developer` group role holds `SELECT, INSERT, UPDATE, DELETE` on every table in `public`, and `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` makes that grant auto-extend to any future table created via `$SUPERUSER_URL`. New developers get RW on everything via `GRANT coeqwal_developer TO <username>` (see "Setting up a new developer" above). This closed the permission-gap class of bugs surfaced by the `variable_type` issue during auditing.
-
-### Scenario assumptions and operations metadata - align DB with the website
-
-Today the website's per-scenario operation/assumption icons are hardcoded in `apps/main/app/features/scenarios/components/shared/opsIcons.tsx` (`ICON_REGISTRY` + `SCENARIO_ICONS`). The database has the parallel concepts (`operation_definition`, `assumption_definition`, `scenario_key_operation_link`, `scenario_key_assumption_link`). The API used to expose them via `GET /api/scenarios` and `GET /api/scenarios/{short_code}` as `key_operations` / `key_assumptions` / `themes` arrays, but the frontend never read those arrays so the API trim of 2026-05-26 dropped them from the responses to cut down the prefetch payload. The frontend is the current source of truth for which icons belong to which scenario, and the DB needs to catch up before the website can switch from the hardcoded mapping back to the API. When the cutover happens, the API will need to re-add `key_operations`, `key_assumptions`, and `themes` to `GET /api/scenarios` (or expose them via the per-scenario detail endpoint) so the frontend has a single source. Audit was done by comparing the seed CSVs in `database/seed_tables/05_assumptions_operations/` and `database/seed_tables/06_scenario/scenario_key_*_link.csv` against `SCENARIO_ICONS` in the website repo.
-
-Equivalently, the per-scenario visual theme is currently inferred from `sibling_group` via a hardcoded `scenarioMetadata` map in `apps/main/app/content/scenarios.ts`. The DB has a `theme` table linked through `theme_scenario_link`. The same cutover applies: once the DB seeds match the website theme assignments, the API trim of 2026-05-26 can be reversed for `themes` and the frontend can drop the local map.
+**Prerequisite, build a short_code to icon-id crosswalk:** The frontend icon ids are a parallel vocabulary that does not match the DB short_codes (`cws_hhs` vs `comm_delivery_HHS`, `unimpaired_45` vs `delta_outflow_45`, `tunnel` vs `DCP_6000`, `biops_2019` vs `biops_standard`, and so on). A mapping is the prerequisite for the steps below. Some frontend icon ids (`reduced_sj_ag`, `functional_flows_salmon`, etc.) have no `operation_definition` row yet, so the crosswalk doubles as a gap list of definitions to add. The frontend is authoritative, so reconciliation is one-directional. The corrected frontend values flow back into the DB as a data-correction migration (not a structural change).
 
 Sequenced TODOs:
 
 1. **Fix wrong/missing operation links in `scenario_key_operation_link`:**
-   - `s0046` - add `functional_flows` (currently linked only to `no_min_flow`. Website shows both `functional_flows` and `no_delta_flow`).
-   - `s0046` - change `biops_standard` → `biops_modified_2019`.
-   - `s0065` - change `biops_standard` → `biops_modified_2019`.
+   - `s0046`: add `functional_flows` (currently linked only to `no_min_flow`. Website shows both `functional_flows` and `no_delta_flow`).
+   - `s0046`: change `biops_standard` -> `biops_modified_2019`.
+   - `s0065`: change `biops_standard` -> `biops_modified_2019`.
    - Decide whether `s0026 / s0028 / s0032 / s0033` should link to a new "reduced ag acreage" operation (see step 2) or stay linked to `SGMA_SJV` / `SGMA_CV`. Today the DB collapses "pumping limits" and "reduced acreage" into the SGMA op even though the scenario descriptions distinguish them and the website renders them as `reduced_sj_ag` / `reduced_cv_ag`.
 
 2. **Add missing operation rows in `operation_definition`** for the icons the website uses but the DB doesn't model:
-   - `usbr_alt2v1` - USBR 2024 LTO Alt2V1 framework (`s0023`, `s0024`)
-   - `usbr_alt3` - USBR 2024 LTO Alt3 framework (`s0039`-`s0042`)
-   - `limit_delta_exports` - Delta export limits (`s0039`-`s0042`)
-   - `dwr_adapt_2025` - DWR 2025 climate adaptation framework (`s0065`)
-   - `reduced_sj_ag`, `reduced_cv_ag` - reduced agricultural acreage, or a single regional-scope op (`s0026`, `s0028`, `s0032`, `s0033`). Decide naming with the modeling team before adding rows.
+   - `usbr_alt2v1`: USBR 2024 LTO Alt2V1 framework (`s0023`, `s0024`)
+   - `usbr_alt3`: USBR 2024 LTO Alt3 framework (`s0039`-`s0042`)
+   - `limit_delta_exports`: Delta export limits (`s0039`-`s0042`)
+   - `dwr_adapt_2025`: DWR 2025 climate adaptation framework (`s0065`)
+   - `reduced_sj_ag`, `reduced_cv_ag`: reduced agricultural acreage, or a single regional-scope op (`s0026`, `s0028`, `s0032`, `s0033`). Decide naming with the modeling team before adding rows.
 
 3. **Add an `is_renderable` (or `is_baseline_no_op`) column on `operation_definition`** so API consumers can filter out the "standard / no-op" rows that every baseline scenario links to: `gw_none`, `infra_standard`, `flow_standard`, `delta_regs_standard`, `alloc_standard`. The website never shows these. Without a flag the API has to return them and the client has to know which ones to drop. `ALTER TABLE operation_definition ADD COLUMN is_renderable BOOLEAN NOT NULL DEFAULT TRUE` and set the five rows above to `FALSE`.
 
-4. **Populate `key_operations` for the CWS scenarios (`s0035`, `s0036`, `s0037`).** They are seeded as inactive "Coming soon" placeholders with zero rows in `scenario_key_operation_link`. The matching operations (`comm_delivery_HHS`, `comm_delivery_functional`, `comm_delivery_full`) already exist. Link them when the scenarios are activated.
+4. **Populate `key_operations` for the CWS scenarios (`s0035`, `s0036`, `s0037`):** They are seeded as inactive "Coming soon" placeholders with zero rows in `scenario_key_operation_link`. The matching operations (`comm_delivery_HHS`, `comm_delivery_functional`, `comm_delivery_full`) already exist. Link them when the scenarios are activated.
 
-5. **Reconcile the assumption vs. operation distinction.** The website's icon track mixes both (e.g. `land_use_2020` is a visual icon next to `tucp`/`biops_*`). In the DB, land-use lives in `assumption_definition` (`lu_2020_landiq`, `lu_2004_2013`, etc.) and is linked via `scenario_key_assumption_link`. Two options:
+5. **Reconcile the assumption vs. operation distinction:** The website's icon track mixes both (e.g. `land_use_2020` is a visual icon next to `tucp`/`biops_*`). In the DB, land-use lives in `assumption_definition` (`lu_2020_landiq`, `lu_2004_2013`, etc.) and is linked via `scenario_key_assumption_link`. Two options:
    - Keep the schemas separate and have the API consumer merge `key_assumptions` + `key_operations` into one visual list (current frontend behavior).
    - Add a unified `scenario_badge` view (or one materialized response field) that returns the combined list in display order, with a `category` discriminator.
 
-6. **Re-run the audit and verification scripts** (`database/audit/run_monthly_audit.py`, `verify_erd_against_audit.py`) after each seed/schema change and confirm the link tables still pass referential integrity.
+6. **Re-run the audit** (`database/audit/run_monthly_audit.py`) after each seed/schema change and confirm the link tables still pass referential integrity.
 
 Once steps 1-4 land, the API needs to re-add `key_operations` and `key_assumptions` to `GET /api/scenarios` (and the detail endpoint) and the website can drop the hardcoded `SCENARIO_ICONS` mapping, keying `ICON_REGISTRY` by `operation.short_code` / `assumption.short_code` returned from the API instead. SVG payloads and colors stay client-side. The per-scenario list of which icons to show comes from the API.
 
-### API conventions, geometry
+#### Developer access and authentication (not urgent)
 
-**Policy.** Geometry of any kind, points, lines, or polygons, must not flow through `coeqwal-api`. All geometry reaches the browser exclusively through Mapbox vector tilesets registered in [apps/main/app/features/map/config/tilesetSources.ts](../../coeqwal-website/apps/main/app/features/map/config/tilesetSources.ts) on the website side. The API returns identifiers (`short_code`, `du_id`, `location_id`, `wba_id`) which the frontend joins to tile features at render time.
+- **SSO user attribution:** currently developers connect to the database using a named PostgreSQL role (e.g. `jfantauzza`). The long-term goal is to use AWS SSO identity for authentication so that the `aws_sso_username` field in the `developer` table is used automatically, without requiring a separate PostgreSQL password per developer.
+- **Role-based table permissions:** shipped in [`database/sql_archive/04_scenario/57_install_coeqwal_developer_role.sql`](sql_archive/04_scenario/57_install_coeqwal_developer_role.sql). The `coeqwal_developer` group role holds `SELECT, INSERT, UPDATE, DELETE` on every table in `public`, and `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` makes that grant auto-extend to any future table created via `$SUPERUSER_URL`. New developers get RW on everything via `GRANT coeqwal_developer TO <username>` (see "Setting up a new developer" above). This closed the permission-gap class of bugs surfaced by the `variable_type` issue during auditing.
 
-**Rationale.** Vector tiles are dramatically more bandwidth-efficient than GeoJSON over HTTP. Tiles are pre-quantized to integer grid coordinates, zoom-level-aware (the browser fetches only the resolution it currently needs), served from Mapbox's global CDN with aggressive caching, and consumed natively by Mapbox GL without per-render JSON parsing. A full demand-unit polygon `FeatureCollection` from the API is multiple MB. The equivalent tile request at zoom 8 is typically tens of KB. The DB retains the `geom` columns on entity tables (`du_urban_entity`, `du_agriculture_entity`, `wba`, `reservoir`, `network_node`, `compliance_station`, `network_arc`) because the ETL needs them to build tilesets, but those columns never leave the DB except through the tile pipeline.
+#### API conventions, geometry
 
-**Cross-reference.** See [coeqwal-website/packages/map/README.md](../../coeqwal-website/packages/map/README.md) for the workflow for uploading new tile data via Mapbox Tiling Service.
+**Policy:** Geometry of any kind, points, lines, or polygons, must not flow through `coeqwal-api`. All geometry reaches the browser exclusively through Mapbox vector tilesets registered in [apps/main/app/features/map/config/tilesetSources.ts](../../coeqwal-website/apps/main/app/features/map/config/tilesetSources.ts) on the website side. The API returns identifiers (`short_code`, `du_id`, `location_id`, `wba_id`) which the frontend joins to tile features at render time.
 
-### Frontend-hardcoded data that should move into the DB
+**Rationale:** Vector tiles are dramatically more bandwidth-efficient than GeoJSON over HTTP. Tiles are pre-quantized to integer grid coordinates, zoom-level-aware (the browser fetches only the resolution it currently needs), served from Mapbox's global CDN with aggressive caching, and consumed natively by Mapbox GL without per-render JSON parsing. A full demand-unit polygon `FeatureCollection` from the API is multiple MB. The equivalent tile request at zoom 8 is typically tens of KB. The DB retains the `geom` columns on entity tables (`du_urban_entity`, `du_agriculture_entity`, `wba`, `reservoir`, `network_node`, `compliance_station`, `network_arc`) because the ETL needs them to build tilesets, but those columns never leave the DB except through the tile pipeline.
 
-Each item below is a static TS or TSX data literal in the website repo whose source of truth is, or should be, the database. The website hardcodes today because the data was either never API-exposed or because the API contract was simpler when the frontend owned the strings. As schemas stabilize, each entry should migrate to a DB column or table and be served via the existing API. The frontend remains the source of truth in the meantime. Audit method: ripgrep over `apps/main/app/content`, `apps/main/app/features/map/config`, and `apps/main/app/features/scenarios/components/shared` for top-level `export const` records and lookup tables.
+**Cross-reference:** See [coeqwal-website/packages/map/README.md](../../coeqwal-website/packages/map/README.md) for the workflow for uploading new tile data via Mapbox Tiling Service.
 
-**Status: most items require schema migrations and are blocked.** Adding columns to existing tables (`hydroclimate`, `tier_definition`, `compliance_station`, `du_*_entity`, `env_flow_channel`, `scenario_hydroclimate_sibling`) is a DB-write operation. We currently do not have AWS access to the COEQWAL database, so any item below that adds, alters, or backfills a column is a roadmap-only entry until that access is restored. What we CAN ship in the meantime are (a) API surface refinements that only re-shape or re-join existing columns (no DDL, no ETL changes), (b) frontend cutovers once a column does land, and (c) the tile-side work in the dedicated subsection below, which only touches Mapbox MTS and never the DB.
+#### Frontend-hardcoded data that should move into the DB
 
-- **Demand-unit display names.** [apps/main/app/features/map/config/demandUnitNames.ts](../../coeqwal-website/apps/main/app/features/map/config/demandUnitNames.ts) (`DEMAND_UNIT_NAMES`, ~400 entries with `subName`, `urbName`, `modName`). The file header already says "Generated from the Mapbox demand-units tileset properties", so this duplicates tile-side data and DB data. Target: confirm the corresponding columns exist on `du_urban_entity` and `du_agriculture_entity`, then surface them in `/api/demand-units` and `/api/ag-demand-units`.
+Each item below is a static TS or TSX data literal in the website repo whose source of truth is, or should be, the database. The website hardcodes today because the data was either never API-exposed or because the API contract was simpler when the frontend owned the strings. As schemas stabilize, each entry should migrate to a DB column or table and be served via the existing API. The frontend remains the source of truth in the meantime.
 
-- **Outcome names, definitions, and tier value descriptions.** [apps/main/app/content/outcomes.ts](../../coeqwal-website/apps/main/app/content/outcomes.ts) (`OUTCOME_NAMES`, `OUTCOME_DEFINITIONS`, `OUTCOME_TIER_VALUES`, `NOD_SOD_DEFINITIONS`, `METRIC_ID_TO_OUTCOME_CODE`). Target: `tier_definition` already holds tier descriptions. Verify it covers all 9 outcomes plus NOD/SOD variants. Add `long_definition` and `tier_value_definitions` columns if missing. Goal is for the website to consume `GET /api/tiers/definitions` exclusively once parity is reached.
+- **Outcome names, definitions, ordering, and tier value descriptions:** [apps/main/app/content/outcomes.ts](../../coeqwal-website/apps/main/app/content/outcomes.ts) (`OUTCOME_NAMES`, `OUTCOME_CODE_ORDER`, `OUTCOME_DEFINITIONS`, `OUTCOME_TIER_VALUES`, `NOD_SOD_DEFINITIONS`, `METRIC_ID_TO_OUTCOME_CODE`). Target: `tier_definition` already holds tier descriptions. Add display and ordering columns for `OUTCOME_CODE_ORDER` / `OUTCOME_NAMES`. Verify it covers all 9 outcomes plus NOD/SOD variants. Goal is for the website to consume something like `GET /api/tiers/definitions`.
 
-- **Tier labels.** [apps/main/app/content/tiers.ts](../../coeqwal-website/apps/main/app/content/tiers.ts) (`TIER_LABELS` = Optimal, Acceptable, At-risk, Critical). Small but conceptually metadata. Either add `tier_level_label` to a lookup table or accept this as cosmetic and leave in code.
+- **Tier labels:** [apps/main/app/content/tiers.ts](../../coeqwal-website/apps/main/app/content/tiers.ts) (`TIER_LABELS` = Optimal, Acceptable, At-risk, Critical). Small but conceptually metadata. Either add `tier_level_label` to a lookup table or accept this as cosmetic and leave in code.
 
-- **Hydroclimate metadata.** [apps/main/app/content/scenarios.ts](../../coeqwal-website/apps/main/app/content/scenarios.ts) (`HYDROCLIMATE_ID_MAP`, `HYDROCLIMATE_LABEL_MAP`, `HYDROCLIMATE_SHORT_LABELS`, `HYDROCLIMATE_LABELS_BY_VALUE`, `HYDROCLIMATE_DESCRIPTIONS_BY_VALUE`). Target: extend the `hydroclimate` table with `short_label`, `long_label`, and `description` columns. Re-add the `JOIN hydroclimate h` to `/api/scenarios` (it was dropped in the 2026-05-26 trim) and expose the new columns there.
+- **Hydroclimate metadata:** [apps/main/app/content/scenarios.ts](../../coeqwal-website/apps/main/app/content/scenarios.ts) (`HYDROCLIMATE_ID_MAP`, `HYDROCLIMATE_LABEL_MAP`, `HYDROCLIMATE_SHORT_LABELS`, `HYDROCLIMATE_LABELS_BY_VALUE`, `HYDROCLIMATE_DESCRIPTIONS_BY_VALUE`). Target: extend the `hydroclimate` table with `short_label`, `long_label`, and `description` columns. Re-add the `JOIN hydroclimate h` to `/api/scenarios` (it was dropped in the 2026-05-26 trim) and expose the new columns there.
 
-- **Sibling-group / scenario UI metadata.** [apps/main/app/content/scenarios.ts](../../coeqwal-website/apps/main/app/content/scenarios.ts) (`SIBLING_GROUP_METADATA` and `scenarioMetadata`, theme plus `iconPath` and `shortLabel` per sibling group, ~30 entries). Target: `scenario_hydroclimate_sibling` already holds the group. Add `theme_short_code` and `icon_path` columns. Themes are already keyed in the `theme` table, so the join would let the API return the visual mapping directly. The 2026-05-26 trim dropped the per-scenario `themes` array from `/api/scenarios` because the website was not using it. The cutover here would re-add it (most likely on the same `/api/scenarios` join, not as a separate endpoint).
+- **Sibling-group / scenario UI metadata:** [apps/main/app/content/scenarios.ts](../../coeqwal-website/apps/main/app/content/scenarios.ts) (`SIBLING_GROUP_METADATA` and `scenarioMetadata`, theme plus `iconPath` and `shortLabel` per sibling group, ~30 entries). Target: `scenario_hydroclimate_sibling` already holds the group. Add `theme_short_code` and `icon_path` columns. Themes are already keyed in the `theme` table, so the join would let the API return the mapping directly.
 
-- **Theme narrative content.** [apps/main/app/content/themes.ts](../../coeqwal-website/apps/main/app/content/themes.ts) (`WATER_THEMES` array, ~700 lines of rich content blocks per theme). This is editorial copy. Move to DB only if non-engineers will edit it. Otherwise leave as code-owned content and document that decision next to the source.
+- **Environmental flow station names:** [apps/main/app/features/map/config/outcomeLocations.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLocations.ts) (`ENV_FLOWS_NAMES`, 17 entries). Target: add `display_name` column on the `env_flow_channel` table. Surface it in `/api/env-flows/channels`.
 
-- **Operation and assumption icon metadata.** [apps/main/app/features/scenarios/components/shared/opsIcons.tsx](../../coeqwal-website/apps/main/app/features/scenarios/components/shared/opsIcons.tsx) (`ICON_REGISTRY`, `SCENARIO_ICONS`). Already covered by the preceding "Scenario assumptions and operations metadata" section. Cross-reference there rather than re-list.
+- **Compliance station and pumping plant names:** Same file (`STATION_NAMES`, 4 entries: `EM`, `JP`, `CAA003`, `DMC000`). Target: `compliance_station.display_name` already exists in many cases. Confirm and then remove from the frontend.
 
-- **Environmental flow station names.** [apps/main/app/features/map/config/outcomeLocations.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLocations.ts) (`ENV_FLOWS_NAMES`, 17 entries). Target: add `display_name` column on the `env_flow_channel` table. Surface it in `/api/env-flows/channels`.
+- **Reservoir display-name mapping:** [apps/main/app/features/map/config/outcomeLayerRegistry.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLayerRegistry.ts) (`RESERVOIR_CALSIM_TO_GNISIDLABEL`, 8 entries). The file already has an inline TODO: "Update the california-reservoir Mapbox tileset to include a `calsim_id` property... then remove this mapping." Promote that inline TODO into this roadmap. Two-step fix. First, regenerate the reservoir tileset with `calsim_id` properties (tile side). Then drop the TS mapping (frontend side).
 
-- **Compliance station and pumping plant names.** Same file (`STATION_NAMES`, 4 entries: `EM`, `JP`, `CAA003`, `DMC000`). Target: `compliance_station.display_name` already exists in many cases. Confirm and then remove from the frontend.
+- **Hardcoded point coordinates:** [apps/main/app/features/map/config/outcomeLocations.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLocations.ts) (`AG_REV_COORDINATES` 132 pts, `CWS_DEL_COORDINATES` ~100 pts, `ENV_FLOWS_COORDINATES` 17 pts, `STATION_COORDINATES` 4 pts, `RESERVOIR_CONFIGS` 7 pts, `SALMON_RIVER_CENTROID` 1 pt). The file header says: "Coordinates are hardcoded because the tier API returns location IDs and tier levels but not geometry." Per the geometry policy above these coordinates belong in Mapbox tiles, not the API and not in hardcoded TS. Two paths: (a) Add a `coeqwal-locations-points` tileset that consolidates all point and centroid coordinates with `outcome_code` and `short_code` properties. (b) Compute DU centroids on-the-fly from the existing polygon tiles. Either way the static TS file goes away. This is a follow-on to the geometry policy above.
 
-- **Reservoir display-name mapping.** [apps/main/app/features/map/config/outcomeLayerRegistry.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLayerRegistry.ts) (`RESERVOIR_CALSIM_TO_GNISIDLABEL`, 8 entries). The file already has an inline TODO: "Update the california-reservoir Mapbox tileset to include a `calsim_id` property... then remove this mapping." Promote that inline TODO into this roadmap. Two-step fix. First, regenerate the reservoir tileset with `calsim_id` properties (tile side). Then drop the TS mapping (frontend side).
+#### Tile work (Mapbox MTS, no DB writes required)
 
-- **Hardcoded point coordinates.** [apps/main/app/features/map/config/outcomeLocations.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLocations.ts) (`AG_REV_COORDINATES` 132 pts, `CWS_DEL_COORDINATES` ~100 pts, `ENV_FLOWS_COORDINATES` 17 pts, `STATION_COORDINATES` 4 pts, `RESERVOIR_CONFIGS` 7 pts, `SALMON_RIVER_CENTROID` 1 pt). The file header says: "Coordinates are hardcoded because the tier API returns location IDs and tier levels but not geometry." Per the geometry policy above these coordinates belong in Mapbox tiles, not the API and not in hardcoded TS. Two paths. (a) Add a `coeqwal-locations-points` tileset that consolidates all point and centroid coordinates with `outcome_code` and `short_code` properties. (b) Compute DU centroids on-the-fly from the existing polygon tiles. Either way the static TS file goes away. This is a follow-on to the geometry policy above.
+The publishing path is Mapbox Tiling Service. See the workflow in [coeqwal-website/packages/map/README.md](../../coeqwal-website/packages/map/README.md) under "Adding new tile data via Mapbox Tiling Service" and the existing recipe layout in `coeqwal-backend/scripts/mapbox_recipes/`.
 
-### Tile work (Mapbox MTS, no DB writes required)
+- **Regenerate the reservoir tileset with a `calsim_id` property:** Cross-reference for the "Reservoir display-name mapping" bullet above. Re-export `reservoir` rows to include `calsim_short_code` as `calsim_id` in each feature's properties, write or update a recipe in `scripts/mapbox_recipes/`, then `tilesets upload-source` + `tilesets create` + `tilesets publish` under the `coeqwal` account. Once the property is on every feature, drop `RESERVOIR_CALSIM_TO_GNISIDLABEL` from [apps/main/app/features/map/config/outcomeLayerRegistry.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLayerRegistry.ts) and set the layer's `idProperty` to `calsim_id`.
 
-This work is **not blocked on AWS** because it never touches the COEQWAL database. The DB is the source for tile builds (the `geom` columns on `du_urban_entity`, `du_agriculture_entity`, `wba`, `reservoir`, `network_node`, `compliance_station`, `network_arc` already exist) but the publishing path is Mapbox Tiling Service end-to-end. See the workflow in [coeqwal-website/packages/map/README.md](../../coeqwal-website/packages/map/README.md) under "Adding new tile data via Mapbox Tiling Service" and the existing recipe layout in `coeqwal-backend/scripts/mapbox_recipes/`.
+- **Publish a consolidated `coeqwal-locations-points` tileset:** Cross-reference for the "Hardcoded point coordinates" bullet above. One NDGeoJSON feed per outcome, joined into a single tileset whose features carry `outcome_code` (one of `AG_REV`, `CWS_DEL`, `ENV_FLOWS`, etc.) and `short_code` (the per-feature identifier the API uses). Register as a new source in [apps/main/app/features/map/config/tilesetSources.ts](../../coeqwal-website/apps/main/app/features/map/config/tilesetSources.ts), wire it into the affected outcome layers, then delete the coordinate tables from `outcomeLocations.ts`. The animation in `useTierAnimationData.ts` currently joins tier results to `AG_REV_COORDINATES` in TS. Once the tileset exists the animation can read centroids out of the tile instead.
 
-- **Regenerate the reservoir tileset with a `calsim_id` property.** Cross-reference for the "Reservoir display-name mapping" bullet above. Re-export `reservoir` rows to NDGeoJSON including `calsim_short_code` as `calsim_id` in each feature's properties, write or update a recipe in `scripts/mapbox_recipes/`, then `tilesets upload-source` + `tilesets create` + `tilesets publish` under the `coeqwal` account. Once the property is on every feature, drop `RESERVOIR_CALSIM_TO_GNISIDLABEL` from [apps/main/app/features/map/config/outcomeLayerRegistry.ts](../../coeqwal-website/apps/main/app/features/map/config/outcomeLayerRegistry.ts) and set the layer's `idProperty` to `calsim_id`.
+- **Add `du_id` parity to whatever demand-unit tilesets still rely on legacy keys:** `coeqwal-demand-units` (per `tilesetSources.ts`) is keyed by `DU_ID` already, so this is mostly a sanity-check pass to confirm every DU referenced by the API has a matching tile feature, and to log the gaps already enumerated in `database/topic_docs/demand_unit_geometry.md`. Output: a small script in `scripts/mapbox_recipes/` that diffs API DU IDs against tile feature properties.
 
-- **Publish a consolidated `coeqwal-locations-points` tileset.** Cross-reference for the "Hardcoded point coordinates" bullet above. One NDGeoJSON feed per outcome, joined into a single tileset whose features carry `outcome_code` (one of `AG_REV`, `CWS_DEL`, `ENV_FLOWS`, etc.) and `short_code` (the per-feature identifier the API uses). Register as a new source in [apps/main/app/features/map/config/tilesetSources.ts](../../coeqwal-website/apps/main/app/features/map/config/tilesetSources.ts), wire it into the affected outcome layers, then delete the coordinate tables from `outcomeLocations.ts`. The animation in `useTierAnimationData.ts` currently joins tier results to `AG_REV_COORDINATES` in TS. Once the tileset exists the animation can read centroids out of the tile instead.
+### Data pipeline / ETL
 
-- **Add `du_id` parity to whatever demand-unit tilesets still rely on legacy keys.** Less urgent. `coeqwal-demand-units` (per `tilesetSources.ts`) is keyed by `DU_ID` already, so this is mostly a sanity-check pass to confirm every DU referenced by the API has a matching tile feature, and to log the gaps already enumerated in `docs/du_geometry_gap.md`. Output: a small script in `scripts/mapbox_recipes/` that diffs API DU IDs against tile feature properties.
+These improve the ETL and its provenance, but the API and website work without them.
 
-### Review indices and compare to API
+#### Layer 04 variable layer (priority)
+
+Layer 04 should serve as the single source of truth for the variable lists the ETL uses to compute statistics. The statistics the website shows are computed today from hardcoded Python dicts and CSV reads. The one Layer 04 table that already feeds the API, `du_urban_variable` (consumed by `/demand-units` in the API and by `etl/statistics/du_urban/calculate_du_statistics_v2.py`), is built as an example. Building out the rest is a key operation. It makes Layer 04 the single source of truth for the variable lists and removes the hardcoded Python dicts and CSV reads the statistics currently depend on. Table shapes and the reference pattern (`du_urban_variable`) are documented in [`schema/ERD.md`](schema/ERD.md) § Layer 04.
+
+> **Planning source:** The variable lists each table needs are driven by the statistics in the **Outcomes tab** of the [COEQWAL Platform Content Summary](https://docs.google.com/spreadsheets/d/1xcQIR_J96-cs7BuCrXjznwkinLgxl-Pf9tA3mJ2GiyA) sheet. Develop the list of variables and calculations in collaboration with the Water Allocation Modeling Team.
+
+> **Registration step (every new table):** Each new Layer 04 table needs a row in `domain_family_map` mapping it to the `variable` family (`version_family.id = 6`). See `database/README.md` § "Creating a new table" step 5 and [`schema/ERD.md`](schema/ERD.md) § `domain_family_map`.
+
+Backlog (but use your own judgement):
+
+- [ ] **Build `delta_variable`** (~8 vars). 2 rows already in `database/seed_tables/04_variable/delta_variable.csv` (NDO, X2 regulatory metadata). Proposed columns in `schema/ERD.md` § Layer 04. Effort: S.
+- [ ] **Add `umhos_cm` to the `unit` catalog:** Microsiemens per centimeter is the native unit for the EC salinity variables the delta calc reads (Emmaton, Jersey Point, Rock Slough, Collinsville, Banks, Tracy). Prerequisite for adding EC rows to `delta_variable`. Effort: S.
+- [ ] **Build `reservoir_variable`:** Seed CSV `database/seed_tables/04_variable/reservoir_variable.csv` curated. Replaces two current mechanisms (storage variables by naming convention from `reservoir_entity.csv`, and the hardcoded `RESERVOIR_THRESHOLDS` dict in `etl/statistics/reservoirs/reservoir_metrics.py`) with one DB lookup. Requires deciding where to encode the threshold-role metadata. Effort: M.
+- [ ] **Build `inflow_entity` first, then `inflow_variable`:** Seed CSV `database/seed_tables/04_variable/inflow_variable.csv` is shape-correct but has content gaps (all rows `variable_type='inflow'`, empty `description`). No inflow ETL exists yet, so this is "ready when an inflow calculation is written." Requires building the parent `inflow_entity` table first (Layer 03 future work). Effort: L.
+
+Deferred (dict-driven domains, need content curation against the Outcomes tab):
+
+- [ ] **`mi_contractor_variable`:** lift `MI_CONTRACTOR_VARIABLES` out of `calculate_mi_statistics.py` (~35 contractors x 4 var lists). FK target `mi_contractor.id`. Effort: M.
+- [ ] **`cws_aggregate_variable`:** lift `CWS_AGGREGATES` out of `calculate_cws_aggregate_statistics.py` (~10 aggregates). FK target `cws_aggregate_entity.id`. Effort: S.
+- [ ] **`ag_variable`:** FK target `du_agriculture_entity.id`. Has a WBA-region branch (`SHRTG_` vs `GW_SHORT_`) needing a column-shape decision. Effort: M.
+- [ ] **`refuge_variable`:** FK target `du_refuge_entity.id`. Same WBA-region branch question. Effort: M.
+
+Related ETL cleanup:
+
+- [ ] **Retire or refactor `etl/statistics/generate_release_variables.py`:** One-shot helper that generated the 276 release-variable rows now in `reservoir_variable.csv`. Not imported or invoked by `run_all.py`. Effort: S.
+
+#### Audit tooling maintenance
+
+The monthly audit's table coverage is hand-maintained and drifts as the schema grows. Layer 09 (TIER) currently falls through the cracks. `tier_location` is exported nowhere and `tier_definition` is sampled as a result rather than exported in full. Details and the suggested fix are in [`audit/README.md`](audit/README.md) § "Maintaining the audit". The standing task is to update the audit's layer lists and ERD whenever a new layer or reference table is added. Effort: S.
+
+#### ETL operator attribution (low priority)
+
+Make `created_by` / `updated_by` reflect the real operator, not the System fallback. Low priority: the cost is not super consequential, at this point.
+
+- [ ] **Run ETL pipelines as a developer role** (e.g. an `etl` service account with its own `developer` row) rather than the shared `postgres` superuser. Most CalSim-derived result rows attribute to System (`developer.id = 1`) because ETL connects via `$SUPERUSER_URL`. Effort: M.
+- [ ] **Add a session-variable hook to `coeqwal_current_operator()`** so a caller connected as `postgres` can `SET LOCAL coeqwal.operator = 'alicelalala'` at the start of a transaction and have the function read that instead of falling back to System. Effort: M.
+- [ ] **Backfill the 1 NULL row in `hydroclimate.created_by`:** Single UPDATE. Effort: S.
+
+### Correctness bugs
+
+The schema-level detail for these also live in [`SCHEMA_BACKLOG.md`](SCHEMA_BACKLOG.md).
+
+#### Resync drifted ID sequences, and add a drift check
+
+- [ ] **Resync 5 drifted ID sequences** (`developer_id_seq`, `version_family_id_seq`, `version_id_seq`, `cws_aggregate_entity_id_seq`, `du_urban_group_id_seq`). Real bug, not debt: `last_value < MAX(id)` means the next insert into these tables collides on the PK and raises `unique_violation`. One-shot `setval(..., MAX(id))`. Also bundled in [`scripts/sql/audit_cleanup.sql`](scripts/sql/audit_cleanup.sql) § 5. Effort: S.
+- [ ] **Add a sequence-drift check to `run_monthly_audit.py`** that flags any `*_id_seq` where `last_value < MAX(id)`, so future drift is caught at audit time. Effort: S.
+
+#### Correct `watershed.hydrologic_region_id` for 4 drifted rows with the wrong hydrologic region assignment
+
+- [ ] Data-correctness bug: the wrong region assignment quietly skews any region-grouped query against `watershed`. Live DB has `BEAR_RIVER`, `UPPER_AMERICAN`, `UPPER_FEATHER`, and `YUBA_RIVER` assigned to `hydrologic_region_id = 2` (SJR). I believe this is incorrect and all four drain to the Sacramento system. After the fix, the `watershed` Values table in [`schema/ERD.md`](schema/ERD.md) (the `#### watershed` section) needs 4 region values flipped from `SJR` to `SAC`. Effort: S.
