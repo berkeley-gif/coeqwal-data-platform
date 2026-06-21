@@ -15,10 +15,10 @@ Two and only two sources of truth for the project's scenario lists:
   - `etl/common/active_scenarios.py` (`ACTIVE_SCENARIOS`): what the public
     website actually serves, derived from the DB by `refresh_active_scenarios.py`.
 
-`database/seed_tables/06_scenario/scenario.csv` is bootstrap-only for the
-`is_active` column. It introduces new scenario rows into the DB, but
-ongoing flips happen here. The seed CSV's `is_active` value is allowed to
-drift after a row's initial upsert.
+New scenario rows enter the DB via a hand-authored INSERT script committed
+under `database/scripts/sql/` (see `add_s0107-s0156_scenarios.sql`),
+inserted with `is_active = FALSE`. This script only flips that flag for rows
+that already exist. It never inserts.
 
 Usage:
   python etl/ingestion/tools/set_scenario_active.py --activate s0070,s0072
@@ -160,7 +160,8 @@ def main() -> None:
         if missing:
             raise SystemExit(
                 f"\nThese short codes are not in the scenario table: {missing}\n"
-                f"Add them via the seed CSV + upsert_scenario_data.sql first, "
+                f"Insert their identity rows first with a hand-authored SQL script "
+                f"under database/scripts/sql/ (modeled on add_s0107-s0156_scenarios.sql), "
                 f"then re-run this script.\n"
             )
 

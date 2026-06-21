@@ -310,3 +310,19 @@ Each tier has a CSV file in `staging/` named by its short code. The formats diff
 | `WRC_SALMON_AB.csv` | `scenario`, `Tier_range` (string like `"Tier 4"`). `s0065` is excluded by the data team |
 
 NA cells in any CSV are skipped (no location row generated for that slot).
+
+---
+
+## Known limitations and roadmap
+
+These are open items that the tier pipeline does not yet handle. They are documented here so the next person does not rediscover them from scratch.
+
+### NOD/SOD regional outcomes are not produced by this pipeline
+
+The frontend shows ten North-of-Delta and South-of-Delta regional outcomes (`NOD_*` and `SOD_*`), but the tier API does not serve them. They come from a static dataset bundled with the website, sourced from the Water Allocation Modeling Team's water data dashboard. The tier teams do not currently report NOD/SOD aggregates.
+
+Much of the raw material already lives in the database. The entity tables that tier locations resolve to (`network` and `network_node`, `reservoir_entity`, the demand-unit tables, and `wba`) record a hydrologic region. NOD maps to the SAC hydrologic region, and SOD maps to SJR or TLB. Compliance and pumping stations are neither, because they sit in the Delta. A future roadmap item is to derive the NOD/SOD split from these hydrologic-region foreign keys rather than maintaining a separate static file. This is the way the database has been created to work: to house data attributes and be able to filter and aggregate on them for current reporting and future analysis.
+
+### Tier scale is moving from discrete to continuous
+
+The pipeline and the database currently assume a discrete 1-4 tier scale. A planned migration moves to a continuous scale. Code and documentation that hardcode the 1-4 range (validation bounds, score normalization, and frontend color and axis mapping) will need to be revisited as part of that migration.
