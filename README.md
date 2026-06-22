@@ -12,7 +12,46 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 
 ## [Data](data/README.md)
 
-Directory of reference files related to project data. 
+Where to find the source data the backend depends on. Most of it lives outside this repo:
+
+- **Scenario model runs and trend reports** on the COEQWAL shared Google Drive (the SV input / DV output the ETL extracts, plus the reference CSVs it validates against).
+- **Content listings** (tiers, outcomes) in the COEQWAL Platform Content Summary Google Sheet.
+- **GIS sources** like the CalSim Geopackage (nodes, arcs, demand units, water budget areas, watersheds) are in the project Research Teams > Data Platform > GIS drive. We are experimenting with getting a [Kart repo](https://github.com/berkeley-gif/coeqwal-gis-kart) up and running.
+- **Tracked reference spreadsheets and PDFs** under [`data/reference/`](data/reference/) (CWS / M&I / crosswalk xlsx, the CalSim 3 network schematic).
+- **Authoritative attribute and reference data** (lookups, entities, scenarios, hydroclimates, themes, tier definitions, version metadata) in [`database/seed_tables/`](database/seed_tables/), organized by schema layer.
+
+The most important single reference is the CalSim 3 manual PDF, too large for the repo (>100 MB) but downloadable from [DWR](https://water.ca.gov/Library/Modeling-and-Analysis/Central-Valley-models-and-tools/CalSim-3).
+
+See [`data/README.md`](data/README.md) for the full inventory with locations and links.
+
+## [Database](database/README.md)
+
+PostgreSQL + PostGIS on RDS. A highly-normalized schema of ~96 tables organized conceptually into layers.
+
+**Source-of-truth artifacts:**
+
+- ERD: [`database/schema/ERD.md`](database/schema/ERD.md)
+- Latest monthly audit: `audits/monthly_<timestamp>/report.md` (gitignored, regenerable)
+
+**Layers:** foundational data (00-09) separated from derived results (10+). Layers tend to depend on/reference layers with a lower number.
+
+- **00 VERSIONING** - `version_family`, `version`, `developer`, `domain_family_map`
+- **01 LOOKUP** - `hydrologic_region`, `source`, `model_source`, `unit`, `spatial_scale`, `temporal_scale`, `statistic_category`, `statistic_type`, `geometry_type`, `network_type`, `network_subtype`, `network_entity_type`, `watershed`, `env_flow_season`
+- **02 NETWORK** - `network`, `network_arc`, `network_node`, `network_gis`
+- **03 ENTITY** - `reservoir`, `reservoir_entity`, `reservoir_group`, `reservoir_group_member`, `channel_entity`, `du_agriculture_entity`, `du_refuge_entity`, `du_urban_entity`, `du_urban_delivery_arc`, `du_urban_group`, `du_urban_group_member`, `mi_contractor`, `mi_contractor_delivery_arc`, `mi_contractor_group`, `mi_contractor_group_member`, `ag_aggregate_entity`, `cws_aggregate_entity`, `compliance_station`, `wba`
+- **04 VARIABLE** - `calsim_model_variable_type`, `derived_variable_type`, `variable_type`, `channel_variable`, `du_urban_variable`
+- **05 ASSUMPTIONS + OPS** - `assumption_category`, `assumption_definition`, `operation_category`, `operation_definition`
+- **06 SCENARIO** - `scenario`, `scenario_hydroclimate_sibling`, `scenario_author`, `scenario_key_assumption_link`, `scenario_key_operation_link`, `scenario_tag`, `scenario_tag_link`
+- **07 HYDROCLIMATE** - `hydroclimate`, `slr`
+- **08 THEME** - `theme`, `theme_scenario_link`
+- **09 TIER** - `tier_definition`, `tier_location`
+- **10 TIER RESULTS** - `tier_result`, `tier_location_result`
+- **11 PER-SCENARIO STATISTICS** - `reservoir_storage_monthly`, `reservoir_spill_monthly`, `reservoir_monthly_percentile`, `reservoir_period_summary`, `delta_monthly`, `delta_period_summary`, `du_delivery_monthly`, `du_shortage_monthly`, `du_period_summary`, `mi_delivery_monthly`, `mi_shortage_monthly`, `mi_contractor_period_summary`, `cws_aggregate_monthly`, `cws_aggregate_period_summary`, `ag_du_demand_monthly`, `ag_du_sw_delivery_monthly`, `ag_du_gw_pumping_monthly`, `ag_du_shortage_monthly`, `ag_du_period_summary`, `ag_aggregate_monthly`, `ag_aggregate_period_summary`, `refuge_du_delivery_monthly`, `refuge_du_shortage_monthly`, `refuge_du_period_summary`, `env_flow_channel_monthly`, `env_flow_channel_seasonal`, `env_flow_channel_period_summary`
+- **12 CROSS-SCENARIO ANALYSIS** - `sensitivity_climate`, `sensitivity_operational`
+
+See [`database/README.md`](database/README.md) and the ERD, [`database/schema/ERD.md`](database/schema/ERD.md), for the full schema reference.
+
+**Audits:** four concerns (schema structure, reference-data content, ETL statistics accuracy, plus health and cost), rolled up by `python database/audit/run_monthly_audit.py` into `audits/monthly_<ts>/report.md`. See [`database/README.md` Audit and verification](database/README.md#audit-and-verification) for the full chain and what to read after a run.
 
 ## [ETL](etl/README.md)
 
@@ -87,54 +126,6 @@ Every stage of both pipelines leaves a receipt, and each pipeline has verifiers 
 4. **For tier data, does the database match what the team handed us?** `verify_tiers.py` compares `tier_result` rows against the staging CSVs the team delivered.
 
 What to read after each run, what each console summary and status value means, and which artifact to open when something is flagged all live in [`etl/verification/README.md`](etl/verification/README.md). The end-to-end artifact map (what lands where, and which receipts are in S3, on local disk, or tracked in git) is in the [ETL runbook](etl/README.md#pipeline-paper-trail-where-every-artifact-lands).
-
-## [Database](database/README.md)
-
-PostgreSQL + PostGIS on RDS. A highly-normalized schema of ~96 tables organized conceptually into layers.
-
-**Layers:**
-
-- **00-09** Foundational and reference data: versioning, lookups, network, entities, variables, assumptions and operations, scenarios, hydroclimate, themes, tier locations.
-- **10+** Derived results: tier results, statistics, period summaries.
-
-<!-- TODO: refine this block, then un-comment.
-
-**Standard data shape** (every domain follows this pattern: reservoirs, channels, ag DUs, refuges, MI contractors, and CWS for community water systems):
-
-1. Entity table in `03_entity/` with `id` PK, `short_code` UNIQUE, FKs to lookup tables, and the audit columns populated by the `set_audit_fields()` trigger.
-2. Variable mapping in `04_variable/` (e.g. `du_urban_variable`, `channel_variable`) holding the CalSim variable names per entity.
-3. Optional multi-arc or sub-entity tables (`du_urban_delivery_arc`, `mi_contractor_delivery_arc`) for entities that sum multiple CalSim arcs.
-4. Group / membership tables (`*_group` + `*_group_member`) for analytical filtering.
-5. Statistics tables in layer 10+ (`*_monthly`, `*_period_summary`) keyed by `scenario_short_code` + `<entity>_id`.
-
-Standards documented in [`database/CHECKLIST_TABLE_STANDARDS.md`](database/CHECKLIST_TABLE_STANDARDS.md): snake_case, FK IDs (never text), audit trigger applied, row in `domain_family_map` for versioning. Every new table also needs an SQL script under `database/scripts/sql/<layer>/` and a seed CSV under `database/seed_tables/<layer>/`.
-
--->
-
-
-**Source-of-truth artifacts:**
-
-- ERD: [`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`](database/schema/COEQWAL_SCENARIOS_DB_ERD.md)
-- Latest monthly audit: `audits/monthly_<timestamp>/report.md` (gitignored, regenerable)
-
-**Audit chain** (each tool answers a different question):
-
-| Question | Tool |
-|---|---|
-| Full monthly audit: content + verification + health + cost | `python database/audit/run_monthly_audit.py` |
-| Is the DB shaped correctly? | `database/run_audit.sh`, `verify_erd_against_audit.py`, per-layer `09_verify_level*.sql` |
-| Are layers 00-08 correct? | `database/scripts/export_layer_tables.py` + diff vs `database/seed_tables/` |
-| Are computed results correct? | `etl/statistics/verify_all_sections.py` (CSV -> DB), `etl/statistics/verify_api.py` (DB -> API) |
-
-**After a monthly audit, what to read:**
-
-| Run | After a run, what do I read? |
-|---|---|
-| **Monthly database audit**<br>`database/audit/run_monthly_audit.py` | **Console:** Ends with a `MONTHLY AUDIT COMPLETE` block naming the output directory and the report filename.<br><br>**Digest:** `audits/monthly_<ts>/report.md` for the top-level summary (row counts, ERD diff, audit-field checks). Drill into `layer_exports/` or `results_samples/` only if a section is flagged. |
-
-Tech: PostgreSQL, PostGIS, `psql`, `aws_s3` extension for S3-side loads.
-
-See [`database/README.md`](database/README.md) for the full schema reference, audit guide, and developer onboarding.
 
 ## [API](api/coeqwal-api/README.md)
 

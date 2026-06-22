@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION register_developer(
     p_email TEXT,
     p_display_name TEXT,
     p_password TEXT,
-    p_role TEXT DEFAULT 'developer'
+    p_role TEXT DEFAULT 'user'
 )
 RETURNS TEXT AS $$
 DECLARE
@@ -57,7 +57,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 COMMENT ON FUNCTION register_developer(TEXT, TEXT, TEXT, TEXT, TEXT) IS 
 'Creates a PostgreSQL user and registers them in the developer table for audit tracking.
 Usage: SELECT register_developer(''username'', ''email@example.com'', ''Display Name'', ''password'', ''role'');
-Roles: admin, developer (default)';
+Roles: admin, user (default), system (reserved for the bootstrap account)';
 
 -- =============================================================================
 -- Function: list_developers()

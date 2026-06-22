@@ -11,7 +11,7 @@ the tier-location data quality batch (Section 1).
 came from `swp_contractor_perdel_A.wresl` with `project = SWP`. Zero CVP
 rows.
 
-**Schema expectation:** [`database/scripts/sql/.archive/12_mi_statistics/03_create_mi_contractor_entity_tables.sql`](../database/scripts/sql/.archive/12_mi_statistics/03_create_mi_contractor_entity_tables.sql)
+**Schema expectation:** [`database/sql_archive/03_entity_layers/mi/03_create_mi_contractor_entity_tables.sql`](../database/sql_archive/03_entity_layers/mi/03_create_mi_contractor_entity_tables.sql)
 comments reference CVP source files (`nodcvpcontract.table`, etc.).
 
 **Work:**
@@ -75,7 +75,7 @@ Reconciliation script:
 
 ## Urban gw/sw reconciliation (in progress)
 
-**Walkthrough:** [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md)
+**Walkthrough:** [`gw_sw_reconciliation.md`](../database/topic_docs/cws/gw_sw_reconciliation.md)
 
 **Status (May 2026):**
 - Urban seed vs M&I xlsx: 88/120 agree, **32 disagree** (semantic, not format)

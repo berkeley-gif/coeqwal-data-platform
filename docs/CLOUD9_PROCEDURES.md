@@ -407,7 +407,7 @@ Threads not in this procedures doc are either team-decision blockers
 (no Cloud9 commands to copy), reference material, or rolled back:
 
 - Thread A3 (gw / sw value reconciliation): per-ID team decisions needed
-  before any DB write. See [`gw_sw_reconciliation.md`](gw_sw_reconciliation.md).
+  before any DB write. See [`gw_sw_reconciliation.md`](../database/topic_docs/cws/gw_sw_reconciliation.md).
 - Threads A4-A6 (`cvp_total`, master crosswalk, tier coverage gaps):
   team decisions, no Cloud9 commands.
 - Thread A7 (statistics correction pattern): reference only - explains
@@ -415,7 +415,7 @@ Threads not in this procedures doc are either team-decision blockers
 - Roadmap R1 (gw/sw BOOLEAN migration) and R2 (DU geometry refactor):
   rolled back in May 2026. Future developers picking these up should
   start from the design notes in
-  [`docs/database_geometry_pattern.md`](database_geometry_pattern.md)
+  [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md#roadmap)
   (for R2) and the BOOLEAN section in
-  [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md) (for R1),
+  [`gw_sw_reconciliation.md`](../database/topic_docs/cws/gw_sw_reconciliation.md) (for R1),
   not from a stashed procedures block.

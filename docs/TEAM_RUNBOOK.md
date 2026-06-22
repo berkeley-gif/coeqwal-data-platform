@@ -14,10 +14,10 @@ historical context live in the linked docs.
 | If you are looking for... | Read |
 |---|---|
 | What this codebase is | [`README.md`](../README.md) |
-| The schema | [`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`](../database/schema/COEQWAL_SCENARIOS_DB_ERD.md) |
+| The schema | [`database/schema/ERD.md`](../database/schema/ERD.md) |
 | What the database looks like right now | `audits/monthly_20260524_143951/report.md` |
 | Verification and audit systems | [`etl/verification/README.md`](../etl/verification/README.md) |
-| How DU, M&I, contractor, and CWS concepts relate | [`docs/water_user_categories.md`](water_user_categories.md) |
+| How DU, M&I, contractor, and CWS concepts relate | [`water_user_categories.md`](../database/topic_docs/cws/water_user_categories.md) |
 | Statistics and model-run roadmap | [`docs/statistics_roadmap.md`](statistics_roadmap.md) |
 | **Copy-paste Cloud9 procedures (threads A1, A2)** | [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) |
 
@@ -132,7 +132,7 @@ the team has time and context. Column types stay VARCHAR(5) (R1).
 
 **Files.**
 
-- Walkthrough: [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md)
+- Walkthrough: [`gw_sw_reconciliation.md`](../database/topic_docs/cws/gw_sw_reconciliation.md)
 - Audit script: [`etl/tier_data/scripts/reconcile_gw_sw_sources.py`](../etl/tier_data/scripts/reconcile_gw_sw_sources.py)
 - CalSim Table 3-7 OR rollup: `data/raw/csv_from_CalSim_report_pdf/du+diversion/urban_demand_unit_water_sources.csv`
 - Kristin xlsx: `data/reference/cws/Final_M&Idemandunits_withlatlongs.xlsx`
@@ -177,7 +177,7 @@ single `DEL_SWP_PMI` (unsuffixed) variable; CVP only exposes
   (`cvp_total` section).
 - Existing aggregate definitions: [`etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py`](../etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py)
   (`CWS_AGGREGATES` dict, lines ~85-136).
-- Table + seed: [`database/scripts/sql/.archive/12_mi_statistics/06_create_cws_aggregate_tables.sql`](../database/scripts/sql/.archive/12_mi_statistics/06_create_cws_aggregate_tables.sql).
+- Table + seed: [`database/sql_archive/03_entity_layers/mi/06_create_cws_aggregate_tables.sql`](../database/sql_archive/03_entity_layers/mi/06_create_cws_aggregate_tables.sql).
 
 **Question for the data team.** Three options:
 
@@ -237,12 +237,12 @@ about 7 missing attribute rows and 42 missing geometry rows. AG_REV has
 
 **Files.**
 
-- User-facing impact: [`docs/tier_location_gap_impact.md`](tier_location_gap_impact.md)
-- Geometry scorecard: [`docs/du_geometry_gap.md`](du_geometry_gap.md)
-- Pattern roadmap: [`docs/du_polygon_mapping.md`](du_polygon_mapping.md) (Pattern C section)
+- How it is consumed: [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md#how-it-is-consumed)
+- Geometry scorecard: [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md#coverage)
+- Missing-geometry ids: [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md#appendix-du_ids-without-geometry)
 
 **Next step.** Decide accept-vs-fix per Pattern C id using the
-checklist at the bottom of `tier_location_gap_impact.md`.
+"Decisions pending" checklist in `demand_unit_geometry.md`.
 
 ---
 
@@ -322,7 +322,7 @@ developer can run end-to-end.
    `ALTER COLUMN` from `VARCHAR(5)` to `BOOLEAN NULL` on
    `du_urban_entity.gw` and `.sw`.
 3. Update CREATE TABLE in
-   `database/scripts/sql/.archive/12_mi_statistics/01_create_du_urban_entity.sql`
+   `database/sql_archive/03_entity_layers/mi/01_create_du_urban_entity.sql`
    to `BOOLEAN`.
 4. Update ERD entry for `du_urban_entity.gw` / `.sw`.
 5. Reader audit:
@@ -342,14 +342,14 @@ current VARCHAR seed.
 ### R2. Move DU polygon geometry into dedicated tables (rolled back)
 
 **Live RDS state.** Migration
-[`56_add_du_geometry_columns.sql`](../database/scripts/sql/.archive/56_add_du_geometry_columns.sql)
+[`56_add_du_geometry_columns.sql`](../database/sql_archive/04_scenario/56_add_du_geometry_columns.sql)
 added `geom` / `geom_wkt` / `srid` directly to the three
 `du_*_entity` tables. Loader
 [`load_du_geometries.py`](../database/scripts/data_processing/load_du_geometries.py)
 populates those columns from `database/seed_tables/03_GIS/du_4326.gpkg`.
 This contradicts the project's "geometry in dedicated tables" rule
 but works and is not blocking anything. The migration SQL now lives in
-`.archive/` along with the rest of the one-shot DDL. The DU columns
+`database/sql_archive/` along with the rest of the one-shot DDL. The DU columns
 exist in RDS, so the loader runs as before. If you ever rebuild the DB
 from scratch, re-apply the migration from its archive location.
 
@@ -368,9 +368,9 @@ of that was applied on RDS. With production untouched, leaving the
 half-prep in place was a footgun (loader and API pointing at tables
 that did not exist).
 
-**Future pickup.** Design reference and step-by-step shape are in
-[`docs/database_geometry_pattern.md`](database_geometry_pattern.md)
-under "Future refactor". Roughly:
+**Future pickup.** The current storage and the roadmap pointer are in
+[`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md#roadmap)
+under "Roadmap". Roughly:
 
 1. Decide table layout (three tables vs one `demand_unit_geometry`
    with a `du_class` discriminator). Update the ERD.
@@ -391,7 +391,7 @@ under "Future refactor". Roughly:
 
 Footprint policy (dissolved gpkg vs multipart vs PWS union vs
 centroid) is a separate open question and does not depend on the table
-shape. See [`docs/du_polygon_mapping.md`](du_polygon_mapping.md).
+shape. See [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md#where-it-lives).
 
 ---
 
@@ -461,10 +461,7 @@ checkout is stale - `git pull` and rerun.
 | Cloud9 procedures (A1, A2) | [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) |
 | Audits + verification | [`etl/verification/README.md`](../etl/verification/README.md) |
 | Statistics + M&I roadmap | [`docs/statistics_roadmap.md`](statistics_roadmap.md) |
-| gw/sw reconciliation | [`docs/gw_sw_reconciliation.md`](gw_sw_reconciliation.md) |
-| Database geometry pattern (roadmap) | [`docs/database_geometry_pattern.md`](database_geometry_pattern.md) |
-| DU polygon mapping | [`docs/du_polygon_mapping.md`](du_polygon_mapping.md) |
-| DU geometry gap scorecard | [`docs/du_geometry_gap.md`](du_geometry_gap.md) |
-| Tier location gap impact | [`docs/tier_location_gap_impact.md`](tier_location_gap_impact.md) |
-| Water user categories | [`docs/water_user_categories.md`](water_user_categories.md) |
-| Schema ERD | [`database/schema/COEQWAL_SCENARIOS_DB_ERD.md`](../database/schema/COEQWAL_SCENARIOS_DB_ERD.md) |
+| gw/sw reconciliation | [`gw_sw_reconciliation.md`](../database/topic_docs/cws/gw_sw_reconciliation.md) |
+| Demand-unit geometry (mapping, gap, user impact, target architecture) | [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md) |
+| Water user categories | [`water_user_categories.md`](../database/topic_docs/cws/water_user_categories.md) |
+| Schema ERD | [`database/schema/ERD.md`](../database/schema/ERD.md) |

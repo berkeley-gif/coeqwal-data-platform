@@ -430,14 +430,14 @@ Run from the repo root (Cloud9 or local with VPN):
 
 ```bash
 # Create table and load seed data from repo CSV
-psql $SUPERUSER_URL -f database/scripts/sql/.archive/migrations/20_create_refuge_entity_table.sql
+psql $SUPERUSER_URL -f database/sql_archive/log/20_create_refuge_entity_table.sql
 ```
 
 To reload after editing the CSV (e.g., correcting provider or GW/SW values):
 
 ```bash
 psql $SUPERUSER_URL -c "TRUNCATE du_refuge_entity CASCADE;"
-psql $SUPERUSER_URL -f database/scripts/sql/.archive/migrations/20_create_refuge_entity_table.sql
+psql $SUPERUSER_URL -f database/sql_archive/log/20_create_refuge_entity_table.sql
 ```
 
 ---
@@ -473,7 +473,7 @@ All statistics in this module are derived from CalSim 3 model outputs for COEQWA
 
 
 The `created_by` field on all inserted rows is set to `2` (jfantauzza) to correctly attribute ETL-generated
-data. See `database/scripts/sql/.archive/00_versioning/01_create_audit_trigger_function.sql` for the trigger logic.
+data. See `database/sql_archive/00_versioning/01_create_audit_trigger_function.sql` for the trigger logic.
 
 ---
 

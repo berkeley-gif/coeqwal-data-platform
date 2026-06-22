@@ -1,50 +1,26 @@
 # ETL: Tier Outcome Results
 
-Loads tier outcome data for all active scenarios into the `tier_result` and
-`tier_location_result` database tables.
+Loads tier outcome data for all active scenarios into the `tier_result` and `tier_location_result` database tables.
 
 This README has two distinct workflows. Pick the one you need:
 
-| If the data team sent you... | Go to |
+| If the tier data team sent you... | Go to |
 |---|---|
-| **new tier-result values** (updated tier 1-4 numbers per scenario) | [How to load new tier data](#how-to-load-new-tier-data) (the section below) |
+| **new tier-result values** (integral tier 1-4 numbers per scenario) | [How to load new tier data](#how-to-load-new-tier-data) (the section below) |
 | **a changed tier-LOCATION list** (added/dropped a location_id from a tier) | [Updating tier locations when a tier team sends new data](#updating-tier-locations-when-a-tier-team-sends-new-data) (further down) |
 
 ---
 
-## What gets written, and the uniqueness guarantee
-
-The loader writes two tables, both UPSERT (`ON CONFLICT ... DO UPDATE`):
-
-| Table | One row per | Unique key (DB-enforced) |
-|---|---|---|
-| `tier_result` | scenario × tier | `(scenario_short_code, tier_short_code, tier_version_id)` |
-| `tier_location_result` | scenario × tier × location | `(scenario_short_code, tier_short_code, location_id, tier_version_id)` |
-
-`tier_version_id` is hardcoded to `8` in [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py).
-Don't change without data team sign-off.
-
-The unique constraints make duplicates **structurally impossible**: a
-second UPSERT for the same (scenario, tier, location, version) overwrites
-the row instead of inserting a new one. Re-running the loader is always
-safe. Rows with unchanged values still get an `updated_at` bump, but no
-duplicate row appears.
-
-Step 8 of the workflow below runs an explicit duplicate-check query as
-belt-and-suspenders. It should always return zero rows.
+For lookups while you work, see the [Reference](#reference) section: what gets written, what each tier is, and the staging CSV formats.
 
 ---
 
 ## How to load new tier data
 
 **1. Drop new CSVs into `etl/tier_data/staging/`.**
-   Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`,
-   `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`,
-   `FW_EXP.csv`, `WRC_SALMON_AB.csv`. Format reference:
-   [Staging CSV format](#staging-csv-format) below.
+   Filenames are fixed: `CWS_DEL.csv`, `AG_REV.csv`, `ENV_FLOWS.csv`, `RES_STOR.csv`, `GW_STOR.csv`, `DELTA_ECO.csv`, `FW_DELTA_USES.csv`, `FW_EXP.csv`, `WRC_SALMON_AB.csv`. Format reference: [Staging CSV format](#staging-csv-format) below.
 
-   If the team sends pre-staging drops (multiple files per tier, per-climate
-   splits, etc.) under `staging/tier_results/`, normalize them with:
+   If the team sends pre-staging drops (multiple files per tier, per-climate splits, etc.) under `staging/tier_results/`, normalize them with:
    ```bash
    python etl/tier_data/scripts/stage_tier_results.py
    ```
@@ -53,17 +29,13 @@ belt-and-suspenders. It should always return zero rows.
    ```bash
    python etl/ingestion/tools/refresh_active_scenarios.py
    ```
-   That regenerates `etl/common/active_scenarios.py` from the live API
-   (`/api/scenarios`, `is_active=true`). If any scenarios are being
-   retired, add their short codes to `DEACTIVATED_SCENARIOS` in
-   [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py).
+   That regenerates `etl/common/active_scenarios.py` from the live API (`/api/scenarios`, `is_active=true`). If any scenarios are being retired, add their short codes to `DEACTIVATED_SCENARIOS` in [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py).
 
-**3. Commit and push from Mac.** The staging CSVs are git-tracked on
-   purpose so Cloud9 sees the same bytes.
+**3. Commit and push from Mac.** The staging CSVs are git-tracked.
 
 **4. On Cloud9: `git pull`.**
 
-**5. Dry run, verify counts:**
+**5. Dry run, rectify counts:**
    ```bash
    python etl/tier_data/scripts/load_all_tier_results.py --dry-run
    ```
@@ -85,19 +57,13 @@ belt-and-suspenders. It should always return zero rows.
    ```bash
    python etl/tier_data/scripts/load_all_tier_results.py --output-sql all_tiers.sql
    ```
-   Writes `etl/tier_data/output/all_tiers.sql` (the whole `output/` tree
-   is gitignored via `etl/**/output/`). Bare filenames are auto-routed
-   there. Paths with `/` are respected verbatim.
+   Writes `etl/tier_data/output/all_tiers.sql` (the whole `output/` tree is gitignored via `etl/**/output/`, debatable whether this is a good idea).
 
 **7. Apply it:**
    ```bash
    psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql
    ```
-   The SQL ends with two verification queries (one per table) showing
-   row counts grouped by `tier_short_code`. Active scenario counts
-   should match `ALLOWED_SCENARIOS`. Use `$DATABASE_URL` (your personal
-   role) so audit attribution lands on you, not on the shared `postgres`
-   account.
+   The SQL ends with two verification queries (one per table) showing row counts grouped by `tier_short_code`. Active scenario counts should match `ALLOWED_SCENARIOS`. Use `$DATABASE_URL` (your personal role) so audit attribution is to you, not on the shared `postgres` account.
 
 **8. Validate uniqueness and idempotency.**
    ```bash
@@ -116,41 +82,16 @@ belt-and-suspenders. It should always return zero rows.
      GROUP BY scenario_short_code, tier_short_code, tier_version_id
      HAVING COUNT(*) > 1;
    SQL
-
-   # Idempotency: re-apply the same SQL and confirm zero net row
-   # count change. If the numbers differ, the loader is non-deterministic
-   # for some input row (almost always a CSV with duplicate scenario
-   # columns) and needs investigation.
-   BEFORE=$(psql -tA $DATABASE_URL -c "SELECT COUNT(*) FROM tier_location_result")
-   psql $DATABASE_URL -f etl/tier_data/output/all_tiers.sql > /dev/null
-   AFTER=$(psql -tA  $DATABASE_URL -c "SELECT COUNT(*) FROM tier_location_result")
-   echo "tier_location_result: before=$BEFORE after=$AFTER (should be equal)"
    ```
 
-   Optional cross-check against the live API (uses tier_result + entity
-   joins via the same code path as the public API). Useful before
-   flipping a new scenario's `is_active`:
+   Optional cross-check against the live API (uses tier_result + entity joins via the same code path as the public API). Useful before flipping a new scenario's `is_active`:
    ```bash
    python etl/tier_data/scripts/verify_tiers.py
    ```
 
-> **No seed CSV step.** `tier_result` and `tier_location_result` are
-> project data, not reference data, so they are not mirrored into
-> `database/seed_tables/10_tier/`. The staging CSVs in `staging/` plus
-> this loader are the source of truth. A from-scratch DB
-> rebuild populates these tables by running the loader after the DDLs,
-> exactly the same command as a routine load (steps 5-7 above).
+> **No seed CSV step.** `tier_result` and `tier_location_result` are project data, not reference data, so they are not mirrored into `database/seed_tables/10_tier/`. The staging CSVs in `staging/` plus this loader are the source of truth.
 
-> **Pre-flight a new scenario before flipping `is_active=1`.**
-> Both [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) and
-> [`scripts/verify_tiers.py`](scripts/verify_tiers.py) accept
-> `--scenarios-override sXXX,sYYY` as a per-invocation replacement for
-> `ACTIVE_SCENARIOS`. Use it to dry-run a tier load
-> (`--scenarios-override sXXX --dry-run`) or verify tier coverage
-> against the live API for a scenario that is not yet public. The
-> override is never persisted. To change `ACTIVE_SCENARIOS` itself, use
-> [`etl/ingestion/tools/set_scenario_active.py`](../ingestion/tools/set_scenario_active.py).
-> Each run emits a `WARNING` line naming the resolved override set.
+> **Test a new scenario before publishing it.** The scripts only process scenarios in the active list ([`etl/common/active_scenarios.py`](../common/active_scenarios.py)), so a scenario that is not yet public gets skipped. To trial one anyway, pass `--scenarios-override sXXX` to [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) (with `--dry-run`) and [`scripts/verify_tiers.py`](scripts/verify_tiers.py). The override applies to that one run only and is never saved. When the scenario checks out, publish it (set `is_active=1`) with [`etl/ingestion/tools/set_scenario_active.py`](../ingestion/tools/set_scenario_active.py).
 
 ### Partial loads
 
@@ -160,44 +101,26 @@ python etl/tier_data/scripts/load_all_tier_results.py \
     --only ENV_FLOWS,RES_STOR --output-sql partial.sql
 psql $DATABASE_URL -f etl/tier_data/output/partial.sql
 ```
-Other tier rows are left alone (the UPSERT only touches the tiers in the
-generated SQL).
+Other tier rows are left alone (the UPSERT only touches the tiers in the generated SQL).
 
 ### Direct DB apply (skip the SQL file)
 
-If you set `$DATABASE_URL`, the loader can apply directly without writing
-a file. Use this only for one-off backfills, not for routine loads -
-the file path keeps a reviewable record of what hit the DB:
+If you set `$DATABASE_URL`, the loader can apply directly without writing a file. Use this only for one-off backfills, not for routine loads - the file path keeps a reviewable record of what hit the DB:
 ```bash
 DATABASE_URL=$DATABASE_URL python etl/tier_data/scripts/load_all_tier_results.py
 ```
 
 ### Notes
 
-- `tier_location_result` has no `is_active` column. Retired-scenario rows
-  stay in the table forever. The API hides them by filtering on
-  `tier_result.is_active`.
-- `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by
-  design - it's the CalSim id for the Legal Delta, which is both a WBA
-  (for groundwater accounting) and the polygon used by `DELTA_ECO`. The
-  composite uniqueness key keeps these rows distinct because the
-  `tier_short_code` differs. API routes that take a tier in the path
-  return only that tier's `DETAW` row. Client code keying by
-  `location_id` across tiers should use `(tier_short_code, location_id)`.
-- Generated SQL lands in `etl/tier_data/output/` by default and that
-  whole tree is gitignored. Only the script and staging CSVs are tracked.
+- `tier_location_result` has no `is_active` column. Retired-scenario rows stay in the table. `tier_result` does have an `is_active` column. The API hides them by filtering on `tier_result.is_active`.
+- `DETAW` is a shared `location_id` across `GW_STOR` and `DELTA_ECO` by design. It's the CalSim id for the Legal Delta, which is both a WBA (for groundwater accounting) and the polygon used by `DELTA_ECO`. The composite uniqueness key keeps these rows distinct because the `tier_short_code` differs. API routes that take a tier in the path return only that tier's `DETAW` row. Client code keying by `location_id` across tiers should use `(tier_short_code, location_id)`.
+- Generated SQL lands in `etl/tier_data/output/` by default and that whole tree is gitignored. Only the script and staging CSVs are tracked.
 
 ---
 
 ## Updating tier locations when a tier team sends new data
 
-The tier teams' staging CSVs are the source of truth for tier-location
-membership. The `tier_location` database table is a narrow catalog
-(`tier_short_code`, `location_type`, `location_id`, `display_order`,
-`is_active`). Display names and geometry are resolved at query time by
-joining `location_id` to the entity tables documented in
-[`etl/common/tier_location_entities.py`](../common/tier_location_entities.py).
-There is no seed CSV for `tier_location`.
+The tier teams' staging CSVs are the source of truth for tier-location membership. The `tier_location` database table is a narrow catalog (`tier_short_code`, `location_type`, `location_id`, `display_order`, `is_active`). Display names and geometry are resolved at query time by joining `location_id` to the entity tables documented in [`etl/common/tier_location_entities.py`](../common/tier_location_entities.py). There is no seed CSV for `tier_location`.
 
 The workflow:
 
@@ -209,22 +132,15 @@ The workflow:
    python etl/tier_data/scripts/diff_tier_locations.py
    ```
 
-   Optional `--tier RES_STOR` scopes the diff to one tier. The output
-   lists ids the tier team added (`in CSV, not in DB`) and ids that are
-   no longer in staging (`in DB, not in CSV`).
+   Optional `--tier RES_STOR` scopes the diff to one tier. The output lists ids the tier team added (`in CSV, not in DB`) and ids that are no longer in staging (`in DB, not in CSV`).
 
-3. Optional but recommended: audit geometry and attribute coverage for
-   the new ids before promoting them. This walks the entity tables
-   (`network`, `network_gis`, `reservoir`, `wba`, `compliance_station`,
-   `du_urban_entity`) and reports any `location_id` that the catalog
-   would carry but the entity table cannot resolve.
+3. Optional but recommended: audit geometry and attribute coverage for the new ids before promoting them. This walks the entity tables named in [`etl/common/tier_location_entities.py`](../common/tier_location_entities.py) (`network` and `network_gis`, `du_urban_entity`, `du_agriculture_entity`, `reservoir_entity` and `reservoir`, `wba`, `compliance_station`) and reports any `location_id` that the catalog would carry but the entity table cannot resolve. Note that each tier resolves against its own table, so `AG_REV` ids check `du_agriculture_entity` while `CWS_DEL` ids check `du_urban_entity`, and `RES_STOR` attributes come from `reservoir_entity` with geometry from `reservoir`.
 
    ```bash
    python etl/tier_data/scripts/audit_tier_location_geometry.py
    ```
 
-   Re-run after each gap-fill until the scorecard reports 100% attribute
-   and geometry coverage.
+   Re-run after each gap-fill until the scorecard reports 100% attribute and geometry coverage.
 
 4. Dry-run the sync to see exactly which rows would change:
 
@@ -232,11 +148,7 @@ The workflow:
    python etl/tier_data/scripts/sync_tier_locations_from_staging.py --dry-run
    ```
 
-   The plan reports inserts, reactivations (rows that returned to
-   staging after being soft-deleted), display-order updates, and
-   deactivations. The script refuses to write rows whose `location_id`
-   does not resolve in the entity table. Pass `--allow-unresolved` only
-   during an active gap-fill.
+   The plan reports inserts, reactivations (rows that returned to staging after being soft-deleted), display-order updates, and deactivations. The script refuses to write rows whose `location_id` does not resolve in the entity table. Pass `--allow-unresolved` only during an active gap-fill.
 
 5. Apply:
 
@@ -244,20 +156,13 @@ The workflow:
    python etl/tier_data/scripts/sync_tier_locations_from_staging.py
    ```
 
-   The script runs in one transaction. Rows that left staging are
-   soft-deleted (`is_active = FALSE`) so historical
-   `tier_location_result` rows still have a catalog row to point at.
-   Re-adding a row to staging flips `is_active` back to TRUE on the
-   next sync.
+   The script runs in one transaction. Rows that left staging are soft-deleted (`is_active = FALSE`) so historical `tier_location_result` rows still have a catalog row to point at. Re-adding a row to staging flips `is_active` back to TRUE on the next sync.
 
-6. Re-run `python etl/tier_data/scripts/diff_tier_locations.py`. Gaps should be
-   gone.
+6. Re-run `python etl/tier_data/scripts/diff_tier_locations.py`. Gaps should be gone.
 
-### Coverage alerts in the daily scripts
+### Coverage alerts in the scripts
 
-Every script that touches `tier_location` now runs a coverage scan and
-prints a one-line WARNING per tier with missing attribute or geometry
-data:
+Every script that touches `tier_location` now runs a coverage scan and prints a one-line WARNING per tier with missing attribute or geometry data, for example:
 
 ```
 WARNING: tier_location coverage gap in RES_STOR: 1 missing attribute [ORO]; 1 missing geometry [ORO]. Run `python etl/tier_data/scripts/audit_tier_location_geometry.py --tier RES_STOR` for details.
@@ -265,35 +170,42 @@ WARNING: tier_location coverage gap in RES_STOR: 1 missing attribute [ORO]; 1 mi
 
 | Script | What it does with the alert |
 |---|---|
-| [`scripts/sync_tier_locations_from_staging.py`](scripts/sync_tier_locations_from_staging.py) | Prints per-tier `coverage: attribute X/Y, geometry A/B` in the plan, then the WARNING block. Attribute gaps still block sync (use `--allow-unresolved` during gap-fill). Geometry gaps warn only. |
-| [`scripts/diff_tier_locations.py`](scripts/diff_tier_locations.py) | Appends a coverage scorecard across the union of staging and catalog ids, then the WARNING block. Read-only, never exits non-zero. |
-| [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) | Emits the WARNING block on startup against active catalog rows. Loader continues regardless. The loader falls back to `location_id` for any name that fails to resolve. |
-| [`scripts/verify_tiers.py`](scripts/verify_tiers.py) | Emits the WARNING block on startup, immediately after the RES_STOR catalog fetch. Verifier pass/fail logic is unchanged. |
-| [`scripts/audit_tier_location_geometry.py`](scripts/audit_tier_location_geometry.py) | The dedicated tool. Full per-id scorecard plus the ERD-vs-live drift pass. Exits non-zero on any gap so CI / wrappers can branch on it. JSON dump via `--json`. |
+| [`scripts/sync_tier_locations_from_staging.py`](scripts/sync_tier_locations_from_staging.py) | Prints a coverage scorecard (attribute X/Y, geometry A/B) and the WARNING block in its plan. Geometry gaps warn only. Blocks on attribute gaps, exiting with code 2 unless `--allow-unresolved` is passed. |
+| [`scripts/diff_tier_locations.py`](scripts/diff_tier_locations.py) | Prints a coverage scorecard across the staging and catalog ids and the WARNING block. Read-only. Never exits non-zero. |
+| [`scripts/load_all_tier_results.py`](scripts/load_all_tier_results.py) | Prints the WARNING block on startup against active catalog rows. Falls back to `location_id` for any name that fails to resolve. Continues regardless. |
+| [`scripts/verify_tiers.py`](scripts/verify_tiers.py) | Prints the WARNING block on startup after the RES_STOR catalog fetch. Leaves pass/fail logic unchanged. Continues regardless. |
+| [`scripts/audit_tier_location_geometry.py`](scripts/audit_tier_location_geometry.py) | Prints the full per-id scorecard and the ERD-vs-live drift pass. Writes JSON with `--json`. Exits non-zero on any gap so CI can branch on it. |
 
-The four daily scripts only ever warn. Only the audit script changes its
-exit code on gaps. Reach for the audit script when you need the full
-per-id detail or want CI to fail on regressions.
+Geometry gaps are warn-only in every script. Attribute (unresolved-id) gaps behave differently. `sync_tier_locations_from_staging.py` blocks on them and exits with code 2 unless `--allow-unresolved` is passed, while `diff`, `load`, and `verify` only warn. The audit script exits non-zero on any gap, attribute or geometry. Reach for the audit script when you need the full per-id detail or want CI to fail on regressions.
 
 ---
 
-## Tier outcomes
+## Reference
+
+### What gets written
+
+The loader writes to two tables, both UPSERT (`ON CONFLICT ... DO UPDATE`):
+
+| Table | One row per | Unique key (DB-enforced) |
+|---|---|---|
+| `tier_result` | scenario × tier | `(scenario_short_code, tier_short_code, tier_version_id)` |
+| `tier_location_result` | scenario × tier × location | `(scenario_short_code, tier_short_code, location_id, tier_version_id)` |
+
+### Tier outcomes
 
 | Short code | Name | Type | Locations |
 |------------|------|------|-----------|
 | `CWS_DEL` | Community water system deliveries | multi-value | Demand units |
-| `AG_REV` | Agricultural revenue | multi-value | Demand units (regions) |
+| `AG_REV` | Agricultural revenue | multi-value | Demand units |
 | `ENV_FLOWS` | Environmental flows | multi-value | 17 stream reaches |
-| `RES_STOR` | Reservoir storage | multi-value | 8 reservoirs |
+| `RES_STOR` | Reservoir storage | multi-value | 8 reservoirs, note that San Louis is split into CSV and SWP |
 | `GW_STOR` | Groundwater storage | multi-value | 42 locations: 41 water budget areas + `DETAW` (Delta) |
 | `DELTA_ECO` | Delta ecology | single-value | DETAW (Delta) |
 | `FW_DELTA_USES` | Freshwater for in-Delta uses | single-value | Emmaton, Jersey Point |
 | `FW_EXP` | Freshwater for Delta exports | single-value | Banks, Jones pumping plants |
-| `WRC_SALMON_AB` | Salmon abundance | single-value | Sacramento at Keswick (s0065 excluded by data team) |
+| `WRC_SALMON_AB` | Salmon abundance | single-value | Sacramento at Keswick |
 
----
-
-## Staging CSV format
+### Staging CSV format
 
 Each tier has a CSV file in `staging/` named by its short code. The formats differ by tier:
 
@@ -315,7 +227,7 @@ NA cells in any CSV are skipped (no location row generated for that slot).
 
 ## Known limitations and roadmap
 
-These are open items that the tier pipeline does not yet handle. They are documented here so the next person does not rediscover them from scratch.
+These are open items that the tier pipeline does not yet handle.
 
 ### NOD/SOD regional outcomes are not produced by this pipeline
 

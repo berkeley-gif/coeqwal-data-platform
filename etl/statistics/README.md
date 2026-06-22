@@ -1,10 +1,12 @@
 # ETL Statistics Pipeline
 
-Calculate and load CalSim model output statistics into the COEQWAL PostgreSQL database, one module per topic.
+Calculate and load CalSim model output statistics into the COEQWAL PostgreSQL database.
+
+> **Provenance and status (read before trusting these numbers).** The location lists and the calculations in this pipeline were ported, as a first pass, from the Water Allocation Modeling Team's Jupyter notebooks: the [`coeqwal`](https://github.com/maramahmedd/coeqwal) repo (`notebooks/coeqwalpackage/metrics.py`, `notebooks/Metrics.ipynb`) and the COEQWAL_V3 toolkit (`coeqwalpackage/metrics.py`, `tier.py`, `DataExtraction.py`, and the `data/` mapping CSVs). They were copied once to stand up the pipeline under time constraints (see [root README](../../README.md)). Treat them as a working draft that needs review, not a verified source of truth. The per-calculation findings from the initial review pass (match / discrepancy / needs review / unverifiable) are in [Provenance and verification](#provenance-and-verification) below.
 
 ## Modules at a glance
 
-Nine production modules live under `etl/statistics/`, one subdirectory per topic. Each one reads scenario CSVs from S3, computes derived metrics, and writes them straight to PostgreSQL. They are usually invoked together via `run_all.py`, but each module's `main.py` is independently runnable.
+Nine production modules live under `etl/statistics/`, one subdirectory per topic. Each one reads scenario CSVs from S3, computes derived metrics, and writes them to PostgreSQL. They are usually invoked together via `run_all.py`, but each module's `main.py` is independently runnable.
 
 | Module | What it computes | Tables written |
 |---|---|---|
@@ -26,6 +28,62 @@ Utility code (not a module): `charts/` for visualization helpers, top-level `ver
 > The whole `audit_reports/` directory is gitignored. Override locations with
 > `--audit-dir` or `-o`. See [`etl/README.md`](../README.md#output-files-audits-generated-sql)
 > for the full output catalog.
+
+## Provenance and verification
+
+Every location list and calculation in this pipeline traces back to the modeling team notebooks. This section records where each one came from and the result of a first review pass that compared the backend implementation against the readable source code.
+
+**Sources of truth (what was compared against):**
+
+- `coeqwal` repo: `notebooks/coeqwalpackage/metrics.py` and `notebooks/Metrics.ipynb` (plain JSON, readable).
+- `COEQWAL_V3` repo: `coeqwalpackage/metrics.py`, `tier.py`, `DataExtraction.py`, and the location/grouping CSVs under `data/mappings/`, `data/variables/`, `data/tiers/`.
+
+**Method and limits.** This was a read-and-compare review of formulas, constants, unit conversions, and location membership, not an automated parity harness and not an exhaustive line-by-line audit. The `COEQWAL_V3` notebooks (`*.ipynb`) are Git LFS pointer stubs in a normal checkout, so V3 logic was verified against its importable `coeqwalpackage/*.py` modules rather than the V3 notebooks themselves.
+
+- **Match** - backend formula/list agrees with the source within the tolerances the existing verifiers already use.
+- **Discrepancy** - a real difference exists that a reviewer should resolve.
+- **Needs review** - intentional-looking backend choice (often with a code comment) that diverges from the notebook and should be confirmed by the modeling team.
+- **Unverifiable** - no readable notebook/Python source exists to compare against (backend-only extension or notebook logic only present in LFS-stubbed `.ipynb`).
+
+Items marked Discrepancy, Needs review, or Unverifiable are collected in the handoff guide at [`docs/STATISTICS_HANDOFF.md`](../../docs/STATISTICS_HANDOFF.md).
+
+### Calculations
+
+| Calculation | Source of truth | Verdict | Note |
+|---|---|---|---|
+| CFS to TAF conversion | `metrics.py` `convert_cfs_to_taf` | Match | Backend uses `86400/43560000 ≈ 0.00198347`. Notebooks use rounded `0.001984`. ~0.027% drift, negligible. |
+| Water-year definition (Oct start) | `metrics.py` `add_water_year_column` | Match | Both set `WaterYear = Year + 1` for months >= 10. |
+| Reservoir flood-pool probability | `metrics.py` `frequency_hitting_level` | Match | Same `storage - threshold` with `+1e-6` epsilon. Only an exact-tie boundary differs. |
+| Reservoir dead-pool probability | `metrics.py` `frequency_hitting_level` | Needs review | Backend computes direct `P(storage <= dead)` with no epsilon/inversion (`reservoir_metrics.py:152-167`). The notebook dead-pool calls use the inverted flood-zone branch. Confirm intended semantics. |
+| Reservoir CV | `metrics.py` `compute_cv` | Discrepancy | Backend adds guards (returns 0 when `|mean| <= 0.01`, uses `std/abs(mean)`, caps at 99). Notebook is raw `std/mean`. |
+| Reservoir annual / monthly average | `metrics.py` `ann_avg`, `mnth_avg` | Match | Mean of per-water-year monthly means. Matches. |
+| Reservoir percentile bands (% capacity) | `V3 metrics.py` `compute_percent_of_capacity` | Discrepancy | Formula agrees when capacity is a fixed scalar. Backend uses fixed `CAPACITY_OVERRIDES`, the notebook path can use time-varying capacity columns, and the full `{0,10,30,50,70,90,100}` band set is not emitted by the notebook metrics loop. |
+| Reservoir capacity overrides / level constants | `Metrics.ipynb` constants, `V3 DataExtraction.py` | Match (1 exception) | FOLSM 967, OROVL 3424.8, MELON 2420, MLRTN flood 524 / dead 135, MELON dead 80 all match. **TRNTY flood** uses `LEVEL4DV` in backend vs `LEVEL5DV` in the notebook (`reservoir_metrics.py:431`, has a rationale comment) - see Needs review. |
+| Delta NDO (net Delta outflow) | `metrics.py` `ann_avg`, `Metrics.ipynb` | Discrepancy | Backend `annual_avg_taf` is an annual **sum** of monthly TAF (`calculate_delta_statistics.py:384`). The notebook headline NDO is a **mean** of monthly CFS. Backend's separate `avg_cfs` (line 389) does match the notebook quantity. |
+| Delta X2 / EM / JP spring and fall avg + CV | `compute_metrics_suite` (V3 `metrics.py`) | Match | Same months ([3,4,5] spring, [9,10,11] fall) and variable names. |
+| Delta RS/CO EC, Banks/Tracy EC, D-1641-style exceedance thresholds (450/900/1600/2500) | none found | Unverifiable | Backend-only relative to the readable notebook suite (`compute_metrics_suite` covers only EM/JP). No source for the exceedance thresholds. |
+| M&I SWP demand via PERDV, MWD Table A = 1911.5 TAF/yr | `V3 DataExtraction.py` | Match | PERDV demand recovery `(D + SHORT)/PERDV` and the `1911.5` constant trace directly to the notebook code. |
+| M&I contractors LROCK / MOJVE / DESRT / CCHLA | `V3 DataExtraction.py` | Unverifiable | Backend defines delivery/shortage (and a backend-only demand var for CCHLA) with no matching PERDV demand block in V3. |
+| CWS aggregate CalSim variable names | `V3 DataExtraction.py` (notebook delivery logic) | Match | Aligns with the notebook delivery logic (including `DEL_CVP_PMI_N_WAMER`). Note: `data/variables/variable_groupings.csv` is a chart-grouping list, **not** the CWS aggregate definition source. |
+| Ag AW (demand) / DN (SW delivery) / GP (GW pumping) / shortage variables | `V3 DataExtraction.py` | Match | Variable choices follow the documented WRESL balance. |
+| Ag GW-only DN = GP + RU synthesis set (`GW_ONLY_DU_IDS`) | `V3 DataExtraction.py:1673-1803` | Needs review | Backend lists **17** DUs (`calculate_ag_statistics.py:122-129`). V3 synthesizes **11**. Backend also has `26N_NA` where V3 uses `26S_NA` (possible ID typo). |
+| % demand met, reliability, shortage-percentile methodology (urban/MI/ag/refuge) | `metrics.py` `ann_percentile`, `exceedance_metric` | Discrepancy | No delivery-family `% demand met` formula exists in the notebooks. Backend definitions are extensions and use a different percentile population (pooled months vs annual means) than `compute_iqr_value`. |
+| Refuge demand source (per-DU `AW_*` from DV) | `V3 DataExtraction.py` | Discrepancy | V3 only aggregates annual `AWOANN_*` applied-water vars for refuge reporting. Per-refuge-DU demand is a backend construction. |
+| Refuge shortage + `reliability_pct_95` | none found | Unverifiable | Backend-only. No refuge shortage/reliability logic in the readable notebook modules. |
+| Env flows: % unimpaired, % functional flows, CEFF 5-season calendar, Pearson alteration index | none found | Unverifiable | No implementation of these in the readable `coeqwal`/`V3` `.py` sources. Logic, if it exists, is only in LFS-stubbed notebooks. |
+| Env flows: MIF met % | `metrics.py` `probability_var1_gte_var2_for_scenario` | Discrepancy | Shares the `var1 >= var2` comparator, but the source returns a 0-1 probability and the backend stores a percent (x100). |
+
+### Location lists
+
+| Location list | Source of truth | Verdict | Note |
+|---|---|---|---|
+| Env-flow tier reaches (17) | `data/mappings/Eflows_Mapping.csv` | Match | `channel_entity.csv` `has_eflows` rows and `ENV_FLOWS.csv` columns equal the 17 mapping stations exactly. |
+| Ag tier regions (`AG_REV`, 132) | `data/mappings/Agricultural_Mapping.csv` | Match | 132/132 identical IDs. |
+| Reservoir tier set (`RES_STOR`, 8) | `data/variables/parallel_variable_groupings.csv`, `tier.py` | Match | NOD 4 + SOD 5 minus the aggregate `S_SLUIS`. |
+| Single-value tiers (`DELTA_ECO`, `FW_DELTA_USES`, `FW_EXP`, `WRC_SALMON_AB`) | `data/tiers/tiers_descriptions.csv`, `tier.py` | Match | Loader location expansion (EM+JP, Banks+Jones, DETAW, SAC299) matches the V3 tier descriptions. |
+| Urban tier DUs (`CWS_DEL` staging) | `data/mappings/DrinkingWater_Mapping.csv` | Discrepancy | 7 ID-level mismatches between the staging columns and the V3 drinking-water mapping. |
+| Ag statistics entity list (`du_agriculture_entity.csv`, ~144) | `data/mappings/Agricultural_Mapping.csv` (132) | Discrepancy | Backend includes ~10 placeholder rows plus a few extra DUs. One V3 ID (`07S_PA`) is absent from the backend list. |
+| Urban statistics entity list (`du_urban_entity.csv`, ~125) | `data/mappings/DrinkingWater_Mapping.csv` (78) | Discrepancy | Backend is the full urban seed (includes ~47 `_NU` groundwater-community DUs). The mapping is a curated drinking-water subset. Not a 1:1 comparison. |
 
 ## Overview
 
@@ -51,8 +109,8 @@ extraction-to-statistics flow, including where the manual handoff happens.
 
 ### Current workflow (manual)
 
-The statistics ETL is a **separate, manually-triggered step** from the extraction pipeline.
-The extraction Batch job (`batch_entrypoint.sh`) handles DSS → CSV conversion and uploads to S3,
+The statistics ETL is a separate, manually-triggered step from the extraction pipeline.
+The extraction Batch job (`batch_entrypoint.sh`) handles DSS to CSV conversion and uploads to S3,
 then writes `SUCCEEDED` to DynamoDB. The statistics ETL (`run_all.py`) must be run separately
 in Cloud9 after extraction completes:
 
