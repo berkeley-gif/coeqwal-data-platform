@@ -44,7 +44,7 @@ There is **no** standalone `cws_entity` or `drinking_water_utility` table today.
 
 **What it is:** A water agency that holds an SWP or CVP contract. Stores contract amount in TAF (`contract_amount_taf`), project (`SWP`/`CVP`), region (`NOD`/`SOD`), and type (`MI`, `MWD`, `AG`, etc.).
 
-**Verified May 2026 state:** all 30 rows have `source_file = swp_contractor_perdel_A.wresl` and `project = SWP`. No CVP contractor rows are loaded yet. See [Statistics roadmap, CVP contractors](../../../docs/statistics_roadmap.md).
+**Verified May 2026 state:** all 30 rows have `source_file = swp_contractor_perdel_A.wresl` and `project = SWP`. No CVP contractor rows are loaded yet. See [Statistics roadmap, CVP contractors](../../../etl/statistics/README.md#cvp-contractor-load-unfinished).
 
 **What it is NOT:** This table does not store a contract number column. It stores `contract_amount_taf` (Table A allocation for SWP) and `source_contractor_id` (integer from the WRESL source file).
 
@@ -116,7 +116,7 @@ We have **not** verified a complete many-to-many join table linking every contra
 | cvp_sod | CVP South | CVP | sod | DEL_CVP_PMI_S |
 | mwd | Metropolitan Water District | MWD | (null) | DEL_SWP_MWD |
 
-There is **no** `cvp_total` row. Whether one is needed is on the [statistics roadmap](../../../docs/statistics_roadmap.md).
+There is **no** `cvp_total` row. Whether one is needed is on the [statistics roadmap](../../../etl/statistics/README.md#cvp_total-aggregate-row-decision-pending).
 
 **What "CWS" means in this codebase (three different uses):**
 
@@ -156,7 +156,7 @@ Contractors appear in M&I statistics views, not in the tier location catalog.
 
 | Item | Track in |
 |---|---|
-| Load CVP contractors into `mi_contractor` | [`docs/statistics_roadmap.md`](../../../docs/statistics_roadmap.md) |
-| Decide on `cvp_total` aggregate row | [`docs/statistics_roadmap.md`](../../../docs/statistics_roadmap.md) |
-| Master crosswalk vs `du_urban_variable` | [`docs/statistics_roadmap.md`](../../../docs/statistics_roadmap.md) |
+| Load CVP contractors into `mi_contractor` | [statistics roadmap](../../../etl/statistics/README.md#cvp-contractor-load-unfinished) |
+| Decide on `cvp_total` aggregate row | [statistics roadmap](../../../etl/statistics/README.md#cvp_total-aggregate-row-decision-pending) |
+| Master crosswalk vs `du_urban_variable` | [statistics roadmap](../../../etl/statistics/README.md#master-crosswalk-vs-du_urban_variable) |
 | Normalize PWSID (PWSID ?) into lookup table | Future schema work |

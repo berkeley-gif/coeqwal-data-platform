@@ -244,7 +244,7 @@ end-to-end pipeline automation, etc.), start at the team runbook. It indexes eac
 state, files touched, and a "Next steps" block.
 
 - [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md) - active threads, rolled-back roadmap entries (R1, R2), and conventions for picking work back up
-- [`docs/statistics_roadmap.md`](docs/statistics_roadmap.md) - statistics ETL roadmap (connection unification, atomic transactions, verification streamlining, reference-directory clarity)
+- [statistics roadmap](etl/statistics/README.md#statistics-roadmap) - statistics ETL roadmap (connection unification, atomic transactions, verification streamlining, reference-directory clarity)
 
 ## License
 

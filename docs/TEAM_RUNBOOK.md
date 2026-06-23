@@ -18,7 +18,7 @@ historical context live in the linked docs.
 | What the database looks like right now | `audits/monthly_20260524_143951/report.md` |
 | Verification and audit systems | [`etl/verification/README.md`](../etl/verification/README.md) |
 | How DU, M&I, contractor, and CWS concepts relate | [`water_user_categories.md`](../database/topic_docs/cws/water_user_categories.md) |
-| Statistics and model-run roadmap | [`docs/statistics_roadmap.md`](statistics_roadmap.md) |
+| Statistics and model-run roadmap | [statistics roadmap](../etl/statistics/README.md#statistics-roadmap) |
 | **Copy-paste Cloud9 procedures (threads A1, A2)** | [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) |
 
 ---
@@ -173,7 +173,7 @@ single `DEL_SWP_PMI` (unsuffixed) variable; CVP only exposes
 
 **Files.**
 
-- Roadmap entry: [`docs/statistics_roadmap.md`](statistics_roadmap.md)
+- Roadmap entry: [statistics roadmap](../etl/statistics/README.md#statistics-roadmap)
   (`cvp_total` section).
 - Existing aggregate definitions: [`etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py`](../etl/statistics/cws_aggregate/calculate_cws_aggregate_statistics.py)
   (`CWS_AGGREGATES` dict, lines ~85-136).
@@ -460,7 +460,7 @@ checkout is stale - `git pull` and rerun.
 | This runbook | [`docs/TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md) |
 | Cloud9 procedures (A1, A2) | [`docs/CLOUD9_PROCEDURES.md`](CLOUD9_PROCEDURES.md) |
 | Audits + verification | [`etl/verification/README.md`](../etl/verification/README.md) |
-| Statistics + M&I roadmap | [`docs/statistics_roadmap.md`](statistics_roadmap.md) |
+| Statistics + M&I roadmap | [statistics roadmap](../etl/statistics/README.md#statistics-roadmap) |
 | gw/sw reconciliation | [`gw_sw_reconciliation.md`](../database/topic_docs/cws/gw_sw_reconciliation.md) |
 | Demand-unit geometry (mapping, gap, user impact, target architecture) | [`demand_unit_geometry.md`](../database/topic_docs/demand_unit_geometry.md) |
 | Water user categories | [`water_user_categories.md`](../database/topic_docs/cws/water_user_categories.md) |

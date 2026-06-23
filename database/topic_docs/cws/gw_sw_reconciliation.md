@@ -200,7 +200,7 @@ This is the same work as the schema-hygiene item in [`SCHEMA_BACKLOG.md` § 6](.
 2. Update the urban seed CSV to `true`/`false`/empty.
 3. Reader audit (the real gating step): ETL tier scripts, API serializers, and frontend consumers that currently parse `'0'`/`'1'` strings.
 
-Tracked in [`docs/statistics_roadmap.md`](../../../docs/statistics_roadmap.md) and as thread R1 in [`docs/TEAM_RUNBOOK.md`](../../../docs/TEAM_RUNBOOK.md).
+Tracked in [statistics roadmap](../../../etl/statistics/README.md#gw--sw-boolean-migration) and as thread R1 in [`docs/TEAM_RUNBOOK.md`](../../../docs/TEAM_RUNBOOK.md).
 
 ---
 
