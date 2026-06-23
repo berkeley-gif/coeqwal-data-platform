@@ -95,6 +95,11 @@ If the console scrolled away, the same result survives off-screen in three place
 
 ***Did the numbers land correctly, not just without error?*** A clean scorecard means the load ran, not that the values match the source. An independent value-level check exists, [`verify_all_sections.py`](../statistics/verify_all_sections.py), which recomputes the headline statistics from the source DV / SV CSVs and compares them against what the ETL wrote to the database. **It is still in progress and not yet part of the pipeline.** It reads only local CSV reference files (a hand-staged DV / SV pair in `audits/notebooks_reference/`, or `--ref-dir`) for development and has no S3 access yet. Wiring it to the bucket is [Roadmap item 1: Point the statistics verifier at S3](#roadmap).
 
+Two caveats when reading its output:
+
+- **Two value checks are intentionally skipped** (logged as warnings, not failures) because the value the ETL loads is unconfirmed and disagrees with the verifier's reference: San Luis CVP/SWP `pct_capacity` (the CVP/SWP capacity split) and the `GDPUD_NU` delivery variable. Both are questions for the modeling team. Background and how to resolve: [Unconfirmed data values](../statistics/README.md#unconfirmed-data-values-two-verification-checks-skipped-meanwhile).
+- **Tier checks are opt-in.** Tier results come from a separate ETL, so `verify_all_sections.py` only checks the tier sections when run with `--with-tiers`. A default run never touches them and exits clean for any scenario. The same `--with-tiers` flag adds the tier endpoints to [`verify_api.py`](../statistics/verify_api.py). See the [API](#api-database-to-public-api) and [Tier data load](#tier-data-load-csvs-to-database) steps.
+
 ### API (database to public API)
 
 ***Does the public API return those same numbers?*** [`verify_api.py`](../statistics/verify_api.py) hits `api.coeqwal.org` over HTTP and compares the API responses against direct database queries.
@@ -239,9 +244,43 @@ python database/audit/run_monthly_audit.py
 ## Roadmap
 
 - **Point the statistics verifier at S3.** [`verify_all_sections.py`](../statistics/verify_all_sections.py) is still under development and reads only local DV / SV CSV reference files (default `audits/notebooks_reference/`, or `--ref-dir`) and has no S3 access yet to compare against the sv and dv files in the bucket. It needs the same S3 read path the production calculators already use, `s3://coeqwal-model-run/scenario/<id>/csv/<id>_coeqwal_calsim_output.csv` (DV) and `..._sv_input.csv` (SV).
-- **Mirror the ingest digest to statistics.** `etl/statistics/tools/audit.py` walks recent `stats_audit_*.csv` and renders a tracked `etl/statistics/audit.md`. Closes the asymmetry where ingestion has a tracked `audit.md` digest and statistics has none. One afternoon, no new infrastructure.
+- **Mirror the ingest digest to statistics.** Ingestion has [`etl/ingestion/tools/audit.py`](../ingestion/tools/audit.py), which renders a committable `etl/ingestion/audit.md` from local state. Add the statistics counterpart `etl/statistics/tools/audit.py` that walks recent `stats_audit_*.csv` and renders `etl/statistics/audit.md`, closing the asymmetry where ingestion has a digest and statistics has none. One afternoon, no new infrastructure.
 
 ### ETL verification developer experience
 
 - **Give every scenario a verification status in the audit.** What a developer needs from `etl/ingestion/audit.md` is a per-scenario answer in one of three buckets: verification ran and passed, ran and failed (which ones), or did not run (which ones). Today the report answers only the middle bucket cleanly. Failed scenarios are named in "What needs your attention," but passed and not-run scenarios both render as `OK` in the active-scenarios table, because `_scenario_status` only special-cases `validation.result == "failed"`. The skipped *count* in the validation breakdown says how many did not run but never which, and the "Unverified scenarios" section names only the missing-trend-report subset, which is a different set than the count. Split `OK` into `VERIFIED` and `NOT VERIFIED`, driven by `validation.result` (already present in each `extract_record.json`), and list the not-verified scenarios by name so a developer knows which to inspect.
 - **Scheduled audit run.** Run `audit.py` automatically after a batch run finishes, so `audit.md` is always current. Removes the "remember to run it" step with zero per-event noise. Timestamp the `audit.md` title so a reader can tell at a glance how fresh the digest is.
+
+### Verification streamlining
+
+The developer-driven layers (Layer 2, Layer 3, Layer 3-tier) each take a separate command today and write reports under [`audits/verification_reports/`](../../audits/verification_reports/). The work below makes them cheaper to run, easier to read, and less surprising. Roughly ordered by value over effort.
+
+**1. Single `verify_release.py` scorecard orchestrator (highest value).** One command that runs Layer 2 + Layer 3 + Layer 3-tier for a scenario (or `--all-scenarios`) and prints a single PASS / FAIL scorecard with per-layer drill-down. Today these are three commands.
+
+```bash
+python etl/verification/verify_release.py --scenario s0042
+python etl/verification/verify_release.py --all-scenarios --report-dir audits/verification_reports
+```
+
+- Run each layer in sequence (fail-fast configurable with `--continue-on-failure`).
+- Collect per-layer JSON into a `release_{scenario}_{ts}.json` aggregate.
+- Print a one-screen scorecard with per-section pass counts (Reservoirs: PASS 8/8, CWS: PASS 6/6, AG: FAIL 130/131, ...) and the path to per-layer detail.
+- Exit 0 if all PASS, 1 otherwise.
+
+The orchestrator's `--verify` preset is the closest equivalent today but only runs Layer 2.
+
+**2. Standardize report naming and paths.** Use consistent `{scenario}_{layer}.json` across all three verifiers (today `verify_tiers.py` writes `tiers_{ts}.json` with no per-scenario stamping). Drop the timestamp default for tier verification so the latest run is at a known path, with a `--timestamped` opt-in to retain prior runs.
+
+**3. Default `--scenario` to the active set.** If no scenario flag is passed, default to `ACTIVE_SCENARIOS` and print a banner naming the resolved set, instead of processing nothing. Preserve `--scenario` and `--scenarios-override` for targeted cases.
+
+**4. Auto-detect pre-flight scenarios.** Add a `--include-inactive` flag that unions `ACTIVE_SCENARIOS` with scenarios that have result-table data but are not yet active, so a freshly loaded scenario can be verified without the awkward `--scenarios-override sXXXX`. Emit the same WARNING banner. Keep `--scenarios-override` as the explicit escape hatch.
+
+**5. Reference-directory clarity.** The verifiers' code default `--ref-dir` is `audits/notebooks_reference/`, which does not exist in the tree, while the CalSim scenario CSVs actually live in [`etl/reference/`](../../etl/reference/) (where `verify_all_sections.py`'s own docstring points), so in practice you must pass `--ref-dir etl/reference`. `s3://coeqwal-model-run/reference/` is the cloud mirror of `etl/reference/`. Reconcile the default with the real location, have `verify_all_sections.py` and `verify_api.py` log the resolved `--ref-dir` at INFO on startup, document the S3 sync command here, and optionally rename `etl/reference/` -> `etl/reference_calsim_csvs/`.
+
+**6. CI integration for Layer 3 (API vs DB).** A GitHub Action that runs `verify_api.py --all-scenarios` against staging on every PR touching `api/coeqwal-api/**` or `etl/statistics/**`, posts the scorecard as a PR comment, and gates merge on PASS. Same for `verify_tiers.py` when `etl/tier_data/scripts/**` changes. Requires a CI-accessible read-only DB role and a stable test bucket. Layer 2 is heavier and may be too slow per-PR, so start with Layer 3.
+
+**7. Layer 4 (`/verification` page).** Build the public status page at `/verification` and the backing `/api/verification/status` endpoint so the Layer 2 / Layer 3 / Layer 3-tier reports are readable outside the developer console.
+
+**8. Move tier verification out of the statistics verifier.** `verify_all_sections.py` checks both statistics tables and tier results (`--with-tiers`). Tier results come from a separate ETL (`etl/tier_data/`) with its own checker (`verify_tiers.py`). Make `verify_all_sections.py` stats-only and move the `tier_result` table check next to the tier ETL. `--with-tiers` is the interim bridge.
+
+**Sequencing.** 1, 2, 3 are local refactors that can ship in any order. 4 depends on 3. 5, 7, and 8 are independent. 6 requires new CI plumbing and stable credentials.
