@@ -10,6 +10,47 @@ The data platform code repository and documentation is organized into four secti
 
 The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coeqwal-private-docs` repository (https://github.com/berkeley-gif/coeqwal-private-docs). A schematic of that infrastructure can be found at https://dev.coeqwal.org/aws_architecture.html.
 
+## Documentation map
+
+**Data**
+
+- [`data/`](data/README.md) - source-data inventory and where each input lives
+- [`data/reference/cws/`](data/reference/cws/README.md) - CWS and M&I reference spreadsheets
+
+**Database**
+
+- [`database/`](database/README.md) - schema, layers, seeding, and audits
+- [`database/schema/`](database/schema/README.md) - schema documentation and ERD
+
+**ETL**
+
+- [`etl/`](etl/README.md) - pipeline runbook (scenario model-run and tier pipelines)
+- [`etl/batch-container/`](etl/batch-container/README.md) - DSS-to-CSV extraction container
+- [`etl/common/`](etl/common/README.md) - shared ETL utilities
+- [`etl/ingestion/tools/`](etl/ingestion/tools/README.md) - ingestion helper tools
+- [`etl/lambda/`](etl/lambda/README.md) - S3-PUT-to-Batch trigger Lambda
+- [`etl/statistics/`](etl/statistics/README.md) - statistics calculation pipeline
+- [`etl/statistics/env_flows/`](etl/statistics/env_flows/README.md) - special environmental-flow CalSim reference
+- [`etl/statistics/refuge/`](etl/statistics/refuge/README.md) - special wildlife-refuge CalSim reference
+- [`etl/tier_data/`](etl/tier_data/README.md) - tier outcome loader
+- [`etl/verification/`](etl/verification/README.md) - verifications and audits
+
+**API**
+
+- [`api/coeqwal-api/`](api/coeqwal-api/README.md) - FastAPI service
+- [`api/lambda/coeqwalPresignDownload/`](api/lambda/coeqwalPresignDownload/README.md) - presigned-download Lambda
+
+## Roadmaps
+
+**Roadmaps by area** - each section keeps its deferred and in-progress work at the bottom of its own README:
+
+- [Database roadmap](database/README.md#roadmap) - CWS dataset, demand-unit group membership, scenario assumptions/operations metadata. Schema hygiene lives in [`database/SCHEMA_BACKLOG.md`](database/SCHEMA_BACKLOG.md)
+- [ETL roadmap](etl/README.md#roadmap) - model-run source hardening, tier-scale reconciliation, demand-unit geometry coverage, statistics location-list and calculation hardening
+- [Statistics roadmap](etl/statistics/README.md#statistics-roadmap) - connection lifecycle, atomic transactions, variable-list migration to SQL, reservoir spill hardening, and the needs-review backlog for WAM-team decisions
+- [Verification roadmap](etl/verification/README.md#roadmap) - point the statistics verifier at S3, name all skipped scenarios, scheduled audit runs, statistics audit digest
+- [Tier data roadmap](etl/tier_data/README.md#known-limitations-and-roadmap) - deriving the NOD/SOD split from hydrologic-region foreign keys
+- [Batch container: maintenance roadmap](etl/batch-container/README.md#maintenance-roadmap) - orphaned S3 sidecar cleanup, pydsstools wheel updates
+
 ## [Data](data/README.md)
 
 Where to find the source data the backend depends on. Most of it lives outside this repo:
@@ -235,16 +276,6 @@ df -h /
 ```
 
 These commands only delete objects that are not currently in use. Running containers, their images, and attached volumes are untouched. The `-f` flag skips the confirmation prompt.
-
-## Open threads and roadmap
-
-When picking up a partially-finished thread (geometry refactor, gw/sw
-reconciliation, TAIESM1 ingest, master crosswalk reconciliation,
-end-to-end pipeline automation, etc.), start at the team runbook. It indexes each open thread with current
-state, files touched, and a "Next steps" block.
-
-- [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md) - active threads, rolled-back roadmap entries (R1, R2), and conventions for picking work back up
-- [statistics roadmap](etl/statistics/README.md#statistics-roadmap) - statistics ETL roadmap (connection unification, atomic transactions, verification streamlining, reference-directory clarity)
 
 ## License
 
