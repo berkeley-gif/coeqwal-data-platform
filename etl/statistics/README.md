@@ -767,10 +767,9 @@ iqr_values = subset_df.apply(lambda x: x.quantile(iqr_value), axis=0)
 
 **Comparison**:
 
-| Aspect | Our ETL | Notebook |
+| Aspect | ETL | Notebook |
 |--------|---------|----------|
 | Method | `np.percentile()` | `pandas.quantile()` |
-| Interpolation | Linear (NumPy default) | Linear (Pandas default) |
 | Grouping | By **water month** (Oct=1 ... Sep=12) | By annual means by default (`compute_iqr_value` runs with `annual=True`), or the full month-filtered series when `annual=False` |
 
 **Note**: Here we group by water month before calculating percentiles to show range and variability by month in the website charts. This is a deliberate design choice for the frontend visualization. Because the backend pools monthly values while the notebook's default percentile path operates on annual means, the two populations differ and the percentile values are not identical. See the [Provenance and verification](#provenance-and-verification) entry for reservoir percentile bands, which is flagged for modeling-team review.
@@ -850,7 +849,7 @@ if abs(mean) < CV_MIN_MEAN_TAF:   # near-zero mean: CV undefined, return 0
     return 0.0
 std = float(data.std())
 cv = std / abs(mean)
-if cv > 99.0:                     # cap implausible ratios, return 0
+if cv > 99.0:                     # implausible ratio: return 0 (not capped)
     return 0.0
 return cv
 ```
@@ -1089,7 +1088,7 @@ All AG variables come from a single file, the CalSim DV output CSV (`{scenario}_
 
 ### Water balance
 
-The CalSim 3 demand-unit water balance is expressed by the `meetAW` goal in `constraints-Deliveries.wresl`. In the model runs retained in this repo (`s0098`, `s0107`) the goal is solved as:
+The CalSim 3 demand-unit water balance is expressed by the `meetAW` goal in `constraints-Deliveries.wresl`. The shortage slack and the `GPmax` bound are toggled per demand unit and per scenario (see the per-unit notes below). For most Sacramento ag (`_NA`) units in both retained runs (`s0098`, `s0107`) the goal is solved without the slack:
 
 ```
 AW + RP = DN + GP + RU
@@ -1102,7 +1101,7 @@ AW + RP = DN + GP + RU
 | **DN** | Net Delivery = DG minus DL (gross diversion minus conveyance losses) | DL = EV + DP + LF + OS |
 | **GP** | Groundwater Pumping | decision variable, lower-bounded by GPmin |
 | **RU** | Reuse = min(TW, RUFR×AWR + RUFO×AWO) | bounded by available tailwater |
-| **SHRTG** | SHRTG (Sac) or GW_SHORT (SJR/Tulare) | standalone SHORTAGE decision variable (declared in `arcs-Deliveries.wresl`), commented out of the `meetAW` goal in the retained runs |
+| **SHRTG** | SHRTG (Sac) or GW_SHORT (SJR/Tulare) | standalone SHORTAGE decision variable (declared in `arcs-Deliveries.wresl`). Commented out of the `meetAW` goal for Sacramento ag (`_NA`) units, but active for refuge (`_PR`/`_NR`) units in both runs and for SJR/Tulare ag in `s0107` |
 
 Source: the `meetAW_02_NA` goal in `s0107_adjBL_cqlTAI_wTUCP/Run/System/SystemTables_Sac/constraints-Deliveries.wresl` (the `!` starts a WRESL comment, so the `SHRTG` term is commented out):
 ```
@@ -1114,15 +1113,15 @@ For GW-only DUs (no surface delivery), DN drops out:
 goal meetAW_07N_NA  {AW_07N_NA + RP_07N_NA = GP_07N_NA + RU_07N_NA } ! + SHRTG_07N_NA }
 ```
 
-The shortage variable is still declared and written to the DV output (`define SHRTG_02_NA {std kind 'SHORTAGE' units 'CFS'}` in `arcs-Deliveries.wresl`), which is what the ETL reads. **Open question for the WAM team:** the `SHRTG` slack is commented out of the `meetAW` balance in both retained runs (`s0098`, `s0107`). Confirm whether the baseline runs that feed the statistics pipeline activate the slack inside the balance, so the shortage definition is unambiguous.
+The shortage variable is still declared and written to the DV output (`define SHRTG_02_NA {std kind 'SHORTAGE' units 'CFS'}` in `arcs-Deliveries.wresl`), which is what the ETL reads. The `02_NA` example above is a Sacramento ag unit, where the slack is commented out. Refuge (`_PR`/`_NR`) units instead carry an active `+ SHRTG` term in both runs, and SJR/Tulare ag carries an active `+ GW_SHORT` term in `s0107` (absent in `s0098`). **Open question for the WAM team:** because slack activation is per-unit and per-scenario, confirm which demand units the pipeline runs should treat as carrying a real shortage slack, so the shortage definition is unambiguous.
 
-In the retained runs the GP maximum bound (`setGPmax`) is commented out and only the minimum bound (`setGPmin`) is active, expressed per applied-water component:
+In the retained runs the GP maximum bound (`setGPmax`) is commented out for most demand units, leaving the minimum bound (`setGPmin`) active throughout, expressed per applied-water component:
 
 ```
 GP > GPmin * AWo * (1 + RPF - RUFo) + GPmin * AWr * (1 + RPF - RUFr)
 ```
 
-The matching `setGPmax` goal (present but commented out) carries the same `(1 + RPF - RUF)` factor, which exceeds 1.0 when RPF > RUF, so GP can exceed AW to also supply riparian losses (RP). GP/AW ratios of 1.0 to 1.15 in the s0020 dry run are consistent with this. **Open question for the WAM team:** because `setGPmax` is commented out in the retained runs, GP has no active upper bound from this constraint. Confirm the intended GP bounding for the pipeline runs.
+The matching `setGPmax` goal carries the same `(1 + RPF - RUF)` factor, which exceeds 1.0 when RPF > RUF, so GP can exceed AW to also supply riparian losses (RP). GP/AW ratios of 1.0 to 1.15 in the s0020 dry run are consistent with this. `setGPmax` is active for a subset of units (16 goals in `s0098`, 76 in `s0107`) and commented out for the rest. **Open question for the WAM team:** confirm the intended GP upper-bounding per unit for the pipeline runs.
 
 **Note:** The WRESL water balance IS the same for refuge DUs (`AW + RP = DN + GP + RU + SHORTAGE`), but the V3 notebooks never use GP for refuge DUs. The AG module filters refuge DUs out before running water balance checks.
 
@@ -1300,6 +1299,7 @@ San Joaquin River and Tulare Lake hydrologic regions (Table 3-10):
 
 | File | Purpose |
 |------|---------|
+| [`refuge/README.md`](refuge/README.md) | CalSim reference: delivery variable inventory, point of diversion / conveyance, composition notes, entity-data location |
 | `refuge/calculate_refuge_statistics.py` | Main calculation module |
 | `refuge/main.py` | CLI entry point |
 
@@ -1339,6 +1339,63 @@ All variables are in CFS. Ratio metrics keep CFS so units cancel. Where a volume
 
 The Sacramento mainstem uses two unimpaired references split at Bend Bridge (rm 257): `UNIMP_SHAS` above (SAC_UPPER), `UNIMP_SRBB` at and below (SAC_LOWER). The Mokelumne has no `UNIMP_MOK` variable, so `unimp_sv_variable` is NULL for MOK019 and MOK028 and metrics 1 and 3 cannot be computed there (metric 2 against `EFLOWS_MOK028` still can).
 
+The structured attribution (watershed, `unimp_sv_variable`, `has_mif`, `has_eflows`, `channel_class`) lives in `channel_entity`. The two tables below reproduce the curated reach inventory for the EFLOWS and MIF subsets with human-readable gauge locations.
+
+#### EFLOWS reaches (17), the tier and CEFF set
+
+These have `has_eflows = true` and are the denominator set for metric 2 (% functional flows) and the basis for metric 3 (flow alteration index).
+
+| Reach | Location | Watershed | `UNIMP_*` | MIF? |
+|-------|----------|-----------|-----------|------|
+| `AMR004` | American River at I-80 Bridge | UPPER_AMERICAN | `UNIMP_FOLS` | yes |
+| `FTR003` | Feather River | UPPER_FEATHER | `UNIMP_OROV` | yes |
+| `FTR029` | Feather River at Yuba City | UPPER_FEATHER | `UNIMP_OROV` | yes |
+| `MCD005` | Merced River at Stevinson | UPPER_MERCED | `UNIMP_ME` | yes |
+| `MOK028` | Mokelumne River at Woodbridge | UPPER_MOKELUMNE | (none) | yes |
+| `SAC000` | Sacramento River at Chipps Island | SAC_LOWER | `UNIMP_SRBB` | no |
+| `SAC049` | Sacramento River at Freeport | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC122` | Sacramento River at Tisdale Weir | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC148` | Sacramento River at Colusa Weir | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC257` | Sacramento River at Bend Bridge | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC289` | Sacramento River at South Bonnieville | SAC_UPPER | `UNIMP_SHAS` | yes |
+| `SJR070` | San Joaquin near Vernalis | SAN_JOAQUIN | `UNIMP_SJ` | yes |
+| `SJR127` | San Joaquin at Salt Slough | SAN_JOAQUIN | `UNIMP_SJ` | yes |
+| `STS011` | Stanislaus River | UPPER_STANISLAUS | `UNIMP_ST` | yes |
+| `TRN111` | Trinity River at Lewiston | TRINITY_RIVER | `UNIMP_TRIN` | yes |
+| `TUO003` | Tuolumne River | UPPER_TUOLUMNE | `UNIMP_TU` | yes |
+| `YUB002` | Yuba River at Marysville | YUBA_RIVER | `UNIMP_YUBA` | yes |
+
+`SAC000` (Chipps Island) has an EFLOWS target but no MIF, because `C_SAC000_MIF` is absent from the DV (it does have `EFLOWS_SAC000` in the SV).
+
+#### MIF reaches (20), the binding minimum-instream-flow set
+
+These have `has_mif = true` (a `C_{reach}_MIF` companion in the DV). The set is the 17 EFLOWS reaches minus `SAC000` (no MIF) plus four additional non-EFLOWS streams: `FTR059`, `KSWCK`, `NTOMA`, `STS059`.
+
+| Reach | Location | Watershed | `UNIMP_*` | EFLOWS? |
+|-------|----------|-----------|-----------|---------|
+| `AMR004` | American River at I-80 Bridge | UPPER_AMERICAN | `UNIMP_FOLS` | yes |
+| `FTR003` | Feather River | UPPER_FEATHER | `UNIMP_OROV` | yes |
+| `FTR029` | Feather River at Yuba City | UPPER_FEATHER | `UNIMP_OROV` | yes |
+| `FTR059` | Feather River at Thermalito Afterbay | UPPER_FEATHER | `UNIMP_OROV` | no |
+| `KSWCK` | Keswick Dam (Sacramento below Shasta) | SAC_UPPER | `UNIMP_SHAS` | no |
+| `MCD005` | Merced River at Stevinson | UPPER_MERCED | `UNIMP_ME` | yes |
+| `MOK028` | Mokelumne River | UPPER_MOKELUMNE | (none) | yes |
+| `NTOMA` | American River at Lake Natoma | UPPER_AMERICAN | `UNIMP_FOLS` | no |
+| `SAC049` | Sacramento River at Freeport | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC122` | Sacramento River at Tisdale Weir | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC148` | Sacramento River at Colusa Weir | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC257` | Sacramento River at Bend Bridge | SAC_LOWER | `UNIMP_SRBB` | yes |
+| `SAC289` | Sacramento River at South Bonnieville | SAC_UPPER | `UNIMP_SHAS` | yes |
+| `SJR070` | San Joaquin near Vernalis | SAN_JOAQUIN | `UNIMP_SJ` | yes |
+| `SJR127` | San Joaquin at Salt Slough | SAN_JOAQUIN | `UNIMP_SJ` | yes |
+| `STS011` | Stanislaus River | UPPER_STANISLAUS | `UNIMP_ST` | yes |
+| `STS059` | Stanislaus River (upper) | UPPER_STANISLAUS | `UNIMP_ST` | no |
+| `TRN111` | Trinity River at Lewiston | TRINITY_RIVER | `UNIMP_TRIN` | yes |
+| `TUO003` | Tuolumne River | UPPER_TUOLUMNE | `UNIMP_TU` | yes |
+| `YUB002` | Yuba River at Marysville | YUBA_RIVER | `UNIMP_YUBA` | yes |
+
+The remaining 40 channels (Sacramento mainstem nodes, other tributaries, reservoir releases, canals) are computed for metric 1 where a `UNIMP_*` variable is available. For the full machine-readable list, query `channel_entity WHERE channel_class IS NOT NULL`.
+
 ### Calculations
 
 Metric 1 (% unimpaired), per timestep and aggregated per water month across years, for reaches with a `unimp_sv_variable`:
@@ -1377,9 +1434,30 @@ Season definitions are seeded in `env_flow_season`. The dry season spans the wat
 
 ### Data quality notes
 
-- MIF variables are absent from some scenarios (for example s0039-s0042 carry 7 of 20). This reflects different regulatory frameworks per scenario, not a pipeline error. The ETL writes NULL `pct_mif_*` for those reaches.
+- MIF variables are absent from some scenarios (for example s0039-s0042 carry 7 of 20). This reflects different regulatory frameworks per scenario, not a pipeline error. The ETL writes NULL `pct_mif_*` for those reaches. The full per-scenario breakdown is in [Per-scenario variable availability](#per-scenario-variable-availability-snapshot) below.
 - EFLOWS targets are SV inputs. s0011 has none (pre-EFLOWS baseline), and s0029/s0030 carry only `EFLOWS_STS011` (see open question below).
-- `pct_unimpaired` can far exceed 100% for heavily regulated reaches near zero natural flow, which is physically valid.
+- `pct_unimpaired` can far exceed 100% for heavily regulated reaches near zero natural flow, which is physically valid. Values up to ~100,000% occur, so migration 27 widened the affected columns from `NUMERIC(8,3)` to `NUMERIC(12,3)`.
+
+### Per-scenario variable availability (snapshot)
+
+Snapshot from the 19-scenario `env_flows` run (2026), recording which scenarios are missing which `C_*_MIF` (DV) and `EFLOWS_*` (SV) variables. Absent variables are expected: they reflect different regulatory frameworks per scenario, not a pipeline error. The ETL writes NULL `pct_mif_*` / `pct_ff_*` for the affected reaches. This is a point-in-time snapshot and drifts as scenarios are added or re-run, so regenerate it by reading the DV/SV CSV headers (Part C `FLOW-MIN-INSTREAM` for MIF, the `EFLOWS_*` columns for targets) per scenario rather than trusting the table below. All 59 `C_{reach}` channel-flow variables are present in every scenario, so no channel-flow data is missing.
+
+**MIF variable availability (20 expected):**
+
+| Scenario(s) | MIF present / 20 | Missing variables |
+|---|---|---|
+| s0020, s0021, s0025-s0028, s0029, s0030, s0031-s0033, s0044 | 20 / 20 | (none) |
+| s0039-s0042 | 7 / 20 | `C_FTR029_MIF`, `C_MCD005_MIF`, `C_MOK028_MIF`, `C_SAC049_MIF`, `C_SAC122_MIF`, `C_SAC148_MIF`, `C_SAC289_MIF`, `C_SJR070_MIF`, `C_SJR127_MIF`, `C_STS011_MIF`, `C_TRN111_MIF`, `C_TUO003_MIF`, `C_YUB002_MIF` |
+| s0011 | 8 / 20 | Same 13 as s0039-s0042 except `C_STS011_MIF` is present |
+| s0023, s0024 | 6 / 20 | Same as s0011 plus `C_SAC257_MIF` and `C_STS011_MIF` |
+
+**EFLOWS (functional-flow target) availability (17 expected):**
+
+| Scenario(s) | EFLOWS present | Notes |
+|---|---|---|
+| s0020, s0021, s0023-s0028, s0031-s0033, s0039-s0042, s0044 | All 17 | Full EFLOWS suite (28 SV columns) |
+| s0011 | None | Pre-EFLOWS baseline (12 SV columns, no functional-flow targets) |
+| s0029, s0030 | 1 of 17 (`EFLOWS_STS011` only) | 12 SV columns. The other 16 EFLOWS targets are absent, so `pct_ff_*` is NULL for those reaches. See the s0029/s0030 EFLOWS coverage open question below. Absent: `EFLOWS_AMR004`, `EFLOWS_FTR003`, `EFLOWS_FTR029`, `EFLOWS_MCD005`, `EFLOWS_MOK028`, `EFLOWS_SAC000`, `EFLOWS_SAC049`, `EFLOWS_SAC122`, `EFLOWS_SAC148`, `EFLOWS_SAC257`, `EFLOWS_SAC289`, `EFLOWS_SJR070`, `EFLOWS_SJR127`, `EFLOWS_TRN111`, `EFLOWS_TUO003`, `EFLOWS_YUB002` |
 
 ### Open questions
 
@@ -1390,6 +1468,7 @@ Season definitions are seeded in `env_flow_season`. The dry season spans the wat
 
 | File | Purpose |
 |------|---------|
+| [`env_flows/README.md`](env_flows/README.md) | CalSim reference: CEFF season catalog, Sacramento mainstem unimpaired-flow split, resolved questions |
 | `env_flows/calculate_env_flow_statistics.py` | Main calculation module |
 | `env_flows/main.py` | CLI entry point |
 
@@ -1417,7 +1496,7 @@ Every location list and calculation in this pipeline traces back to the modeling
 - **Needs review:** intentional-looking backend choice (often with a code comment) that diverges from the notebook and should be confirmed by the modeling team.
 - **Unverifiable:** no readable notebook/Python source exists to compare against (backend-only extension or notebook logic only present in LFS-stubbed `.ipynb`).
 
-Items marked Discrepancy, Needs review, or Unverifiable are collected in the handoff guide at [`docs/STATISTICS_HANDOFF.md`](../../docs/STATISTICS_HANDOFF.md).
+Items marked Discrepancy, Needs review, or Unverifiable are summarized as a checklist in the [Needs-review backlog](#needs-review-backlog-modeling-team-decisions) at the end of this README.
 
 ### Calculations
 
@@ -1427,7 +1506,7 @@ Items marked Discrepancy, Needs review, or Unverifiable are collected in the han
 | Water-year definition (Oct start) | `metrics.py` `add_water_year_column` | Match | Both set `WaterYear = Year + 1` for months >= 10. |
 | Reservoir flood-pool probability | `metrics.py` `frequency_hitting_level` | Match | Same `storage - threshold` with `+1e-6` epsilon. Only an exact-tie boundary differs. |
 | Reservoir dead-pool probability | `metrics.py` `frequency_hitting_level` | Match | Backend computes direct `P(storage <= dead)` (`reservoir_metrics.py` `calculate_dead_pool_probability`). The notebook reaches the same quantity by inverting its flood-zone branch with `floodzone=False`: `100 - count(storage - dead > 0)` equals `count(storage <= dead)`, and the dead-pool branch adds no epsilon (`metrics.py` `frequency_hitting_level`). The two are equivalent at the boundary. |
-| Reservoir CV | `metrics.py` `compute_cv` | Discrepancy | Backend adds guards (returns 0 when `|mean| <= 0.01`, uses `std/abs(mean)`, caps at 99). Notebook is raw `std/mean`. |
+| Reservoir CV | `metrics.py` `compute_cv` | Discrepancy | Backend adds guards (returns 0 when `|mean| <= 0.01`, uses `std/abs(mean)`, returns 0 when `cv > 99`). Notebook is raw `std/mean`. |
 | Reservoir annual / monthly average | `metrics.py` `ann_avg`, `mnth_avg` | Match | Mean of per-water-year monthly means. Matches. |
 | Reservoir percentile bands (% capacity) | `V3 metrics.py` `compute_percent_of_capacity` | Discrepancy | Formula agrees when capacity is a fixed scalar. Backend uses fixed `CAPACITY_OVERRIDES`, the notebook path can use time-varying capacity columns, and the full `{0,10,30,50,70,90,100}` band set is not emitted by the notebook metrics loop. |
 | Reservoir capacity overrides / level constants | `Metrics.ipynb` constants, `V3 DataExtraction.py` | Match (1 exception) | FOLSM 967, OROVL 3424.8, MELON 2420, MLRTN flood 524 / dead 135, MELON dead 80 all match. **TRNTY flood** uses `LEVEL4DV` in backend vs `LEVEL5DV` in the notebook (the TRNTY entry in `RESERVOIR_THRESHOLDS`, `reservoir_metrics.py`, has a rationale comment) - see Needs review. |
@@ -1538,7 +1617,7 @@ This table covers the variables the ETL modules read. It aims to be complete but
 | Urban (GW-only, _NU) | `goal setUD_{DU}` | `UD = GP + SHORTAGE` (no DN) | Same as AG by region |
 | MI (SWP contractors) | (implicit) | `demand × taf_cfs × perdel = delivery + shortage` | `SHORT_D_*_PMI` (alias) |
 
-These are accounting identities, not verbatim goal lines. In both runs the `goal meetAW_{DU}` constraint for Sacramento DUs omits an active `SHRTG_` term (it is commented out), so shortage here is the residual. The SJR/Tulare `GW_SHORT_` term is active.
+These are accounting issues. The `goal meetAW_{DU}` constraint omits an active `SHRTG_` term for Sacramento ag (`_NA`) units in both runs (it is commented out), so shortage there is the residual. Refuge (`_PR`/`_NR`) units keep an active `SHRTG_` term, and the SJR/Tulare `GW_SHORT_` term is active in `s0107` (absent in `s0098`).
 
 ### C. CFS to TAF conversion factors
 
@@ -1743,7 +1822,7 @@ Ag PDF tables 3-4 and 3-5 have no gw/sw columns (diversion arcs only). Do not co
 
 **Why deferred:** requires live RDS verification of rollback behavior per module. The SQL is battle-tested but the rollback semantics have to be exercised against a real database.
 
-**Connection lifecycle (do not change).** Each module opens its own short-lived connection at the moment it writes, lasting seconds. Do not refactor toward one shared connection held across all 8 modules during a scenario run. A module's calculation phase takes minutes, sometimes 30 or more, and RDS behind an NLB with a ~350-second idle timeout will drop an idle TCP connection mid-calculation, so the next write call crashes.
+**Connection lifecycle (do not change):** Each module opens its own short-lived connection at the moment it writes, lasting seconds. Do not refactor toward one shared connection held across all 8 modules during a scenario run. A module's calculation phase takes minutes, sometimes 30 or more, and RDS behind an NLB with a ~350-second idle timeout will drop an idle TCP connection mid-calculation, so the next write call crashes.
 
 
 ### Unconfirmed data values (two verification checks skipped meanwhile)
@@ -1788,4 +1867,24 @@ When the configured `flood_var` is absent from the data or is `None`, `_get_floo
 4. Rename `spill_threshold_pct` / `storage_at_spill_avg_pct`, or document them in the schema as "average storage (% capacity) during spill," and update any API or frontend reader. A rename is a breaking DB and API change, so it needs a migration plan.
 
 Items 1 and 2 change values the API and frontend already read, so they need live-RDS verification and a re-run of the reservoir module across all scenarios. Item 1 also has a modeling-team dependency. Item 4 is a breaking schema change.
+
+### Needs-review backlog (WAM team decisions)
+
+Open questions checklist:
+
+- **Demand-unit water balance and shortage slack form:** Slack (`SHRTG`/`GW_SHORT`) and the `GPmax` bound activate per demand unit and per scenario, not uniformly. Confirm which units the pipeline should treat as carrying a real shortage or `GP > AW` slack. See [Water balance](#water-balance).
+- **Ag GW-only synthesis set:** Backend lists 17 DUs (`GW_ONLY_DU_IDS`) where V3 synthesizes 11, and uses `26N_NA` where V3 uses `26S_NA`. Reconcile the set and the ID. See the Calculations table under [Provenance and verification](#provenance-and-verification).
+- **Delta NDO annual metric:** `annual_avg_taf` is an annual sum of monthly TAF; the notebook headline NDO is a mean of monthly CFS (backend also stores a matching `avg_cfs`). Decide which the website displays. See the Calculations table.
+- **Reservoir CV guards, percentile bands, and TRNTY flood level:** Confirm the CV guards, the fixed-capacity percentile bands, and the `LEVEL4DV` (vs notebook `LEVEL5DV`) Trinity flood threshold. See the Calculations table.
+- **Percent demand met and reliability methodology:** No delivery-family "percent demand met" formula exists in the notebooks; the backend definitions are extensions using a different percentile population. These need a definition sign-off. See the Calculations table.
+- **Location-list reconciliations:** `CWS_DEL` (7 ID mismatches vs `DrinkingWater_Mapping.csv`), the ag entity list (144 rows vs the 132 mapping, `07S_PA` absent), and the urban entity list (125-row superset of the 78-row mapping, 64 `_NU` DUs). See the Location lists table.
+- **Unconfirmed data values:** San Luis CVP/SWP capacity split and the `GDPUD_NU` delivery variable, both skipped by `KNOWN ISSUE` guards in the verifier. See [Unconfirmed data values](#unconfirmed-data-values-two-verification-checks-skipped-meanwhile).
+- **`s0065` salmon-tier exclusion:** Excluded by the data team (documented in [`etl/tier_data/README.md`](../tier_data/README.md)).
+
+### Minor cleanup:
+
+None changes a calculated value.
+
+- **Dead constant in the M&I module:** `CWS_SHORTAGE_CSV` in [`mi/calculate_mi_statistics.py`](mi/calculate_mi_statistics.py) points to `etl/pipelines/CWS/CWS_shortage_variables.csv`, a path that does not exist, and is never used. The live shortage mappings are the `MI_CONTRACTOR_VARIABLES` dict in the same file. Remove the dead constant.
+- **Idealized balance in code docstrings:** The ag module docstring and the `calculate_du_shortage_monthly` docstring ([`ag/calculate_ag_statistics.py`](ag/calculate_ag_statistics.py)) state the balance as `AW + RP = DN + GP + RU + SHORTAGE`. Per [Water balance](#water-balance), the `SHRTG`/`GW_SHORT` slack is active for some units and scenarios and absent for others, so the docstring form is correct for part of the set, not all of it. Align the docstrings once the modeling team confirms the intended form.
 
