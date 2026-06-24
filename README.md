@@ -12,6 +12,10 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 
 ## Documentation map
 
+**Handoff and operations**
+
+- [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md) - start here for active threads and next steps
+
 **Data**
 
 - [`data/`](data/README.md) - source-data inventory and where each input lives
@@ -20,9 +24,10 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 **Database**
 
 - [`database/`](database/README.md) - schema, layers, seeding, and audits
+- [`database/SCHEMA_BACKLOG.md`](database/SCHEMA_BACKLOG.md) - audit-derived backlog. It's important to regularly floss the database for project longevity. The goal is to have it as a queryable resource for reserachers to use.
 - [`database/schema/`](database/schema/README.md) - schema documentation and ERD
 - /topic_docs
-  - [`demand_unit_geometry.md`](database/topic_docs/demand_unit_geometry.md) - where DU geometry lives, coverage, and gaps
+  - [`geometry.md`](database/topic_docs/geometry.md) - how geometry is stored across layers, DU coverage and gaps, and the target layout
   - [`cws/water_user_categories.md`](database/topic_docs/cws/water_user_categories.md) - how DUs, M&I contractors, CWS aggregates, and utilities relate
   - [`cws/gw_sw_reconciliation.md`](database/topic_docs/cws/gw_sw_reconciliation.md) - groundwater/surface-water flag reconciliation walkthrough
 
@@ -45,6 +50,8 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 - [`api/lambda/coeqwalPresignDownload/`](api/lambda/coeqwalPresignDownload/README.md) - presigned-download Lambda
 
 ## Roadmaps
+
+**Resuming work after a handoff?** Start at [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md). It is the dashboard of active threads (where each stands and the next step) and links into the detailed roadmaps below.
 
 **Roadmaps by area** - each section keeps its deferred and in-progress work at the bottom of its own README:
 
@@ -135,9 +142,9 @@ Handles CalSim scenario model run data end to end:
 It moves in two stages:
 
 - **Stage 1** (`scan` through the post-Batch `audit`) pulls each scenario's model run ZIP from the COEQWAL shared Google Drive, stages it to S3, and extracts the SV input and DV output DSS files to CSV.
-- **Stage 2** (`run_all` → `activate`) reads those CSVs back from S3, computes derived statistics, and writes them to PostgreSQL. An activation step flips the scenarios' `is_active` record in the database, signalling to the API to deliver it.
+- **Stage 2** (`run_all` to `activate`) reads those CSVs from S3, computes derived statistics, and writes them to PostgreSQL. An activation step flips the scenarios' `is_active` record in the database, signalling to the API to deliver it.
 
-Today each arrow is a manual step the developer runs in sequence from Cloud9.
+Today each step in that sequence is run manually by the developer from Cloud9. There is an experimental orchestrator, `run_full_pipeline.py` that can be tried and further developed.
 
 **Stage 1 products** land in S3 (under `s3://coeqwal-model-run/scenario/<id>/`):
 

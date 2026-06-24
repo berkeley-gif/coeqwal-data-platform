@@ -15,7 +15,7 @@ Each urban DU row carries two binary flags:
 | `gw` | Demand unit has groundwater-supplied systems |
 | `sw` | Demand unit has surface-water-supplied systems |
 
-Both can be `1` (mixed sources). Values are stored as `'0'`/`'1'` strings in seed CSVs today. A planned migration will move them to `BOOLEAN`.
+Both can be `1` (mixed sources). Values are stored as `'0'`/`'1'` strings in seed CSVs today. A migration should move them to `BOOLEAN`.
 
 **Sources:**
 
@@ -29,6 +29,8 @@ Both can be `1` (mixed sources). Values are stored as `'0'`/`'1'` strings in see
 | CalSim PDF text | `urban_du_calsim_report_text.txt` | Table 3-7 layout reference |
 
 Ag gw/sw comes from CalSim Tables 3-3 (SAC) and 3-6 (SJR) only. Tables 3-4 and 3-5 list diversion arcs and have **no** gw/sw columns.
+
+**Seed vs live DB (2026-05-24 audit):** Compared against the live-table export `audits/monthly_20260524_143951/layer_exports/03_entity/du_urban_entity.csv`, the committed seed and the live `du_urban_entity` agree on gw/sw for all 125 shared rows. The live table has 20 additional `_P*` project rows (9 urban, 10 agricultural, 1 refuge) that are not in the seed CSV, so the seed is a strict subset of the live table. See the reload caveat in Step 6.
 
 ---
 
@@ -186,6 +188,8 @@ Example change for `03_PU1` (seed differs from CalSim, xlsx agrees):
 "03_PU1",...,"1","1",...
 ```
 
+**Reload caveat:** the committed seed is missing 20 `_P*` project rows that exist in the live `du_urban_entity` (see Step 0). Use an upsert-style reload keyed on `du_id`, not a full table replace, or those rows will be dropped. Better, reconcile the 20 rows into the seed first so the seed and table match.
+
 Reload seed to RDS using your usual seed refresh path, then re-run monthly audit or spot-check `du_urban_entity` gw/sw columns.
 
 ---
@@ -196,17 +200,24 @@ The type change and the value reconciliation in Steps 1-6 are independent jobs. 
 
 This is the same work as the schema-hygiene item in [`SCHEMA_BACKLOG.md` § 6](../../SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies) ("Align gw/sw column types across DU entity tables"). `du_agriculture_entity` and `du_refuge_entity` are already `BOOLEAN`. Only `du_urban_entity` is `VARCHAR(5)`, so it is the lone outlier.
 
-1. SQL migration: `VARCHAR(5)` to `BOOLEAN NULL` on `du_urban_entity.gw` and `du_urban_entity.sw`.
-2. Update the urban seed CSV to `true`/`false`/empty.
-3. Reader audit (the real gating step): ETL tier scripts, API serializers, and frontend consumers that currently parse `'0'`/`'1'` strings.
+The migration has five parts:
 
-Tracked in [statistics roadmap](../../../etl/statistics/README.md#gw--sw-boolean-migration) and as thread R1 in [`docs/TEAM_RUNBOOK.md`](../../../docs/TEAM_RUNBOOK.md).
+1. Convert the urban seed CSV values (`'0'`/`'1'`/empty to `true`/`false`/empty) in `database/seed_tables/04_calsim_data/du_urban_entity.csv`.
+2. Write an `information_schema`-guarded SQL migration that `ALTER COLUMN`s `du_urban_entity.gw` and `.sw` from `VARCHAR(5)` to `BOOLEAN NULL`.
+3. Update the CREATE TABLE in [`01_create_du_urban_entity.sql`](../../sql_archive/03_entity_layers/mi/01_create_du_urban_entity.sql) to `BOOLEAN`.
+4. Update the ERD entry for `du_urban_entity.gw` / `.sw`.
+5. Reader audit (the real gating step):
+   - `api/coeqwal-api/routes/demand_unit_endpoints.py` returns `e.gw` / `e.sw` as-is. PostgreSQL booleans serialize to JSON booleans, so no API code change is needed.
+   - ETL `etl/statistics/ag/calculate_ag_statistics.py` and `etl/statistics/refuge/calculate_refuge_statistics.py` already compare against `'1'` strings, but they read from CSV (not the DB), so they were never affected. Re-verify anyway.
+   - Spot-check any ETL DB query that filters with `gw = '1'` instead of `gw IS TRUE`. The May 2026 audit found none.
+
+Tracked in [statistics roadmap](../../../etl/statistics/README.md#gw--sw-boolean-migration) and [`SCHEMA_BACKLOG.md` § 6](../../SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies).
 
 ---
 
 ## Roadmap (remaining work)
 
-| Item | Owner | Blocker |
+| Item | Owner | Need |
 |---|---|---|
 | Apply the 5 safe seed fixes (`03_PU1`, `24_NU4`, `26N_NU5`, `26N_PU1`, `26S_PU2`) where seed differs from CalSim and xlsx agrees | Dev | None |
 | Tier-rule policy for the ~24 disagreements where seed matches CalSim but the xlsx differs, plus the 2 three-way conflicts (`60N_NU2`, `90_PU`) | Team | Tier-rule decision |
@@ -216,14 +227,3 @@ Tracked in [statistics roadmap](../../../etl/statistics/README.md#gw--sw-boolean
 | `gw`/`sw` BOOLEAN type migration (urban only; SCHEMA_BACKLOG § 6) | Dev | Reader audit (not value reconciliation) |
 | xlsx lat/long ingest (separate from gw/sw) | Deferred | Out of scope ? Is there a need? |
 
----
-
-## Polygon loader clarification (separate from gw/sw)
-
-Migration `database/sql_archive/04_scenario/56_add_du_geometry_columns.sql` adds `geom`, `geom_wkt`, and `srid` to the **existing demand-unit entity tables**:
-
-- `du_urban_entity`
-- `du_agriculture_entity`
-- `du_refuge_entity`
-
-Polygons are not a new table. The loader matches `du_id` from `database/seed_tables/03_GIS/du_4326.gpkg` and writes the dissolved footprint into whichever entity row already exists for that id. See [`load_du_geometries.py`](../../scripts/data_processing/load_du_geometries.py).

@@ -17,10 +17,7 @@ a top-level `reference/` directory has been consolidated here.
 
 ## Schema notes
 
-`du_urban_entity.gw` and `.sw` are `VARCHAR(5)` (`'0'` / `'1'` / empty) on
-live RDS. The team xlsx uses `0` / `1` integers. A `BOOLEAN` migration is
-on the roadmap, see [`docs/TEAM_RUNBOOK.md`](../../../docs/TEAM_RUNBOOK.md)
-thread R1. Value reconciliation vs the CalSim manual is deferred, see
+`du_urban_entity.gw` and `.sw` are `VARCHAR(5)` (`'0'` / `'1'` / empty) on live RDS. The team xlsx uses `0` / `1` integers. A `BOOLEAN` migration is on the roadmap, see [`SCHEMA_BACKLOG.md` § 6](../../../database/SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies) and [`gw_sw_reconciliation.md` Step 7](../../../database/topic_docs/cws/gw_sw_reconciliation.md#step-7-boolean-type-migration-independent-of-value-reconciliation). Value reconciliation vs the CalSim manual is deferred, see
 [`gw_sw_reconciliation.md`](../../../database/topic_docs/cws/gw_sw_reconciliation.md).
 
 ## Downstream

@@ -27,7 +27,7 @@ Columns by file:
 
 A GeoPackage with a `demandunits` layer of dissolved `MULTIPOLYGON` features, one per `DU_ID`. The schema migration [`../../sql_archive/04_scenario/56_add_du_geometry_columns.sql`](../../sql_archive/04_scenario/56_add_du_geometry_columns.sql) adds `geom_wkt`, `srid`, a `geometry(MultiPolygon, 4326)` column, and a GIST index to each of `du_urban_entity`, `du_agriculture_entity`, and `du_refuge_entity`. The loader strips the GeoPackage GPB header from each blob and writes the WKB to whichever entity table holds the matching `du_id` via `ST_GeomFromWKB(wkb, 4326)`. Dry-run with `--dry-run` first.
 
-Not every demand unit has a polygon. The covered, missing, and gpkg-only IDs (and the `26N_NA` urban / agriculture overlap) are enumerated in [`demand_unit_geometry.md`](../../topic_docs/demand_unit_geometry.md#coverage).
+Not every demand unit has a polygon. The covered, missing, and gpkg-only IDs (and the `26N_NA` urban / agriculture overlap) are enumerated in [`geometry.md`](../../topic_docs/geometry.md#coverage).
 
 ## Tier coverage
 

@@ -2,7 +2,7 @@
 
 How CalSim demand units, M&I contractors, CWS aggregates, and drinking-water utilities relate in the COEQWAL schema. Every claim below is verified against the May 24 2026 monthly audit snapshot (`audits/monthly_20260524_143951/layer_exports/`) unless noted.
 
-Related: [`demand_unit_geometry.md`](../demand_unit_geometry.md)
+Related: [`geometry.md`](../geometry.md)
 
 ---
 
@@ -161,4 +161,4 @@ This is a `database/` doc about schema entities, but the work for the first thre
 | Load CVP contractors into `mi_contractor` | The M&I statistics pipeline populating `mi_contractor` / `mi_contractor_delivery_arc` | [statistics roadmap](../../../etl/statistics/README.md#cvp-contractor-load-unfinished) |
 | Decide on `cvp_total` aggregate row | A seed row plus an ETL path in `etl/statistics/cws_aggregate/` | [statistics roadmap](../../../etl/statistics/README.md#cvp_total-aggregate-row-decision-pending) |
 | Master crosswalk vs `du_urban_variable` | Reconciling the statistics input mapping | [statistics roadmap](../../../etl/statistics/README.md#master-crosswalk-vs-du_urban_variable) |
-| Normalize PWSID (PWSID ?) into lookup table | | Future schema work |
+| Normalize PWSID (PWSID ?) into lookup table | Pull the utility name / PWSID out of `du_urban_entity.community_agency` free text into a normalized lookup, tied to the CWS schema design | [SCHEMA_BACKLOG § 8](../../SCHEMA_BACKLOG.md#8-layer-01-lookup-enforcement) (future schema work) |

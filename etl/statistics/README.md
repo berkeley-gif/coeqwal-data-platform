@@ -1719,7 +1719,7 @@ Raised during WRESL verification (March 2026). These are open questions about th
 
 ## Statistics roadmap
 
-Deferred and in-progress work for the statistics and model-run pipeline. Items here are not in scope for the tier-location data quality batch.
+Deferred and in-progress work for the statistics and model-run pipeline.
 
 ### Migrate module variable lists into SQL tables
 
@@ -1744,11 +1744,14 @@ Deferred and in-progress work for the statistics and model-run pipeline. Items h
 
 ### `cvp_total` aggregate row (decision pending)
 
-**Current state:** `cws_aggregate_entity` has 6 rows. SWP has `swp_total` plus NOD/SOD splits. CVP has `cvp_nod` and `cvp_sod` only. No `cvp_total`.
+**Current state:** `cws_aggregate_entity` has 6 rows (`swp_total`, `swp_nod`, `swp_sod`, `cvp_nod`, `cvp_sod`, `mwd`). SWP has `swp_total` plus NOD/SOD splits. CVP has `cvp_nod` and `cvp_sod` only. No `cvp_total`. SWP works because CalSim ships a single unsuffixed `DEL_SWP_PMI` variable. CVP only exposes `DEL_CVP_PMI_N` and `DEL_CVP_PMI_S`.
 
-**Question for data team:** should a CVP-wide total row exist (mirroring `swp_total`), or is NOD+SOD sufficient?
+**Question for WAM team:** should a CVP-wide total row exist (mirroring `swp_total`), or is NOD+SOD sufficient? Three options:
 
-**If yes:** add seed row, delivery variables, and ETL path in [`etl/statistics/cws_aggregate/`](../../etl/statistics/cws_aggregate/).
+- **A.** Use a single CalSim-native CVP variable if one exists (would mirror SWP). Confirm with the WAM team.
+- **B.** ETL-computed sum of `cvp_nod` + `cvp_sod` (a new `CWS_AGGREGATES` entry that sums the two existing aggregate values).
+- **C.** Leave as-is. Treat NOD + SOD as the default CVP split, no total row.
+
 
 
 ### Master crosswalk vs `du_urban_variable`
@@ -1759,11 +1762,19 @@ Deferred and in-progress work for the statistics and model-run pipeline. Items h
 
 **DB table:** `du_urban_variable` (90 rows in May 2026 audit).
 
+**Comparison (May 2026):**
+
+- match: 17
+- conflict: 54 (all on `delivery_variable`: xlsx `DN_<id>` vs DB `DL_<id>` / `D_<plant>_<id>`)
+- xlsx-only: 15
+- db-only: 19 (mostly `_PA` ag-suffix ids, worth confirming they belong in the urban table)
+
 **Work (statistics batch):**
 
-1. Cross-reference xlsx ids against `du_urban_variable`.
-2. Identify new, matching, and conflicting rows.
-3. Update `du_urban_variable` and re-run urban DU statistics verification.
+1. Implement `etl/statistics/scripts/compare_master_crosswalk.py` (not yet in the repo. The comparison logic existed in a prior local checkout but was never committed). Run with `--csv-out` to refresh the audit CSV against the latest audit snapshot (`audits/monthly_*/layer_exports/04_variable/du_urban_variable.csv`). The audit CSV (`etl/statistics/audit_reports/master_crosswalk_audit.csv`) is gitignored.
+2. Decide delivery-variable policy (xlsx wins, DB wins, or case-by-case). `D_<plant>_<id>` codes may encode the correct CalSim variable for that specific DU, so check with the M&I team before normalizing to `DN_<id>`.
+3. Confirm whether the `_PA` rows in `du_urban_variable` are intentional (they look like agricultural rows misfiled in the urban table).
+4. Update `du_urban_variable` and re-run urban DU statistics verification.
 
 
 ### `gw` / `sw` BOOLEAN migration
@@ -1772,7 +1783,7 @@ Deferred and in-progress work for the statistics and model-run pipeline. Items h
 
 **Target:** `BOOLEAN NULL` with reader audit across ETL and API.
 
-Tracked as thread R1 in [`docs/TEAM_RUNBOOK.md`](../../docs/TEAM_RUNBOOK.md).
+Tracked in [`SCHEMA_BACKLOG.md` § 6](../../database/SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies) and [`gw_sw_reconciliation.md` Step 7](../../database/topic_docs/cws/gw_sw_reconciliation.md#step-7-boolean-type-migration-independent-of-value-reconciliation).
 
 
 ### Reference data sources for gw/sw
@@ -1810,7 +1821,7 @@ Each DU carries a `(gw, sw)` flag pair: whether it has groundwater-supplied syst
 1. Apply the 5 safe seed updates, then resolve the small residual the rollup does not cover (seed du_ids absent from it, and `NAPA2` present but blank) from `urban_du.pdf`
 2. Get a team decision on the tier-rule group (24), the two three-way conflicts, and the `03_PU3` Notes override
 3. Update `du_urban_entity.csv` seed
-4. Then `gw`/`sw` BOOLEAN migration (thread R1 in `docs/TEAM_RUNBOOK.md`)
+4. Then `gw`/`sw` BOOLEAN migration (see [`SCHEMA_BACKLOG.md` § 6](../../database/SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies) and [`gw_sw_reconciliation.md` Step 7](../../database/topic_docs/cws/gw_sw_reconciliation.md#step-7-boolean-type-migration-independent-of-value-reconciliation))
 
 Ag PDF tables 3-4 and 3-5 have no gw/sw columns (diversion arcs only). Do not compare them to seed gw/sw.
 
