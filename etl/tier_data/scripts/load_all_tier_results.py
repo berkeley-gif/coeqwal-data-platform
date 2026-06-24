@@ -513,7 +513,7 @@ def _multi_value_aggregate(scenario: str, short_code: str, tier_sums: dict, tota
 def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
     """
     DELTA_ECO — Delta Ecology.
-    Format: scenario (numeric, e.g. '11' for s0011), TierScore.
+    Format: scenario (numeric, e.g. '11' for s0011), NDO.
     One location row per scenario: wba DETAW.
     """
     csv_path = STAGING_DIR / 'DELTA_ECO.csv'
@@ -534,7 +534,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
         scenario = normalize_scenario_id(row.scenario)
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier_continuous = float(row.TierScore)
+        tier_continuous = float(row.NDO)
         tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'DELTA_ECO', tier)
         agg['_source_file'] = 'DELTA_ECO.csv'
