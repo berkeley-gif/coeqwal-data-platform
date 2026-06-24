@@ -1,29 +1,27 @@
 #!/usr/bin/env bash
 # cloud9_snapshot.sh
 #
-# Read-only inventory of the Cloud9 environment. Captures versions,
-# configs, and host info so a Linux dev host can be compared against
-# the supported Cloud9 setup.
+# Read-only inventory of the supported Cloud9 environment (the `coeqwal-db-admin`
+# environment): versions, configs, and host info. You could use it to compare a Linux dev
+# host against Cloud9.
 #
-# Run on Cloud9 from the repo root:
-#   bash scripts/cloud9_snapshot.sh > docs/CLOUD9_INVENTORY.md
+# Prints to stdout by default. Run on Cloud9 from the repo root, with the
+# project venv activated so pip packages are captured:
+#   bash scripts/cloud9_snapshot.sh
+#   bash scripts/cloud9_snapshot.sh --output=/tmp/cloud9_inventory.md
 #
-# Or, write straight to the docs file:
-#   bash scripts/cloud9_snapshot.sh --write
 #
-# Never modifies state. Safe to rerun anytime Cloud9 changes.
+# Never modifies state. Safe to rerun anytime.
 
 set -uo pipefail
 
-WRITE_TO_FILE=0
-OUTPUT_PATH="docs/CLOUD9_INVENTORY.md"
+OUTPUT_PATH=""
 
 for arg in "$@"; do
   case "$arg" in
-    --write) WRITE_TO_FILE=1 ;;
-    --output=*) OUTPUT_PATH="${arg#--output=}"; WRITE_TO_FILE=1 ;;
+    --output=*) OUTPUT_PATH="${arg#--output=}" ;;
     -h|--help)
-      sed -n '2,15p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *) echo "Unknown arg: $arg" >&2; exit 2 ;;
@@ -138,7 +136,7 @@ emit() {
 }
 
 # output dispatch
-if [ "$WRITE_TO_FILE" -eq 1 ]; then
+if [ -n "$OUTPUT_PATH" ]; then
   mkdir -p "$(dirname "$OUTPUT_PATH")"
   emit > "$OUTPUT_PATH"
   echo "Wrote inventory to $OUTPUT_PATH" >&2
