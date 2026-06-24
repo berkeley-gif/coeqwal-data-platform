@@ -107,17 +107,15 @@ def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
         print(f"  AG_REV: no exact match, using {src.name}")
 
     df = pd.read_csv(src)
-    df = df.transpose()
-    df.columns = df.iloc[0]
-    df = df[1:]
-    df = df.reset_index().rename(columns={"index": "scenario"})
+    if df.columns[0] != "scenario":
+        df = df.rename(columns={df.columns[0]: "scenario"})
     _write(df, out_dir / "AG_REV.csv", dry_run, f"from AG_REV/{src.name}")
     return True
 
 
 def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """ENV_FLOWS/Continuous_Tier_Table.csv -> ENV_FLOWS.csv"""
-    src = _find_single(source_dir / "ENV_FLOWS", "Continuous_Tier_Table.csv")
+    """ENV_FLOWS/Continuous_Tier_Table_June18(1).csv -> ENV_FLOWS.csv"""
+    src = _find_single(source_dir / "ENV_FLOWS", "Continuous_Tier_Table_June18(1).csv")
     if src is None:
         matches = _find_glob(source_dir / "ENV_FLOWS", "*.csv")
         if not matches:
@@ -134,8 +132,8 @@ def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """RES_STOR/Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv -> RES_STOR.csv"""
-    src = _find_single(source_dir / "RES_STOR", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI.csv")
+    """RES_STOR/Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> RES_STOR.csv"""
+    src = _find_single(source_dir / "RES_STOR", "Continuous_ReservoirStorage_Tiers_Hist_CC50_CC95_TAI_ECV.csv")
     if src is None:
         matches = _find_glob(source_dir / "RES_STOR", "*.csv")
         if not matches:
@@ -152,8 +150,8 @@ def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """GW_STOR/Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv -> GW_STOR.csv"""
-    src = _find_single(source_dir / "GW_STOR", "Continuous_GroundWater_Tiers_CC50_CC95_TAI.csv")
+    """GW_STOR/Continuous_GroundWater_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> GW_STOR.csv"""
+    src = _find_single(source_dir / "GW_STOR", "Continuous_GroundWater_Tiers_Hist_CC50_CC95_TAI_ECV.csv")
     if src is None:
         matches = _find_glob(source_dir / "GW_STOR", "*.csv")
         if not matches:
@@ -170,29 +168,26 @@ def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """DELTA_ECO/TierOutcomes_{Historical,CC50,CC95,TieESM}.csv -> DELTA_ECO.csv."""
-    de_dir = source_dir / "DELTA_ECO"
-    parts: List[Path] = []
-    for tag in ("Historical", "CC50", "CC95", "TieESM"): # TaiESM misspelled
-        p = de_dir / f"TierOutcomes_{tag}.csv"
-        if p.exists():
-            parts.append(p)
-    if not parts:
-        print("  DELTA_ECO: no source files under DELTA_ECO/, skipped")
-        return False
+    """DELTA_ECO/TierOutcomes_Continuous.csv -> DELTA_ECO.csv."""
+    src = _find_single(source_dir / "DELTA_ECO", "TierOutcomes_Continuous.csv")
+    if src is None:
+        matches = _find_glob(source_dir / "DELTA_ECO", "*.csv")
+        if not matches:
+            print("  DELTA_ECO: no source under DELTA_ECO/, skipped")
+            return False
+        src = matches[-1]
+        print(f"  DELTA_ECO: no exact match, using {src.name}")
 
-    df = _concat_csvs(parts)
-    df = df.drop_duplicates(subset=["Scenario"], keep="last")
+    df = pd.read_csv(src)
     if df.columns[0] != "scenario":
         df = df.rename(columns={df.columns[0]: "scenario"})
-    _write(df, out_dir / "DELTA_ECO.csv", dry_run,
-           f"from DELTA_ECO/TierOutcomes_{{{','.join(p.stem.split('_')[-1] for p in parts)}}}.csv")
+    _write(df, out_dir / "DELTA_ECO.csv", dry_run, f"from DELTA_ECO/{src.name}")
     return True
 
 
 def stage_fw_delta_uses(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """FW_DELTA_USES/Continuous_InDeltaSalinity_Tiers_CC50_CC95_TAI.csv -> FW_DELTA_USES.csv"""
-    src = _find_single(source_dir / "FW_DELTA_USES", "Continuous_InDeltaSalinity_Tiers_CC50_CC95_TAI.csv")
+    """FW_DELTA_USES/Continuous_InDeltaSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> FW_DELTA_USES.csv"""
+    src = _find_single(source_dir / "FW_DELTA_USES", "Continuous_InDeltaSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv")
     if src is None:
         matches = _find_glob(source_dir / "FW_DELTA_USES", "*.csv")
         if not matches:
@@ -209,8 +204,8 @@ def stage_fw_delta_uses(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_fw_exp(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """FW_EXP/Continuous_ExportSalinity_Tiers_CC50_CC95_TAI.csv -> FW_EXP.csv"""
-    src = _find_single(source_dir / "FW_EXP", "Continuous_ExportSalinity_Tiers_CC50_CC95_TAI.csv")
+    """FW_EXP/Continuous_ExportSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> FW_EXP.csv"""
+    src = _find_single(source_dir / "FW_EXP", "Continuous_ExportSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv")
     if src is None:
         matches = _find_glob(source_dir / "FW_EXP", "*.csv")
         if not matches:
@@ -228,12 +223,12 @@ def stage_fw_exp(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_salmon(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """
-    WRC_SALMON_AB/TIERS_WRLCM_01_BestYearSummary_ForDataDashboard_2026-04-17.csv -> WRC_SALMON_AB.csv
+    WRC_SALMON_AB/TIERS_WRLCM_Modified_By_EL_2026-06-22.csv -> WRC_SALMON_AB.csv
 
-    Schema: scenario, Hydroclimate, Tier_range, tier_score_cont.
+    Schema: scenario, Tier_range, tier_score_cont.
     Keep: scenario, tier_score_cont.
     """
-    src = _find_single(source_dir / "WRC_SALMON_AB", "TIERS_WRLCM_01_BestYearSummary_ForDataDashboard_2026-04-17.csv")
+    src = _find_single(source_dir / "WRC_SALMON_AB", "TIERS_WRLCM_Modified_By_EL_2026-06-22.csv")
     if src is None:
         matches = _find_glob(source_dir / "WRC_SALMON_AB", "*.csv")
         if not matches:
