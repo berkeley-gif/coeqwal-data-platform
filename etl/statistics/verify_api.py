@@ -295,7 +295,7 @@ def verify_batch_ag(report: APIReport, conn, api_url: str, sid: str):
         """
         SELECT e.short_code, p.annual_delivery_avg_taf
         FROM ag_aggregate_period_summary p
-        JOIN ag_aggregate_entity e ON p.ag_aggregate_id = e.id
+        JOIN ag_aggregate_entity e ON p.aggregate_code = e.short_code
         WHERE p.scenario_short_code = %s AND e.is_active = TRUE
     """,
         (sid,),
@@ -436,9 +436,8 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
     db_rows = db_query(
         conn,
         """
-        SELECT na.code, p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
+        SELECT p.network_arc_id AS code, p.pearson_r, p.avg_pct_unimpaired, p.avg_pct_ff
         FROM env_flow_channel_period_summary p
-        JOIN network_arc na ON p.network_arc_id = na.id
         WHERE p.scenario_short_code = %s
     """,
         (sid,),
@@ -469,20 +468,42 @@ def verify_env_flow_period(report: APIReport, conn, api_url: str, sid: str):
 # Main
 
 
-def run_scenario(sid: str, api_url: str, report_dir: Optional[Path]) -> APIReport:
+def run_scenario(
+    sid: str, api_url: str, report_dir: Optional[Path], with_tiers: bool = False
+) -> APIReport:
     report = APIReport(scenario_id=sid, api_url=api_url)
     conn = connect_db()
     if not conn:
         log.error("Cannot run API verification without DB connection")
         return report
 
+    # Each section runs under its own guard. A section that raises (a query
+    # that has drifted from the schema, a transient API/DB error) records a
+    # `section_error` fail and the run moves on, so one broken section no
+    # longer aborts the remaining sections or, in --all-scenarios, every later
+    # scenario. The rollback clears the aborted transaction left by a failed
+    # query so the next section can still talk to the database.
+    sections = [
+        ("storage", verify_batch_storage),
+        ("cws", verify_batch_cws),
+        ("ag", verify_batch_ag),
+        ("delta", verify_delta),
+        ("env_flow_period", verify_env_flow_period),
+    ]
+    # Tier data comes from a separate ETL, so tier verification is opt-in via
+    # --with-tiers.
+    if with_tiers:
+        sections.append(("tiers", verify_tiers))
+    else:
+        log.info("Skipping tier verification (pass --with-tiers to enable)")
     try:
-        verify_batch_storage(report, conn, api_url, sid)
-        verify_batch_cws(report, conn, api_url, sid)
-        verify_batch_ag(report, conn, api_url, sid)
-        verify_delta(report, conn, api_url, sid)
-        verify_tiers(report, conn, api_url, sid)
-        verify_env_flow_period(report, conn, api_url, sid)
+        for name, fn in sections:
+            try:
+                fn(report, conn, api_url, sid)
+            except Exception as e:
+                log.error(f"Section '{name}' failed: {e}")
+                report.add("section_error", name, "section", 1.0, 0.0)
+                conn.rollback()
     finally:
         conn.close()
 
@@ -582,6 +603,13 @@ def main():
     )
     parser.add_argument("--api-url", default=DEFAULT_API_URL)
     parser.add_argument("--report-dir", default=None)
+    parser.add_argument(
+        "--with-tiers",
+        action="store_true",
+        help="Also verify tier results against the API (off by default). Tier "
+        "data is produced by a separate ETL, so a stats-only run should leave "
+        "this off.",
+    )
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument(
         "--no-json",
@@ -615,7 +643,7 @@ def main():
         log.info(f"\n{'=' * 70}")
         log.info(f"  API VERIFY: {sid}")
         log.info(f"{'=' * 70}")
-        r = run_scenario(sid, args.api_url, report_dir_for_run)
+        r = run_scenario(sid, args.api_url, report_dir_for_run, with_tiers=args.with_tiers)
         all_reports.append(r)
 
     if args.json_stdout:
