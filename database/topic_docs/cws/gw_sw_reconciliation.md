@@ -214,7 +214,7 @@ Tracked in [statistics roadmap](../../../etl/statistics/README.md#gw--sw-boolean
 | Fill `NAPA2` in the curated rollup (only disagreement still blank) | Manual extract | PDF row lookup |
 | `du_urban_entity.csv` seed update | Dev | Decisions spreadsheet |
 | `gw`/`sw` BOOLEAN type migration (urban only; SCHEMA_BACKLOG § 6) | Dev | Reader audit (not value reconciliation) |
-| xlsx lat/long ingest (separate from gw/sw) | Deferred | Out of scope here |
+| xlsx lat/long ingest (separate from gw/sw) | Deferred | Out of scope ? Is there a need? |
 
 ---
 

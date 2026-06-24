@@ -152,11 +152,13 @@ Contractors appear in M&I statistics views, not in the tier location catalog.
 
 ---
 
-## Open items (roadmap, not speculated)
+## Roadmap
 
-| Item | Track in |
-|---|---|
-| Load CVP contractors into `mi_contractor` | [statistics roadmap](../../../etl/statistics/README.md#cvp-contractor-load-unfinished) |
-| Decide on `cvp_total` aggregate row | [statistics roadmap](../../../etl/statistics/README.md#cvp_total-aggregate-row-decision-pending) |
-| Master crosswalk vs `du_urban_variable` | [statistics roadmap](../../../etl/statistics/README.md#master-crosswalk-vs-du_urban_variable) |
-| Normalize PWSID (PWSID ?) into lookup table | Future schema work |
+This is a `database/` doc about schema entities, but the work for the first three items is executed by the statistics ETL, so each is tracked in the statistics roadmap.
+
+| Item | What it means | Track in |
+|---|---|---|
+| Load CVP contractors into `mi_contractor` | The M&I statistics pipeline populating `mi_contractor` / `mi_contractor_delivery_arc` | [statistics roadmap](../../../etl/statistics/README.md#cvp-contractor-load-unfinished) |
+| Decide on `cvp_total` aggregate row | A seed row plus an ETL path in `etl/statistics/cws_aggregate/` | [statistics roadmap](../../../etl/statistics/README.md#cvp_total-aggregate-row-decision-pending) |
+| Master crosswalk vs `du_urban_variable` | Reconciling the statistics input mapping | [statistics roadmap](../../../etl/statistics/README.md#master-crosswalk-vs-du_urban_variable) |
+| Normalize PWSID (PWSID ?) into lookup table | | Future schema work |

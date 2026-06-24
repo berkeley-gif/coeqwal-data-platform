@@ -21,6 +21,10 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 
 - [`database/`](database/README.md) - schema, layers, seeding, and audits
 - [`database/schema/`](database/schema/README.md) - schema documentation and ERD
+- /topic_docs
+  - [`demand_unit_geometry.md`](database/topic_docs/demand_unit_geometry.md) - where DU geometry lives, coverage, and gaps
+  - [`cws/water_user_categories.md`](database/topic_docs/cws/water_user_categories.md) - how DUs, M&I contractors, CWS aggregates, and utilities relate
+  - [`cws/gw_sw_reconciliation.md`](database/topic_docs/cws/gw_sw_reconciliation.md) - groundwater/surface-water flag reconciliation walkthrough
 
 **ETL**
 
@@ -45,6 +49,8 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 **Roadmaps by area** - each section keeps its deferred and in-progress work at the bottom of its own README:
 
 - [Database roadmap](database/README.md#roadmap) - CWS dataset, demand-unit group membership, scenario assumptions/operations metadata. Schema hygiene lives in [`database/SCHEMA_BACKLOG.md`](database/SCHEMA_BACKLOG.md)
+- [Water user categories roadmap](database/topic_docs/cws/water_user_categories.md#roadmap) - CVP contractor load, `cvp_total` aggregate row, master crosswalk reconciliation, PWSID normalization
+- [CWS gw/sw reconciliation roadmap](database/topic_docs/cws/gw_sw_reconciliation.md#roadmap-remaining-work) - remaining `gw`/`sw` flag value reconciliation, seed fixes, and the BOOLEAN type migration
 - [ETL roadmap](etl/README.md#roadmap) - model-run source hardening, tier-scale reconciliation, demand-unit geometry coverage, statistics location-list and calculation hardening
 - [Statistics roadmap](etl/statistics/README.md#statistics-roadmap) - connection lifecycle, atomic transactions, variable-list migration to SQL, reservoir spill hardening, and the needs-review backlog for WAM-team decisions
 - [Verification roadmap](etl/verification/README.md#roadmap) - point the statistics verifier at S3, name all skipped scenarios, scheduled audit runs, statistics audit digest
