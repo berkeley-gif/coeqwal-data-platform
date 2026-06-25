@@ -1,9 +1,4 @@
-# Project gitignore. Most ignores are conventional. The non-obvious bit is
-# the `/data/` block near the end: `/data/*` ignores everything by default
-# and the `!/data/...` lines re-allow only the specific subdirs that
-# should be tracked.
-
-# Python bytecode
+# Python
 __pycache__/
 *.pyc
 
@@ -31,9 +26,6 @@ venv/
 # Archived working notes
 **/.archive/
 **/_archive/
-
-# Private infrastructure docs (AWS account IDs, ARNs)
-docs/INFRASTRUCTURE.md
 
 # Database: local-dev scripts and secrets
 database/secrets/
@@ -86,7 +78,5 @@ costs/
 !/data/reference/cws/**
 !/data/reference/CS3_NetworkSchematic-Hongbing.pdf
 
-# LibreOffice lock files at any depth.
-# Must stay below the data/ whitelist so it wins the last-match rule against
-# `!/data/reference/cws/**` (which would otherwise un-ignore locks under data/).
+# LibreOffice lock files
 **/.~lock.*

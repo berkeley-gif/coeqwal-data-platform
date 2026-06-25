@@ -117,4 +117,4 @@ Increase the Lambda timeout. 30s is enough for the cold start plus the S3 listin
 
 - The FastAPI service that serves the rest of the API: [`../../coeqwal-api/`](../../coeqwal-api/)
 - Frontend caller (separate repo, `coeqwal-website`): `apps/main/app/lib/api/fileDownloadApi.ts`
-- AWS-side resource details (API Gateway id, IAM, costs): [`../../../docs/INFRASTRUCTURE.md`](../../../docs/INFRASTRUCTURE.md)
+- AWS-side resource details (API Gateway id, IAM, costs): `INFRASTRUCTURE.md` in the private [`coeqwal-private-docs`](https://github.com/berkeley-gif/coeqwal-private-docs) repo
