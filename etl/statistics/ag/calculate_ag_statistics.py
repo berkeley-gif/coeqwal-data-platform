@@ -23,13 +23,13 @@ CalSim 3 Water Balance (from WRESL constraints-Deliveries.wresl):
   the demand variable for agricultural DUs.  AWO_* in the SV input is the
   pre-model demand order/target — a different (higher) quantity.
 
-  18 GW-only DUs have no DN in the WRESL meetAW constraint — their entire
+  17 GW-only DUs have no DN in the WRESL meetAW constraint — their entire
   supply is GP + RU.  The ETL synthesizes delivery as GP + RU for these DUs,
   matching the COEQWAL notebook (DataExtraction.py) approach.
 
   Sacramento (9): 06_NA, 07N_NA, 07S_NA, 15N_NA1, 15S_NA1, 16_NA1, 17N_NA,
                   20_NA2, 26N_NA
-  SJR/Tulare (9): 60S_NA1, 60S_NA2, 61_NA1, 62_NA1, 63_NA1, 64_NA1,
+  SJR/Tulare (8): 60S_NA1, 60S_NA2, 61_NA1, 62_NA1, 63_NA1, 64_NA1,
                   72_NA2, 73_NA
   Note: 26S_NA is commented out in WRESL (moved to Lower Mokelumne).
 
@@ -123,7 +123,7 @@ GW_ONLY_DU_IDS = frozenset([
     # Sacramento (9)
     "06_NA", "07N_NA", "07S_NA", "15N_NA1", "15S_NA1",
     "16_NA1", "17N_NA", "20_NA2", "26N_NA",
-    # SJR/Tulare (9)
+    # SJR/Tulare (8)
     "60S_NA1", "60S_NA2", "61_NA1", "62_NA1", "63_NA1",
     "64_NA1", "72_NA2", "73_NA",
 ])

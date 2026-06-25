@@ -4,7 +4,7 @@ load_du_geometries.py - load dissolved demand-unit polygons into the
 `du_*_entity` tables from `database/seed_tables/03_GIS/du_4326.gpkg`.
 
 This is a one-shot bootstrap loader for reference data, paired with
-`database/scripts/sql/.archive/56_add_du_geometry_columns.sql`. It is not part
+`database/sql_archive/04_scenario/56_add_du_geometry_columns.sql`. It is not part
 of the recurring ETL pipeline; rerun it only when new polygons land
 in the source GeoPackage (or `--gpkg` points at a successor file).
 
@@ -76,9 +76,9 @@ self-intersections, duplicated vertices, etc.):
     `geometry(MultiPolygon, 4326)` and the `ST_GeometryType` check
     in `validate_writes`.
 
-The migration `database/scripts/sql/.archive/56_add_du_geometry_columns.sql`
+The migration `database/sql_archive/04_scenario/56_add_du_geometry_columns.sql`
 has already been applied to RDS, so the `geom_wkt` / `srid` / `geom`
-columns exist. Re-apply it from `.archive/` only if you are rebuilding
+columns exist. Re-apply it from `database/sql_archive/` only if you are rebuilding
 the DU entity tables on a fresh database.
 
 Read-only companion (audit / drift scorecard):
@@ -118,7 +118,7 @@ DEFAULT_GPKG = (
     REPO_ROOT / "database" / "seed_tables" / "03_GIS" / "du_4326.gpkg"
 )
 GAP_DOC = "docs/du_geometry_gap.md"
-MIGRATION_SCRIPT = "database/scripts/sql/.archive/56_add_du_geometry_columns.sql"
+MIGRATION_SCRIPT = "database/sql_archive/04_scenario/56_add_du_geometry_columns.sql"
 
 ENTITY_TABLES: Tuple[str, ...] = (
     "du_urban_entity",

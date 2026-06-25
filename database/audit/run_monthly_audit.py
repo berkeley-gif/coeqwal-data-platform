@@ -638,7 +638,12 @@ EXPECTED_COUNTS: dict[str, int | None] = {
 
 
 def _build_select(cur, table_name: str) -> tuple[str | None, list[str]]:
-    """Return (sql, col_names). Geometry columns wrapped in ST_AsText()."""
+    """Return (sql, col_names).
+
+    Geometry columns are summarized (point count + bbox) and `*_wkt` text
+    mirrors reduced to their length, so a single cell never blows past the csv
+    module's 128 KB field limit and the exports stay readable.
+    """
     cur.execute("""
         SELECT column_name, udt_name
         FROM information_schema.columns
@@ -652,7 +657,12 @@ def _build_select(cur, table_name: str) -> tuple[str | None, list[str]]:
     parts, col_names = [], []
     for col_name, udt_name in columns:
         if udt_name == "geometry":
-            parts.append(f'ST_AsText("{col_name}") AS "{col_name}"')
+            parts.append(
+                f"('npoints=' || ST_NPoints(\"{col_name}\") || ' ' "
+                f"|| Box2D(\"{col_name}\")::text) AS \"{col_name}\""
+            )
+        elif col_name.endswith("_wkt"):
+            parts.append(f'(\'wktlen=\' || length("{col_name}")) AS "{col_name}"')
         else:
             parts.append(f'"{col_name}"')
         col_names.append(col_name)

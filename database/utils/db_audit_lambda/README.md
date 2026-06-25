@@ -1,6 +1,8 @@
 # Database audit Lambda function
 
-PostgreSQL database audit that runs on AWS Lambda and saves detailed reports to S3
+PostgreSQL database audit that runs on AWS Lambda and saves detailed reports to S3.
+
+**Status: legacy, removable.** This is the original AWS Lambda audit. It has been superseded by `database/audit/run_monthly_audit.py`, which is self-contained, runs on demand from Cloud9 with no AWS dependencies, and produces a superset of what this Lambda does (see [`../../audit/README.md`](../../audit/README.md)). Use that instead. The Lambda is manual-invoke only (no schedule is wired up) and its report generator (`generate_audit_report`) is currently still imported by `database/run_local_audit.py`, which is itself redundant with the monthly audit. Nothing here is actively maintained. It can be removed once `run_local_audit.py` is retired. The deployment notes below are kept only for reference.
 
 ## This script audits:
 
@@ -42,7 +44,7 @@ du -h lambda-layer.zip # Should be ~40MB
 
 ### 2. Create Lambda layer in AWS Console
 
-1. **AWS Console** → **Lambda** → **Layers** → **Create layer**
+1. **AWS Console** > **Lambda** > **Layers** > **Create layer**
 2. **Name**: `coeqwal-db-audit-dependencies`
 3. **Upload**: `lambda-layer.zip`
 4. **Compatible runtimes**: Python 3.10
@@ -50,7 +52,7 @@ du -h lambda-layer.zip # Should be ~40MB
 
 ### 3. Create Lambda function in AWS Console
 
-1. **Lambda** → **Create function**
+1. **Lambda** > **Create function**
 2. **Name**: `coeqwal-database-audit`
 3. **Runtime**: Python 3.10
 4. **Architecture**: x86_64
@@ -72,7 +74,7 @@ du -h lambda-layer.zip # Should be ~40MB
 
 ### 5. Update database security group
 
-**EC2 Console** → **Security Groups** → `coeqwal-pg-sg`:
+**EC2 Console** > **Security Groups** > `coeqwal-pg-sg`:
 - **Add inbound rule**: PostgreSQL (5432) from `sg-04667c3a432b7e844`
 
 ### 6. Test the function
@@ -123,7 +125,7 @@ print(f\"{vf['short_code']}: {vf['label']} ({'ACTIVE' if vf['is_active'] else 'I
 "
 ```
 
-## 💰 Cost
+## Cost
 
 AWS Lambda pricing (us-west-2):
 - **Requests**: $0.20 per 1M requests
@@ -155,7 +157,7 @@ aws lambda invoke --function-name coeqwal-database-audit --region us-west-2 resp
 - **Check environment variables**: DATABASE_URL must be correct
 
 ### Function timeout
-- **Increase timeout**: Configuration → General → Timeout → 5 minutes
+- **Increase timeout**: Configuration > General > Timeout > 5 minutes
 - **Increase memory**: 512 MB for better performance
 
 ### Decimal serialization errors

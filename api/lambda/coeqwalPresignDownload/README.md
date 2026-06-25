@@ -77,7 +77,7 @@ aws lambda invoke \
 - [ ] Handler: `index.handler`
 - [ ] Timeout: 30 seconds
 - [ ] Memory: 256 MB minimum
-- [ ] Environment variable: `COEQWAL_S3_BUCKET=coeqwal-model-run`
+- [ ] Environment variable (optional): `COEQWAL_S3_BUCKET` - defaults to `coeqwal-model-run` if unset
 - [ ] IAM role has S3 read access to `coeqwal-model-run` bucket
 
 ## Common issues
@@ -98,23 +98,14 @@ Add S3 read to the Lambda's IAM role:
 }
 ```
 
-### Environment variable missing
-```
-Error: Bucket name is undefined
-```
-Set `COEQWAL_S3_BUCKET=coeqwal-model-run` on the function.
-
 ### Path not found (404)
 ```
 {"error": "Not Found"}
 ```
 Check the API Gateway route matches the Lambda's expected paths (`/scenario`, `/download`).
 
-### Timeout
-Increase the Lambda timeout. 30s is enough for the cold start plus the S3 listing.
-
 ## Related
 
 - The FastAPI service that serves the rest of the API: [`../../coeqwal-api/`](../../coeqwal-api/)
 - Frontend caller (separate repo, `coeqwal-website`): `apps/main/app/lib/api/fileDownloadApi.ts`
-- AWS-side resource details (API Gateway id, IAM, costs): [`../../../docs/INFRASTRUCTURE.md`](../../../docs/INFRASTRUCTURE.md)
+- AWS-side resource details (API Gateway id, IAM, costs): `INFRASTRUCTURE.md` in the private [`coeqwal-private-docs`](https://github.com/berkeley-gif/coeqwal-private-docs) repo

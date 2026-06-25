@@ -6,13 +6,14 @@ All row counts and table inventories are from the May 11, 2026 monthly audit (`a
 
 ---
 
-### COEQWAL database: architecture, audit framework, and roadmap
+### COEQWAL database: architecture and audit framework
 
 1. Purpose of the database
-2. Layered schema and patterns
-3. Audits, versioning, ETL (how we know the data is right)
-4. Operations, security, and workflow
-5. Roadmap
+2. Example queries to try
+3. Behind the numbers: how reliability and shortage are computed
+4. The layered schema
+5. Versioning and audit framework
+6. The API: serving the database to the website and the public
 
 ---
 
@@ -24,7 +25,7 @@ The COEQWAL database has three concrete jobs:
 
 *Indexed reads* Postgres jumps straight to the rows matching the query instead of reading every row in the table, by following pre-built lookup structures called indexes. For the API's typical query shapes, the relevant indexes are on composite keys like `(scenario_short_code, du_id)`.
 
-*Pre-aggregated period-summary tables* Tables named `*_period_summary` (e.g. `ag_period_summary`, `reservoir_period_summary`) hold statistics the ETL has already computed across the CalSim run time period. One row per scenario × entity.
+*Pre-aggregated period-summary tables* Tables named `*_period_summary` (e.g. `ag_du_period_summary`, `reservoir_period_summary`) hold statistics the ETL has already computed across the CalSim run time period. One row per scenario × entity.
 
 **2. Answer analyst queries across scenarios** Analysts can query the database for, for example, "compare X to Y" questions.
 
@@ -35,9 +36,9 @@ The COEQWAL database has three concrete jobs:
 **The database lives in AWS**, in the `us-west-2` (Oregon) region:
 
 - AWS RDS PostgreSQL 17.4 + PostGIS: Multi-AZ across two availability zones for automatic failover.
-- Placed in a private VPC subnet. Not reachable from the public Internet. The only paths in are (a) workloads inside the same VPC (the API on Fargate, the audit Lambda), or (b) developer entry through our current bastion, AWS Cloud9, an AWS-managed EC2 inside the VPC, identified per-user via AWS IAM. *(Roadmap alternative: AWS Systems Manager Session Manager, the planned post-Cloud9 path, see below.)*
+- Placed in a private VPC subnet. Not reachable from the public Internet. The only paths in are (a) workloads inside the same VPC (the API on Fargate, the audit Lambda), or (b) developer entry through our current bastion, AWS Cloud9, an AWS-managed EC2 inside the VPC, identified per-user via AWS IAM. *(Roadmap alternative: AWS Systems Manager Session Manager, the planned post-Cloud9 path.)*
 
-*Cloud9 as our bastion.* A bastion in a castle is a structure projecting outward from a castle wall, intentionally exposed, narrowly used, guarded. Cloud9 plays that role here: it is the only developer-facing door into the VPC, identified per-user via AWS IAM, narrowly scoped and audited (every `psql` command runs as a registered developer). It is the one exposed entry point, on purpose.
+*Cloud9 as our bastion.* A bastion in a castle is a structure projecting outward from a castle wall, intentionally exposed, narrowly used, and guarded. Cloud9 plays that role here: it is the only developer-facing door into the VPC, identified per-user via AWS IAM, narrowly scoped and audited (every `psql` command runs as a registered developer). It is the one exposed entry point, on purpose.
 
 **Why run commands in Cloud9**
 
@@ -62,7 +63,7 @@ A community member asks: *"How much might Alameda County Water District's South 
 
 - **`$SUPERUSER_URL`**: the RDS master account (`postgres`). Use this **only** for DDL (`CREATE` / `ALTER` / `DROP` table). Writes through this URL are attributed to the system account.
 
-For the query on this slide and everything else in this deck, you only ever need `$DATABASE_URL`. To verify both are set on Cloud9:
+For the query below and everything else in this document, you likely only need `$DATABASE_URL`. To verify both are set on Cloud9:
 
 ```bash
 # List the database-related environment variables:
@@ -176,7 +177,7 @@ reliability_pct = round(float(pct_met.dropna().mean()), 2)
 
 In plain English: **for each water year, what fraction of the recovered annual demand did SBA029's turnout receive? Average that fraction across all 100 years.** For SBA029 / s0020, that average is **54.99%**.
 
-`reliability_pct` is a database-team derived metric. Verifying our chosen formula and denominator with the COEQWAL modeling team is a Phase 2 task.
+`reliability_pct` is a database-team derived metric. We need to [verify the formula and denominator with the COEQWAL WAM team](etl/statistics/README.md#needs-review-backlog-wam-team-decisions).
 
 ### Step 4: annual_shortage_avg_taf (CalSim's own SHORT_*, summed)
 
@@ -199,7 +200,7 @@ The `clip(lower=0)` step removes occasional negative micro-values that CalSim's 
 
 The two metrics are **not complementary**. `(1 − reliability_pct/100) × demand` will **not** equal `annual_shortage_avg_taf`. For SBA029 / s0020, reliability is 54.99% and shortage is 0.85 TAF - both numbers are correct. They simply measure against different baselines.
 
-In `du_period_summary`, the column comments now document this explicitly (see [`02_create_du_statistics_tables.sql` L216-L230](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/database/scripts/sql/.archive/12_mi_statistics/02_create_du_statistics_tables.sql#L216-L230)). The ETL has matching inline comments at the PERDV and reliability_pct blocks.
+In `du_period_summary`, this is documented (see [`02_create_du_statistics_tables.sql` L216-L230](https://github.com/berkeley-gif/coeqwal-data-platform/blob/main/database/sql_archive/03_entity_layers/mi/02_create_du_statistics_tables.sql#L216-L230)). The ETL has matching inline comments at the PERDV and reliability_pct blocks.
 
 ---
 
@@ -247,7 +248,10 @@ Output: `audits/monthly_YYYYMMDD_HHMMSS/`.
 - **06 SCENARIO** - `scenario`, `scenario_author`, `scenario_tag`, `scenario_hydroclimate_sibling`
 - **07 HYDROCLIMATE** - `hydroclimate`, `slr`
 - **08 THEME** - `theme`, `theme_scenario_link`
-- **10+ RESULTS** - `tier_result`, `*_monthly`, `*_period_summary`, `sensitivity_*`
+- **09 TIER** - `tier_definition`, `tier_location`
+- **10 TIER RESULTS** - `tier_result`, `tier_location_result`
+- **11 PER-SCENARIO STATISTICS** - `*_monthly`, `*_period_summary` (reservoir, ag, urban, refuge, env flow, delta)
+- **12 CROSS-SCENARIO ANALYSIS** - `sensitivity_climate`, `sensitivity_operational`
 
 > see also: `database/README.md` § Schema layers.
 
@@ -286,7 +290,7 @@ Every statistics row in Layers 10+ FKs back to a Layer 03 entity. These are the 
 | `du_urban_entity` | 145 | Urban (M&I / CWS) demand units |
 | `du_agriculture_entity` | 144 | Agricultural demand units |
 | `du_refuge_entity` | 18 | Refuge demand units |
-| `mi_contractor` | 30 | M&I contractors (SWP today; CVP coming) |
+| `mi_contractor` | 30 | M&I contractors (SWP only today; CVP load is a [roadmap item](etl/statistics/README.md#cvp-contractor-load-unfinished)) |
 | `wba` | 42 | Water budget areas |
 | `compliance_station` | 2 | Delta compliance stations |
 | `ag_aggregate_entity` | 9 | CalSim project-level ag rollups (SWP/CVP NOD/SOD, settlement, exchange) |
@@ -337,9 +341,38 @@ CalSim emits time series keyed by variable names like `DEL_SWP_PMI`, `S_OROVL`, 
 
 ---
 
-### Layers 10+: the wide statistics tables
+### Layer 09 TIER: the tier rubric (key outcomes)
 
-These are the tables the API reads. Wide (lots of columns: monthly averages, percentiles, exceedances), keyed by `scenario_short_code` + entity FK. 29 result tables in total, grouped by domain:
+- **`tier_definition`** (9 rows) - one row per tier indicator. The nine `short_code` values (`CWS_DEL`, `AG_REV`, `ENV_FLOWS`, `RES_STOR`, `GW_STOR`, `DELTA_ECO`, `FW_EXP`, `FW_DELTA_USES`, `WRC_SALMON_AB`) are what the website surfaces as "key outcomes".
+- **`tier_location`** (280 rows) - catalog of (tier, location) pairs: which Layer 03 entities each tier indicator applies to and aggregates. Populated by the tier-data ETL from staging CSVs via `sync_tier_locations_from_staging.py`.
+
+The per-scenario tier outputs (`tier_result`, `tier_location_result`) live in Layer 10.
+
+---
+
+### Layers 10-12: the wide statistics tables
+
+These are the tables the API reads. Wide (lots of columns: monthly averages, percentiles, exceedances), keyed by `scenario_short_code` + entity FK. 31 result tables across three layers:
+
+- **Layer 10 TIER RESULTS** - team-curated tier scores loaded from CSV, not computed here.
+- **Layer 11 PER-SCENARIO STATISTICS** - the ETL-computed statistics, grouped by domain.
+- **Layer 12 CROSS-SCENARIO ANALYSIS** - sensitivity sweeps that span scenarios.
+
+#### Layer 10 TIER RESULTS (2 tables)
+
+| Table | Rows | Cols |
+| --- | ---: | ---: |
+| `tier_location_result` | 21,076 | 14 |
+| `tier_result` | 655 | 19 |
+
+Per-scenario tier scores, per-indicator (`tier_result`) and per-indicator-per-location (`tier_location_result`). Loaded from the tier team's staging CSVs by the tier-data ETL, not produced by the statistics pipeline. Both reference the Layer 09 rubric via `tier_short_code`.
+
+#### Layer 11 PER-SCENARIO STATISTICS (27 tables)
+
+The ETL-computed statistics, grouped by domain. Each domain is two layers deep:
+
+- `*_monthly` - one row per (scenario x entity x water month), used for time-series and percentile-band charts.
+- `*_period_summary` - one row per (scenario x entity), pre-aggregated 100-year statistics (avg, std, exc_p5..p95, reliability). The fast headline-number path.
 
 **Reservoir (4 tables)**
 
@@ -383,11 +416,12 @@ These are the tables the API reads. Wide (lots of columns: monthly averages, per
 | `refuge_du_shortage_monthly` | 16,416 | 29 |
 | `refuge_du_period_summary` | 1,368 | 32 |
 
-**Environmental flow (2 tables)**
+**Environmental flow (3 tables)**
 
 | Table | Rows | Cols |
 | --- | ---: | ---: |
 | `env_flow_channel_monthly` | 53,808 | 58 |
+| `env_flow_channel_seasonal` | 22,420 | 61 |
 | `env_flow_channel_period_summary` | 4,484 | 32 |
 
 **Delta (2 tables)**
@@ -397,25 +431,16 @@ These are the tables the API reads. Wide (lots of columns: monthly averages, per
 | `delta_monthly` | 7,296 | 27 |
 | `delta_period_summary` | 608 | 14 |
 
-**Tier outcomes (1 table)**
-
-| Table | Rows | Cols |
-| --- | ---: | ---: |
-| `tier_result` | 653 | 19 |
-
-**Sensitivity sweeps (2 tables)**
+#### Layer 12 CROSS-SCENARIO ANALYSIS (2 tables)
 
 | Table | Rows | Cols |
 | --- | ---: | ---: |
 | `sensitivity_climate` | 306,272 | 15 |
 | `sensitivity_operational` | 39,702 | 15 |
 
-**Pattern across every domain.** Each group is two layers deep:
+Cross-scenario sweeps. Unlike Layers 10-11, these are keyed across scenarios rather than to a single one: `sensitivity_climate` isolates the hydroclimate signal across sibling runs, `sensitivity_operational` isolates the operational-change signal.
 
-- `*_monthly` - one row per (scenario x entity x water month), used for time-series and percentile-band charts.
-- `*_period_summary` - one row per (scenario x entity), pre-aggregated 100-year statistics (avg, std, exc_p5..p95, reliability). The fast slide-1 path.
-
-> Source: `audits/monthly_20260511_125419/tables_summary.csv`; `database/README.md` § Schema implementation status.
+> Source: `database/README.md` § Schema implementation status.
 
 ---
 
@@ -427,15 +452,14 @@ These are the tables the API reads. Wide (lots of columns: monthly averages, per
 
 | # | Concern | Question | Tool |
 | --- | --- | --- | --- |
-| A | Schema structure | Is the DB shaped the way we documented it? | `database/run_audit.sh` + `verify_erd_against_audit.py` + `09_verify_level*.sql` |
-| B | Reference data content | Do layers 00-08 contain the correct records? | `export_layer_tables.py` + diff vs `seed_tables/` |
+| A | Schema structure | Is the DB shaped the way we documented it? | `database/run_audit.sh` + `verify_erd_against_audit.py` |
+| B | Reference data content | Do layers 00-09 contain the correct records? | `export_layer_tables.py` + diff vs `seed_tables/` |
 | C | ETL statistics accuracy | Do the computed results (layers 10+) match the source? | `etl/statistics/verify_all_sections.py` (CSV→DB), `verify_api.py` (DB→API) |
 
-All three are rolled up monthly by `python database/audit/run_monthly_audit.py` → `audits/monthly_<ts>/report.md` (the May 11 audit is the one we will demo in Section VIII).
+All three are rolled up monthly by `python database/audit/run_monthly_audit.py` → `audits/monthly_<ts>/report.md`.
 
-A fourth concern, "is verified/unverified visible externally?", is on the roadmap. See [`docs/statistics_roadmap.md` V7](statistics_roadmap.md#v7-layer-4-smoke-test-verification-page-renders).
 
-> Source: `database/README.md` § Audit and verification strategy.
+> Source: `database/README.md` § Audit and verification.
 
 ---
 
@@ -489,11 +513,11 @@ If `developer_id = 1` you are connected as `postgres` and writes will be attribu
 
 ---
 
-### Slide 17 - Versioning: version_family + version + domain_family_map
+### Versioning: version_family + version + domain_family_map
 
 ```
 ┌─────────────────────────┐       ┌─────────────────────────┐
-│      developer (2)      │       │   version_family (14)   │
+│      developer (6)      │       │   version_family (14)   │
 │  id, email, role        │       │  one per domain         │
 │  aws_sso_username       │◄──────│  (entity, scenario,     │
 └─────────────────────────┘       │   network, ..., stats)  │
@@ -515,9 +539,8 @@ If `developer_id = 1` you are connected as `postgres` and writes will be attribu
 
 - **14 version families** today - one per domain. Independent so a schema bump in `entity` does not force a bump in `network`.
 - **93 table-to-family mappings** - every table is covered.
-- **`audit_log`** (separate table) - opt-in row-level history with full JSONB diffs. Not active by default because of write volume on bulk tables. Enabled on sensitive tables (`scenario`, `developer`, `version`) via `apply_audit_log_trigger_to_table(...)`.
 
-> Source: `database/README.md` § Layer 00_VERSIONING schema, § audit_log table (Scripts and Verification queries).
+> Source: `database/README.md` § Layer 00_VERSIONING schema (Scripts and Verification queries).
 
 ---
 
@@ -540,7 +563,7 @@ The database has five overlapping defenses. Any one of them failing alone is not
 
 The website is public, the database is not, and even a connection bypassing the network firewall would still be blocked from writing by an in-database trigger that requires an identified human.
 
-> Source: Slides 0.75, 15, 16, 19; `docs/INFRASTRUCTURE.md` § 3.3 (networking), § 3.4 (encryption), § 7.11 (CORS).
+> Source: `INFRASTRUCTURE.md` in the private `coeqwal-private-docs` repo (networking, encryption, CORS).
 
 ---
 
@@ -553,7 +576,7 @@ Every row in the database can answer four basic questions: where it came from, w
 | Where did the data come from? | `source` + `source_id` (FK to lookup), `model_source_id` on Layer 02 network and Layer 03 entity rows. Descriptive columns like `community_agency`, `point_of_diversion`, `provider` carry informal origin notes |
 | Who put it there or changed it? | `created_by`, `updated_by` columns → `developer` table, populated by the `set_audit_fields()` BEFORE trigger. Unregistered writes are refused |
 | When was it put in or changed? | `created_at`, `updated_at` set by the same trigger |
-| What ETL run produced it? | Today: implicit via `created_by`. Planned: `data_load_log` table linking each row to a specific Batch ETL run |
+| What ETL run produced it? | Implicit via `created_by` |
 | What schema version is it under? | `version_family` (14 domains) + `version` + `domain_family_map` (93 tables → families). Independent per domain so a change in one domain does not cascade |
 | What CalSim run is it from? | `scenario_short_code` on every statistics row → `scenario` → `hydroclimate` → `model_source` |
 
@@ -567,15 +590,16 @@ The database publishes through a FastAPI service at `api.coeqwal.org`. This is w
 
 ### What it serves
 
-16 route modules, grouped by domain:
+11 route modules, grouped by domain, plus inline network and system routes in `main.py`:
 
 - **Reservoir statistics** - monthly percentiles, storage, spill, period summaries for the 8 major reservoirs (or filter by group: `major`, `cvp`, `swp`)
-- **Network** - nodes, arcs, and spatial queries against the PostGIS geometry layer
 - **Scenarios** - scenario list, tier results, tier maps per indicator
 - **Demand units** - urban + ag, with monthly and period-summary endpoints
-- **M&I contractors** - SWP / CVP contractor-level rollups
+- **M&I contractors** - SWP contractor-level rollups (SWP only; CVP load is a [roadmap item](etl/statistics/README.md#cvp-contractor-load-unfinished))
 - **Aggregates** - CalSim project-level rollups (SWP total, SWP NOD/SOD, CVP NOD/SOD, MWD)
-- **Refuge, Delta, Environmental flow, Verification, Bulk download** - one route module each
+- **Batch statistics** - multi-scenario statistics in one request
+- **Refuge, Delta, Environmental flow** - one route module each
+- **Network** - nodes and arcs against the PostGIS geometry layer, served as inline routes (`/api/nodes`, `/api/arcs`) in `main.py`
 
 Every endpoint is FastAPI + Pydantic. The response shape is validated against a typed schema before it leaves the server, and the OpenAPI / Swagger documentation at `/docs` is auto-generated from those schemas.
 
@@ -585,13 +609,13 @@ Every endpoint is FastAPI + Pydantic. The response shape is validated against a 
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?group=major"
 ```
 
-Returns JSON: 8 reservoirs x 12 water months of percentile bands (p5, p25, p50, p75, p95), straight from `reservoir_percentile_monthly`, indexed on `(scenario_short_code, reservoir_entity_id)`. The website renders the box-and-whisker plot directly from this payload.
+Returns JSON: 8 reservoirs x 12 water months of percentile bands (q0, q10, q30, q50, q70, q90, q100), straight from `reservoir_monthly_percentile`, indexed on `(scenario_short_code, reservoir_entity_id)`.
 
 ### Tech and infrastructure
 
 - **Language / framework:** Python + FastAPI
 - **Schema validation:** Pydantic models for every response
-- **Database driver:** `psycopg2` / `asyncpg`, connection pool 5-50 (auto-scaling)
+- **Database driver:** `asyncpg`, connection pool 5-50 (auto-scaling)
 - **Deployment:** GitHub Actions builds a Docker image, pushes to ECR, ECS Fargate pulls and runs it on `git push origin main`
 - **Routing:** Internet -> Route 53 -> ALB -> ECS Fargate -> PostgreSQL RDS
 - **TLS:** AWS Certificate Manager, terminated at the ALB (`api.coeqwal.org` matches one cert, the website hostnames match another)

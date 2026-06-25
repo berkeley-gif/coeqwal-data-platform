@@ -19,7 +19,7 @@ Ag PDF tables 3-4 and 3-5 list diversion arcs only. They have no gw/sw
 columns and are not compared here.
 
 This script is informational while gw/sw value reconciliation is deferred.
-See docs/gw_sw_reconciliation.md.
+See database/topic_docs/cws/gw_sw_reconciliation.md.
 
 Usage:
     python etl/tier_data/scripts/reconcile_gw_sw_sources.py
@@ -475,8 +475,9 @@ def main() -> int:
 
     print(
         "\nUrban gw/sw column types: VARCHAR(5) on live RDS ('0' / '1' / empty). "
-        "BOOLEAN migration is on the roadmap (see docs/TEAM_RUNBOOK.md thread R1). "
-        "Value reconciliation deferred - see docs/gw_sw_reconciliation.md."
+        "BOOLEAN migration is tracked in SCHEMA_BACKLOG.md section 6. "
+        "Value reconciliation deferred, see "
+        "database/topic_docs/cws/gw_sw_reconciliation.md."
     )
     return 0
 

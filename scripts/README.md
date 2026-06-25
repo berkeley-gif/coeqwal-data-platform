@@ -4,6 +4,6 @@ This directory contains utility scripts and tools for the COEQWAL web backend. C
 
 | Script | What it does |
 |---|---|
-| [`cloud9_snapshot.sh`](cloud9_snapshot.sh) | Read-only inventory of Cloud9. Writes [`docs/CLOUD9_INVENTORY.md`](../docs/CLOUD9_INVENTORY.md) with `--write`. Supported. |
+| [`cloud9_snapshot.sh`](cloud9_snapshot.sh) | Read-only inventory of the supported Cloud9 environment. Prints to stdout; pass `--output=PATH` to save. |
 | [`setup_etl_cloud9.sh`](setup_etl_cloud9.sh) | One-time setup of the ETL Python environment on a fresh Cloud9 instance. |
-| [`mapbox_recipes/`](mapbox_recipes/) | Helpers for building Mapbox tilesets from the network GIS layers. |
+| [`mapbox_recipes/`](mapbox_recipes/) | Mapbox Tiling Service recipe JSON for COEQWAL tilesets. Currently the demand-unit tileset (`calsim_demand_units.json`, `demand_units` layer). |

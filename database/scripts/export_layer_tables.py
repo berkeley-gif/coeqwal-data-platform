@@ -34,7 +34,9 @@ Output
 
 Notes
 -----
-- PostGIS geometry columns are exported as WKT text via ST_AsText().
+- PostGIS geometry columns are summarized (point count + bbox), not dumped as
+  full WKT, and `*_wkt` text mirrors are reduced to their length, so the CSVs
+  stay readable by naive consumers. Use a dedicated GIS export for real geometry.
 - The audit_log table is excluded (can be very large; run separately if needed).
 - Connects as read-only; the script never writes to the database.
 - Run from the repo root with DATABASE_URL set in your environment.
@@ -127,8 +129,9 @@ def build_select(cur: psycopg2.extensions.cursor, table_name: str):
     """
     Return (sql, col_names) for the table.
 
-    Geometry columns are wrapped in ST_AsText() so they export as WKT strings
-    instead of binary blobs. Returns (None, []) if the table doesn't exist.
+    Geometry columns are summarized (point count + bbox) and `*_wkt` text
+    mirrors are reduced to their length, so a single cell never blows past the
+    csv module's 128 KB field limit. Returns (None, []) if the table is absent.
     """
     cur.execute(
         """
@@ -148,7 +151,16 @@ def build_select(cur: psycopg2.extensions.cursor, table_name: str):
     col_names = []
     for col_name, udt_name in columns:
         if udt_name == "geometry":
-            parts.append(f'ST_AsText("{col_name}") AS "{col_name}"')
+            # Summarize, do not dump full WKT. A dissolved MultiPolygon can run
+            # past the csv module's 128 KB field limit and break naive readers.
+            parts.append(
+                f"('npoints=' || ST_NPoints(\"{col_name}\") || ' ' "
+                f"|| Box2D(\"{col_name}\")::text) AS \"{col_name}\""
+            )
+        elif col_name.endswith("_wkt"):
+            # Text mirror of a geometry column (e.g. geom_wkt). Emit its length,
+            # not the full WKT string, for the same reason.
+            parts.append(f'(\'wktlen=\' || length("{col_name}")) AS "{col_name}"')
         else:
             parts.append(f'"{col_name}"')
         col_names.append(col_name)

@@ -95,6 +95,11 @@ If the console scrolled away, the same result survives off-screen in three place
 
 ***Did the numbers land correctly, not just without error?*** A clean scorecard means the load ran, not that the values match the source. An independent value-level check exists, [`verify_all_sections.py`](../statistics/verify_all_sections.py), which recomputes the headline statistics from the source DV / SV CSVs and compares them against what the ETL wrote to the database. **It is still in progress and not yet part of the pipeline.** It reads only local CSV reference files (a hand-staged DV / SV pair in `audits/notebooks_reference/`, or `--ref-dir`) for development and has no S3 access yet. Wiring it to the bucket is [Roadmap item 1: Point the statistics verifier at S3](#roadmap).
 
+Two caveats when reading its output:
+
+- **Two value checks are intentionally skipped** (logged as warnings, not failures) because the value the ETL loads is unconfirmed and disagrees with the verifier's reference: San Luis CVP/SWP `pct_capacity` (the CVP/SWP capacity split) and the `GDPUD_NU` delivery variable. Both are questions for the modeling team. Background and how to resolve: [Unconfirmed data values](../statistics/README.md#unconfirmed-data-values-two-verification-checks-skipped-meanwhile).
+- **Tier checks are opt-in.** Tier results come from a separate ETL, so `verify_all_sections.py` only checks the tier sections when run with `--with-tiers`. A default run never touches them and exits clean for any scenario. The same `--with-tiers` flag adds the tier endpoints to [`verify_api.py`](../statistics/verify_api.py). See the [API](#api-database-to-public-api) and [Tier data load](#tier-data-load-csvs-to-database) steps.
+
 ### API (database to public API)
 
 ***Does the public API return those same numbers?*** [`verify_api.py`](../statistics/verify_api.py) hits `api.coeqwal.org` over HTTP and compares the API responses against direct database queries.
@@ -123,6 +128,89 @@ python etl/tier_data/scripts/verify_tiers.py --tier CWS_DEL
 **It worked** when every tier row prints `PASS <tier_code>`, the run ends `Overall: N/N tiers PASS`, and the script exits `0`. It writes a JSON report under `audits/verification_reports/`.
 
 **It didn't** when any row reads `FAIL <tier_code> (... issues: ...)`: the run ends `... FAIL`, the script exits `1`, and the `Detail:` line points at the JSON report. Requires `DATABASE_URL` and API access; without `DATABASE_URL` the tier-location coverage scan is skipped with a warning.
+
+---
+
+## Receipts: the paper trail
+
+Alongside the per-step checks above, the pipeline leaves a deliberate paper trail at every stage. Tags: `[S3]` lives in S3, `[local]` is on disk but gitignored, `[tracked]` is committed to git.
+
+```
+Google Drive
+   |
+   | gdrive_bulk_download.py
+   v
+Ingest ----writes----> [S3]     scenario/<id>/ingest_record.json
+   |                            (provenance + SHA-256 hashes)
+   |
+   |   ----writes----> [local] etl/ingestion/audit_reports/ingest_state.json
+   v
+AWS Batch  (DSS to CSV + Trend Report validation)
+   |
+   |---writes--> [S3]     scenario/<id>/csv/*.csv
+   |
+   |---writes--> [S3]     scenario/<id>/extract_record.json
+   |                       (Batch status + inlined validation result)
+   |
+   +---writes--> [S3]     scenario/<id>/validation/<id>_validation_mismatches.csv
+                           (every Batch run that validates,
+                            header-only on pass, rows on fail)
+
+etl/ingestion/tools/audit.py
+   reads:   ingest_record.json + ingest_state.json + extract_record.json
+   writes:  [tracked once committed] etl/ingestion/audit.md
+            ("what needs attention" digest across all scenarios)
+
+----------------------------------------------------------------
+
+[S3] csv/*.csv  ----> etl/statistics/run_all.py
+                            |
+                            +--> PostgreSQL stats tables
+                            |
+                            +--> [local] etl/statistics/audit_reports/
+                                         stats_audit_<ts>.csv
+
+PostgreSQL  ----> verify_all_sections.py  --\
+            ----> verify_api.py              >--> [local, gitignored]
+                                            -/    audits/verification_reports/
+                                                  *_layer2.json
+                                                  *_layer3.json
+
+----------------------------------------------------------------
+
+etl/tier_data/staging/  ----> load_all_tier_results.py
+                                    |
+                                    +--> PostgreSQL tier tables
+
+PostgreSQL  ----> verify_tiers.py  ----> [local, gitignored]
+                                         audits/verification_reports/
+                                         tiers_<ts>.json
+
+----------------------------------------------------------------
+
+PostgreSQL  ----> database/audit/run_monthly_audit.py
+                            |
+                            +--> [tracked] audits/monthly_<ts>/
+                                           (schema, row counts, entity exports)
+```
+
+## After a run: what to read
+
+You do not need to read every verification file after every run. Each kind of run feedback follows the same shape: **console first, then the scoreboard or digest if the console scrolled, then forensic detail only if something was flagged.** Stop at the first level that gives a clean answer.
+
+| Run | After a run, what do I read? |
+|---|---|
+| **`gdrive_bulk_download.py scan`**<br>(preflight against Google Drive, no S3 writes) | **Console:** prints a `SCAN AUDIT SUMMARY` block at the end of the run. Three parts, in this order:<br>- A totals header counting `Total scenarios`, `OK` (clean count), `Missing files`, `Multiple` (indicates more than one scenario version in the drive. Need to pin correct version in `model_run_file_source_working.csv`), `Folder mismatches`, `No drive access`, and `Local-only entries` (if that option is selected at run time).<br>- A per-scenario table, one row per scenario, with columns `Scenario` (the `short_code`), `Via` (how the scan reached Drive: `id` if `ModelFilesLink` resolved to a folder ID, `path` if it fell back to walking the Shared Drive by folder name, `none` if neither worked), `Zips` (count), `CSVs` (count, refers to Trend Report CSVs), `Match` (folder-name convention check: `OK`, `MISMATCH`, or `NO_DV_PATH` when the working CSV row has no `DV_Path` to compare against), `Status` (pipe-delimited failure codes, or `OK`).<br>- A `SCENARIOS REQUIRING ATTENTION` block. Present only when at least one scenario is non-OK and non-LOCAL_ONLY. Each entry carries the scenario id, status code, ZIP name, trend csv name, and folder name details for mismatches.<br><br>Clean-run signal: `OK (clean): N` equals `Total scenarios` and no `SCENARIOS REQUIRING ATTENTION` block follows.<br><br>**Forensic:** the run also writes `etl/ingestion/audit_reports/ingest_state.json` (`scan` block). Replay the saved per-scenario table later (e.g. when the terminal has scrolled, or to share with a teammate) with `python etl/ingestion/tools/show_last_run.py --stage scan`. It reads from `ingest_state.json` on disk and does not call Drive or S3. Scan never touches S3 and never updates `audit.md`.<br><br>See [Scan (Google Drive inventory)](#scan-google-drive-inventory) above for what each status counter means and where to set `pinned_model_run_zip` / `pinned_trend_csv` when "Multiple (need pin)" fires. |
+| **`gdrive_bulk_download.py download`**<br>(Drive -> S3 staging, with validation) | **Console:**<br>- Ends with a `DOWNLOAD & VALIDATION SUMMARY` block with totals (`Total scenarios`, `OK`, `Skipped (review)`). A clean run reads `OK: N`, `Skipped (review): 0`, with no follow-up block. If `Skipped (review)` is non-zero, a `SCENARIOS REQUIRING REVIEW` block lists each flagged scenario with its `error_code` and `error_message`. A row is skipped (not staged to S3, not promoted) for one of: no Drive access, missing or extra ZIPs / trend CSVs, a pin pointing at a filename Drive no longer has, a corrupt ZIP, or the ZIP not containing the SV / DV basenames the working CSV declared. The full code catalog and the fix for each is in [Download (Drive to S3 staging)](#download-drive-to-s3-staging) above.<br>- Then `audit.py` auto-runs (unless `--skip-audit` is passed) and prints three lines: `Audit written to etl/ingestion/audit.md. Review and commit it manually when ready.`, then `Summary: N active scenarios in S3, M need developer action (extraction failures: ..., validation failures: ..., convention warnings: ...)`, then `Validation: K passed, F failed, S skipped, W awaiting extraction.` The audit at this point reflects ingest-side state only, because Batch has not yet run for any of the newly-staged scenarios. On a clean run, `M` is zero, all three parenthesized counts are zero, and `W` equals the number of scenarios just staged (they all sit at "awaiting extraction" until Batch finishes).<br><br>**Digest:** [`etl/ingestion/audit.md`](../ingestion/audit.md). `audit.py` rewrites the entire file on every call (walks all `scenario/` prefixes in S3). The download command auto-calls it once at the end of the run, so this snapshot reflects ingest-side state only. The "Did Batch finish extracting all the scenarios?" row below picks the file up again once extraction settles. |
+| **`gdrive_bulk_download.py promote`**<br>(staging -> ready, fires the Batch Lambda to do the dss -> csv extraction) | **Console:** both a summary and per-object lines.<br>- Pre-flight: `About to promote N scenario(s) from staging/scenario_data/ to ready/.`, then `Upload order per scenario: ingest_record.json -> trend CSV -> ZIP last.`, then a per-scenario plan line listing the three files in upload order.<br>- Per-object copy lines `Copying s3://.../staging/... -> s3://.../ready/...` for every file (three per scenario), plus one `[sXXXX] Promoted to ready/` line per scenario.<br>- Closes with `Done. Promoted N scenario(s) to ready/.` followed by `The Lambda will trigger on each ZIP upload.`<br><br>When `Done.` prints, every S3 PUT succeeded. The per-object lines are there so you can grep when something looks wrong, the summary is there for when the console scrolled.<br><br>**What happens next.** The ZIP PUT fires the Lambda, which submits one Batch job per scenario. Extraction runs asynchronously in AWS, roughly 20 minutes per scenario, multiple in parallel. The next row's `audit.py` is how you confirm each Batch job actually finished cleanly.<br><br>**Status hint while Batch is in flight.** `python etl/status.py` reports active and recently-terminated Batch job counts straight from the queue, with no S3 walk and no `audit.md` rewrite. Use it for a quick "is anything still running?" check between promote and the next audit. It does not tell you whether finished jobs succeeded. Only `audit.py` does that. |
+| **Did Batch finish extracting all the scenarios?**<br>`python etl/ingestion/tools/audit.py` | Batch runs asynchronously in AWS, roughly 20 minutes per scenario, multiple scenarios in parallel (Fargate Spot spins containers up on demand, capped by the compute environment's `maxvCpus` setting. Each container uses 2 vCPU, so the queue can run up to `maxvCpus / 2` scenarios concurrently. If `maxvCpus` is 64, that is 32 scenarios in parallel. If it is 16, that is 8 in parallel).<br><br>When you are ready to check completion, run `python etl/ingestion/tools/audit.py`. It walks S3, rewrites `etl/ingestion/audit.md`, and prints three console lines: `Audit written to etl/ingestion/audit.md. Review and commit it manually when ready.`, then `Summary: N active scenarios in S3, M need developer action (extraction failures: X, validation failures: Y, convention warnings: Z)` (convention warnings surfaces scenario file naming differences), then `Validation: K passed, F failed, S skipped, W awaiting extraction.`.<br><br>If `M` is zero, every promoted scenario landed cleanly. If `M` is non-zero, the named scenarios are in [`etl/ingestion/audit.md`](../ingestion/audit.md) under "What needs your attention".<br><br>**Per-scenario validation outcomes** for every active scenario in S3 (not just the flagged ones) appear in `audit.md`'s `## Active scenarios` table under the `status` column. Values: `OK` (extraction and validation both clean), `VALIDATION_FAILED` (extraction OK, trend-report check found mismatches), `FAILED` (Batch did not produce the expected CSV), `PARTIAL` (one of SV / DV missing), `AWAITING_EXTRACTION` (Batch has not written `extract_record.json` yet), or `NO_INGEST_RECORD` (ZIP in S3 but no record alongside).<br><br>**Forensic:** when validation flags a scenario, **open `s3://<bucket>/scenario/<id>/validation/<id>_validation_mismatches.csv`**. This is the per-row diff between the extracted CSV and the WAM team's trend report. <br><br> Other forensic artifacts:<br>- `s3://<bucket>/scenario/<id>/extract_record.json` (the full Batch outcome record).<br>- The `/aws/batch/job/...` CloudWatch log stream, named by the job id printed in `audit.md`.<br><br>See [Extraction (DSS to CSV)](#extraction-dss-to-csv) above for per-job tuning, parallelism details, and the audit.md section-by-section guide. |
+| **Statistics ETL**<br>`etl/statistics/run_all.py` | **Console:** `ETL PROCESSING SCORECARD` with per-scenario PASS / FAIL markers, a `SUMMARY` block with task totals, and a `FAILURES (need attention)` block if any row failed.<br><br>**Digest:** `etl/statistics/audit_reports/stats_audit_<ts>.csv`. Columns: `module, scenario, success, wall_time_sec, rows_written, error`. The `error` column carries the failure reason. This file is the scoreboard and the forensic detail in one. Statistics has no separate markdown digest yet (see [Roadmap](#roadmap)). |
+| **Tier data load**<br>`etl/tier_data/scripts/load_all_tier_results.py` | **Console:** Per-tier row counts (e.g. `CWS_DEL: N location records, M scenario aggregates`), then `Manifest written: etl/tier_data/staging/tier_upload_manifest.csv` with totals. The manifest is regenerated on every normal run.<br><br>**Digest:** `etl/tier_data/staging/tier_upload_manifest.csv` (per-tier totals). To confirm the DB matches, re-run `load_all_tier_results.py --verify`. It compares. It does not regenerate the manifest. |
+| **Model-run verification**<br>`verify_all_sections.py`, `verify_api.py` | **Why / when:** Independent spot check that the statistics ETL landed numbers correctly and that the public API is serving them faithfully. `verify_all_sections.py` re-reads the reference DV / SV CSVs that `run_all.py` consumed, recomputes the headline statistics in plain pandas, and compares against the database. `verify_api.py` hits `api.coeqwal.org` over HTTP and compares each response against a direct database query. Run after `run_all.py` finishes (at least on a sample of scenarios), after deploying a change to the statistics calculation code, after a stats-table migration, or when a stakeholder reports numbers that look off. This is a developer diagnostic, not an automated pipeline step (experimental, see [Statistics load (CSV to database)](#statistics-load-csv-to-database) above).<br><br>**Console:** Per-scenario `VERIFICATION SUMMARY` block with `PASS` / `FAIL` / `Skipped` / `No DB data` counts and a `FAILED CHECKS` list when any check failed.<br><br>**Digest:** `audits/verification_reports/<scenario>_layer2.json` (from `verify_all_sections.py`, DB vs reference CSVs) and `<scenario>_layer3.json` (from `verify_api.py`, API vs DB). |
+| **Tier verification**<br>`etl/tier_data/scripts/verify_tiers.py` | **Why / when:** Part of the tier pipeline, not the model-run pipeline. Confirms that `load_all_tier_results.py` transcribed the team-delivered staging CSVs into the `tier_result` and `tier_location_result` tables faithfully, for every active scenario and every tier code. Comparison is row-for-row against `etl/tier_data/staging/`.<br><br>**Console:** One row per tier code (e.g. `PASS WRC_SALMON_AB    (N checks, 0 mismatches)` or `FAIL ... (N checks, M issues: ...)`), then an `Overall: X/Y tiers PASS` (or `Overall: X/Y tiers PASS, Z FAIL`) line and a `Detail: <json_path>` pointer.<br><br>**Digest:** `audits/verification_reports/tiers_<ts>.json`. See [`etl/tier_data/README.md`](../tier_data/README.md). |
+| **Status check** ("when did X last run?")<br>`python etl/status.py` | **Console:** Freshness across six sections: ingestion, batch, statistics, tiers, verification, and connectivity (RDS, AWS, S3, rclone). |
+
+**Rule of thumb.** Trust the headline at each level (console, then `audit.md` or JSON report, then `stats_audit_<ts>.csv` or `report.md`). The forensic artifacts in the diagram exist for triage. Read them only when the headline says to.
 
 ---
 
@@ -156,9 +244,43 @@ python database/audit/run_monthly_audit.py
 ## Roadmap
 
 - **Point the statistics verifier at S3.** [`verify_all_sections.py`](../statistics/verify_all_sections.py) is still under development and reads only local DV / SV CSV reference files (default `audits/notebooks_reference/`, or `--ref-dir`) and has no S3 access yet to compare against the sv and dv files in the bucket. It needs the same S3 read path the production calculators already use, `s3://coeqwal-model-run/scenario/<id>/csv/<id>_coeqwal_calsim_output.csv` (DV) and `..._sv_input.csv` (SV).
-- **Mirror the ingest digest to statistics.** `etl/statistics/tools/audit.py` walks recent `stats_audit_*.csv` and renders a tracked `etl/statistics/audit.md`. Closes the asymmetry where ingestion has a tracked `audit.md` digest and statistics has none. One afternoon, no new infrastructure.
+- **Mirror the ingest digest to statistics.** Ingestion has [`etl/ingestion/tools/audit.py`](../ingestion/tools/audit.py), which renders a committable `etl/ingestion/audit.md` from local state. Add the statistics counterpart `etl/statistics/tools/audit.py` that walks recent `stats_audit_*.csv` and renders `etl/statistics/audit.md`, closing the asymmetry where ingestion has a digest and statistics has none. One afternoon, no new infrastructure.
 
 ### ETL verification developer experience
 
 - **Give every scenario a verification status in the audit.** What a developer needs from `etl/ingestion/audit.md` is a per-scenario answer in one of three buckets: verification ran and passed, ran and failed (which ones), or did not run (which ones). Today the report answers only the middle bucket cleanly. Failed scenarios are named in "What needs your attention," but passed and not-run scenarios both render as `OK` in the active-scenarios table, because `_scenario_status` only special-cases `validation.result == "failed"`. The skipped *count* in the validation breakdown says how many did not run but never which, and the "Unverified scenarios" section names only the missing-trend-report subset, which is a different set than the count. Split `OK` into `VERIFIED` and `NOT VERIFIED`, driven by `validation.result` (already present in each `extract_record.json`), and list the not-verified scenarios by name so a developer knows which to inspect.
 - **Scheduled audit run.** Run `audit.py` automatically after a batch run finishes, so `audit.md` is always current. Removes the "remember to run it" step with zero per-event noise. Timestamp the `audit.md` title so a reader can tell at a glance how fresh the digest is.
+
+### Verification streamlining
+
+The developer-driven layers (Layer 2, Layer 3, Layer 3-tier) each take a separate command today and write reports under [`audits/verification_reports/`](../../audits/verification_reports/). The work below makes them cheaper to run, easier to read, and less surprising. Roughly ordered by value over effort.
+
+**1. Single `verify_release.py` scorecard orchestrator (highest value).** One command that runs Layer 2 + Layer 3 + Layer 3-tier for a scenario (or `--all-scenarios`) and prints a single PASS / FAIL scorecard with per-layer drill-down. Today these are three commands.
+
+```bash
+python etl/verification/verify_release.py --scenario s0042
+python etl/verification/verify_release.py --all-scenarios --report-dir audits/verification_reports
+```
+
+- Run each layer in sequence (fail-fast configurable with `--continue-on-failure`).
+- Collect per-layer JSON into a `release_{scenario}_{ts}.json` aggregate.
+- Print a one-screen scorecard with per-section pass counts (Reservoirs: PASS 8/8, CWS: PASS 6/6, AG: FAIL 130/131, ...) and the path to per-layer detail.
+- Exit 0 if all PASS, 1 otherwise.
+
+The orchestrator's `--verify` preset is the closest equivalent today but only runs Layer 2.
+
+**2. Standardize report naming and paths.** Use consistent `{scenario}_{layer}.json` across all three verifiers (today `verify_tiers.py` writes `tiers_{ts}.json` with no per-scenario stamping). Drop the timestamp default for tier verification so the latest run is at a known path, with a `--timestamped` opt-in to retain prior runs.
+
+**3. Default `--scenario` to the active set.** If no scenario flag is passed, default to `ACTIVE_SCENARIOS` and print a banner naming the resolved set, instead of processing nothing. Preserve `--scenario` and `--scenarios-override` for targeted cases.
+
+**4. Auto-detect pre-flight scenarios.** Add a `--include-inactive` flag that unions `ACTIVE_SCENARIOS` with scenarios that have result-table data but are not yet active, so a freshly loaded scenario can be verified without the awkward `--scenarios-override sXXXX`. Emit the same WARNING banner. Keep `--scenarios-override` as the explicit escape hatch.
+
+**5. Reference-directory clarity.** The verifiers' code default `--ref-dir` is `audits/notebooks_reference/`, which does not exist in the tree, while the CalSim scenario CSVs actually live in [`etl/reference/`](../../etl/reference/) (where `verify_all_sections.py`'s own docstring points), so in practice you must pass `--ref-dir etl/reference`. `s3://coeqwal-model-run/reference/` is the cloud mirror of `etl/reference/`. Reconcile the default with the real location, have `verify_all_sections.py` and `verify_api.py` log the resolved `--ref-dir` at INFO on startup, document the S3 sync command here, and optionally rename `etl/reference/` -> `etl/reference_calsim_csvs/`.
+
+**6. CI integration for Layer 3 (API vs DB).** A GitHub Action that runs `verify_api.py --all-scenarios` against staging on every PR touching `api/coeqwal-api/**` or `etl/statistics/**`, posts the scorecard as a PR comment, and gates merge on PASS. Same for `verify_tiers.py` when `etl/tier_data/scripts/**` changes. Requires a CI-accessible read-only DB role and a stable test bucket. Layer 2 is heavier and may be too slow per-PR, so start with Layer 3.
+
+**7. Layer 4 (`/verification` page).** Build the public status page at `/verification` and the backing `/api/verification/status` endpoint so the Layer 2 / Layer 3 / Layer 3-tier reports are readable outside the developer console.
+
+**8. Move tier verification out of the statistics verifier.** `verify_all_sections.py` checks both statistics tables and tier results (`--with-tiers`). Tier results come from a separate ETL (`etl/tier_data/`) with its own checker (`verify_tiers.py`). Make `verify_all_sections.py` stats-only and move the `tier_result` table check next to the tier ETL. `--with-tiers` is the interim bridge.
+
+**Sequencing.** 1, 2, 3 are local refactors that can ship in any order. 4 depends on 3. 5, 7, and 8 are independent. 6 requires new CI plumbing and stable credentials.

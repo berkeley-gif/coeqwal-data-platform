@@ -1,44 +1,29 @@
-# 06_assumptions_operations
+# 05_assumptions_operations
 
-This directory contains policy assumptions and operational rules that define how the water management system behaves under different scenarios.
+Seed data for the assumption and operation reference tables. These hold the policy assumptions and operational rules that scenarios reference.
 
-## Assumptions (Version Family 3)
+## Files
 
-Policy assumptions that drive scenario behavior:
+| File | DB table |
+|------|----------|
+| `assumption_category.csv` | `assumption_category` |
+| `assumption_definition.csv` | `assumption_definition` |
+| `operation_category.csv` | `operation_category` |
+| `operation_definition.csv` | `operation_definition` |
 
-### Core tables
-- `assumption_category.csv` - Categories: TUCP/TUCO, land use, groundwater restrictions, SLR, etc.
-- `assumption_definition.csv` - Specific assumption definitions with parameters
+`assumption_category` short codes: `land_use`, `gw_model`. `operation_category` short codes: `comm_delivery`, `delta_outflow`, `carryover`, `regulatory_salinity`, `tucp`, `gw_restrictions`, `infrastructure`, `flow`, `biops`.
 
-### Parameter tables
-- `assumption_param_tucp_tuco.csv` - TUCP/TUCO parameters by region/season
-- `assumption_param_land_use.csv` - Crop types, amounts, regions
-- `assumption_param_sgma.csv` - SGMA groundwater restrictions
-- `assumption_param_slr.csv` - Sea level rise projections
-- `assumption_param_gwmodel.csv` - Groundwater model parameters
-- `assumption_param_bioops.csv` - Biological operations parameters
-- `assumption_param_kv.csv` - Key-value pairs for other assumption types
+`assumption_definition` rows carry `assumptions_version_id`, in the `assumption` version family. `operation_definition` rows carry `operation_version_id`, in the `operation` version family. The category tables are not versioned. See [`../../VERSIONING.md`](../../VERSIONING.md) for how version families work.
 
-## Operations (Version Family 4)
+## Loading
 
-Operational policies and rules that govern system behavior:
+There is no standalone loader in this folder. The tables were created and populated by the scenario-layer migrations now archived under [`../../sql_archive/`](../../sql_archive/). These CSVs are the committed copy of the reference data.
 
-### Core tables
-- `operation_category.csv` - Categories: infrastructure, regulatory, priority allocation, minimum flow, etc.
-- `operation_definition.csv` - Specific operational policy definitions
+## Not in this folder
 
-### Parameter tables
-- `operation_param_priority_allocation.csv` - Water allocation priorities by region/season
-- `operation_param_minimum_flow.csv` - Minimum instream flow requirements
-- `operation_param_infrastructure.csv` - Infrastructure operational rules
-- `operation_param_regulatory.csv` - Regulatory compliance rules
-- `operation_param_carryover.csv` - Reservoir carryover storage rules
-- `operation_param_kv.csv` - Key-value pairs for other operation types
+- **Parameter tables.** Earlier designs anticipated per-type parameter CSVs (`assumption_param_*`, `operation_param_*`). None were ever built. Parameter detail lives inline in the `description` and `narrative` columns of the definition rows.
+- **Link tables.** The assumption-to-scenario and operation-to-scenario links are seeded from [`../06_scenario/`](../06_scenario/) (`scenario_key_assumption_link.csv`, `scenario_key_operation_link.csv`), not here.
 
-## Links to themes & scenarios
+## Pending: align these rows with the frontend
 
-These assumptions and operations are linked to themes and scenarios via:
-- `theme_key_assumption_link` - Which assumptions are key for each theme
-- `theme_key_operation_link` - Which operations are key for each theme
-- `scenario_key_assumption_link` - Which assumptions apply to each scenario
-- `scenario_key_operation_link` - Which operations apply to each scenario
+Per-scenario operation and assumption metadata is still hardcoded on the website because the definitions kept shifting while the team settled them. Bringing the DB rows up to date so the API can serve them is roadmap work, not a seed-loading task. The sequenced TODOs (operation-link fixes, missing `operation_definition` rows, the frontend icon-id crosswalk, an `is_renderable` flag) live in [`../../README.md`](../../README.md#scenario-assumptions-and-operations-metadata-align-db-with-the-website) § Roadmap.
