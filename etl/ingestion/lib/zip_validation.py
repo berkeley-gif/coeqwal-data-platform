@@ -13,8 +13,7 @@ Three layers, top to bottom:
 
 `process_scenario` (in `worker.py`) is the only caller that chains all three.
 `manual_ingest.py` (under `etl/ingestion/tools/`) reuses `build_ingest_record`
-on its own ZIP paths. The historical `backfill_ingest_records.py` in
-`etl/archive/oneshot_scripts/` also called `build_ingest_record` directly.
+on its own ZIP paths.
 
 Why we hash:
 
