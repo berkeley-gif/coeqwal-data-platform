@@ -11,7 +11,7 @@ For how the versioning subsystem works (families, `*_version_id` coverage, the a
 | `version_family.csv` | `version_family` | Yes, via `06_load_seed_data.sql` |
 | `version.csv` | `version` | Yes, via `06_load_seed_data.sql` |
 | `developer.csv` | `developer` | Partial, inline `INSERT` (see note below) |
-| `domain_family_map.csv` | `domain_family_map` | No. Populated by `05_populate_domain_family_map.sql`. This CSV is a stale export, do not load it |
+| `domain_family_map.csv` | `domain_family_map` | No. Populated by `05_populate_domain_family_map.sql`. This CSV is a stale export, do not load it (it still carries a `target_version_column` that no longer exists in the table) |
 
 ## Loading
 
@@ -27,6 +27,7 @@ psql $DATABASE_URL -c "\copy (
     dfm.schema_name,
     dfm.table_name,
     vf.short_code AS version_family_short_code,
+    dfm.database_level,
     dfm.note,
     dfm.is_active
   FROM domain_family_map dfm

@@ -38,7 +38,7 @@ A `short_code` is COEQWAL's stable, human-readable identity for a row, a compact
 
 How it is used in this database:
 
-- **It is the cross-environment join key:** Examples: `scenario.short_code` (`s0040`), `tier_definition.short_code` (`AG_REV`), `hydrologic_region.short_code` (`SAC`), DU ids (`02_NA`). Roughly 42 of 76 tables carry one.
+- **It is the cross-environment join key:** Examples: `scenario.short_code` (`s0040`), `tier_definition.short_code` (`AG_REV`), `hydrologic_region.short_code` (`SAC`), DU ids (`02_NA`). Roughly 42 of 97 tables carry one.
 - **Newer tables FK on `short_code`, not on the integer `id`:** For example `tier_location_result` / `tier_result` reference `tier_definition.short_code`, and `scenario.hydroclimate_sibling` references `scenario_hydroclimate_sibling.short_code`. The Layer 11 result tables key on `scenario_short_code` (varchar) rather than `scenario.id`. This is the deliberate direction (see `SCHEMA_BACKLOG.md` § "Design background, integer IDs vs short codes").
 - **Reference and catalog tables should almost always have one:** Pure result rows and internal-only tables may not need one.
 - **One thing to watch:** `scenario_hydroclimate_sibling.short_code` reuses the founding scenario's code (e.g. `s0020`), so the same string can name both a scenario and its sibling group. They live in different tables, so there is no collision, but the value alone is ambiguous.
