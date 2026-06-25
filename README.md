@@ -56,6 +56,7 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 **Roadmaps by area** - each section keeps its deferred and in-progress work at the bottom of its own README:
 
 - [Database roadmap](database/README.md#roadmap) - CWS dataset, demand-unit group membership, scenario assumptions/operations metadata. Schema hygiene lives in [`database/SCHEMA_BACKLOG.md`](database/SCHEMA_BACKLOG.md)
+- [Database audit roadmap](database/audit/README.md#improving-the-audit) - coverage self-check, ERD verifier fix, softening hardcoded counts, Layer 09 export gap
 - [Water user categories roadmap](database/topic_docs/cws/water_user_categories.md#roadmap) - CVP contractor load, `cvp_total` aggregate row, master crosswalk reconciliation, PWSID normalization
 - [CWS gw/sw reconciliation roadmap](database/topic_docs/cws/gw_sw_reconciliation.md#roadmap-remaining-work) - remaining `gw`/`sw` flag value reconciliation, seed fixes, and the BOOLEAN type migration
 - [ETL roadmap](etl/README.md#roadmap) - model-run source hardening, tier-scale reconciliation, demand-unit geometry coverage, statistics location-list and calculation hardening

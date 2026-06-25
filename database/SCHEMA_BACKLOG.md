@@ -785,7 +785,7 @@ Versioning has two levels: a family registry (`domain_family_map`, mapping 93 ta
 
 ## 10. Docs and tooling
 
-- [ ] **Fix or retire the ERD-vs-DB verifier (`database/audit/verify_erd_against_audit.py`):** Has drifted from the markdown-table ERD and needs the parser rewritten. Two drift points: (1) `run_monthly_audit.py` hardcodes the old filename `COEQWAL_SCENARIOS_DB_ERD.md`, so the comparison silently skips. (2) `parse_erd_tables()` scans for tree lines but `ERD.md` uses Markdown tables, so it parses zero tables and would flag every DB table as missing. Effort: M.
+- [ ] **Fix or retire the ERD-vs-DB verifier (`database/audit/verify_erd_against_audit.py`):** Has drifted from the markdown-table ERD and needs the parser rewritten. Two drift points: (1) `run_monthly_audit.py` hardcodes the old filename `COEQWAL_SCENARIOS_DB_ERD.md`, so the comparison silently skips. (2) `parse_erd_tables()` scans for tree lines but `ERD.md` uses Markdown tables, so it parses zero tables and would flag every DB table as missing. Effort: M. The full audit roadmap (this plus the coverage self-check, softening hardcoded counts, and the Layer 09 export gap) lives in [`audit/README.md`](audit/README.md#improving-the-audit).
 - [ ] **Decide on the "Referenced by" pattern for inbound references in the ERD:** Unevenly applied. Either document inbound FKs for every table (the `foreign_keys` snapshot block is the source) or drop the pattern entirely. Effort: M.
 
 ---
