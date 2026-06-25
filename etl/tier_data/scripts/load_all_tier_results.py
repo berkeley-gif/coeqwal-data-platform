@@ -49,11 +49,12 @@ Usage:
 
 import argparse
 import csv
+import math
 import os
 import sys
 import pandas as pd
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 # Add the repo root to sys.path so `etl.common` is importable when this
@@ -122,6 +123,29 @@ def normalize_scenario_id(raw) -> str:
     except ValueError:
         return s
 
+class TierSums():
+    """
+    Class to keep track of continous tier values for each tier level
+    as well as total sum and total count of tier locations.
+    """
+    total_sum = 0.000
+    total_count = 0
+
+    def __init__(self):
+        self.tier_sums = {
+            1: 0.000,
+            2: 0.000,
+            3: 0.000,
+            4: 0.000
+        }
+
+    def add_value(self, value):
+        self.total_sum += value
+        self.total_count += 1
+        self.tier_sums[math.trunc(value)] += value
+
+    def get_sums(self):
+        return self.tier_sums
 
 # =============================================================================
 # MULTI-VALUE LOADERS
@@ -130,7 +154,7 @@ def normalize_scenario_id(raw) -> str:
 def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
     """
     CWS_DEL — Community Water System Deliveries.
-    Format: rows = scenarios, columns = demand unit short codes, values = tier 1-4 or NA.
+    Format: rows = scenarios, columns = demand unit short codes, values = tier 1.0-5.0 or NA.
     """
     csv_path = STAGING_DIR / 'CWS_DEL.csv'
     if not csv_path.exists():
@@ -152,16 +176,15 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_counts = Counter()
-        valid_count = 0
+        tier_sums = TierSums()
 
         for du_id in du_columns:
             tier_val = row[du_id]
-            if pd.isna(tier_val) or tier_val == 'NA':
+            if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                 continue
-            tier = int(tier_val)
-            tier_counts[tier] += 1
-            valid_count += 1
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
+            tier_sums.add_value(tier_continuous)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'CWS_DEL',
@@ -170,12 +193,13 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': du_id,
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': len(location_results) + 1,
                 '_source_file': 'CWS_DEL.csv',
             })
 
-        if valid_count > 0:
-            agg = _multi_value_aggregate(scenario, 'CWS_DEL', tier_counts, valid_count)
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'CWS_DEL', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'CWS_DEL.csv'
             tier_results.append(agg)
 
@@ -201,104 +225,43 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
     location_results = []
     tier_results = []
 
-    is_long_format = 'region' in df.columns and 'tier' in df.columns
+    scenario_col = df.columns[0]
+    du_columns = [c for c in df.columns[1:] if c]
 
-    if is_long_format:
-        for scenario, group in df.groupby('scenario'):
-            scenario = normalize_scenario_id(scenario)
-            if scenario not in ALLOWED_SCENARIOS:
+    for _, row in df.iterrows():
+        scenario = normalize_scenario_id(row[scenario_col])
+        if scenario not in ALLOWED_SCENARIOS:
+            continue
+
+        tier_sums = TierSums()
+
+        for du_id in du_columns:
+            tier_val = row[du_id]
+            if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                 continue
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
+            tier_sums.add_value(tier_continuous)
+            location_results.append({
+                'scenario_short_code': scenario,
+                'tier_short_code': 'AG_REV',
+                'location_type': 'demand_unit',
+                'location_id': du_id,
+                'location_name': du_id,
+                'tier_level': tier,
+                'tier_value': 1,
+                'tier_continuous': tier_continuous,
+                'display_order': len(location_results) + 1,
+                '_source_file': 'AG_REV.csv',
+            })
 
-            tier_counts = Counter()
-            display_order = 1
-
-            for _, row in group.iterrows():
-                tier = int(row['tier'])
-                region = row['region']
-                tier_counts[tier] += 1
-                location_results.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'AG_REV',
-                    'location_type': 'demand_unit',
-                    'location_id': region,
-                    'location_name': region,
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'display_order': display_order,
-                    '_source_file': 'AG_REV.csv',
-                })
-                display_order += 1
-
-            total = len(group)
-            if total > 0:
-                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_counts, total)
-                agg['_source_file'] = 'AG_REV.csv'
-                tier_results.append(agg)
-        print(f"  AG_REV.csv: long format, {len(set(r['scenario_short_code'] for r in tier_results))} scenarios")
-    else:
-        scenario_col = df.columns[0]
-        du_columns = [c for c in df.columns[1:] if c]
-        print(f"  AG_REV.csv: wide format, {len(du_columns)} DU regions")
-
-        for _, row in df.iterrows():
-            scenario = normalize_scenario_id(row[scenario_col])
-            if scenario not in ALLOWED_SCENARIOS:
-                continue
-
-            tier_counts = Counter()
-            valid_count = 0
-
-            for du_id in du_columns:
-                tier_val = row[du_id]
-                if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
-                    continue
-                tier = int(tier_val)
-                tier_counts[tier] += 1
-                valid_count += 1
-                location_results.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'AG_REV',
-                    'location_type': 'demand_unit',
-                    'location_id': du_id,
-                    'location_name': du_id,
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'display_order': len(location_results) + 1,
-                    '_source_file': 'AG_REV.csv',
-                })
-
-            if valid_count > 0:
-                agg = _multi_value_aggregate(scenario, 'AG_REV', tier_counts, valid_count)
-                agg['_source_file'] = 'AG_REV.csv'
-                tier_results.append(agg)
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+            agg['_source_file'] = 'AG_REV.csv'
+            tier_results.append(agg)
 
     print(f"AG_REV: {len(location_results)} location records, {len(tier_results)} scenario aggregates")
     return location_results, tier_results
-
-
-def _discover_env_flows_files() -> List[Tuple[Path, str]]:
-    """
-    Find ENV_FLOWS CSV files in staging. Returns (path, label) pairs.
-    Ordered so historical is processed first, then cc50, then cc95
-    (later files overwrite earlier ones for overlapping scenarios).
-    """
-    priority = {'historical': 0, 'cc50': 1, 'cc95': 2}
-
-    def sort_key(p: Path) -> int:
-        name_lower = p.stem.lower()
-        for tag, order in priority.items():
-            if tag in name_lower:
-                return order
-        return 99
-
-    files = []
-    legacy = STAGING_DIR / 'ENV_FLOWS.csv'
-    if legacy.exists():
-        files.append((legacy, 'ENV_FLOWS.csv'))
-    split = sorted(STAGING_DIR.glob('ENV_FLOWS_*.csv'), key=sort_key)
-    for p in split:
-        files.append((p, p.name))
-    return files
 
 
 def _ensure_unique_axes(df: pd.DataFrame, csv_path: Path) -> pd.DataFrame:
@@ -351,116 +314,66 @@ def _ensure_unique_axes(df: pd.DataFrame, csv_path: Path) -> pd.DataFrame:
     return df
 
 
-def _load_one_env_flows_file(csv_path: Path) -> pd.DataFrame:
-    """
-    Load a single ENV_FLOWS CSV and return a DataFrame with
-    index=station IDs, columns=scenario IDs (canonical orientation).
-
-    Auto-detects whether rows are scenarios or stations by inspecting
-    the first-column values.
-    """
-    df = pd.read_csv(csv_path, index_col=0)
-    df = _ensure_unique_axes(df, csv_path)
-    first_vals = [str(v) for v in df.index[:5]]
-    rows_are_scenarios = all(v.startswith('s0') for v in first_vals)
-    if rows_are_scenarios:
-        df = df.T
-    else:
-        scenario_mapping = {}
-        for col in df.columns:
-            base = col.split('(')[0].strip()
-            if base not in scenario_mapping:
-                scenario_mapping[base] = col
-        if scenario_mapping:
-            df = df.rename(columns={v: k for k, v in scenario_mapping.items()})
-    return df
-
-
 def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
     """
     ENV_FLOWS — Environmental Flows.
-    Discovers ENV_FLOWS.csv and/or ENV_FLOWS_*.csv split files.
-    Auto-detects orientation (rows=stations or rows=scenarios).
+    Format: rows = scenarios, columns = demand unit short codes, values = tier 1.0-5.0 or NA.
     """
-    files = _discover_env_flows_files()
-    if not files:
-        print("WARNING: No ENV_FLOWS*.csv found in staging, skipping ENV_FLOWS")
+    csv_path = STAGING_DIR / 'ENV_FLOWS.csv'
+    if not csv_path.exists():
+        print(f"WARNING: {csv_path} not found, skipping ENV_FLOWS")
         return [], []
+
+    df = pd.read_csv(csv_path)
+    df.columns = [c.strip().replace('\n', '') for c in df.columns]
+    df = _ensure_unique_axes(df, csv_path)
 
     location_results = []
     tier_results = []
-    seen_scenarios: Dict[str, str] = {}
-    skipped: List[str] = []
 
-    for csv_path, label in files:
-        df = _load_one_env_flows_file(csv_path)
-        file_count = 0
+    scenario_col = df.columns[0]
+    du_columns = [c for c in df.columns[1:] if c]
 
-        for scenario in sorted(df.columns):
-            scenario = str(scenario).strip()
-            if scenario not in ALLOWED_SCENARIOS:
-                skipped.append(scenario)
+    for _, row in df.iterrows():
+        scenario = normalize_scenario_id(row[scenario_col])
+        if scenario not in ALLOWED_SCENARIOS:
+            continue
+
+        tier_sums = TierSums()
+
+        for du_id in du_columns:
+            tier_val = row[du_id]
+            if pd.isna(tier_val) or str(tier_val).strip().upper() == 'NA':
                 continue
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
+            tier_sums.add_value(tier_continuous)
+            location_results.append({
+                'scenario_short_code': scenario,
+                'tier_short_code': 'ENV_FLOWS',
+                'location_type': 'demand_unit',
+                'location_id': du_id,
+                'location_name': TIER_LOCATION_NAMES.get('ENV_FLOWS', {}).get(du_id, du_id),
+                'tier_level': tier,
+                'tier_value': 1,
+                'tier_continuous': tier_continuous,
+                'display_order': len(location_results) + 1,
+                '_source_file': 'ENV_FLOWS.csv',
+            })
 
-            tier_counts = Counter()
-            display_order = 1
-            loc_rows_for_scenario = []
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+            agg['_source_file'] = 'ENV_FLOWS.csv'
+            tier_results.append(agg)
 
-            for station in df.index:
-                tier_val = df.loc[station, scenario]
-                if pd.isna(tier_val):
-                    continue
-                tier = int(tier_val)
-                tier_counts[tier] += 1
-                loc_rows_for_scenario.append({
-                    'scenario_short_code': scenario,
-                    'tier_short_code': 'ENV_FLOWS',
-                    'location_type': 'network_node',
-                    'location_id': station,
-                    'location_name': TIER_LOCATION_NAMES.get('ENV_FLOWS', {}).get(station, station),
-                    'tier_level': tier,
-                    'tier_value': 1,
-                    'display_order': display_order,
-                    '_source_file': label,
-                })
-                display_order += 1
-
-            if tier_counts:
-                if scenario in seen_scenarios:
-                    location_results = [
-                        r for r in location_results
-                        if not (r['tier_short_code'] == 'ENV_FLOWS'
-                                and r['scenario_short_code'] == scenario)
-                    ]
-                    tier_results = [
-                        r for r in tier_results
-                        if not (r['tier_short_code'] == 'ENV_FLOWS'
-                                and r['scenario_short_code'] == scenario)
-                    ]
-                seen_scenarios[scenario] = label
-                location_results.extend(loc_rows_for_scenario)
-                total = len(df.index)
-                agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_counts, total)
-                agg['_source_file'] = label
-                tier_results.append(agg)
-                file_count += 1
-
-        print(f"  {label}: {file_count} scenarios loaded")
-
-    unique_skipped = sorted(set(skipped) - ALLOWED_SCENARIOS)
-    if unique_skipped:
-        print(f"  ENV_FLOWS skipped (not in ALLOWED_SCENARIOS): {', '.join(unique_skipped[:10])}{'...' if len(unique_skipped) > 10 else ''}")
-
-    env_loc = [r for r in location_results if r['tier_short_code'] == 'ENV_FLOWS']
-    env_agg = [r for r in tier_results if r['tier_short_code'] == 'ENV_FLOWS']
-    print(f"ENV_FLOWS: {len(env_loc)} location records, {len(env_agg)} scenario aggregates")
+    print(f"ENV_FLOWS: {len(location_results)} location records, {len(tier_results)} scenario aggregates")
     return location_results, tier_results
 
 
 def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
     """
     RES_STOR — Reservoir Storage.
-    Format: rows = scenarios (col 'Scenario'), columns = reservoir tier names.
+    Format: rows = scenarios (col 'scenario'), columns = reservoir tier names.
     """
     csv_path = STAGING_DIR / 'RES_STOR.csv'
     if not csv_path.exists():
@@ -469,25 +382,26 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
 
     df = pd.read_csv(csv_path)
     df = _ensure_unique_axes(df, csv_path)
-    res_columns = [c for c in df.columns if c != 'Scenario']
+    res_columns = [c for c in df.columns if c != 'scenario']
 
     location_results = []
     tier_results = []
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['Scenario'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_counts = Counter()
+        tier_sums = TierSums()
         display_order = 1
 
         for res_col in res_columns:
             tier_val = row[res_col]
             if pd.isna(tier_val):
                 continue
-            tier = int(tier_val)
-            tier_counts[tier] += 1
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
+            tier_sums.add_value(tier_continuous)
             res_id = _res_stor_location_id(res_col)
             res_name = TIER_LOCATION_NAMES.get('RES_STOR', {}).get(res_id, res_id)
             location_results.append({
@@ -498,14 +412,14 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': res_name,
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': display_order,
                 '_source_file': 'RES_STOR.csv',
             })
             display_order += 1
 
-        total = len(res_columns)
-        if total > 0:
-            agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_counts, total)
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'RES_STOR.csv'
             tier_results.append(agg)
 
@@ -516,7 +430,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
 def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
     """
     GW_STOR — Groundwater Storage.
-    Format: rows = scenarios (col 'scenario'), columns = WBA IDs + DETAW, values = tier 0-4.
+    Format: rows = scenarios (col 'scenario'), columns = WBA IDs + DETAW, values = tier 0.0-5.0.
     Tier 0 is treated as tier 1 (no impact).
     """
     csv_path = STAGING_DIR / 'GW_STOR.csv'
@@ -536,17 +450,19 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_counts = Counter()
+        tier_sums = TierSums()
         display_order = 1
 
         for wba_col in wba_columns:
             tier_val = row[wba_col]
             if pd.isna(tier_val):
                 continue
-            tier = int(tier_val)
+            tier_continuous = float(tier_val)
+            tier = math.trunc(tier_continuous)
             if tier == 0:
+                tier_continuous = float(1)
                 tier = 1  # tier 0 maps to tier 1 (no impact)
-            tier_counts[tier] += 1
+            tier_sums.add_value(tier_continuous)
             mapbox_id = convert_wba_id_to_mapbox_format(wba_col)
             location_results.append({
                 'scenario_short_code': scenario,
@@ -556,14 +472,14 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': TIER_LOCATION_NAMES.get('GW_STOR', {}).get(mapbox_id, wba_col),
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': display_order,
                 '_source_file': 'GW_STOR.csv',
             })
             display_order += 1
 
-        total = len(wba_columns)
-        if total > 0:
-            agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_counts, total)
+        if tier_sums.total_count > 0:
+            agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
             agg['_source_file'] = 'GW_STOR.csv'
             tier_results.append(agg)
 
@@ -571,20 +487,21 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _multi_value_aggregate(scenario: str, short_code: str, tier_counts: Counter, total: int) -> Dict:
+def _multi_value_aggregate(scenario: str, short_code: str, tier_sums: dict, total_sum: float, total_count: int) -> Dict:
     """Build a tier_result row for a multi-value tier."""
     return {
         'scenario_short_code': scenario,
         'tier_short_code': short_code,
-        'tier_1_value': tier_counts.get(1, 0),
-        'tier_2_value': tier_counts.get(2, 0),
-        'tier_3_value': tier_counts.get(3, 0),
-        'tier_4_value': tier_counts.get(4, 0),
-        'norm_tier_1': round(tier_counts.get(1, 0) / total, 4),
-        'norm_tier_2': round(tier_counts.get(2, 0) / total, 4),
-        'norm_tier_3': round(tier_counts.get(3, 0) / total, 4),
-        'norm_tier_4': round(tier_counts.get(4, 0) / total, 4),
-        'total_value': total,
+        'tier_1_value': tier_sums[1],
+        'tier_2_value': tier_sums[2],
+        'tier_3_value': tier_sums[3],
+        'tier_4_value': tier_sums[4],
+        'norm_tier_1': round(tier_sums[1] / total_sum, 4),
+        'norm_tier_2': round(tier_sums[2] / total_sum, 4),
+        'norm_tier_3': round(tier_sums[3] / total_sum, 4),
+        'norm_tier_4': round(tier_sums[4] / total_sum, 4),
+        'total_value': total_sum,
+        'total_count': total_count,
         'single_tier_level': None,
     }
 
@@ -596,7 +513,7 @@ def _multi_value_aggregate(scenario: str, short_code: str, tier_counts: Counter,
 def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
     """
     DELTA_ECO — Delta Ecology.
-    Format: Scenario (numeric, e.g. '11' for s0011), TierValue.
+    Format: scenario (numeric, e.g. '11' for s0011), NDO.
     One location row per scenario: wba DETAW.
     """
     csv_path = STAGING_DIR / 'DELTA_ECO.csv'
@@ -610,11 +527,15 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
     location_results = []
     tier_results = []
 
-    for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['Scenario'])
+    # Itertuples used instead of iterrows because iterrows does not preserve datatype
+    # and scenario integers were being converted to floating point due to TierScore
+    # now being a float instead of an integer.
+    for row in df.itertuples():
+        scenario = normalize_scenario_id(row.scenario)
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier = int(row['TierValue'])
+        tier_continuous = float(row.NDO)
+        tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'DELTA_ECO', tier)
         agg['_source_file'] = 'DELTA_ECO.csv'
         tier_results.append(agg)
@@ -626,6 +547,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
             'location_name': TIER_LOCATION_NAMES.get('DELTA_ECO', {}).get('DETAW', 'DETAW'),
             'tier_level': tier,
             'tier_value': 1,
+            'tier_continuous': tier_continuous,
             'display_order': 1,
             '_source_file': 'DELTA_ECO.csv',
         })
@@ -637,7 +559,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
 def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
     """
     FW_DELTA_USES — Freshwater for In-Delta Uses.
-    Format: ScenarioID (s0XXX), Salinity_Tier.
+    Format: scenario (s0XXX), Salinity_InDelta_Tier.
     Two compliance station locations per scenario: Emmaton (EM) and Jersey Point (JP).
     """
     csv_path = STAGING_DIR / 'FW_DELTA_USES.csv'
@@ -655,10 +577,11 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
     names = TIER_LOCATION_NAMES.get('FW_DELTA_USES', {})
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['ScenarioID'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier = int(row['Salinity_Tier'])
+        tier_continuous = float(row['Salinity_InDelta_Tier'])
+        tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'FW_DELTA_USES', tier)
         agg['_source_file'] = 'FW_DELTA_USES.csv'
         tier_results.append(agg)
@@ -671,6 +594,7 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': names.get(loc_id, loc_id),
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': order,
                 '_source_file': 'FW_DELTA_USES.csv',
             })
@@ -682,7 +606,7 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
 def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     """
     FW_EXP — Freshwater for Delta Exports.
-    Format: Scenario (s0XXX), Salinity_Export_Tier.
+    Format: scenario (s0XXX), Salinity_Export_Tier.
     Two network node locations per scenario: Banks (CAA003) and Jones (DMC000).
     """
     csv_path = STAGING_DIR / 'FW_EXP.csv'
@@ -700,10 +624,11 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     names = TIER_LOCATION_NAMES.get('FW_EXP', {})
 
     for _, row in df.iterrows():
-        scenario = normalize_scenario_id(row['Scenario'])
+        scenario = normalize_scenario_id(row['scenario'])
         if scenario not in ALLOWED_SCENARIOS:
             continue
-        tier = int(row['Salinity_Export_Tier'])
+        tier_continuous = float(row['Salinity_Export_Tier'])
+        tier = math.trunc(tier_continuous)
         agg = _single_value_aggregate(scenario, 'FW_EXP', tier)
         agg['_source_file'] = 'FW_EXP.csv'
         tier_results.append(agg)
@@ -716,6 +641,7 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
                 'location_name': names.get(loc_id, loc_id),
                 'tier_level': tier,
                 'tier_value': 1,
+                'tier_continuous': tier_continuous,
                 'display_order': order,
                 '_source_file': 'FW_EXP.csv',
             })
@@ -724,32 +650,13 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _parse_tier_range(raw) -> int:
-    """
-    Parse the salmon CSV Tier_range column into an integer tier level.
-    Accepts values like 'Tier 4', 'tier 3', '4', 4. Returns the integer
-    or raises ValueError for unrecognized input.
-    """
-    if pd.isna(raw):
-        raise ValueError("Tier_range is NaN")
-    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return int(raw)
-    s = str(raw).strip()
-    if s.isdigit():
-        return int(s)
-    parts = s.split()
-    if len(parts) == 2 and parts[0].lower() == 'tier' and parts[1].isdigit():
-        return int(parts[1])
-    raise ValueError(f"Cannot parse Tier_range: {raw!r}")
-
-
 def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
     """
     WRC_SALMON_AB - Salmon Abundance.
 
     Reads staging/WRC_SALMON_AB.csv (produced by stage_tier_results.py from
     the data team's salmon/TIERS_WRLCM_01_BestYearSummary_*.csv drop).
-    Expected columns: scenario, Hydroclimate, Tier_range, tier_score_cont.
+    Expected columns: scenario, tier_score_cont.
 
     All scenarios filtered through ALLOWED_SCENARIOS. Single representative
     location per scenario: network node SAC299 (Sacramento River at Keswick).
@@ -767,7 +674,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
 
     df = pd.read_csv(csv_path)
     df = _ensure_unique_axes(df, csv_path)
-    missing_cols = [c for c in ('scenario', 'Tier_range') if c not in df.columns]
+    missing_cols = [c for c in ('scenario', 'tier_score_cont') if c not in df.columns]
     if missing_cols:
         raise ValueError(
             f"{csv_path.name} missing expected columns {missing_cols}; "
@@ -785,7 +692,8 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             skipped_scenarios.append(scenario)
             continue
         try:
-            tier = _parse_tier_range(row['Tier_range'])
+            tier_continuous = row['tier_score_cont']
+            tier = math.trunc(tier_continuous)
         except ValueError as exc:
             parse_errors.append(f"{scenario}: {exc}")
             continue
@@ -800,6 +708,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
             'location_name': TIER_LOCATION_NAMES.get('WRC_SALMON_AB', {}).get('SAC299', 'SAC299'),
             'tier_level': tier,
             'tier_value': 1,
+            'tier_continuous': tier_continuous,
             'display_order': 1,
             '_source_file': csv_path.name,
         })
@@ -834,6 +743,7 @@ def _single_value_aggregate(scenario: str, short_code: str, tier_level: int) -> 
         'norm_tier_3': None,
         'norm_tier_4': None,
         'total_value': None,
+        'total_count': None,
         'single_tier_level': tier_level,
     }
 
@@ -853,7 +763,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
         "",
         "INSERT INTO tier_location_result (",
         "    scenario_short_code, tier_short_code, location_type, location_id,",
-        "    location_name, tier_level, tier_value, display_order, tier_version_id",
+        "    location_name, tier_level, tier_value, tier_continuous, display_order, tier_version_id",
         ") VALUES",
     ]
 
@@ -862,7 +772,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
         values.append(
             f"    ({escape_sql(r['scenario_short_code'])}, {escape_sql(r['tier_short_code'])}, "
             f"{escape_sql(r['location_type'])}, {escape_sql(r['location_id'])}, "
-            f"{escape_sql(r['location_name'])}, {r['tier_level']}, {r['tier_value']}, "
+            f"{escape_sql(r['location_name'])}, {r['tier_level']}, {r['tier_value']}, {r['tier_continuous']}, "
             f"{r['display_order']}, {TIER_VERSION_ID})"
         )
 
@@ -873,6 +783,7 @@ def generate_location_result_sql(location_results: List[Dict]) -> str:
     lines.append("    location_name = EXCLUDED.location_name,")
     lines.append("    tier_level = EXCLUDED.tier_level,")
     lines.append("    tier_value = EXCLUDED.tier_value,")
+    lines.append("    tier_continuous = EXCLUDED.tier_continuous,")
     lines.append("    display_order = EXCLUDED.display_order;")
     lines.append("")
     return '\n'.join(lines)
@@ -891,7 +802,7 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
         "    scenario_short_code, tier_short_code,",
         "    tier_1_value, tier_2_value, tier_3_value, tier_4_value,",
         "    norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4,",
-        "    total_value, single_tier_level, tier_version_id",
+        "    total_value, total_count, single_tier_level, tier_version_id",
         ") VALUES",
     ]
 
@@ -904,7 +815,7 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
             f"{escape_sql(r['tier_3_value'])}, {escape_sql(r['tier_4_value'])}, "
             f"{escape_sql(r['norm_tier_1'])}, {escape_sql(r['norm_tier_2'])}, "
             f"{escape_sql(r['norm_tier_3'])}, {escape_sql(r['norm_tier_4'])}, "
-            f"{escape_sql(r['total_value'])}, {escape_sql(r['single_tier_level'])}, "
+            f"{escape_sql(r['total_value'])}, {escape_sql(r['total_count'])}, {escape_sql(r['single_tier_level'])}, "
             f"{TIER_VERSION_ID})"
         )
 
@@ -920,6 +831,7 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
     lines.append("    norm_tier_3 = EXCLUDED.norm_tier_3,")
     lines.append("    norm_tier_4 = EXCLUDED.norm_tier_4,")
     lines.append("    total_value = EXCLUDED.total_value,")
+    lines.append("    total_count = EXCLUDED.total_count,")
     lines.append("    single_tier_level = EXCLUDED.single_tier_level,")
     lines.append("    is_active = TRUE,")
     lines.append("    updated_at = NOW();")
