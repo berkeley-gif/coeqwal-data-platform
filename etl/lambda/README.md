@@ -13,20 +13,19 @@ The bridge between developer-driven ingestion and the automatic DSS extraction p
 
 ## What it does on each PUT
 
-```mermaid
-flowchart LR
-  Put["S3 PUT to<br/>ready/(s0020/)?scenario.zip"]
-  Lambda["coeqwalEtlTrigger"]
-  Wait["HEAD-and-retry for<br/>ingest_record.json"]
-  Move["Copy ZIP to<br/>scenario/sXXXX/run/<br/>+ ingest_record.json to<br/>scenario/sXXXX/"]
-  FindCsv["Find peer<br/>trend report CSV"]
-  Submit["aws batch SubmitJob<br/>queue=coeqwal-dss-queue"]
-  Put --> Lambda
-  Lambda --> Wait
-  Wait --> Move
-  Lambda --> FindCsv
-  Move --> Submit
-  FindCsv --> Submit
+```text
+  S3 PUT: ready/(sXXXX/)?scenario.zip
+        |
+        v
+  coeqwalEtlTrigger
+        |
+        |-- HEAD-and-retry for ingest_record.json (grace window, else infer one)
+        |-- copy ZIP            -> scenario/sXXXX/run/
+        |-- move ingest_record  -> scenario/sXXXX/ingest_record.json
+        |-- find peer trend CSV -> scenario/sXXXX/verify/ (validation reference)
+        |
+        v
+  aws batch SubmitJob (queue=coeqwal-dss-queue)
 ```
 
 Two upload patterns are supported:
@@ -95,4 +94,4 @@ Other log groups you may want at the same time:
 
 - The downstream extraction code: [../batch-container/README.md](../batch-container/README.md)
 - The developer scripts that put files into `ready/`: [../README.md](../README.md) (see "How to load scenario data into the database and S3 buckets from Google Drive" and "Developer scripts in `etl/ingestion/`")
-- AWS-side resource details (job definition, queue, IAM): [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)
+- AWS-side resource details (job definition, queue, IAM): `INFRASTRUCTURE.md` in the private [`coeqwal-private-docs`](https://github.com/berkeley-gif/coeqwal-private-docs) repo

@@ -33,7 +33,7 @@ The Docker image AWS Batch runs in Fargate Spot to turn one CalSim ZIP into one 
 `.github/workflows/etl.yml` builds and pushes on every push to `main` that touches `etl/batch-container/**`:
 
 1. Checkout
-2. Configure AWS credentials (IAM user `coeqwal-etl-github-actions-user`, to be migrated to OIDC. See [INFRASTRUCTURE.md §11/§14](../../docs/INFRASTRUCTURE.md))
+2. Configure AWS credentials (IAM user `coeqwal-etl-github-actions-user`, to be migrated to OIDC. See `INFRASTRUCTURE.md` §11/§14 in the private [`coeqwal-private-docs`](https://github.com/berkeley-gif/coeqwal-private-docs) repo)
 3. ECR login
 4. `cd etl/batch-container && docker build`
 5. `docker push` to `ECR_REGISTRY/coeqwal-etl:latest` and `:<github-sha>`
@@ -49,23 +49,32 @@ aws ecr describe-images --repository-name coeqwal-etl \
 
 ## What the container does at runtime
 
-```mermaid
-flowchart LR
-  In["s3://coeqwal-model-run/<br/>scenario/sXXXX/run/scenario.zip"]
-  Trend["s3://.../scenario/sXXXX/run/*_trend_report.csv"]
-  Container["batch_entrypoint.sh"]
-  DV["DV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_calsim_output.csv"]
-  SV["SV CSV<br/>scenario/sXXXX/csv/sXXXX_coeqwal_sv_input.csv"]
-  Valid["scenario/sXXXX/validation/<br/>sXXXX_validation_mismatches.csv (on failure)"]
-  Rec["scenario/sXXXX/extract_record.json"]
-
-  In --> Container
-  Trend --> Container
-  Container --> DV
-  Container --> SV
-  Container --> Valid
-  Container --> Rec
+```text
+  INPUTS (S3)                  CONTAINER              OUTPUTS (S3)
+  scenario.zip          --->                   ---> csv/...calsim_output.csv (DV)
+  *_trend_report.csv    --->  batch_entrypoint ---> csv/...sv_input.csv      (SV)
+  (validation ref)             .sh             ---> validation/...mismatches.csv (on failure)
+                                               ---> extract_record.json
 ```
+
+All paths are relative to `s3://coeqwal-model-run/scenario/sXXXX/`. The two CSV
+names are `sXXXX_coeqwal_calsim_output.csv` and `sXXXX_coeqwal_sv_input.csv`.
+
+**Inputs**
+
+| Object | S3 path | Notes |
+|---|---|---|
+| Scenario ZIP | `run/scenario.zip` | Required (`ZIP_BUCKET` / `ZIP_KEY`). |
+| Validation reference CSV | `run/*_trend_report.csv` | Optional (`VALIDATION_REF_CSV_KEY`). Skipped if unset. |
+
+**Outputs**
+
+| Object | S3 path | When |
+|---|---|---|
+| DV CSV (CalSim output) | `csv/sXXXX_coeqwal_calsim_output.csv` | When DV is extracted. |
+| SV CSV (state-variable input) | `csv/sXXXX_coeqwal_sv_input.csv` | When SV is extracted. |
+| Validation mismatches CSV | `validation/sXXXX_validation_mismatches.csv` | Only when validation finds mismatches. |
+| Extract record | `extract_record.json` | Always. |
 
 The extract record is the per-scenario summary. Validation pass/fail and mismatch counts (`mismatch_columns`, `mismatch_cells`) are inlined into its `validation` block. The per-row mismatches CSV is the only artifact rich enough to debug a failure and is written separately under `validation/` only when mismatches were found. `etl/ingestion/tools/audit.py` reads the extract record across every scenario and projects it into `etl/ingestion/audit.md` alongside the per-scenario ingest record.
 
@@ -218,4 +227,4 @@ If any of those fail, the right move is to keep the from-source build path and a
 - The Lambda that fires extraction jobs: [../lambda/README.md](../lambda/README.md)
 - The developer scripts that put ZIPs into `ready/`: [../README.md](../README.md) (see "How to load scenario data into the database and S3 buckets from Google Drive" and "Developer scripts in `etl/ingestion/`")
 - End-to-end accuracy verification (Layer 1, 2, 3, 3-tier): [../verification/README.md](../verification/README.md)
-- AWS-side resource details: [../../docs/INFRASTRUCTURE.md](../../docs/INFRASTRUCTURE.md)
+- AWS-side resource details: `INFRASTRUCTURE.md` in the private [`coeqwal-private-docs`](https://github.com/berkeley-gif/coeqwal-private-docs) repo
