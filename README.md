@@ -188,7 +188,7 @@ The public-facing surface at `https://api.coeqwal.org`. Two pieces:
 
 | Piece | What it does | Source |
 |---|---|---|
-| FastAPI service on ECS Fargate | Serves the rest of the API. Statistics, tiers, verification status, etc. Async Python with automatic OpenAPI docs at `/docs` | [`api/coeqwal-api/`](api/coeqwal-api/) |
+| FastAPI service on ECS Fargate | Serves the rest of the API. Statistics, tiers, scenarios, etc. Async Python with automatic OpenAPI docs at `/docs` | [`api/coeqwal-api/`](api/coeqwal-api/) |
 | `coeqwalPresignDownload` Lambda | Lists scenarios in S3 and presigns download URLs. Backs `GET /scenario` and `GET /download` through API Gateway v2 | [`api/lambda/coeqwalPresignDownload/`](api/lambda/coeqwalPresignDownload/) |
 
 **Endpoints:**

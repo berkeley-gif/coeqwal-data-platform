@@ -609,13 +609,13 @@ Every endpoint is FastAPI + Pydantic. The response shape is validated against a 
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?group=major"
 ```
 
-Returns JSON: 8 reservoirs x 12 water months of percentile bands (p5, p25, p50, p75, p95), straight from `reservoir_monthly_percentile`, indexed on `(scenario_short_code, reservoir_entity_id)`. The website renders the box-and-whisker plot directly from this payload.
+Returns JSON: 8 reservoirs x 12 water months of percentile bands (q0, q10, q30, q50, q70, q90, q100), straight from `reservoir_monthly_percentile`, indexed on `(scenario_short_code, reservoir_entity_id)`.
 
 ### Tech and infrastructure
 
 - **Language / framework:** Python + FastAPI
 - **Schema validation:** Pydantic models for every response
-- **Database driver:** `psycopg2` / `asyncpg`, connection pool 5-50 (auto-scaling)
+- **Database driver:** `asyncpg`, connection pool 5-50 (auto-scaling)
 - **Deployment:** GitHub Actions builds a Docker image, pushes to ECR, ECS Fargate pulls and runs it on `git push origin main`
 - **Routing:** Internet -> Route 53 -> ALB -> ECS Fargate -> PostgreSQL RDS
 - **TLS:** AWS Certificate Manager, terminated at the ALB (`api.coeqwal.org` matches one cert, the website hostnames match another)
