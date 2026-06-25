@@ -803,11 +803,17 @@ The design, planned tables, design decisions, and open questions can be found in
 
 #### Demand-unit group membership (Data Explorer filters)
 
-The `du_*_group` / `du_*_group_member` tables let the website filter demand units by membership (NOD/SOD, SWP/CVP served, hydrologic region). The plumbing is partly in place but not enough to query, for example, for tier outcome and data in depth statistics.
+The `du_*_group` / `du_*_group_member` tables let the website filter demand units by membership (NOD/SOD, SWP/CVP served, hydrologic region). The plumbing is partly in place: urban has the table pair with its `tier` members loaded, but the NOD/SOD and SWP/CVP division memberships are not, so the tier-outcome and data-in-depth statistics can't yet be sliced those ways.
 
-- **Backfill the 5 empty `du_urban_group` rows** (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) so the existing per-DU SWP/CVP/NOD/SOD memberships are queryable. (These are the per-DU relatives of the project-level rollups in `cws_aggregate_entity`.)
-- **Add the ag-side counterpart:** There is no `du_agriculture_group` / `du_agriculture_group_member` yet. Create them and populate `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-hydrologic-region groups (`sac`, `sjr`, `tulare`), all derivable from the existing `cs3_type` / `provider` / `hydrologic_region_id` columns on `du_agriculture_entity`.
-- **Expose these in the API:** Surfacing group membership in the `/demand-units` (urban) and `/ag-demand-units` responses is one join in the existing FastAPI route handlers, and lets the website filter without per-group queries.
+This is a good candidate for a way forward for the newly-required NOD/SOD slicing across the three demand-unit types. The reservoir endpoints already implement the same `*_group` pattern end-to-end (see [API filtering by group](../api/coeqwal-api/README.md#filtering-by-group-cvp--swp-divisions)).
+
+**First, one design question to settle: fill membership by rule or by hand?** We could individually populate which demand units are NOD vs SOD or derive membership from the region each DU already carries: `SAC` -> NOD, and `SJR` + `TULARE` -> SOD. A rule regenerates itself and won't drift as DUs change. The catch is that there are four remaining regions (`DELTA`, `SOCAL`, `NC`, `EXPORT`) that don't fall cleanly on one side of the Delta, so the Water Allocation Modeling Team has to rule on where they belong (or that they're excluded).
+
+Then the implementation work:
+
+- **Backfill the 5 empty `du_urban_group` rows** (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`) so the existing per-DU SWP/CVP/NOD/SOD memberships are queryable. (These are the per-DU relatives of the project-level rollups in `cws_aggregate_entity`.) Urban is the only fully-plumbed type: `/api/statistics/demand-units` already joins `du_urban_group_member`, defaults to the `tier` group, and accepts `?group=`, so backfilling those rows is all it takes to make `?group=nod` (etc.) return data.
+- **Add the ag-side counterpart, and wire it into the route:** There is no `du_agriculture_group` / `du_agriculture_group_member` yet, and the ag endpoint (`/api/statistics/ag-demand-units`) has no `group` parameter at all (only `region` / `cs3_type` / `provider`). So this is bigger than the urban case: create the tables, populate `nod`, `sod`, `swp_served`, `cvp_served`, `cvp_settlement`, `cvp_exchange`, `non_district`, plus per-hydrologic-region groups (`sac`, `sjr`, `tulare`) - all derivable from the existing `cs3_type` / `provider` / `hydrologic_region_id` columns on `du_agriculture_entity` - **and** add the `?group=` join to the route.
+- **Optionally, return membership flags in the responses** so the website can slice client-side. This is a separate mechanism from the server-side `?group=` filter. Instead of one request per group, the `/demand-units` and `/ag-demand-units` rows would each carry their group memberships (e.g. `nod`/`sod`, `swp_served`/`cvp_served`) and the frontend filters in one pass. The current responses don't carry these fields yet.
 
 #### Scenario assumptions and operations metadata, align DB with the website
 

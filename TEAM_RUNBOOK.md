@@ -42,9 +42,12 @@ While the website functions as is, there are some improvements that need to be m
 
 **Next step:**
 
-- Backfill the 5 empty [`du_urban_group`](database/README.md#demand-unit-group-membership-data-explorer-filters) rows (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`).
-- Add the ag-side [`du_agriculture_group` / `du_agriculture_group_member`](database/README.md#demand-unit-group-membership-data-explorer-filters) tables, mirroring the existing [`du_urban_group` shape in the ERD](database/schema/ERD.md#du_urban_group) (Layer 03). The membership is derivable from `cs3_type` / `provider` / `hydrologic_region_id` on `du_agriculture_entity`.
-- Surface group membership in the `/demand-units` and `/ag-demand-units` [API](api/coeqwal-api/README.md) responses, then drop the frontend's hardcoded copy.
+- Backfill the 5 empty [`du_urban_group`](database/README.md#demand-unit-group-membership-data-explorer-filters) rows (`nod`, `sod`, `swp_served`, `cvp_served`, `swp_delivery_point`). Urban is already wired: `/demand-units` joins the membership table, defaults to `tier`, and accepts [`?group=`](api/coeqwal-api/README.md#filtering-by-group-cvp--swp-divisions), so backfilling is enough to make `?group=nod` (etc.) return data.
+- Add the ag-side [`du_agriculture_group` / `du_agriculture_group_member`](database/README.md#demand-unit-group-membership-data-explorer-filters) tables, mirroring the existing [`du_urban_group` shape in the ERD](database/schema/ERD.md#du_urban_group) (Layer 03). Membership is derivable from `cs3_type` / `provider` / `hydrologic_region_id` on `du_agriculture_entity`. The ag endpoint has no `group` parameter yet, so this also means adding the `?group=` join to `/ag-demand-units`, not just the tables.
+- Do the same for refuge if it needs NOD/SOD slicing (no `du_refuge_group` pair or `group` parameter exists yet); otherwise scope this task to urban + ag.
+- Optionally, return group-membership flags on the `/demand-units` and `/ag-demand-units` [API](api/coeqwal-api/README.md) rows so the website filters client-side in one fetch, then drop the frontend's hardcoded copy. This is separate from the server-side `?group=` filter.
+
+**Open decisions** (full discussion in the [database roadmap](database/README.md#demand-unit-group-membership-data-explorer-filters)): whether to derive NOD/SOD membership from a rule (`SAC` -> NOD, `SJR` + `TULARE` -> SOD) rather than hand-curating rows, including a WAM-team ruling on the four regions that don't fall cleanly on one side of the Delta (`DELTA`, `SOCAL`, `NC`, `EXPORT`); and whether to consolidate the `du_urban_group` mechanism with the `cws_list` registry so we don't ship two ways to define membership. The reservoir endpoints are the [worked example](api/coeqwal-api/README.md#filtering-by-group-cvp--swp-divisions) of the `*_group` pattern this task extends.
 
 ---
 

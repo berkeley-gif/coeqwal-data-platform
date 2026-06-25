@@ -4,21 +4,21 @@ FastAPI backend for the COEQWAL project.
 
 ## Deployment
 
-The API deploys via **GitHub Actions → ECR → ECS Fargate**. Push changes to `main` on GitHub. The CI pipeline auto-builds a new Docker image and deploys it to ECS when files under `api/` change. No manual steps needed unless CI is broken.
+The API deploys via **GitHub Actions → ECR → ECS Fargate**. When you push changes to `main` on GitHub, the CI pipeline auto-builds a new Docker image and deploys it to ECS when files under `api/` change. No manual steps needed under this CI.
 
-Note that we have `ruff` linting configured - run `ruff check .` before pushing to avoid failed builds. See "Linting" below.
+Note that we have `ruff` linting configured. Run `ruff check .` before pushing to avoid failed builds. See "Linting" below.
 
-If the auto-deploy gets stuck, see "Manual Deployment (Troubleshooting)" further down for how to rebuild and push the Docker image from Cloud9.
+If the auto-deploy gets stuck for whatever reason (it hasn't to date), see "Manual Deployment (Troubleshooting)" further down for how to rebuild and push the Docker image from Cloud9.
 
 ## Quick start
 
-- **Base URL**: `https://api.coeqwal.org`
+- **Base URL**: `https://api.coeqwal.org/api`
 - **Interactive docs**: `https://api.coeqwal.org/docs`
 - **Health check**: `https://api.coeqwal.org/api/health`
 
 ## Smoke tests
 
-After a deploy, paste this into a shell to walk every endpoint family. It uses scenario `s0020` (override via `SMOKE_SCENARIO`) and targets prod (override via `COEQWAL_API_URL`). Each line prints `PASS 200 <path>` or `FAIL <code> <path>`, and the script exits non-zero if anything missed.
+After a deploy, paste this into a shell to walk the main scenario, tier, and statistics endpoint families. It uses scenario `s0020` (override via `SMOKE_SCENARIO`) and targets prod (override via `COEQWAL_API_URL`). Each line prints `PASS 200 <path>` or `FAIL <code> <path>`, and the script exits non-zero if anything missed.
 
 ```bash
 BASE="${COEQWAL_API_URL:-https://api.coeqwal.org}"
@@ -85,7 +85,8 @@ For regressions specific to the recent streamline, pipe individual endpoints thr
 BASE="${COEQWAL_API_URL:-https://api.coeqwal.org}"
 
 # AG DU monthly now returns the four merged metric bands in one payload.
-# Expect monthly_demand, monthly_sw_delivery, monthly_gw_pumping, monthly_shortage.
+# Among the keys, expect monthly_demand, monthly_sw_delivery, monthly_gw_pumping,
+# and monthly_shortage alongside the entry metadata (label, agency, region, etc).
 curl -sS "$BASE/api/statistics/scenarios/s0020/ag-demand-units/monthly?du_id=64_PA1" \
   | jq '.demand_units["64_PA1"] | keys'
 
@@ -95,31 +96,36 @@ curl -sS "$BASE/api/statistics/channels" | jq 'keys'
 
 ## How `coeqwal-website` consumes this API
 
-The website does **not** call these endpoints with `fetch()` directly. All data access flows through the `@repo/data` package in [`coeqwal-website/packages/data`](../../../COEQWAL_repo/coeqwal-website/packages/data):
+The website **should not call these endpoints with `fetch()`** directly. All data access should flow through the `@repo/data` package, which lives in the separate `coeqwal-website` repo at `packages/data` (locally: [`../../../COEQWAL_repo/coeqwal-website/packages/data`](../../../COEQWAL_repo/coeqwal-website/packages/data)). The paths below are relative to that package's `src/`:
 
-- `coeqwal/api.ts` holds endpoint URL builders.
-- `coeqwal/fetchers.ts` wraps every endpoint in a typed `apiFetcher<T>` call.
-- `coeqwal/hooks/*` exposes SWR hooks the website uses to read from the API. Most endpoints have a dedicated hook. A few have several hooks for different filter shapes (e.g. `useReservoirPercentiles`, `useAllReservoirPercentiles`, and `useGroupedReservoirPercentiles` all hit `/reservoir-percentiles` with different query params), and `useBatchStatistics` fans out to many endpoints in one call. Hook files are organized by domain (`useMiContractorStatistics.ts`, `useUrbanDemandUnitStatistics.ts`, `useAgStatistics.ts`, `useRefugeStatistics.ts`, etc).
-- `cache/keys.ts` holds the matching cache-key constants.
+- `src/coeqwal/api.ts` holds endpoint URL builders.
+- `src/coeqwal/fetchers.ts` wraps every endpoint in a typed `apiFetcher<T>` call.
+- `src/coeqwal/hooks/*` exposes SWR hooks the website uses to read from the API. Most endpoints have a dedicated hook. A few have several hooks for different filter shapes (e.g. `useReservoirPercentiles`, `useAllReservoirPercentiles`, and `useGroupedReservoirPercentiles` all hit `/reservoir-percentiles` with different query params), and `useBatchStatistics` makes a single request to `/statistics/batch` that returns storage, CWS, ag, and env-flow data for multiple scenarios at once. Hook files are organized by domain (`useMiContractorStatistics.ts`, `useUrbanDemandUnitStatistics.ts`, `useAgStatistics.ts`, `useRefugeStatistics.ts`, etc).
+- `src/coeqwal/types.ts` holds the request/response type definitions.
+- `src/cache/keys.ts` holds the matching cache-key constants.
 
-When you change a URL or payload shape here, the matching website update is in those four files (types, fetchers, hooks, occasionally one component). Components never see raw endpoint URLs. Outside callers (notebooks, third-party tools, ad-hoc scripts) consume these endpoints directly.
+When you change an endpoint here, the matching website changes are: for a path or query-param change, the URL builder in `api.ts` and its cache key in `cache/keys.ts`. For a payload-shape change, the response type in `types.ts` and the typed fetcher in `fetchers.ts`. A hook, and occasionally one component, may also need updating. Components read this API's data through hooks, never raw endpoint URLs. Outside callers (notebooks, third-party tools, ad-hoc scripts) can consume these endpoints directly (because they don't have a website to weigh down).
 
 ## Local development
 
-Cloud9 is the supported environment for everything touching production data. `$DATABASE_URL` and `$SUPERUSER_URL` are already configured there. On Cloud9:
+Cloud9 is the supported environment; `$DATABASE_URL` is already set there and points at production RDS.
 
 ```bash
-source ../../venv/bin/activate
+cd api/coeqwal-api
+
+# First time (or when requirements.txt changes): build/refresh the venv
+source ../../venv/bin/activate      # Cloud9 venv lives at repo-root/venv
+pip install -r requirements.txt     # fastapi, uvicorn, asyncpg, ...
+
+# DATABASE_URL is inherited from the Cloud9 shell
 uvicorn main:app --reload --port 8000
 
 open http://localhost:8000/docs
 ```
 
-`DATABASE_URL` is inherited from the Cloud9 shell environment and points at production RDS. The same `DATABASE_URL` is reachable from VPN. There is no out-of-the-box local-Postgres path.
-
 ### Building the dev container
 
-If you want to exercise the same Docker image CI builds, but with the dev-friendly defaults (root user, default asyncio loop, no access log), use the `dev` target of the multi-stage Dockerfile:
+Work is faster with the venv + `uvicorn` flow above, but you can directly access the container when you need to test the image itself rather than the app code. It runs the same multi-stage Dockerfile CI uses, but via the `dev` target's friendlier defaults (root user, default asyncio loop, no access log). The `DATABASE_URL` value here is a placeholder.
 
 ```bash
 docker build --target dev -t coeqwal-api:dev api/coeqwal-api
@@ -145,55 +151,66 @@ ruff check . --fix
 
 ## API Endpoints & Filtering
 
-### Reservoir Statistics (`/api/statistics`)
+The endpoint catalog lives in the interactive docs, generated from the live FastAPI app:
 
-All reservoir statistics endpoints support filtering by individual reservoirs or predefined groups.
+- **Swagger UI**: `https://api.coeqwal.org/docs`
+- **Machine-readable reference**: `GET https://api.coeqwal.org/api` lists the endpoint families plus a `data_summary` of key row counts (scenarios, tier indicators, network nodes/arcs)
 
-**Filter Parameters:**
+Every endpoint's query parameters are documented in Swagger (`/docs`). Two kinds of filtering are worth understanding here: **group** filters (curated named sets that Swagger can't fully convey) and ordinary attribute filters. For the full list of endpoints, use the docs above or the `## Smoke tests` block earlier in this file.
+
+### Filtering by group: CVP / SWP divisions
+
+The goal is to slice scenario outputs in different emergent ways, for example, SWP/CVP or NOD/SOD via `?group=<short_code>` filter. Group membership lives in the database as a `*_group` / `*_group_member` table pair per entity, so the sets change with data, not code.
+
+**Reservoirs are the worked example.** Reservoir statistics accept either specific reservoirs or a named group:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `reservoirs` | string | Comma-separated reservoir short_codes (e.g., `SHSTA,OROVL,FOLSM`) |
-| `group` | string | Predefined group: `major`, `cvp`, or `swp` |
-
-> **Note:** Cannot use both `reservoirs` and `group` simultaneously. If neither is specified, defaults to the 8 major reservoirs.
-
-**Examples:**
+| `reservoirs` | string | Comma-separated short_codes (e.g., `SHSTA,OROVL,FOLSM`) |
+| `group` | string | Named group: `major`, `cvp`, or `swp` |
 
 ```bash
-# Default (8 major reservoirs)
-curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles"
-
-# Filter by group
-curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?group=major"
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?group=cvp"
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/spill-monthly?group=swp"
-
-# Filter by specific reservoirs
 curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/reservoir-percentiles?reservoirs=SHSTA,OROVL,FOLSM"
-curl "https://api.coeqwal.org/api/statistics/scenarios/s0020/spill-monthly?reservoirs=SHSTA,TRNTY"
 ```
 
-**Available Reservoir Groups:**
+Current membership snapshot:
 
-| Group | Description |
-|-------|-------------|
-| `major` | 8 major California reservoirs |
-| `cvp` | Central Valley Project reservoirs |
-| `swp` | State Water Project reservoirs |
+| Group | Members |
+|-------|---------|
+| `major` | SHSTA, TRNTY, OROVL, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP |
+| `cvp` | SHSTA, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP |
+| `swp` | OROVL, SLUIS_SWP |
 
-**Major Reservoirs:** SHSTA, TRNTY, OROVL, FOLSM, MELON, MLRTN, SLUIS_CVP, SLUIS_SWP
+**Demand units are next, and already plumbed.** The urban demand-unit endpoints accept the same `?group=` filter, which looks up `du_urban_group` by `short_code`.
 
-**CVP Reservoirs:** SHSTA, TRNTY, FOLSM, MELON, MLRTN, SLUIS_CVP
+A group has two parts:
 
-**SWP Reservoirs:** OROVL, SLUIS_SWP
+- a **definition** - one row in `du_urban_group` that names the group (its `short_code`, e.g. `cvp_served`)
+- its **membership** - rows in `du_urban_group_member` listing which demand units belong to that group
 
-**Endpoints supporting these filters:**
+Today `du_urban_group` defines several groups - `tier`, `cvp_served`, `swp_served`, `nod` (north of Delta), `sod` (south of Delta) - but only `tier` has its membership filled in. The division groups are named but empty. So a call like `?group=cvp_served` succeeds and returns an empty result, not an error, until someone adds those membership rows. `tier` is the only group the app needs right now; the NOD/SOD and CVP/SWP division groups can be populated later, if and when that slicing is actually required.
 
-- `GET /api/statistics/scenarios/{scenario_id}/reservoir-percentiles` - Monthly percentile bands
-- `GET /api/statistics/scenarios/{scenario_id}/spill-monthly` - Monthly spill statistics
+This `*_group` pattern is a candidate way forward for the newly-required NOD/SOD slicing across the three demand-unit types (urban, ag, refuge). The data-model work and open decisions (backfilling membership, adding `du_agriculture_group` / `du_refuge_group`, whether to consolidate with the `cws_list` registry) are tracked in [the database roadmap](../../database/README.md#demand-unit-group-membership-data-explorer-filters). The reservoirs example points the way.
 
-**Discovery endpoints:**
+### Other filters
+
+Unlike groups, these filters match a column that already exists on each row, so there is nothing to curate or populate - they work. Every endpoint's parameters are in Swagger (`/docs`). Besides `group`, the attribute filters are:
+
+| Endpoint family | Filters |
+|-----------------|---------|
+| ag | `region`, `cs3_type`, `du_id`, `provider`, `aggregate` |
+| refuge | `region`, `cs3_type`, `du_id`, `water_month` |
+| demand units | `du_id` |
+| M&I contractors | `contractor` |
+| env flow (`channels`) | `watershed`, `channel_class`, `has_mif`, `has_eflows` |
+| cws | `aggregate` |
+| delta | `category` |
+| tiers | `scenarios`, `codes` |
+| batch | `scenarios`, `types` |
+
+Discovery endpoints:
 
 ```bash
 # List all reservoirs with statistics data
@@ -202,67 +219,8 @@ curl "https://api.coeqwal.org/api/statistics/reservoirs"
 # List reservoir groups and their members
 curl "https://api.coeqwal.org/api/statistics/reservoir-groups"
 
-# List scenarios with percentile data
-curl "https://api.coeqwal.org/api/statistics/scenarios"
-```
-
-### Network nodes & arcs (`/api/nodes`, `/api/arcs`)
-
-**Filter Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `region` | string | Hydrologic region: `SAC`, `SJR`, `TUL`, `SF`, `SC`, `CC`, `NC` |
-| `limit` | int | Maximum results (default: 1000, max: 10000) |
-
-**Examples:**
-
-```bash
-# Get nodes in Sacramento region
-curl "https://api.coeqwal.org/api/nodes?region=SAC&limit=500"
-
-# Get arcs in San Joaquin region
-curl "https://api.coeqwal.org/api/arcs?region=SJR&limit=500"
-```
-
-### Spatial Queries (`/api/nodes/spatial`)
-
-**Filter Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `bbox` | string | Bounding box: `minLng,minLat,maxLng,maxLat` |
-| `zoom` | int | Map zoom level (1-20). Lower zooms show only major infrastructure |
-| `limit` | int | Maximum nodes (default: 1000, max: 10000) |
-
-**Examples:**
-
-```bash
-# Get nodes in bounding box (Sacramento Delta area)
-curl "https://api.coeqwal.org/api/nodes/spatial?bbox=-122.5,37.5,-121.0,38.5&zoom=10"
-
-# High zoom for detailed view
-curl "https://api.coeqwal.org/api/nodes/spatial?bbox=-121.5,38.5,-121.0,39.0&zoom=14&limit=5000"
-```
-
-### Unfiltered nodes (`/api/nodes/unfiltered`)
-
-**Filter Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `bbox` | string | Bounding box: `minLng,minLat,maxLng,maxLat` |
-| `source_filter` | string | Data source: `geopackage`, `network_schematic`, or `all` |
-| `limit` | int | Maximum nodes (default: 10000, max: 50000) |
-
-**Examples:**
-
-```bash
-# All nodes from geopackage source
-curl "https://api.coeqwal.org/api/nodes/unfiltered?bbox=-122.5,37.5,-121.0,38.5&source_filter=geopackage"
-
-# All nodes regardless of source
-curl "https://api.coeqwal.org/api/nodes/unfiltered?bbox=-122.5,37.5,-121.0,38.5&source_filter=all"
+# List scenarios
+curl "https://api.coeqwal.org/api/scenarios"
 ```
 
 ## Testing
@@ -278,7 +236,7 @@ curl "http://localhost:8000/api/tiers/scenarios/s0020/locations?codes=RES_STOR,C
 
 # Reservoir statistics with filtering
 curl "http://localhost:8000/api/statistics/scenarios/s0020/reservoir-percentiles?group=major"
-curl "http://localhost:8000/api/statistics/scenarios/s0020/storage-monthly?reservoirs=SHSTA,OROVL"
+curl "http://localhost:8000/api/statistics/scenarios/s0020/spill-monthly?reservoirs=SHSTA,OROVL"
 ```
 
 ## Deployment
@@ -286,7 +244,7 @@ curl "http://localhost:8000/api/statistics/scenarios/s0020/storage-monthly?reser
 Deployment is handled via GitHub Actions → ECR → ECS Fargate.
 
 ```bash
-# Push to main triggers deployment (only when api/** files change)
+# Push to main triggers deployment when api/** changes (excluding api/**/*.md docs; also fires on changes to the workflow file)
 git push origin main
 
 # Manual ECS update (if needed)
@@ -295,7 +253,7 @@ aws ecs update-service --cluster coeqwal-api --service coeqwal-api-service --for
 
 ### Manual Deployment (Troubleshooting)
 
-If the API is running old code despite pushes to main, the ECR `:latest` image may be stale. Manually rebuild and push from Cloud9:
+If the API is running old code despite pushes to main, the ECR `:latest` image may be stale. The ECS task definition tracks `:latest`, so a forced deployment re-pulls whatever `:latest` currently points to - the fix is to rebuild `:latest` and force a new deployment from Cloud9:
 
 ```bash
 cd ~/environment/coeqwal-backend
@@ -318,10 +276,16 @@ docker push 533266975152.dkr.ecr.us-west-2.amazonaws.com/coeqwal-network-api:lat
 aws ecs update-service --cluster coeqwal-api --service coeqwal-api-service --force-new-deployment --region us-west-2
 ```
 
-Wait 3-5 minutes, then verify:
+Wait 3-5 minutes, then confirm the rollout actually completed. Don't rely on the `version` field alone - it only changes if `API_VERSION` was bumped in this commit, so it can read "unchanged" even when a fresh image is live (or stale and you'd never know):
 ```bash
-curl https://api.coeqwal.org/
-# Check "version" field matches expected version
+# The new rollout should settle to a single PRIMARY deployment with rolloutState COMPLETED
+aws ecs describe-services --cluster coeqwal-api --services coeqwal-api-service --region us-west-2 --query 'services[0].deployments'
+
+# Confirm the running :latest digest matches what you just pushed
+aws ecr describe-images --repository-name coeqwal-network-api --region us-west-2 --image-ids imageTag=latest --query 'imageDetails[0].imageDigest'
+
+# If API_VERSION was bumped, this should reflect the new value
+curl https://api.coeqwal.org/   # check "version" field
 ```
 
 ### Checking Deployment Status
@@ -343,17 +307,6 @@ aws logs tail /ecs/coeqwal-api --since 10m --region us-west-2
 Internet → Route 53 (api.coeqwal.org) → ALB → ECS Fargate → PostgreSQL RDS
 ```
 
-**Performance:**
-- Response time: 50-300ms for spatial queries
-- Connection pool: 5-50 connections (auto-scaling)
-- Concurrent users: 50+ supported
+For the full AWS architecture (RDS, ECS Fargate, ALB, Route 53, networking, cost, and a diagram), see `INFRASTRUCTURE.md` in the private [`coeqwal-private-docs`](https://github.com/berkeley-gif/coeqwal-private-docs) repo.
 
-## Database
-
-- **1,400+ network nodes** with PostGIS coordinates
-- **1,000+ network arcs** (rivers, canals, pipelines)
-- **8 scenarios** with tier outcomes
-- **9 tier indicators** with location-level results
-- **92 reservoirs** with monthly statistics data
-
-See [COEQWAL_SCENARIOS_DB_ERD.md](../../database/schema/COEQWAL_SCENARIOS_DB_ERD.md) for full schema.
+See [`database/schema/ERD.md`](../../database/schema/ERD.md) for the full database schema.
