@@ -229,7 +229,8 @@ async def get_all_scenario_tiers(
     }
     ```
 
-    `weighted_score` is 1.0-5.0 for all tiers (lower is better). Use for sorting/comparison.
+    `weighted_score` is 1.0-5.0 for all tiers (lower is better). Used for sorting/comparison.
+    `normalized_score` is 0.0-1.0 for all tiers (lower is better). Used for radar plot positioning.
     """
     try:
         query = """
