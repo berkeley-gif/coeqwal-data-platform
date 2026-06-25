@@ -1779,11 +1779,7 @@ Deferred and in-progress work for the statistics and model-run pipeline.
 
 ### `gw` / `sw` BOOLEAN migration
 
-**Current:** `du_urban_entity.gw` and `.sw` are `VARCHAR(5)` with `'0'`/`'1'`.
-
-**Target:** `BOOLEAN NULL` with reader audit across ETL and API.
-
-Tracked in [`SCHEMA_BACKLOG.md` § 6](../../database/SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies) and [`gw_sw_reconciliation.md` Step 7](../../database/topic_docs/cws/gw_sw_reconciliation.md#step-7-boolean-type-migration-independent-of-value-reconciliation).
+Urban `du_urban_entity.gw` / `.sw` need migrating to `BOOLEAN NULL` with a reader audit across ETL and API. The current type, value mapping, and full plan live in [`gw_sw_reconciliation.md` Step 7](../../database/topic_docs/cws/gw_sw_reconciliation.md#step-7-boolean-type-migration-independent-of-value-reconciliation), tracked alongside [`SCHEMA_BACKLOG.md` § 6](../../database/SCHEMA_BACKLOG.md#6-schema-pattern-inconsistencies).
 
 
 ### Reference data sources for gw/sw

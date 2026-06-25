@@ -31,7 +31,7 @@ There is **no** standalone `cws_entity` or `drinking_water_utility` table today.
 
 **Columns that matter:**
 - `du_id` is the primary key for joins
-- `gw`, `sw` are groundwater / surface-water flags (`VARCHAR(5)` today, `'0'`/`'1'`)
+- `gw`, `sw` are groundwater / surface-water flags, `VARCHAR(5)` today. See [`gw_sw_reconciliation.md` Step 7](gw_sw_reconciliation.md#step-7-boolean-type-migration-independent-of-value-reconciliation) for the planned `BOOLEAN` migration
 - `community_agency` is free-text communities and agencies served
 - `geom` is the polygon from gpkg loader (when present)
 - `primary_contractor_short_code` (`VARCHAR(50)`) references `mi_contractor.short_code` by name but is **not** FK-enforced. It is a soft reference, populated on 21 of the 145 rows
