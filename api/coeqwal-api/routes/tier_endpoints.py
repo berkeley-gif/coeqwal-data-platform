@@ -221,15 +221,16 @@ async def get_all_scenario_tiers(
     {
       "scenario": "s0020",
       "tiers": {
-        "AG_REV": { "name": "...", "type": "multi_value", "weighted_score": 1.78, "data": [...], "total": 132 },
-        "CWS_DEL": { "name": "...", "type": "multi_value", "weighted_score": 1.12, "data": [...], "total": 91 },
-        "DELTA_ECO": { "name": "...", "type": "single_value", "weighted_score": 3.0, "level": 3 },
+        "AG_REV": { "name": "...", "type": "multi_value", "weighted_score": 2.326, "normalized_score": 0.668, "data": [...], "total": 307.09 },
+        "CWS_DEL": { "name": "...", "type": "multi_value", "weighted_score": 1.787, "normalized_score": 0.803, "data": [...], "total": 132.227 },
+        "DELTA_ECO": { "name": "...", "type": "single_value", "weighted_score": 3, "normalized_score": 0.5, "level": 3 },
         ...
       }
     }
     ```
 
-    `weighted_score` is 1.0-5.0 for all tiers (lower is better). Use for sorting/comparison.
+    `weighted_score` is 1.0-5.0 for all tiers (lower is better). Used for sorting/comparison.
+    `normalized_score` is 0.0-1.0 for all tiers (lower is better). Used for radar plot positioning.
     """
     try:
         query = """
