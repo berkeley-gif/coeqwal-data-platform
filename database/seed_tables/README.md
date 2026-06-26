@@ -25,7 +25,7 @@ seed_tables/
 Some CSVs here are inputs, not table seeds. They load into existing tables through a script, or are intermediate CalSim data. They are not orphaned tables.
 
 - `04_calsim_data/du_*_geometry.csv` load into the `du_*_entity` geometry columns via `database/scripts/data_processing/load_du_geometries.py`.
-- `04_calsim_data/CalSim_*_geopackage.csv`, `connectivity_resolution_log.csv`, and `network_*_connectivity*.csv` are intermediate / staging data from the CalSim network resolution, not DB tables. Candidates for a `04_calsim_data/intermediate/` subfolder.
+- `04_calsim_data/CalSim_*_geopackage.csv` are intermediate / staging exports from the CalSim network resolution, not DB tables.
 
 The `03_GIS/` spatial CSVs seed geometry that lives on the singular Layer 03 tables `reservoir`, `wba`, and `compliance_station` (each keeps `geom_wkt` plus a PostGIS `geom`), and `du_4326.gpkg` feeds the `du_*_entity` geometry columns via [`../scripts/data_processing/load_du_geometries.py`](../scripts/data_processing/load_du_geometries.py). The older [`../sql_archive/02_network_layer/load_spatial_tables.sql`](../sql_archive/02_network_layer/load_spatial_tables.sql) creates plural `reservoirs` / `compliance_stations` tables that do not match the live schema, so treat it as superseded.
 
