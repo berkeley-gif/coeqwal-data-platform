@@ -14,7 +14,7 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 
 **Handoff and operations**
 
-- [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md) - start here for active threads and next steps
+- [`TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md) - start here for active threads and next steps
 
 **Data**
 
@@ -51,7 +51,7 @@ The AWS infrastructure reference, `INFRASTRUCTURE.md`, lives in the private `coe
 
 ## Roadmaps
 
-**Resuming work after a handoff?** Start at [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md). It is the dashboard of active threads (where each stands and the next step) and links into the detailed roadmaps below.
+**Resuming work after a handoff?** Start at [`TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md). It is the dashboard of active threads (where each stands and the next step) and links into the detailed roadmaps below.
 
 **Roadmaps by area** - each section keeps its deferred and in-progress work at the bottom of its own README:
 
@@ -163,7 +163,7 @@ Two pieces of automation are designed and on the way to production-ready:
 - A unified driver ([`etl/run_full_pipeline.py`](etl/run_full_pipeline.py)) that wraps every stage into one resumable command. Its current state and caveats are documented in the [ETL runbook](etl/README.md#experimental-orchestrator).
 - An EventBridge `Batch -> run_all` trigger so statistics fire automatically on extraction completion.
 
-Both are tracked in [`docs/TEAM_RUNBOOK.md`](docs/TEAM_RUNBOOK.md).
+Both are tracked in [`TEAM_RUNBOOK.md`](TEAM_RUNBOOK.md).
 
 ### Tier data pipeline
 
