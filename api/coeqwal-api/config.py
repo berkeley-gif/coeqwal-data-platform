@@ -27,6 +27,7 @@ class Settings:
         "https://dev.coeqwal.org"  # Development frontend
         "https://staging.coeqwal.org"  # Staging frontend
         "https://coeqwal.org",  # Development frontend
+        "https://dev.d2yqk6im560ffz.amplifyapp.com/", # Amplify staging frontend
     ]
 
     # Pagination
