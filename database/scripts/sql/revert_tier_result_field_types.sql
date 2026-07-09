@@ -9,6 +9,5 @@ ALTER TABLE tier_result ALTER COLUMN tier_1_value TYPE INTEGER;
 ALTER TABLE tier_result ALTER COLUMN tier_2_value TYPE INTEGER;
 ALTER TABLE tier_result ALTER COLUMN tier_3_value TYPE INTEGER;
 ALTER TABLE tier_result ALTER COLUMN tier_4_value TYPE INTEGER;
-ALTER TABLE tier_result ALTER COLUMN total_value TYPE INTEGER;
 
 COMMIT;
