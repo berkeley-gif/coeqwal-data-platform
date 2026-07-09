@@ -140,7 +140,7 @@ class TierCounts():
 
     def add_value(self, value):
         self.total_value += 1
-        self.tier_counts[value] += value
+        self.tier_counts[value] += 1
 
     def get_counts(self):
         return self.tier_counts
