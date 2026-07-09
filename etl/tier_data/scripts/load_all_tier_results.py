@@ -123,29 +123,29 @@ def normalize_scenario_id(raw) -> str:
     except ValueError:
         return s
 
-class TierSums():
+class TierCounts():
     """
-    Class to keep track of continous tier values for each tier level
-    as well as total sum and total count of tier locations.
+    Class to keep track of discrete tier counts for each tier level
+    as well as total count of tier locations.
     """
-    total_sum = 0.000
+    total_value = 0.0
     total_count = 0
 
     def __init__(self):
-        self.tier_sums = {
-            1: 0.000,
-            2: 0.000,
-            3: 0.000,
-            4: 0.000
+        self.tier_counts = {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0
         }
 
     def add_value(self, value):
-        self.total_sum += value
+        self.total_value += value
         self.total_count += 1
-        self.tier_sums[math.trunc(value)] += value
+        self.tier_counts[math.trunc(value)] += 1
 
-    def get_sums(self):
-        return self.tier_sums
+    def get_counts(self):
+        return self.tier_counts
 
 # =============================================================================
 # MULTI-VALUE LOADERS
@@ -176,7 +176,7 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_sums = TierSums()
+        tier_counts = TierCounts()
 
         for du_id in du_columns:
             tier_val = row[du_id]
@@ -184,7 +184,7 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_sums.add_value(tier_continuous)
+            tier_counts.add_value(tier_continuous)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'CWS_DEL',
@@ -198,8 +198,8 @@ def load_cws_del_data() -> Tuple[List[Dict], List[Dict]]:
                 '_source_file': 'CWS_DEL.csv',
             })
 
-        if tier_sums.total_count > 0:
-            agg = _multi_value_aggregate(scenario, 'CWS_DEL', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+        if tier_counts.total_value > 0:
+            agg = _multi_value_aggregate(scenario, 'CWS_DEL', tier_counts.get_counts(), tier_counts.total_value, tier_counts.total_count)
             agg['_source_file'] = 'CWS_DEL.csv'
             tier_results.append(agg)
 
@@ -233,7 +233,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_sums = TierSums()
+        tier_counts = TierCounts()
 
         for du_id in du_columns:
             tier_val = row[du_id]
@@ -241,7 +241,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_sums.add_value(tier_continuous)
+            tier_counts.add_value(tier)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'AG_REV',
@@ -255,8 +255,8 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                 '_source_file': 'AG_REV.csv',
             })
 
-        if tier_sums.total_count > 0:
-            agg = _multi_value_aggregate(scenario, 'AG_REV', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+        if tier_counts.total_value > 0:
+            agg = _multi_value_aggregate(scenario, 'AG_REV', tier_counts.get_counts(), tier_counts.total_value, tier_counts.total_count)
             agg['_source_file'] = 'AG_REV.csv'
             tier_results.append(agg)
 
@@ -339,7 +339,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_sums = TierSums()
+        tier_counts = TierCounts()
 
         for du_id in du_columns:
             tier_val = row[du_id]
@@ -347,7 +347,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_sums.add_value(tier_continuous)
+            tier_counts.add_value(tier)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'ENV_FLOWS',
@@ -361,8 +361,8 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 '_source_file': 'ENV_FLOWS.csv',
             })
 
-        if tier_sums.total_count > 0:
-            agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+        if tier_counts.total_value > 0:
+            agg = _multi_value_aggregate(scenario, 'ENV_FLOWS', tier_counts.get_counts(), tier_counts.total_value, tier_counts.total_count)
             agg['_source_file'] = 'ENV_FLOWS.csv'
             tier_results.append(agg)
 
@@ -392,7 +392,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_sums = TierSums()
+        tier_counts = TierCounts()
         display_order = 1
 
         for res_col in res_columns:
@@ -401,7 +401,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_sums.add_value(tier_continuous)
+            tier_counts.add_value(tier)
             res_id = _res_stor_location_id(res_col)
             res_name = TIER_LOCATION_NAMES.get('RES_STOR', {}).get(res_id, res_id)
             location_results.append({
@@ -418,8 +418,8 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
             })
             display_order += 1
 
-        if tier_sums.total_count > 0:
-            agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+        if tier_counts.total_value > 0:
+            agg = _multi_value_aggregate(scenario, 'RES_STOR', tier_counts.get_counts(), tier_counts.total_value, tier_counts.total_count)
             agg['_source_file'] = 'RES_STOR.csv'
             tier_results.append(agg)
 
@@ -450,7 +450,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
         if scenario not in ALLOWED_SCENARIOS:
             continue
 
-        tier_sums = TierSums()
+        tier_counts = TierCounts()
         display_order = 1
 
         for wba_col in wba_columns:
@@ -462,7 +462,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             if tier == 0:
                 tier_continuous = float(1)
                 tier = 1  # tier 0 maps to tier 1 (no impact)
-            tier_sums.add_value(tier_continuous)
+            tier_counts.add_value(tier)
             mapbox_id = convert_wba_id_to_mapbox_format(wba_col)
             location_results.append({
                 'scenario_short_code': scenario,
@@ -478,8 +478,8 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             })
             display_order += 1
 
-        if tier_sums.total_count > 0:
-            agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_sums.get_sums(), tier_sums.total_sum, tier_sums.total_count)
+        if tier_counts.total_value > 0:
+            agg = _multi_value_aggregate(scenario, 'GW_STOR', tier_counts.get_counts(), tier_counts.total_value, tier_counts.total_count)
             agg['_source_file'] = 'GW_STOR.csv'
             tier_results.append(agg)
 
@@ -487,21 +487,23 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _multi_value_aggregate(scenario: str, short_code: str, tier_sums: dict, total_sum: float, total_count: int) -> Dict:
+def _multi_value_aggregate(scenario: str, short_code: str, tier_counts: dict, total_value: float, total_count: int) -> Dict:
     """Build a tier_result row for a multi-value tier."""
     return {
         'scenario_short_code': scenario,
         'tier_short_code': short_code,
-        'tier_1_value': tier_sums[1],
-        'tier_2_value': tier_sums[2],
-        'tier_3_value': tier_sums[3],
-        'tier_4_value': tier_sums[4],
-        'norm_tier_1': round(tier_sums[1] / total_sum, 4),
-        'norm_tier_2': round(tier_sums[2] / total_sum, 4),
-        'norm_tier_3': round(tier_sums[3] / total_sum, 4),
-        'norm_tier_4': round(tier_sums[4] / total_sum, 4),
-        'total_value': total_sum,
+        'tier_1_value': tier_counts[1],
+        'tier_2_value': tier_counts[2],
+        'tier_3_value': tier_counts[3],
+        'tier_4_value': tier_counts[4],
+        'norm_tier_1': round(tier_counts[1] / total_count, 4),
+        'norm_tier_2': round(tier_counts[2] / total_count, 4),
+        'norm_tier_3': round(tier_counts[3] / total_count, 4),
+        'norm_tier_4': round(tier_counts[4] / total_count, 4),
+        'total_value': total_value,
         'total_count': total_count,
+        'weighted_score': round(total_value / total_count, 4),
+        'normalized_score': round((5.0 - round(total_value / total_count, 4)) / 4.0, 3),
         'single_tier_level': None,
     }
 
@@ -744,6 +746,8 @@ def _single_value_aggregate(scenario: str, short_code: str, tier_level: int) -> 
         'norm_tier_4': None,
         'total_value': None,
         'total_count': None,
+        'weighted_score': tier_level,
+        'normalized_score': round((5.0 - tier_level) / 4.0, 3),
         'single_tier_level': tier_level,
     }
 
@@ -802,7 +806,8 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
         "    scenario_short_code, tier_short_code,",
         "    tier_1_value, tier_2_value, tier_3_value, tier_4_value,",
         "    norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4,",
-        "    total_value, total_count, single_tier_level, tier_version_id",
+        "    total_value, total_count, weighted_score, normalized_score,",
+        "    single_tier_level, tier_version_id",
         ") VALUES",
     ]
 
@@ -815,7 +820,9 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
             f"{escape_sql(r['tier_3_value'])}, {escape_sql(r['tier_4_value'])}, "
             f"{escape_sql(r['norm_tier_1'])}, {escape_sql(r['norm_tier_2'])}, "
             f"{escape_sql(r['norm_tier_3'])}, {escape_sql(r['norm_tier_4'])}, "
-            f"{escape_sql(r['total_value'])}, {escape_sql(r['total_count'])}, {escape_sql(r['single_tier_level'])}, "
+            f"{escape_sql(r['total_value'])}, {escape_sql(r['total_count'])}, "
+            f"{escape_sql(r['weighted_score'])}, {escape_sql(r['normalized_score'])}, "
+            f"{escape_sql(r['single_tier_level'])}, "
             f"{TIER_VERSION_ID})"
         )
 
@@ -832,6 +839,8 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
     lines.append("    norm_tier_4 = EXCLUDED.norm_tier_4,")
     lines.append("    total_value = EXCLUDED.total_value,")
     lines.append("    total_count = EXCLUDED.total_count,")
+    lines.append("    weighted_score = EXCLUDED.weighted_score,")
+    lines.append("    normalized_score = EXCLUDED.normalized_score,")
     lines.append("    single_tier_level = EXCLUDED.single_tier_level,")
     lines.append("    is_active = TRUE,")
     lines.append("    updated_at = NOW();")
