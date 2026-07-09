@@ -79,35 +79,6 @@ async def get_db():
         yield connection
 
 
-def calculate_tier_scores(
-    total_value: Optional[float],
-    total_count: Optional[int]
-) -> dict:
-    """
-    Calculate the two scores used by the Scenario Explorer for multi-value
-    tier rows.
-
-    Inputs may be None when the ETL row is missing or partial. If both
-    inputs are None, both outputs are None (no data). Otherwise None values
-    are treated as 0 in the arithmetic so partial rows still yield scores.
-
-    Returns:
-    - weighted_score: 1.0 (best) to 5.0 (worst), drives sort comparators
-    - normalized_score: 0.0 to 1.0 (higher = better), Y-axis for the
-      parallel plot
-    """
-
-    weighted_score = round(total_value / total_count, 3)
-
-    # Map weighted_score 1.0 to normalized 1.0 (best), 5.0 to 0.0 (worst)
-    normalized_score = round((5.0 - weighted_score) / 4.0, 3)
-
-    return {
-        "weighted_score": weighted_score,
-        "normalized_score": normalized_score,
-    }
-
-
 @router.get("/definitions", summary="Get tier descriptions")
 async def get_tier_definitions(
     response: Response,
@@ -248,6 +219,8 @@ async def get_all_scenario_tiers(
             tr.norm_tier_4,
             tr.total_value,
             tr.total_count,
+            tr.weighted_score,
+            tr.normalized_score,
             tr.single_tier_level
         FROM tier_result tr
         JOIN tier_definition td ON tr.tier_short_code = td.short_code
@@ -278,16 +251,12 @@ async def get_all_scenario_tiers(
                 norm_2 = safe_float(row["norm_tier_2"])
                 norm_3 = safe_float(row["norm_tier_3"])
                 norm_4 = safe_float(row["norm_tier_4"])
-                total_value = safe_float(row["total_value"])
-                total_count = safe_int(row["total_count"])
-
-                scores = calculate_tier_scores(total_value, total_count)
 
                 tiers[tier_code] = {
                     "name": row["name"],
                     "type": "multi_value",
-                    "weighted_score": scores["weighted_score"],
-                    "normalized_score": scores["normalized_score"],
+                    "weighted_score": safe_float(row["weighted_score"]),
+                    "normalized_score": safe_float(row["normalized_score"]),
                     # Fixed-length 4-element array, index i corresponds to
                     # tier level i+1. Clients derive the tier label from the
                     # index so we don't ship "tier1".."tier4" on every row
@@ -297,7 +266,7 @@ async def get_all_scenario_tiers(
                         {"value": safe_float(row["tier_3_value"]), "normalized": norm_3},
                         {"value": safe_float(row["tier_4_value"]), "normalized": norm_4},
                     ],
-                    "total": safe_float(row["total_value"]),
+                    "total": safe_int(row["total_count"]),
                 }
             else:
                 level = safe_int(row["single_tier_level"])
@@ -305,8 +274,8 @@ async def get_all_scenario_tiers(
                     weighted = None
                     normalized = None
                 else:
-                    weighted = level
-                    normalized = round((5.0 - weighted) / 4.0, 3)
+                    weighted = safe_float(row["weighted_score"])
+                    normalized = safe_float(row["normalized_score"])
                 tiers[tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
@@ -377,6 +346,8 @@ async def get_batch_scenario_tiers(
             tr.norm_tier_4,
             tr.total_value,
             tr.total_count,
+            tr.weighted_score,
+            tr.normalized_score,
             tr.single_tier_level
         FROM tier_result tr
         JOIN tier_definition td ON tr.tier_short_code = td.short_code
@@ -401,16 +372,12 @@ async def get_batch_scenario_tiers(
                 norm_2 = safe_float(row["norm_tier_2"])
                 norm_3 = safe_float(row["norm_tier_3"])
                 norm_4 = safe_float(row["norm_tier_4"])
-                total_value = safe_float(row["total_value"])
-                total_count = safe_int(row["total_count"])
-
-                scores = calculate_tier_scores(total_value, total_count)
 
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "multi_value",
-                    "weighted_score": scores["weighted_score"],
-                    "normalized_score": scores["normalized_score"],
+                    "weighted_score": safe_float(row["weighted_score"]),
+                    "normalized_score": safe_float(row["normalized_score"]),
                     # Fixed-length 4-element array, index i corresponds to
                     # tier level i+1 (see per-scenario handler for context)
                     "data": [
@@ -419,7 +386,7 @@ async def get_batch_scenario_tiers(
                         {"value": safe_float(row["tier_3_value"]), "normalized": norm_3},
                         {"value": safe_float(row["tier_4_value"]), "normalized": norm_4},
                     ],
-                    "total": safe_float(row["total_value"]),
+                    "total": safe_int(row["total_count"]),
                 }
             else:
                 level = safe_int(row["single_tier_level"])
@@ -427,8 +394,8 @@ async def get_batch_scenario_tiers(
                     weighted = None
                     normalized = None
                 else:
-                    weighted = level
-                    normalized = round((5.0 - weighted) / 4.0, 3)
+                    weighted = safe_float(row["weighted_score"])
+                    normalized = safe_float(row["normalized_score"])
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
