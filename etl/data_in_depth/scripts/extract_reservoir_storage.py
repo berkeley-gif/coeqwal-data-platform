@@ -108,8 +108,12 @@ def build_series(tr: TrendReport, scenarios: Optional[Sequence[str]] = None) -> 
 def value_records(df: pd.DataFrame) -> pd.DataFrame:
     """Two rows per year: (TAF, volume) and (PCT_CAP, pct-of-capacity)."""
     base = ["scenario", "subject_kind", "subject_code", "source_variable", "period", "water_year"]
-    taf = df[base].copy(); taf["value"] = df["volume_taf"]; taf["unit_code"] = UNIT_TAF
-    pct = df[base].copy(); pct["value"] = df["pct_capacity"]; pct["unit_code"] = UNIT_PCT
+    taf = df[base].copy()
+    taf["value"] = df["volume_taf"]
+    taf["unit_code"] = UNIT_TAF
+    pct = df[base].copy()
+    pct["value"] = df["pct_capacity"]
+    pct["unit_code"] = UNIT_PCT
     return pd.concat([taf, pct], ignore_index=True)
 
 
@@ -170,7 +174,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         print(df.head(6).to_string(index=False))
         return 0
 
-    out_dir = Path(args.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "reservoir_storage_values.sql").write_text(generate_value_sql(vrecs, args.batch_size))
     log.info("wrote reservoir_storage_values.sql (%d rows)", len(vrecs))
     return 0

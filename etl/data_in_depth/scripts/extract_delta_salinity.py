@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 import pandas as pd
 
@@ -119,7 +119,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         print(df.head(6).to_string(index=False))
         return 0
 
-    out_dir = Path(args.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "delta_salinity_values.sql").write_text(generate_value_sql(df, args.batch_size))
     log.info("wrote delta_salinity_values.sql (%d rows)", len(df))
     return 0

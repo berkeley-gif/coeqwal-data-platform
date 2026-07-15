@@ -129,7 +129,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         print(df.head(6).to_string(index=False))
         return 0
 
-    out_dir = Path(args.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "river_flow_values.sql").write_text(generate_value_sql(df, args.batch_size))
     log.info("wrote river_flow_values.sql (%d rows)", len(df))
     return 0
