@@ -223,6 +223,73 @@ curl "https://api.coeqwal.org/api/statistics/reservoir-groups"
 curl "https://api.coeqwal.org/api/scenarios"
 ```
 
+### Data-in-depth
+
+Three **separate, specific** endpoints under `/api/data-in-depth`, all reading the
+generic `data_in_depth_*` tables. They are intentionally not merged into one
+generalized endpoint; each has its own route, defaults, and scoping.
+
+| Endpoint | Subjects | Periods | Units | Value |
+|----------|----------|---------|-------|-------|
+| `GET /reservoir-storage` | 8 tier reservoirs + `NOD_Reservoirs`/`SOD_Reservoirs` aggregates | `april`, `sept` | `volume` (TAF), `pct_capacity` | end-of-month storage |
+| `GET /river-flows` | 17 river-flow channel nodes | `annual` | `volume` (TAF) | water-year (Oct–Sep) sum of monthly TAF |
+| `GET /delta-salinity` | `X2` (Delta 2-psu isohaline position) | `april`, `sept` | `km` | month value |
+
+**Shared design (all three):**
+
+- **Hybrid compute.** SQL filters/joins/fetches the raw per-year values; the API
+  computes every derived value **live** (exceedance percentile, box-plot
+  quantiles, mean, CV). Nothing derived is stored, so results stay correct when a
+  WYT filter changes the population of years.
+- **Multiple scenarios per request**, but each scenario is computed
+  independently (no cross-scenario pooling).
+- **Common parameters:** `scenarios` (required, CSV), `subjects` (default all),
+  `include` (CSV of facets, combinable — `values`, `exceedance`, `box`,
+  `statistics`; default all), and `wyt` (CSV of water-year-types `1`–`5`; default
+  all years → **no join**). Per-endpoint `periods`/`units` follow the table above.
+- **WYT filtering semantics.** Because percentiles, box quantiles, mean, and CV
+  are population-dependent, a `wyt` filter joins `scenario_water_year_type` and
+  **recomputes** them over the matching years. Each scenario reports `n_years`;
+  when a scenario has `n < 2` matching years `cv` is `null`, and `n = 0` yields an
+  empty series (not an error). Per-row values (volume, percent-of-capacity, km)
+  are just filtered, not recomputed.
+
+```bash
+# Reservoir: box + stats, volume, September, two scenarios
+curl ".../api/data-in-depth/reservoir-storage?scenarios=s0011,s0020&include=box,statistics&units=volume&periods=sept"
+
+# Reservoir: NOD/SOD aggregate exceedance curve, wet + above-normal years only
+curl ".../api/data-in-depth/reservoir-storage?scenarios=s0020&subjects=NOD_Reservoirs,SOD_Reservoirs&include=exceedance&wyt=1,2"
+
+# River flow: annual TAF stats for two gauges
+curl ".../api/data-in-depth/river-flows?scenarios=s0011&subjects=SAC000,YUB002&include=statistics"
+
+# Delta X2: April position, dry years only
+curl ".../api/data-in-depth/delta-salinity?scenarios=s0011,s0020&periods=april&wyt=4,5"
+```
+
+Response is nested `scenario → <subjects> → period → unit → facets`. The
+subject-array key differs by endpoint: `reservoirs`, `rivers`, or `subjects`
+(delta):
+
+```jsonc
+{
+  "wyt_filter": [1, 2],                 // null when default (all years)
+  "scenarios": [
+    { "scenario": "s0020", "n_years": 41,
+      "reservoirs": [                    // "rivers" / "subjects" on the other endpoints
+        { "subject": "NOD_Reservoirs", "kind": "aggregate", "label": "North of Delta Reservoirs",
+          "periods": { "sept": { "TAF": {
+            "values":     [ { "water_year": 1922, "value": 8901.2 }, … ],
+            "exceedance": [ { "water_year": 1999, "value": 11056.0, "percentile": 2.38 }, … ],
+            "box":        { "min": …, "q1": …, "median": …, "q3": …, "max": …,
+                            "whisker_low": …, "whisker_high": …, "outliers": [ … ] },
+            "statistics": { "n": 41, "mean": …, "cv": … }
+          } } } } ] } ] }
+  ]
+}
+```
+
 ## Testing
 
 ```bash

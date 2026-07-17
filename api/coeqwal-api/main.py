@@ -75,6 +75,10 @@ from routes.delta_endpoints import (
     router as delta_router,
     set_db_pool as set_delta_db_pool,
 )
+from routes.data_in_depth_endpoints import (
+    router as data_in_depth_router,
+    set_db_pool as set_data_in_depth_db_pool,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -161,6 +165,7 @@ async def lifespan(app: FastAPI):
     set_refuge_db_pool(db_pool)
     set_env_flow_db_pool(db_pool)
     set_delta_db_pool(db_pool)
+    set_data_in_depth_db_pool(db_pool)
 
     yield
 
@@ -215,6 +220,7 @@ app.include_router(env_flow_router)
 
 # Delta statistics router (X2, salinity, outflow)
 app.include_router(delta_router)
+app.include_router(data_in_depth_router)
 
 # Middleware for performance
 app.add_middleware(GZipMiddleware, minimum_size=1000)
