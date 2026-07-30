@@ -538,7 +538,7 @@ def load_delta_eco_data() -> Tuple[List[Dict], List[Dict]]:
             continue
         tier_continuous = float(row.NDO)
         tier = math.trunc(tier_continuous)
-        agg = _single_value_aggregate(scenario, 'DELTA_ECO', tier)
+        agg = _single_value_aggregate(scenario, 'DELTA_ECO', tier, tier_continuous)
         agg['_source_file'] = 'DELTA_ECO.csv'
         tier_results.append(agg)
         location_results.append({
@@ -584,7 +584,7 @@ def load_fw_delta_uses_data() -> Tuple[List[Dict], List[Dict]]:
             continue
         tier_continuous = float(row['Salinity_InDelta_Tier'])
         tier = math.trunc(tier_continuous)
-        agg = _single_value_aggregate(scenario, 'FW_DELTA_USES', tier)
+        agg = _single_value_aggregate(scenario, 'FW_DELTA_USES', tier, tier_continuous)
         agg['_source_file'] = 'FW_DELTA_USES.csv'
         tier_results.append(agg)
         for loc_id, order in stations:
@@ -631,7 +631,7 @@ def load_fw_exp_data() -> Tuple[List[Dict], List[Dict]]:
             continue
         tier_continuous = float(row['Salinity_Export_Tier'])
         tier = math.trunc(tier_continuous)
-        agg = _single_value_aggregate(scenario, 'FW_EXP', tier)
+        agg = _single_value_aggregate(scenario, 'FW_EXP', tier, tier_continuous)
         agg['_source_file'] = 'FW_EXP.csv'
         tier_results.append(agg)
         for loc_id, order in pumps:
@@ -699,7 +699,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
         except ValueError as exc:
             parse_errors.append(f"{scenario}: {exc}")
             continue
-        agg = _single_value_aggregate(scenario, 'WRC_SALMON_AB', tier)
+        agg = _single_value_aggregate(scenario, 'WRC_SALMON_AB', tier, tier_continuous)
         agg['_source_file'] = csv_path.name
         tier_results.append(agg)
         location_results.append({
@@ -731,7 +731,7 @@ def load_salmon_data() -> Tuple[List[Dict], List[Dict]]:
     return location_results, tier_results
 
 
-def _single_value_aggregate(scenario: str, short_code: str, tier_level: int) -> Dict:
+def _single_value_aggregate(scenario: str, short_code: str, tier_level: int, tier_continuous: float) -> Dict:
     """Build a tier_result row for a single-value tier."""
     return {
         'scenario_short_code': scenario,
@@ -746,8 +746,8 @@ def _single_value_aggregate(scenario: str, short_code: str, tier_level: int) -> 
         'norm_tier_4': None,
         'total_value': None,
         'total_count': None,
-        'weighted_score': tier_level,
-        'normalized_score': round((5.0 - tier_level) / 4.0, 3),
+        'weighted_score': tier_continuous,
+        'normalized_score': round((5.0 - tier_continuous) / 4.0, 3),
         'single_tier_level': tier_level,
     }
 
