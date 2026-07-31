@@ -502,7 +502,7 @@ def _multi_value_aggregate(scenario: str, short_code: str, tier_counts: dict, to
         'norm_tier_4': round(tier_counts[4] / total_count, 4),
         'total_value': total_value,
         'total_count': total_count,
-        'weighted_score': round(total_value / total_count, 4),
+        'average_score': round(total_value / total_count, 4),
         'normalized_score': round((5.0 - round(total_value / total_count, 4)) / 4.0, 3),
         'single_tier_level': None,
     }
@@ -746,7 +746,7 @@ def _single_value_aggregate(scenario: str, short_code: str, tier_level: int, tie
         'norm_tier_4': None,
         'total_value': None,
         'total_count': None,
-        'weighted_score': tier_continuous,
+        'average_score': tier_continuous,
         'normalized_score': round((5.0 - tier_continuous) / 4.0, 3),
         'single_tier_level': tier_level,
     }
@@ -806,7 +806,7 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
         "    scenario_short_code, tier_short_code,",
         "    tier_1_value, tier_2_value, tier_3_value, tier_4_value,",
         "    norm_tier_1, norm_tier_2, norm_tier_3, norm_tier_4,",
-        "    total_value, total_count, weighted_score, normalized_score,",
+        "    total_value, total_count, average_score, normalized_score,",
         "    single_tier_level, tier_version_id",
         ") VALUES",
     ]
@@ -821,7 +821,7 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
             f"{escape_sql(r['norm_tier_1'])}, {escape_sql(r['norm_tier_2'])}, "
             f"{escape_sql(r['norm_tier_3'])}, {escape_sql(r['norm_tier_4'])}, "
             f"{escape_sql(r['total_value'])}, {escape_sql(r['total_count'])}, "
-            f"{escape_sql(r['weighted_score'])}, {escape_sql(r['normalized_score'])}, "
+            f"{escape_sql(r['average_score'])}, {escape_sql(r['normalized_score'])}, "
             f"{escape_sql(r['single_tier_level'])}, "
             f"{TIER_VERSION_ID})"
         )
@@ -839,7 +839,7 @@ def generate_tier_result_sql(tier_results: List[Dict]) -> str:
     lines.append("    norm_tier_4 = EXCLUDED.norm_tier_4,")
     lines.append("    total_value = EXCLUDED.total_value,")
     lines.append("    total_count = EXCLUDED.total_count,")
-    lines.append("    weighted_score = EXCLUDED.weighted_score,")
+    lines.append("    average_score = EXCLUDED.average_score,")
     lines.append("    normalized_score = EXCLUDED.normalized_score,")
     lines.append("    single_tier_level = EXCLUDED.single_tier_level,")
     lines.append("    is_active = TRUE,")

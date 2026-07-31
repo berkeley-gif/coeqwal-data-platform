@@ -192,15 +192,15 @@ async def get_all_scenario_tiers(
     {
       "scenario": "s0020",
       "tiers": {
-        "AG_REV": { "name": "...", "type": "multi_value", "weighted_score": 2.326, "normalized_score": 0.668, "data": [...], "total": 307.09 },
-        "CWS_DEL": { "name": "...", "type": "multi_value", "weighted_score": 1.787, "normalized_score": 0.803, "data": [...], "total": 132.227 },
-        "DELTA_ECO": { "name": "...", "type": "single_value", "weighted_score": 3, "normalized_score": 0.5, "level": 3 },
+        "AG_REV": { "name": "...", "type": "multi_value", "average_score": 2.326, "normalized_score": 0.668, "data": [...], "total": 307.09 },
+        "CWS_DEL": { "name": "...", "type": "multi_value", "average_score": 1.787, "normalized_score": 0.803, "data": [...], "total": 132.227 },
+        "DELTA_ECO": { "name": "...", "type": "single_value", "average_score": 3, "normalized_score": 0.5, "level": 3 },
         ...
       }
     }
     ```
 
-    `weighted_score` is 1.0-5.0 for all tiers (lower is better). Used for sorting/comparison.
+    `average_score` is 1.0-5.0 for all tiers (lower is better). Used for sorting/comparison.
     `normalized_score` is 0.0-1.0 for all tiers (lower is better). Used for radar plot positioning.
     """
     try:
@@ -219,7 +219,7 @@ async def get_all_scenario_tiers(
             tr.norm_tier_4,
             tr.total_value,
             tr.total_count,
-            tr.weighted_score,
+            tr.average_score,
             tr.normalized_score,
             tr.single_tier_level
         FROM tier_result tr
@@ -255,7 +255,7 @@ async def get_all_scenario_tiers(
                 tiers[tier_code] = {
                     "name": row["name"],
                     "type": "multi_value",
-                    "weighted_score": safe_float(row["weighted_score"]),
+                    "average_score": safe_float(row["average_score"]),
                     "normalized_score": safe_float(row["normalized_score"]),
                     # Fixed-length 4-element array, index i corresponds to
                     # tier level i+1. Clients derive the tier label from the
@@ -271,15 +271,15 @@ async def get_all_scenario_tiers(
             else:
                 level = safe_int(row["single_tier_level"])
                 if level is None:
-                    weighted = None
+                    averaged = None
                     normalized = None
                 else:
-                    weighted = safe_float(row["weighted_score"])
+                    averaged = safe_float(row["average_score"])
                     normalized = safe_float(row["normalized_score"])
                 tiers[tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
-                    "weighted_score": weighted,
+                    "average_score": averaged,
                     "normalized_score": normalized,
                     "level": level,
                 }
@@ -346,7 +346,7 @@ async def get_batch_scenario_tiers(
             tr.norm_tier_4,
             tr.total_value,
             tr.total_count,
-            tr.weighted_score,
+            tr.average_score,
             tr.normalized_score,
             tr.single_tier_level
         FROM tier_result tr
@@ -376,7 +376,7 @@ async def get_batch_scenario_tiers(
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "multi_value",
-                    "weighted_score": safe_float(row["weighted_score"]),
+                    "average_score": safe_float(row["average_score"]),
                     "normalized_score": safe_float(row["normalized_score"]),
                     # Fixed-length 4-element array, index i corresponds to
                     # tier level i+1 (see per-scenario handler for context)
@@ -391,15 +391,15 @@ async def get_batch_scenario_tiers(
             else:
                 level = safe_int(row["single_tier_level"])
                 if level is None:
-                    weighted = None
+                    averaged = None
                     normalized = None
                 else:
-                    weighted = safe_float(row["weighted_score"])
+                    averaged = safe_float(row["average_score"])
                     normalized = safe_float(row["normalized_score"])
                 result[scenario_id][tier_code] = {
                     "name": row["name"],
                     "type": "single_value",
-                    "weighted_score": weighted,
+                    "average_score": averaged,
                     "normalized_score": normalized,
                     "level": level,
                 }
