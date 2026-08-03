@@ -421,9 +421,9 @@ def verify_tiers(report: APIReport, conn, api_url: str, sid: str):
         if db_total is not None:
             report.add("total_value", section, tier_code, db_total, api_total)
 
-        api_score = _sf(api_tier.get("weighted_score"))
+        api_score = _sf(api_tier.get("average_score"))
         if api_score is not None:
-            report.add("weighted_score_present", section, tier_code, None, api_score)
+            report.add("average_score_present", section, tier_code, None, api_score)
 
 
 # Verify: Env Flow Period
