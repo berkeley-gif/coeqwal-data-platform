@@ -225,17 +225,20 @@ curl "https://api.coeqwal.org/api/scenarios"
 
 ### Data-in-depth
 
-Three **separate, specific** endpoints under `/api/data-in-depth`, all reading the
+Six **separate, specific** endpoints under `/api/data-in-depth`, all reading the
 generic `data_in_depth_*` tables. They are intentionally not merged into one
 generalized endpoint; each has its own route, defaults, and scoping.
 
-| Endpoint | Subjects | Periods | Units | Value |
-|----------|----------|---------|-------|-------|
-| `GET /reservoir-storage` | 8 tier reservoirs + `NOD_Reservoirs`/`SOD_Reservoirs` aggregates | `april`, `sept` | `volume` (TAF), `pct_capacity` | end-of-month storage |
-| `GET /river-flows` | 17 river-flow channel nodes | `annual` | `volume` (TAF) | water-year (Oct–Sep) sum of monthly TAF |
-| `GET /delta-salinity` | `X2` (Delta 2-psu isohaline position) | `april`, `sept` | `km` | month value |
+| Endpoint | Subjects | Periods | Units / measures | Value |
+|----------|----------|---------|------------------|-------|
+| `GET /reservoir-storage` | 8 tier reservoirs + `NOD_Reservoirs`/`SOD_Reservoirs` aggregates | `april`, `sept` | units: `volume` (TAF), `pct_capacity` | end-of-month storage |
+| `GET /river-flows` | 17 river-flow channel nodes | `annual` | units: `volume` (TAF) | water-year (Oct–Sep) sum of monthly TAF |
+| `GET /delta-salinity` | `X2` (Delta 2-psu isohaline position) | `april`, `sept` | units: `km` | month value |
+| `GET /cws` | 106 CWS demand units + `NOD_CWS`/`SOD_CWS` aggregates | `annual` | measures: `delivery` (TAF), `pct_demand_met` (PCT_DEMAND_MET), `welfare_loss` (USD), `shortage_total` (TAF), `shortage_pct` (PCT_SHORTAGE) | annual delivery, percent of demand met & welfare-outcome measures |
+| `GET /ag` | 132 ag demand units + `NOD_Agriculture`/`SOD_Agriculture` aggregates | `annual` | measures: `net_diversion`, `gw_pumping`, `shortage` (TAF), `revenue` (USD) | annual net diversion, groundwater pumping, shortage & revenue |
+| `GET /groundwater-storage` | 42 groundwater WBAs + `NOD_GroundwaterStorage`/`SOD_GroundwaterStorage` aggregates | `annual` | measures: `volume` (TAF), `level` (ft) | annual groundwater storage volume & water-table level |
 
-**Shared design (all three):**
+**Shared design (all six):**
 
 - **Hybrid compute.** SQL filters/joins/fetches the raw per-year values; the API
   computes every derived value **live** (exceedance percentile, box-plot
@@ -246,13 +249,51 @@ generalized endpoint; each has its own route, defaults, and scoping.
 - **Common parameters:** `scenarios` (required, CSV), `subjects` (default all),
   `include` (CSV of facets, combinable — `values`, `exceedance`, `box`,
   `statistics`; default all), and `wyt` (CSV of water-year-types `1`–`5`; default
-  all years → **no join**). Per-endpoint `periods`/`units` follow the table above.
+  all years → **no join**). Per-endpoint `periods` and the innermost split follow
+  the table above: reservoir/river/delta split by **`units`**; CWS, ag, and
+  groundwater split by **`measures`** (CWS: `delivery` TAF / `pct_demand_met`
+  PCT_DEMAND_MET / `welfare_loss` USD / `shortage_total` TAF / `shortage_pct`
+  PCT_SHORTAGE — different units across a mix of two source files, so it
+  groups by measure rather than unit; ag: `net_diversion` / `gw_pumping` /
+  `shortage` (TAF) / `revenue` (USD) — revenue isn't a volume, but the value
+  table doesn't require one, so it's grouped alongside the other three as a
+  fourth measure; groundwater: `volume` TAF / `level` ft — different units AND
+  different physical meaning, volume is extensive, level is an intensive
+  water-table elevation).
 - **WYT filtering semantics.** Because percentiles, box quantiles, mean, and CV
   are population-dependent, a `wyt` filter joins `scenario_water_year_type` and
   **recomputes** them over the matching years. Each scenario reports `n_years`;
   when a scenario has `n < 2` matching years `cv` is `null`, and `n = 0` yields an
-  empty series (not an error). Per-row values (volume, percent-of-capacity, km)
-  are just filtered, not recomputed.
+  empty series (not an error). Per-row values (volume, percent-of-capacity, km,
+  delivery, percent-of-demand-met, groundwater level) are just filtered, not
+  recomputed.
+  Entity `pct_demand_met` is read directly from the source data (not derived
+  from delivery/demand). `NOD_CWS`/`SOD_CWS` aggregate `pct_demand_met` is
+  demand-weighted (`sum(delivery)/sum(demand)*100`), capped at 100 to match
+  the entity-row convention — see `etl/data_in_depth/open_issues.md` #5. In
+  the ~9 scenarios with a missing SOD contractor (#4), both the aggregate
+  delivery and percent-demand-met are computed from whichever members have
+  data that scenario-year (silently partial, not flagged).
+  `welfare_loss`/`shortage_total`/`shortage_pct` (from the separate
+  welfare-outcomes source — see `etl/data_in_depth/cws_extract_decisions.md`)
+  are available at `NOD_CWS`/`SOD_CWS` too: `welfare_loss`/`shortage_total`
+  are summed across members (extensive), and aggregate `shortage_pct` is
+  demand-weighted (`sum(shortage_total)/sum(supply_total+shortage_total)*100`)
+  — unlike `pct_demand_met` this can never exceed 100 (both terms are
+  non-negative), so no capping is needed. `welfare_loss`'s extreme skew
+  (open_issues.md #9) also means its `exceedance` facet is unconditionally
+  suppressed for now (silently
+  omitted, not an error) — a future version will compute welfare_loss
+  percentiles over **all** water years always, ignoring `wyt`, rather than
+  recomputing per filtered population like every other series here; until
+  that's built, requesting `include=exceedance` for `welfare_loss` just gets
+  no `exceedance` key back. `values`/`box`/`statistics` are unaffected, and
+  this is scoped to `welfare_loss` only — see open_issues.md #10.
+  `NOD_GroundwaterStorage`/`SOD_GroundwaterStorage` aggregates only have the
+  `volume` measure — summing water-table elevations across WBAs is physically
+  meaningless, so `level` is never aggregated (permanent, not pending; see
+  `etl/data_in_depth/open_issues.md` #8); requesting `measures=level` for those
+  two subjects returns an empty series.
 
 ```bash
 # Reservoir: box + stats, volume, September, two scenarios
@@ -266,11 +307,41 @@ curl ".../api/data-in-depth/river-flows?scenarios=s0011&subjects=SAC000,YUB002&i
 
 # Delta X2: April position, dry years only
 curl ".../api/data-in-depth/delta-salinity?scenarios=s0011,s0020&periods=april&wyt=4,5"
+
+# CWS: NOD/SOD aggregate percent-demand-met stats, two scenarios
+curl ".../api/data-in-depth/cws?scenarios=s0011,s0020&subjects=NOD_CWS,SOD_CWS&measures=pct_demand_met&include=box,statistics"
+
+# CWS: dry-year percent-demand-met for one system
+curl ".../api/data-in-depth/cws?scenarios=s0020&subjects=MWD&measures=pct_demand_met&wyt=4,5"
+
+# CWS: welfare-outcome measures for one demand unit
+curl ".../api/data-in-depth/cws?scenarios=s0020&subjects=02_NU&measures=welfare_loss,shortage_total,shortage_pct"
+
+# CWS: NOD/SOD aggregate shortage_pct stats, two scenarios
+curl ".../api/data-in-depth/cws?scenarios=s0011,s0020&subjects=NOD_CWS,SOD_CWS&measures=shortage_pct&include=box,statistics"
+
+# Ag: NOD/SOD aggregate shortage exceedance curve, two scenarios
+curl ".../api/data-in-depth/ag?scenarios=s0011,s0020&subjects=NOD_Agriculture,SOD_Agriculture&measures=shortage&include=exceedance"
+
+# Ag: all four measures for one demand unit, dry years only
+curl ".../api/data-in-depth/ag?scenarios=s0020&subjects=02_NA&wyt=4,5"
+
+# Ag: NOD/SOD aggregate revenue stats, two scenarios
+curl ".../api/data-in-depth/ag?scenarios=s0011,s0020&subjects=NOD_Agriculture,SOD_Agriculture&measures=revenue&include=box,statistics"
+
+# Groundwater: NOD/SOD aggregate storage volume stats, two scenarios (level has no aggregate)
+curl ".../api/data-in-depth/groundwater-storage?scenarios=s0011,s0020&subjects=NOD_GroundwaterStorage,SOD_GroundwaterStorage&measures=volume&include=box,statistics"
+
+# Groundwater: volume + level for one WBA, dry years only
+curl ".../api/data-in-depth/groundwater-storage?scenarios=s0020&subjects=WBA2&wyt=4,5"
 ```
 
-Response is nested `scenario → <subjects> → period → unit → facets`. The
-subject-array key differs by endpoint: `reservoirs`, `rivers`, or `subjects`
-(delta):
+Response is nested `scenario → <subjects> → period → <series> → facets`, where
+`<series>` is the **unit** (`TAF`/`PCT_CAP`/`km`) for reservoir/river/delta, or the
+**measure** (`delivery`/`pct_demand_met` for CWS; `net_diversion`/`gw_pumping`/
+`shortage` for ag; `volume`/`level` for groundwater) for CWS/ag/groundwater. The
+subject-array key is `reservoirs`, `rivers`, or `subjects` (delta, CWS, ag, and
+groundwater):
 
 ```jsonc
 {
@@ -289,6 +360,60 @@ subject-array key differs by endpoint: `reservoirs`, `rivers`, or `subjects`
   ]
 }
 ```
+
+For CWS, ag, and groundwater the innermost split is the **measure** instead of
+a unit — since the unit isn't the dict key in that case, each facet block also
+echoes its own `"unit"`:
+
+```jsonc
+{ "scenario": "s0020", "n_years": 101,
+  "subjects": [
+    { "subject": "NOD_CWS", "kind": "aggregate", "label": "North of Delta Community Water Systems",
+      "periods": { "annual": {
+        "delivery": { "unit": "TAF", "values": […], "box": {…}, "statistics": { "n": 101, "mean": …, "cv": … } },
+        "pct_demand_met": { "unit": "PCT_DEMAND_MET", "values": […], "box": {…}, "statistics": {…} },
+        "welfare_loss": { "unit": "USD", "values": […], "box": {…}, "statistics": {…} },
+        "shortage_total": { "unit": "TAF", "values": […], "box": {…}, "statistics": {…} },
+        "shortage_pct": { "unit": "PCT_SHORTAGE", "values": […], "box": {…}, "statistics": {…} }
+        // welfare_loss has no "exceedance" key here (or anywhere) - suppressed for now, see open_issues.md #10
+      } } } ] }
+```
+
+```jsonc
+{ "scenario": "s0020", "n_years": 100,
+  "subjects": [
+    { "subject": "02_NU", "kind": "entity", "label": "Anderson City of Anderson 4510001",
+      "periods": { "annual": {
+        "welfare_loss":    { "unit": "USD", "values": […], "statistics": {…} },
+        "shortage_total":  { "unit": "TAF", "values": […], "statistics": {…} },
+        "shortage_pct":    { "unit": "PCT_SHORTAGE", "values": […], "statistics": {…} }
+      } } } ] }
+```
+
+```jsonc
+{ "scenario": "s0020", "n_years": 100,
+  "subjects": [
+    { "subject": "02_NA", "kind": "entity", "label": "02_NA",
+      "periods": { "annual": {
+        "net_diversion": { "unit": "TAF", "values": […], "statistics": {…} },
+        "gw_pumping":    { "unit": "TAF", "values": […], "statistics": {…} },
+        "shortage":      { "unit": "TAF", "values": […], "statistics": {…} },
+        "revenue":       { "unit": "USD", "values": […], "statistics": {…} }
+      } } } ] }
+```
+
+```jsonc
+{ "scenario": "s0020", "n_years": 101,
+  "subjects": [
+    { "subject": "NOD_GroundwaterStorage", "kind": "aggregate", "label": "North of Delta Groundwater Storage",
+      "periods": { "annual": {
+        "volume": { "unit": "TAF", "values": […], "box": {…}, "statistics": { "n": 101, "mean": …, "cv": … } }
+        // no "level" key here - not aggregated (see open_issues.md #8)
+      } } } ] }
+```
+
+(Reservoir/river/delta don't get this extra key — there the unit already *is*
+the dict key, e.g. `"periods": { "sept": { "TAF": { "values": … } } }`.)
 
 ## Testing
 
