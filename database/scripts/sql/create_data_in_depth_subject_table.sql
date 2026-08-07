@@ -72,8 +72,12 @@ CREATE TABLE data_in_depth_subject (
     -- location_type, when present, matches the tier_location / registry enum.
     CONSTRAINT chk_dids_location_type
         CHECK (location_type IS NULL OR location_type IN
-               ('network_node', 'wba', 'reservoir', 'compliance_station', 'region', 'demand_unit'))
+               ('network_node', 'wba', 'reservoir', 'compliance_station', 'region',
+                'demand_unit', 'ag_demand_unit'))
 );
+-- Note: 'ag_demand_unit' extends the tier_location enum for data_in_depth so
+-- agricultural DUs resolve to du_agriculture_entity (vs 'demand_unit' ->
+-- du_urban_entity). See LOCATION_ENTITY_MAP in etl/common/tier_location_entities.py.
 
 \echo 'data_in_depth_subject created.'
 
