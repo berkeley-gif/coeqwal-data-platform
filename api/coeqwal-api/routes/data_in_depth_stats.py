@@ -110,15 +110,34 @@ def compute_series(
     include: Sequence[str] = INCLUDE_ALL,
     wyt_filter: Optional[Sequence[int]] = None,
     subject_key: str = "subjects",
+    series_field: str = "unit",
+    no_exceedance: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """Group raw rows and compute per-scenario, per-subject, per-period, per-unit.
+    """Group raw rows and compute per-scenario, per-subject, per-period, per-series.
 
     Each row needs: scenario_short_code, subject_code, subject_kind, subject_label,
-    period, unit, water_year, value. Compute is per single scenario (no pooling
-    across scenarios) even when many scenarios are requested. `subject_key` names
-    the per-scenario array in the output (e.g. "reservoirs", "rivers").
+    period, unit, water_year, value, and the field named by `series_field`.
+    Compute is per single scenario (no pooling across scenarios) even when many
+    scenarios are requested. `subject_key` names the per-scenario array (e.g.
+    "reservoirs", "rivers"). `series_field` is the innermost grouping key: "unit"
+    for the reservoir/river/delta endpoints (TAF/PCT_CAP/km), or "measure" for
+    CWS/ag/groundwater (e.g. delivery in TAF, pct_demand_met in PCT_DEMAND_MET —
+    different units, so grouping by measure rather than unit keeps each series'
+    values together). When series_field != "unit", each facet block also echoes
+    its own "unit" key, since in that case the unit isn't otherwise visible (it's
+    not the dict key the way it is for the unit-grouped endpoints).
+
+    `no_exceedance` is a set of series keys (e.g. measure names) for which the
+    "exceedance" facet is silently omitted regardless of `include` - e.g.
+    welfare_loss's extreme skew (open_issues.md #9) makes an exceedance curve
+    over an arbitrary wyt-filtered population misleading for now; a future
+    version will compute welfare_loss percentiles over ALL water years always,
+    ignoring wyt, rather than recomputing per filtered population like every
+    other series here. Until that lands, exceedance is just suppressed for it.
     """
-    # scenario -> subject_code -> {kind,label, periods: {period: {unit: [(wy,val)]}}}
+    echo_unit = series_field != "unit"
+    no_exceedance_set = set(no_exceedance) if no_exceedance else set()
+    # scenario -> subject_code -> {kind,label, periods: {period: {series_key: {unit, pairs: [(wy,val)]}}}}
     grouped: Dict[str, Dict[str, Dict[str, Any]]] = {}
     years: Dict[str, set] = {}
     for r in rows:
@@ -129,7 +148,10 @@ def compute_series(
         subj = grouped.setdefault(sc, {}).setdefault(
             code, {"kind": r["subject_kind"], "label": r["subject_label"], "periods": {}}
         )
-        subj["periods"].setdefault(r["period"], {}).setdefault(r["unit"], []).append((wy, val))
+        bucket = subj["periods"].setdefault(r["period"], {}).setdefault(
+            r[series_field], {"unit": r["unit"], "pairs": []}
+        )
+        bucket["pairs"].append((wy, val))
         years.setdefault(sc, set()).add(wy)
 
     scenarios_out: List[Dict[str, Any]] = []
@@ -138,8 +160,17 @@ def compute_series(
         for code in sorted(grouped[sc]):
             subj = grouped[sc][code]
             periods_out = {
-                period: {unit: _facets(pairs, include) for unit, pairs in units.items()}
-                for period, units in subj["periods"].items()
+                period: {
+                    key: {
+                        **({"unit": bucket["unit"]} if echo_unit else {}),
+                        **_facets(
+                            bucket["pairs"],
+                            [i for i in include if i != "exceedance"] if key in no_exceedance_set else include,
+                        ),
+                    }
+                    for key, bucket in keys.items()
+                }
+                for period, keys in subj["periods"].items()
             }
             subjects.append(
                 {"subject": code, "kind": subj["kind"], "label": subj["label"], "periods": periods_out}
