@@ -22,9 +22,24 @@
 \echo 'CREATING DATA_IN_DEPTH_VALUE TABLE'
 \echo '=================================='
 
--- Ensure the percent-of-capacity unit exists (idempotent).
+-- Ensure the percent-based units exist (idempotent). 'ft'/'USD'/'PCT_SHORTAGE'
+-- are proper canonical units (in unit.csv, like mm/km) - these inserts are
+-- only for DBs where the table already exists and hasn't been reseeded from
+-- the CSV.
 INSERT INTO unit (short_code, full_name, canonical_group)
 VALUES ('PCT_CAP', 'percent of capacity', 'percent')
+ON CONFLICT (short_code) DO NOTHING;
+INSERT INTO unit (short_code, full_name, canonical_group)
+VALUES ('PCT_DEMAND_MET', 'percent of demand met', 'percent')
+ON CONFLICT (short_code) DO NOTHING;
+INSERT INTO unit (short_code, full_name, canonical_group)
+VALUES ('ft', 'feet', 'length')
+ON CONFLICT (short_code) DO NOTHING;
+INSERT INTO unit (short_code, full_name, canonical_group)
+VALUES ('USD', 'US dollars', 'currency')
+ON CONFLICT (short_code) DO NOTHING;
+INSERT INTO unit (short_code, full_name, canonical_group)
+VALUES ('PCT_SHORTAGE', 'percent shortage', 'percent')
 ON CONFLICT (short_code) DO NOTHING;
 
 DROP TABLE IF EXISTS data_in_depth_value CASCADE;
