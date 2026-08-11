@@ -113,6 +113,25 @@ LOCATION_ENTITY_MAP: Dict[str, TierLocationEntity] = {
         ),
         description="CWS_DEL urban DUs, AG_REV agricultural DUs.",
     ),
+    "ag_demand_unit": TierLocationEntity(
+        location_type="ag_demand_unit",
+        attribute=AttributeResolver(
+            table="du_agriculture_entity",
+            id_column="du_id",
+            name_column="du_id",
+            notes=(
+                "data_in_depth-only location_type (NOT used by tier_location, which "
+                "types ag DUs as 'demand_unit' + the AG_REV override). Distinguishes "
+                "agricultural DUs so they resolve to du_agriculture_entity."
+            ),
+        ),
+        geometry=GeometryResolver(
+            table="du_agriculture_entity",
+            id_column="du_id",
+            geom_kind="MULTIPOLYGON",
+        ),
+        description="data_in_depth agricultural DUs.",
+    ),
     "reservoir": TierLocationEntity(
         location_type="reservoir",
         attribute=AttributeResolver(

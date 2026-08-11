@@ -393,3 +393,406 @@ async def delta_salinity(
     result = compute_series(rows, include=include_list, wyt_filter=wyt_list, subject_key="subjects")
     _cache[cache_key] = result
     return _json_response(result, max_age)
+
+
+# ===========================================================================
+# COMMUNITY WATER SYSTEMS  (separate, self-contained endpoint)
+# ===========================================================================
+# CWS is annual, FIVE measures across two sources with DIFFERENT units:
+# delivery (TAF) and percent-demand-met (PCT_DEMAND_MET) from the original
+# demand_met_by_year source; welfare_loss (USD), shortage_total (TAF), and
+# shortage_pct (PCT_SHORTAGE) from the newer welfare-outcomes source (see
+# etl/data_in_depth/cws_extract_decisions.md). Groups by MEASURE (not unit).
+# Scoped by the explicit CWS source-variable list. Subjects are the CWS demand
+# units + NOD_CWS/SOD_CWS aggregates - all 5 measures are available at every
+# subject (added 2026-08-06 for the 3 welfare measures, once a NOD/SOD mapping
+# existed for their DUs - see cws_extract_decisions.md). Entity pct_demand_met/
+# shortage_pct are read directly from / derived from the source; aggregate
+# pct_demand_met is demand-weighted and capped at 100 (open_issues.md #5);
+# aggregate shortage_pct is demand-weighted
+# (sum(shortage_total)/sum(supply_total+shortage_total)*100) and can never
+# exceed 100 (both terms non-negative), so no capping is needed there.
+CWS_MEASURE_TO_SRC = {
+    "delivery": "CWS_DELIVERY",
+    "pct_demand_met": "CWS_PCT_DEMAND_MET",
+    "welfare_loss": "CWS_WELFARE_LOSS",
+    "shortage_total": "CWS_SHORTAGE_TOTAL",
+    "shortage_pct": "CWS_SHORTAGE_PCT",
+}
+CWS_VALID_MEASURES = set(CWS_MEASURE_TO_SRC)
+CWS_DEFAULT_PERIODS = ["annual"]
+CWS_VALID_PERIODS = {"annual"}
+# welfare_loss's extreme skew (open_issues.md #9) makes an exceedance curve
+# over an arbitrary wyt-filtered population misleading for now. Suppressed
+# (not an error - the key is just silently absent) until a future version
+# computes welfare_loss percentiles over ALL water years always, ignoring wyt,
+# rather than recomputing per filtered population like every other series.
+CWS_NO_EXCEEDANCE = {"welfare_loss"}
+
+
+@router.get("/cws", summary="Annual CWS delivery, percent-demand-met & welfare outcomes (raw + live-computed stats)")
+async def cws(
+    scenarios: str = Query(..., description="CSV of scenario short_codes (one or many)"),
+    subjects: Optional[str] = Query(None, description="CSV of CWS subject short_codes (02_PU, MWD, NOD_CWS, ...)"),
+    periods: Optional[str] = Query(None, description="CSV; default annual"),
+    measures: Optional[str] = Query(None, description="CSV: delivery,pct_demand_met,welfare_loss,shortage_total,shortage_pct; default all"),
+    include: Optional[str] = Query(None, description="CSV: values,exceedance,box,statistics; default all"),
+    wyt: Optional[str] = Query(None, description="CSV of water-year-types 1-5; default all"),
+    db=Depends(get_db),
+):
+    # --- parse + validate params ------------------------------------------
+    scen_list = _csv(scenarios)
+    if not scen_list:
+        raise HTTPException(400, "scenarios is required")
+
+    subj_list = _csv(subjects) or None
+    period_list = _csv(periods) or CWS_DEFAULT_PERIODS
+    if any(p not in CWS_VALID_PERIODS for p in period_list):
+        raise HTTPException(400, f"invalid period; allowed: {sorted(CWS_VALID_PERIODS)}")
+
+    measure_list = [m.lower() for m in (_csv(measures) or list(CWS_VALID_MEASURES))]
+    if any(m not in CWS_VALID_MEASURES for m in measure_list):
+        raise HTTPException(400, f"invalid measure; allowed: {sorted(CWS_VALID_MEASURES)}")
+    src_list = [CWS_MEASURE_TO_SRC[m] for m in measure_list]
+
+    include_list = _csv(include) or list(INCLUDE_ALL)
+    if any(i not in VALID_INCLUDE for i in include_list):
+        raise HTTPException(400, f"invalid include; allowed: {sorted(VALID_INCLUDE)}")
+
+    wyt_list: Optional[List[int]] = None
+    if wyt:
+        try:
+            wyt_list = [int(w) for w in _csv(wyt)]
+        except ValueError:
+            raise HTTPException(400, "wyt must be integers 1-5")
+        if any(w not in VALID_WYT for w in wyt_list):
+            raise HTTPException(400, "wyt values must be 1-5")
+
+    # --- cache ------------------------------------------------------------
+    cache_key = "cws|" + "|".join([
+        ",".join(sorted(scen_list)),
+        ",".join(sorted(subj_list)) if subj_list else "*",
+        ",".join(sorted(period_list)),
+        ",".join(sorted(measure_list)),
+        ",".join(sorted(include_list)),
+        ",".join(str(w) for w in sorted(wyt_list)) if wyt_list else "*",
+    ])
+    max_age = api_cache_max_age()
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return _json_response(cached, max_age)
+
+    # --- SQL: filter/join/fetch raw rows ----------------------------------
+    # Scope by explicit CWS source-variable list; map to friendly measure names.
+    # No unit filter: each source_variable has exactly one unit (TAF for
+    # delivery/shortage_total, PCT_DEMAND_MET for pct_demand_met, USD for
+    # welfare_loss, PCT_SHORTAGE for shortage_pct), so source_variable alone
+    # disambiguates.
+    params: List[Any] = [scen_list, period_list, src_list]
+    where = [
+        "v.scenario_short_code = ANY($1)",
+        "v.period = ANY($2)",
+        "v.source_variable = ANY($3)",
+        "v.is_active = TRUE",
+    ]
+    join_wyt = ""
+    if subj_list:
+        params.append(subj_list)
+        where.append(f"s.short_code = ANY(${len(params)})")
+    if wyt_list:
+        params.append(wyt_list)
+        join_wyt = (
+            "JOIN scenario_water_year_type w "
+            "ON w.scenario_short_code = v.scenario_short_code AND w.water_year = v.water_year"
+        )
+        where.append(f"w.wyt = ANY(${len(params)})")
+
+    sql = f"""
+        SELECT v.scenario_short_code,
+               s.short_code   AS subject_code,
+               s.subject_kind AS subject_kind,
+               s.label        AS subject_label,
+               v.period,
+               CASE v.source_variable
+                    WHEN 'CWS_DELIVERY' THEN 'delivery'
+                    WHEN 'CWS_PCT_DEMAND_MET' THEN 'pct_demand_met'
+                    WHEN 'CWS_WELFARE_LOSS' THEN 'welfare_loss'
+                    WHEN 'CWS_SHORTAGE_TOTAL' THEN 'shortage_total'
+                    WHEN 'CWS_SHORTAGE_PCT' THEN 'shortage_pct'
+                    ELSE v.source_variable END AS measure,
+               u.short_code   AS unit,
+               v.water_year,
+               v.value
+        FROM data_in_depth_value v
+        JOIN data_in_depth_subject s ON s.id = v.data_in_depth_subject_id
+        JOIN unit u ON u.id = v.unit_id
+        {join_wyt}
+        WHERE {" AND ".join(where)}
+    """
+
+    try:
+        rows = await db.fetch(sql, *params)
+    except Exception as e:  # noqa: BLE001
+        log.error("cws query failed: %s", e)
+        raise HTTPException(500, "query failed")
+
+    result = compute_series(rows, include=include_list, wyt_filter=wyt_list,
+                            subject_key="subjects", series_field="measure",
+                            no_exceedance=CWS_NO_EXCEEDANCE)
+    _cache[cache_key] = result
+    return _json_response(result, max_age)
+
+
+# ===========================================================================
+# GROUNDWATER STORAGE  (separate, self-contained endpoint)
+# ===========================================================================
+# Groundwater is annual, TWO measures with DIFFERENT units and DIFFERENT
+# physical meaning: volume (GW_STOR, TAF, extensive) and level (GW_LEVEL, ft,
+# intensive - a water-table elevation, not a quantity). Groups by MEASURE
+# (like CWS/ag). Subjects are the groundwater WBAs (location_type='wba') +
+# NOD_GroundwaterStorage/SOD_GroundwaterStorage aggregates. Aggregates only
+# have the volume measure - summing water-table elevations across WBAs is
+# physically meaningless, so no level aggregate is ever computed (permanent,
+# not a pending decision - see etl/data_in_depth/open_issues.md #8); requesting
+# measures=level for the aggregates returns an empty series for that subject.
+GW_MEASURE_TO_SRC = {"volume": "GW_STOR", "level": "GW_LEVEL"}
+GW_VALID_MEASURES = set(GW_MEASURE_TO_SRC)
+GW_DEFAULT_PERIODS = ["annual"]
+GW_VALID_PERIODS = {"annual"}
+
+
+@router.get("/groundwater-storage", summary="Annual groundwater storage volume & level (raw + live-computed stats)")
+async def groundwater_storage(
+    scenarios: str = Query(..., description="CSV of scenario short_codes (one or many)"),
+    subjects: Optional[str] = Query(None, description="CSV of WBA subject short_codes (WBA2, NOD_GroundwaterStorage, ...)"),
+    periods: Optional[str] = Query(None, description="CSV; default annual"),
+    measures: Optional[str] = Query(None, description="CSV: volume,level; default both"),
+    include: Optional[str] = Query(None, description="CSV: values,exceedance,box,statistics; default all"),
+    wyt: Optional[str] = Query(None, description="CSV of water-year-types 1-5; default all"),
+    db=Depends(get_db),
+):
+    # --- parse + validate params ------------------------------------------
+    scen_list = _csv(scenarios)
+    if not scen_list:
+        raise HTTPException(400, "scenarios is required")
+
+    subj_list = _csv(subjects) or None
+    period_list = _csv(periods) or GW_DEFAULT_PERIODS
+    if any(p not in GW_VALID_PERIODS for p in period_list):
+        raise HTTPException(400, f"invalid period; allowed: {sorted(GW_VALID_PERIODS)}")
+
+    measure_list = [m.lower() for m in (_csv(measures) or list(GW_VALID_MEASURES))]
+    if any(m not in GW_VALID_MEASURES for m in measure_list):
+        raise HTTPException(400, f"invalid measure; allowed: {sorted(GW_VALID_MEASURES)}")
+    src_list = [GW_MEASURE_TO_SRC[m] for m in measure_list]
+
+    include_list = _csv(include) or list(INCLUDE_ALL)
+    if any(i not in VALID_INCLUDE for i in include_list):
+        raise HTTPException(400, f"invalid include; allowed: {sorted(VALID_INCLUDE)}")
+
+    wyt_list: Optional[List[int]] = None
+    if wyt:
+        try:
+            wyt_list = [int(w) for w in _csv(wyt)]
+        except ValueError:
+            raise HTTPException(400, "wyt must be integers 1-5")
+        if any(w not in VALID_WYT for w in wyt_list):
+            raise HTTPException(400, "wyt values must be 1-5")
+
+    # --- cache ------------------------------------------------------------
+    cache_key = "gw|" + "|".join([
+        ",".join(sorted(scen_list)),
+        ",".join(sorted(subj_list)) if subj_list else "*",
+        ",".join(sorted(period_list)),
+        ",".join(sorted(measure_list)),
+        ",".join(sorted(include_list)),
+        ",".join(str(w) for w in sorted(wyt_list)) if wyt_list else "*",
+    ])
+    max_age = api_cache_max_age()
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return _json_response(cached, max_age)
+
+    # --- SQL: filter/join/fetch raw rows ----------------------------------
+    # Scope by explicit groundwater source-variable list; map to friendly
+    # measure names. No unit filter: each source_variable has exactly one
+    # unit (TAF for volume, ft for level), so source_variable disambiguates.
+    params: List[Any] = [scen_list, period_list, src_list]
+    where = [
+        "v.scenario_short_code = ANY($1)",
+        "v.period = ANY($2)",
+        "v.source_variable = ANY($3)",
+        "v.is_active = TRUE",
+    ]
+    join_wyt = ""
+    if subj_list:
+        params.append(subj_list)
+        where.append(f"s.short_code = ANY(${len(params)})")
+    if wyt_list:
+        params.append(wyt_list)
+        join_wyt = (
+            "JOIN scenario_water_year_type w "
+            "ON w.scenario_short_code = v.scenario_short_code AND w.water_year = v.water_year"
+        )
+        where.append(f"w.wyt = ANY(${len(params)})")
+
+    sql = f"""
+        SELECT v.scenario_short_code,
+               s.short_code   AS subject_code,
+               s.subject_kind AS subject_kind,
+               s.label        AS subject_label,
+               v.period,
+               CASE v.source_variable
+                    WHEN 'GW_STOR' THEN 'volume'
+                    WHEN 'GW_LEVEL' THEN 'level'
+                    ELSE v.source_variable END AS measure,
+               u.short_code   AS unit,
+               v.water_year,
+               v.value
+        FROM data_in_depth_value v
+        JOIN data_in_depth_subject s ON s.id = v.data_in_depth_subject_id
+        JOIN unit u ON u.id = v.unit_id
+        {join_wyt}
+        WHERE {" AND ".join(where)}
+    """
+
+    try:
+        rows = await db.fetch(sql, *params)
+    except Exception as e:  # noqa: BLE001
+        log.error("groundwater-storage query failed: %s", e)
+        raise HTTPException(500, "query failed")
+
+    result = compute_series(rows, include=include_list, wyt_filter=wyt_list,
+                            subject_key="subjects", series_field="measure")
+    _cache[cache_key] = result
+    return _json_response(result, max_age)
+
+
+# ===========================================================================
+# AGRICULTURE  (separate, self-contained endpoint)
+# ===========================================================================
+# Ag is annual, FOUR measures: net_diversion/gw_pumping/shortage (all TAF,
+# taken directly from the source - shortage is a source column here, not
+# derived) and revenue (USD, added 2026-07-29 - not a volume, but the generic
+# value table doesn't require one). Groups by MEASURE (like CWS) for
+# consistency even though three of the four share a unit. Scoped by the
+# explicit ag source-variable list. Subjects are the ag demand units
+# (location_type='ag_demand_unit') + NOD_Agriculture/SOD_Agriculture
+# aggregates (all four measures summed across members - no capping/weighting
+# ambiguity since these are all extensive quantities, not percentages).
+AG_MEASURE_TO_SRC = {
+    "net_diversion": "AG_NET_DIVERSION",
+    "gw_pumping": "AG_GW_PUMPING",
+    "shortage": "AG_SHORTAGE",
+    "revenue": "AG_REVENUE",
+}
+AG_VALID_MEASURES = set(AG_MEASURE_TO_SRC)
+AG_DEFAULT_PERIODS = ["annual"]
+AG_VALID_PERIODS = {"annual"}
+
+
+@router.get("/ag", summary="Annual ag net diversion, GW pumping, shortage & revenue (raw + live-computed stats)")
+async def ag(
+    scenarios: str = Query(..., description="CSV of scenario short_codes (one or many)"),
+    subjects: Optional[str] = Query(None, description="CSV of ag subject short_codes (02_NA, NOD_Agriculture, ...)"),
+    periods: Optional[str] = Query(None, description="CSV; default annual"),
+    measures: Optional[str] = Query(None, description="CSV: net_diversion,gw_pumping,shortage,revenue; default all"),
+    include: Optional[str] = Query(None, description="CSV: values,exceedance,box,statistics; default all"),
+    wyt: Optional[str] = Query(None, description="CSV of water-year-types 1-5; default all"),
+    db=Depends(get_db),
+):
+    # --- parse + validate params ------------------------------------------
+    scen_list = _csv(scenarios)
+    if not scen_list:
+        raise HTTPException(400, "scenarios is required")
+
+    subj_list = _csv(subjects) or None
+    period_list = _csv(periods) or AG_DEFAULT_PERIODS
+    if any(p not in AG_VALID_PERIODS for p in period_list):
+        raise HTTPException(400, f"invalid period; allowed: {sorted(AG_VALID_PERIODS)}")
+
+    measure_list = [m.lower() for m in (_csv(measures) or list(AG_VALID_MEASURES))]
+    if any(m not in AG_VALID_MEASURES for m in measure_list):
+        raise HTTPException(400, f"invalid measure; allowed: {sorted(AG_VALID_MEASURES)}")
+    src_list = [AG_MEASURE_TO_SRC[m] for m in measure_list]
+
+    include_list = _csv(include) or list(INCLUDE_ALL)
+    if any(i not in VALID_INCLUDE for i in include_list):
+        raise HTTPException(400, f"invalid include; allowed: {sorted(VALID_INCLUDE)}")
+
+    wyt_list: Optional[List[int]] = None
+    if wyt:
+        try:
+            wyt_list = [int(w) for w in _csv(wyt)]
+        except ValueError:
+            raise HTTPException(400, "wyt must be integers 1-5")
+        if any(w not in VALID_WYT for w in wyt_list):
+            raise HTTPException(400, "wyt values must be 1-5")
+
+    # --- cache ------------------------------------------------------------
+    cache_key = "ag|" + "|".join([
+        ",".join(sorted(scen_list)),
+        ",".join(sorted(subj_list)) if subj_list else "*",
+        ",".join(sorted(period_list)),
+        ",".join(sorted(measure_list)),
+        ",".join(sorted(include_list)),
+        ",".join(str(w) for w in sorted(wyt_list)) if wyt_list else "*",
+    ])
+    max_age = api_cache_max_age()
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return _json_response(cached, max_age)
+
+    # --- SQL: filter/join/fetch raw rows ----------------------------------
+    # Scope by explicit ag source-variable list; map to friendly measure names.
+    params: List[Any] = [scen_list, period_list, src_list]
+    where = [
+        "v.scenario_short_code = ANY($1)",
+        "v.period = ANY($2)",
+        "v.source_variable = ANY($3)",
+        "v.is_active = TRUE",
+    ]
+    join_wyt = ""
+    if subj_list:
+        params.append(subj_list)
+        where.append(f"s.short_code = ANY(${len(params)})")
+    if wyt_list:
+        params.append(wyt_list)
+        join_wyt = (
+            "JOIN scenario_water_year_type w "
+            "ON w.scenario_short_code = v.scenario_short_code AND w.water_year = v.water_year"
+        )
+        where.append(f"w.wyt = ANY(${len(params)})")
+
+    sql = f"""
+        SELECT v.scenario_short_code,
+               s.short_code   AS subject_code,
+               s.subject_kind AS subject_kind,
+               s.label        AS subject_label,
+               v.period,
+               CASE v.source_variable
+                    WHEN 'AG_NET_DIVERSION' THEN 'net_diversion'
+                    WHEN 'AG_GW_PUMPING' THEN 'gw_pumping'
+                    WHEN 'AG_SHORTAGE' THEN 'shortage'
+                    WHEN 'AG_REVENUE' THEN 'revenue'
+                    ELSE v.source_variable END AS measure,
+               u.short_code   AS unit,
+               v.water_year,
+               v.value
+        FROM data_in_depth_value v
+        JOIN data_in_depth_subject s ON s.id = v.data_in_depth_subject_id
+        JOIN unit u ON u.id = v.unit_id
+        {join_wyt}
+        WHERE {" AND ".join(where)}
+    """
+
+    try:
+        rows = await db.fetch(sql, *params)
+    except Exception as e:  # noqa: BLE001
+        log.error("ag query failed: %s", e)
+        raise HTTPException(500, "query failed")
+
+    result = compute_series(rows, include=include_list, wyt_filter=wyt_list,
+                            subject_key="subjects", series_field="measure")
+    _cache[cache_key] = result
+    return _json_response(result, max_age)
