@@ -796,3 +796,256 @@ async def ag(
                             subject_key="subjects", series_field="measure")
     _cache[cache_key] = result
     return _json_response(result, max_age)
+
+
+# ===========================================================================
+# SALMON (WRLCM)  (separate, self-contained endpoint)
+# ===========================================================================
+# Salmon is annual, ONE subject (WRLCM_ADULT_FEMALES, a metric - no location),
+# ONE source_variable (METRIC_AVG_ROLL), ONE unit (NOF_3YR_AVG). So this groups
+# by UNIT (like system-deliveries/river-flows) - there is NO measure param.
+#
+# No aggregates (single subject, nothing to sum). water_year here is year_cal
+# (calendar year, NOT the usual Oct-Sep water year - see extract_salmon.py).
+
+SALMON_SOURCE_VARS = ["METRIC_AVG_ROLL"]
+SALMON_UNIT_ALIASES = {"nof_3yr_avg": "NOF_3YR_AVG", "adult_females": "NOF_3YR_AVG"}
+SALMON_VALID_UNITS = {"NOF_3YR_AVG"}
+SALMON_DEFAULT_PERIODS = ["annual"]
+SALMON_VALID_PERIODS = {"annual"}
+
+
+@router.get("/salmon", summary="Annual WRLCM adult-females 3-yr rolling average (raw + live-computed stats)")
+async def salmon(
+    scenarios: str = Query(..., description="CSV of scenario short_codes (one or many)"),
+    subjects: Optional[str] = Query(None, description="CSV of subject short_codes (default: WRLCM_ADULT_FEMALES)"),
+    periods: Optional[str] = Query(None, description="CSV; default annual"),
+    units: Optional[str] = Query(None, description="CSV: nof_3yr_avg only; default NOF_3YR_AVG"),
+    include: Optional[str] = Query(None, description="CSV: values,exceedance,box,statistics; default all"),
+    wyt: Optional[str] = Query(None, description="CSV of water-year-types 1-5; default all"),
+    db=Depends(get_db),
+):
+    # --- parse + validate params ------------------------------------------
+    scen_list = _csv(scenarios)
+    if not scen_list:
+        raise HTTPException(400, "scenarios is required")
+
+    subj_list = _csv(subjects) or None
+    period_list = _csv(periods) or SALMON_DEFAULT_PERIODS
+    if any(p not in SALMON_VALID_PERIODS for p in period_list):
+        raise HTTPException(400, f"invalid period; allowed: {sorted(SALMON_VALID_PERIODS)}")
+
+    unit_tokens = _csv(units) or ["nof_3yr_avg"]
+    unit_list = [SALMON_UNIT_ALIASES.get(u.lower(), u.upper()) for u in unit_tokens]
+    if any(u not in SALMON_VALID_UNITS for u in unit_list):
+        raise HTTPException(400, "invalid unit; salmon supports nof_3yr_avg (NOF_3YR_AVG) only")
+
+    include_list = _csv(include) or list(INCLUDE_ALL)
+    if any(i not in VALID_INCLUDE for i in include_list):
+        raise HTTPException(400, f"invalid include; allowed: {sorted(VALID_INCLUDE)}")
+
+    wyt_list: Optional[List[int]] = None
+    if wyt:
+        try:
+            wyt_list = [int(w) for w in _csv(wyt)]
+        except ValueError:
+            raise HTTPException(400, "wyt must be integers 1-5")
+        if any(w not in VALID_WYT for w in wyt_list):
+            raise HTTPException(400, "wyt values must be 1-5")
+
+    # --- cache ------------------------------------------------------------
+    cache_key = "salmon|" + "|".join([
+        ",".join(sorted(scen_list)),
+        ",".join(sorted(subj_list)) if subj_list else "*",
+        ",".join(sorted(period_list)),
+        ",".join(sorted(unit_list)),
+        ",".join(sorted(include_list)),
+        ",".join(str(w) for w in sorted(wyt_list)) if wyt_list else "*",
+    ])
+    max_age = api_cache_max_age()
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return _json_response(cached, max_age)
+
+    # --- SQL: filter/join/fetch raw rows ----------------------------------
+    # Scope by the explicit salmon source-variable list (single variable).
+    params: List[Any] = [scen_list, period_list, unit_list, SALMON_SOURCE_VARS]
+    where = [
+        "v.scenario_short_code = ANY($1)",
+        "v.period = ANY($2)",
+        "u.short_code = ANY($3)",
+        "v.source_variable = ANY($4)",
+        "v.is_active = TRUE",
+    ]
+    join_wyt = ""
+    if subj_list:
+        params.append(subj_list)
+        where.append(f"s.short_code = ANY(${len(params)})")
+    if wyt_list:
+        params.append(wyt_list)
+        join_wyt = (
+            "JOIN scenario_water_year_type w "
+            "ON w.scenario_short_code = v.scenario_short_code AND w.water_year = v.water_year"
+        )
+        where.append(f"w.wyt = ANY(${len(params)})")
+
+    sql = f"""
+        SELECT v.scenario_short_code,
+               s.short_code   AS subject_code,
+               s.subject_kind AS subject_kind,
+               s.label        AS subject_label,
+               v.period,
+               u.short_code   AS unit,
+               v.water_year,
+               v.value
+        FROM data_in_depth_value v
+        JOIN data_in_depth_subject s ON s.id = v.data_in_depth_subject_id
+        JOIN unit u ON u.id = v.unit_id
+        {join_wyt}
+        WHERE {" AND ".join(where)}
+    """
+
+    try:
+        rows = await db.fetch(sql, *params)
+    except Exception as e:  # noqa: BLE001
+        log.error("salmon query failed: %s", e)
+        raise HTTPException(500, "query failed")
+
+    result = compute_series(rows, include=include_list, wyt_filter=wyt_list, subject_key="subjects")
+    _cache[cache_key] = result
+    return _json_response(result, max_age)
+
+
+# ===========================================================================
+# SYSTEM DELIVERIES  (separate, self-contained endpoint)
+# ===========================================================================
+# System deliveries is annual, ONE unit (TAF), 25 INDEPENDENT metric subjects -
+# CVP/SWP delivery totals broken out by NOD/SOD/Total x AG/M&I/Refuges, Delta
+# export totals, and Southern San Joaquin Valley export paths. UNLIKE every
+# other data_in_depth domain, each subject IS its own leaf variable (short_code
+# == source_variable, 1:1) - there's no measure-splitting (no CWS/ag/groundwater-
+# style shared subject) and no aggregation (NOD/SOD/Total triplets are each their
+# own pre-aggregated raw CalSim variable, not summed here - see
+# seed_data_in_depth_system_deliveries_subjects.sql / extract_system_deliveries.py).
+# So this groups by UNIT (like reservoir/river/delta) rather than measure, even
+# though there's only one unit - shape matches river-flows most closely (annual,
+# TAF-only, no percent-of-capacity, no aggregates), but scoped by an EXPLICIT
+# source-variable list (like delta-salinity) since the 25 variables don't share
+# a clean prefix (DEL_/C_/D_/SWP_ all appear).
+SYSTEM_DELIVERIES_SOURCE_VARS = [
+    "DEL_CVP_TOT_N_WAMER", "DEL_CVP_TOT_S_WLOSS", "DEL_CVP_TOTAL",
+    "DEL_CVP_PAG_NOD", "DEL_CVP_PAG_SOD", "DEL_CVP_PAG_TOTAL",
+    "DEL_CVP_PMI_TOTAL", "DEL_CVP_PMI_N_WAMER", "DEL_CVP_PMI_S",
+    "DEL_CVP_PRF_TOTAL", "C_CVP_TOTAL_EXPORTS",
+    "DEL_SWP_TOT_N", "DEL_SWP_TOT_S", "DEL_SWP_TOTAL",
+    "DEL_SWP_PAG_NOD", "DEL_SWP_PAG_S", "DEL_SWP_PAG_TOTAL",
+    "DEL_SWP_PMI", "DEL_SWP_PMI_N", "DEL_SWP_PMI_S",
+    "D_MLRTN_FRK000", "D_CAA238_CVPCV", "SWP_TA_KERNAG",
+    "C_CAA003_SWP", "C_CVPSWP_TOTAL_EXPORTS",
+]
+SYS_DEL_UNIT_ALIASES = {"volume": "TAF", "taf": "TAF"}
+SYS_DEL_VALID_UNITS = {"TAF"}
+SYS_DEL_DEFAULT_PERIODS = ["annual"]
+SYS_DEL_VALID_PERIODS = {"annual"}
+
+
+@router.get("/system-deliveries", summary="Annual CVP/SWP delivery & Delta export totals (raw + live-computed stats)")
+async def system_deliveries(
+    scenarios: str = Query(..., description="CSV of scenario short_codes (one or many)"),
+    subjects: Optional[str] = Query(None, description="CSV of subject short_codes (DEL_CVP_TOTAL, C_CAA003_SWP, ...); default all 25"),
+    periods: Optional[str] = Query(None, description="CSV; default annual"),
+    units: Optional[str] = Query(None, description="CSV: volume (TAF) only; default TAF"),
+    include: Optional[str] = Query(None, description="CSV: values,exceedance,box,statistics; default all"),
+    wyt: Optional[str] = Query(None, description="CSV of water-year-types 1-5; default all"),
+    db=Depends(get_db),
+):
+    # --- parse + validate params ------------------------------------------
+    scen_list = _csv(scenarios)
+    if not scen_list:
+        raise HTTPException(400, "scenarios is required")
+
+    subj_list = _csv(subjects) or None
+    period_list = _csv(periods) or SYS_DEL_DEFAULT_PERIODS
+    if any(p not in SYS_DEL_VALID_PERIODS for p in period_list):
+        raise HTTPException(400, f"invalid period; allowed: {sorted(SYS_DEL_VALID_PERIODS)}")
+
+    unit_tokens = _csv(units) or ["volume"]
+    unit_list = [SYS_DEL_UNIT_ALIASES.get(u.lower(), u.upper()) for u in unit_tokens]
+    if any(u not in SYS_DEL_VALID_UNITS for u in unit_list):
+        raise HTTPException(400, "invalid unit; system deliveries supports volume (TAF) only")
+
+    include_list = _csv(include) or list(INCLUDE_ALL)
+    if any(i not in VALID_INCLUDE for i in include_list):
+        raise HTTPException(400, f"invalid include; allowed: {sorted(VALID_INCLUDE)}")
+
+    wyt_list: Optional[List[int]] = None
+    if wyt:
+        try:
+            wyt_list = [int(w) for w in _csv(wyt)]
+        except ValueError:
+            raise HTTPException(400, "wyt must be integers 1-5")
+        if any(w not in VALID_WYT for w in wyt_list):
+            raise HTTPException(400, "wyt values must be 1-5")
+
+    # --- cache ------------------------------------------------------------
+    cache_key = "sysdel|" + "|".join([
+        ",".join(sorted(scen_list)),
+        ",".join(sorted(subj_list)) if subj_list else "*",
+        ",".join(sorted(period_list)),
+        ",".join(sorted(unit_list)),
+        ",".join(sorted(include_list)),
+        ",".join(str(w) for w in sorted(wyt_list)) if wyt_list else "*",
+    ])
+    max_age = api_cache_max_age()
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return _json_response(cached, max_age)
+
+    # --- SQL: filter/join/fetch raw rows ----------------------------------
+    # Scope by the explicit system-deliveries source-variable list (no prefix
+    # trick - DEL_/C_/D_/SWP_ all appear across these 25 variables).
+    params: List[Any] = [scen_list, period_list, unit_list, SYSTEM_DELIVERIES_SOURCE_VARS]
+    where = [
+        "v.scenario_short_code = ANY($1)",
+        "v.period = ANY($2)",
+        "u.short_code = ANY($3)",
+        "v.source_variable = ANY($4)",
+        "v.is_active = TRUE",
+    ]
+    join_wyt = ""
+    if subj_list:
+        params.append(subj_list)
+        where.append(f"s.short_code = ANY(${len(params)})")
+    if wyt_list:
+        params.append(wyt_list)
+        join_wyt = (
+            "JOIN scenario_water_year_type w "
+            "ON w.scenario_short_code = v.scenario_short_code AND w.water_year = v.water_year"
+        )
+        where.append(f"w.wyt = ANY(${len(params)})")
+
+    sql = f"""
+        SELECT v.scenario_short_code,
+               s.short_code   AS subject_code,
+               s.subject_kind AS subject_kind,
+               s.label        AS subject_label,
+               v.period,
+               u.short_code   AS unit,
+               v.water_year,
+               v.value
+        FROM data_in_depth_value v
+        JOIN data_in_depth_subject s ON s.id = v.data_in_depth_subject_id
+        JOIN unit u ON u.id = v.unit_id
+        {join_wyt}
+        WHERE {" AND ".join(where)}
+    """
+
+    try:
+        rows = await db.fetch(sql, *params)
+    except Exception as e:  # noqa: BLE001
+        log.error("system-deliveries query failed: %s", e)
+        raise HTTPException(500, "query failed")
+
+    result = compute_series(rows, include=include_list, wyt_filter=wyt_list, subject_key="subjects")
+    _cache[cache_key] = result
+    return _json_response(result, max_age)
