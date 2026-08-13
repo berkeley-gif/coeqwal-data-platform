@@ -225,7 +225,7 @@ curl "https://api.coeqwal.org/api/scenarios"
 
 ### Data-in-depth
 
-Six **separate, specific** endpoints under `/api/data-in-depth`, all reading the
+Eight **separate, specific** endpoints under `/api/data-in-depth`, all reading the
 generic `data_in_depth_*` tables. They are intentionally not merged into one
 generalized endpoint; each has its own route, defaults, and scoping.
 
@@ -237,8 +237,10 @@ generalized endpoint; each has its own route, defaults, and scoping.
 | `GET /cws` | 106 CWS demand units + `NOD_CWS`/`SOD_CWS` aggregates | `annual` | measures: `delivery` (TAF), `pct_demand_met` (PCT_DEMAND_MET), `welfare_loss` (USD), `shortage_total` (TAF), `shortage_pct` (PCT_SHORTAGE) | annual delivery, percent of demand met & welfare-outcome measures |
 | `GET /ag` | 132 ag demand units + `NOD_Agriculture`/`SOD_Agriculture` aggregates | `annual` | measures: `net_diversion`, `gw_pumping`, `shortage` (TAF), `revenue` (USD) | annual net diversion, groundwater pumping, shortage & revenue |
 | `GET /groundwater-storage` | 42 groundwater WBAs + `NOD_GroundwaterStorage`/`SOD_GroundwaterStorage` aggregates | `annual` | measures: `volume` (TAF), `level` (ft) | annual groundwater storage volume & water-table level |
+| `GET /salmon` | `WRLCM_ADULT_FEMALES` (metric, no location) | `annual` | units: `nof_3yr_avg` (NOF_3YR_AVG) | 3-yr rolling average of natural-origin adult females |
+| `GET /system-deliveries` | 25 independent metric subjects (CVP/SWP delivery totals, Delta exports, SSJV export paths) | `annual` | units: `volume` (TAF) | water-year (Oct–Sep) sum of monthly TAF |
 
-**Shared design (all six):**
+**Shared design (all eight):**
 
 - **Hybrid compute.** SQL filters/joins/fetches the raw per-year values; the API
   computes every derived value **live** (exceedance percentile, box-plot
@@ -250,7 +252,11 @@ generalized endpoint; each has its own route, defaults, and scoping.
   `include` (CSV of facets, combinable — `values`, `exceedance`, `box`,
   `statistics`; default all), and `wyt` (CSV of water-year-types `1`–`5`; default
   all years → **no join**). Per-endpoint `periods` and the innermost split follow
-  the table above: reservoir/river/delta split by **`units`**; CWS, ag, and
+  the table above: reservoir/river/delta/system-deliveries/salmon split by
+  **`units`** (system-deliveries has only one unit, TAF, and salmon only
+  NOF_3YR_AVG, but both are grouped like river-flows since each of their
+  subjects is already its own independent leaf variable — no measure to split);
+  CWS, ag, and
   groundwater split by **`measures`** (CWS: `delivery` TAF / `pct_demand_met`
   PCT_DEMAND_MET / `welfare_loss` USD / `shortage_total` TAF / `shortage_pct`
   PCT_SHORTAGE — different units across a mix of two source files, so it
@@ -294,6 +300,10 @@ generalized endpoint; each has its own route, defaults, and scoping.
   meaningless, so `level` is never aggregated (permanent, not pending; see
   `etl/data_in_depth/open_issues.md` #8); requesting `measures=level` for those
   two subjects returns an empty series.
+  Salmon's `water_year` is the source's own `year_cal` (a plain calendar year,
+  **not** the Oct–Sep water year used everywhere else in `/api/data-in-depth`),
+  
+
 
 ```bash
 # Reservoir: box + stats, volume, September, two scenarios
@@ -334,14 +344,27 @@ curl ".../api/data-in-depth/groundwater-storage?scenarios=s0011,s0020&subjects=N
 
 # Groundwater: volume + level for one WBA, dry years only
 curl ".../api/data-in-depth/groundwater-storage?scenarios=s0020&subjects=WBA2&wyt=4,5"
+
+# Salmon: adult-females stats, two scenarios compared
+curl ".../api/data-in-depth/salmon?scenarios=s0011,s0020&include=box,statistics"
+
+# Salmon: exceedance curve, one scenario, dry years only
+curl ".../api/data-in-depth/salmon?scenarios=s0020&include=exceedance&wyt=4,5"
+
+# System deliveries: CVP/SWP grand totals, two scenarios
+curl ".../api/data-in-depth/system-deliveries?scenarios=s0011,s0020&subjects=DEL_CVP_TOTAL,DEL_SWP_TOTAL&include=box,statistics"
+
+# System deliveries: combined Delta exports, dry years only
+curl ".../api/data-in-depth/system-deliveries?scenarios=s0020&subjects=C_CVPSWP_TOTAL_EXPORTS&wyt=4,5"
 ```
 
 Response is nested `scenario → <subjects> → period → <series> → facets`, where
-`<series>` is the **unit** (`TAF`/`PCT_CAP`/`km`) for reservoir/river/delta, or the
+`<series>` is the **unit** (`TAF`/`PCT_CAP`/`km`/`NOF_3YR_AVG`) for
+reservoir/river/delta/system-deliveries/salmon, or the
 **measure** (`delivery`/`pct_demand_met` for CWS; `net_diversion`/`gw_pumping`/
 `shortage` for ag; `volume`/`level` for groundwater) for CWS/ag/groundwater. The
-subject-array key is `reservoirs`, `rivers`, or `subjects` (delta, CWS, ag, and
-groundwater):
+subject-array key is `reservoirs`, `rivers`, or `subjects` (delta, CWS, ag,
+groundwater, salmon, and system-deliveries):
 
 ```jsonc
 {
@@ -412,8 +435,32 @@ echoes its own `"unit"`:
       } } } ] }
 ```
 
-(Reservoir/river/delta don't get this extra key — there the unit already *is*
-the dict key, e.g. `"periods": { "sept": { "TAF": { "values": … } } }`.)
+```jsonc
+{ "scenario": "s0020", "n_years": 83,
+  "subjects": [
+    { "subject": "WRLCM_ADULT_FEMALES", "kind": "metric", "label": "Metric of winter-run adundance",
+      "periods": { "annual": { "NOF_3YR_AVG": {
+        // water_year here is a plain calendar year (year_cal), not Oct-Sep water year
+        "values":     [ { "water_year": 1934, "value": 0.425062 }, … ],
+        "box":        { "min": …, "q1": …, "median": …, "q3": …, "max": …, "outliers": [ … ] },
+        "statistics": { "n": 83, "mean": …, "cv": … }
+      } } } ] }
+```
+
+```jsonc
+{ "scenario": "s0020", "n_years": 100,
+  "subjects": [
+    { "subject": "DEL_CVP_TOTAL", "kind": "metric", "label": "Total Central Valley Project deliveries (AG + M&I + Wildlife Refuges)",
+      "periods": { "annual": { "TAF": {
+        "values":     [ { "water_year": 1922, "value": 4543.74 }, … ],
+        "box":        { "min": …, "q1": …, "median": …, "q3": …, "max": …, "outliers": [ … ] },
+        "statistics": { "n": 100, "mean": …, "cv": … }
+      } } } } ] }
+```
+
+(Reservoir/river/delta/system-deliveries/salmon don't get an extra `"unit"` key —
+there the unit already *is* the dict key, e.g.
+`"periods": { "sept": { "TAF": { "values": … } } }` / `"periods": { "annual": { "TAF": { … } } }`.)
 
 ## Testing
 
