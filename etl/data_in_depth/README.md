@@ -17,6 +17,8 @@ This is a **standalone pipeline**, deliberately separate from
 | Target table DDL (subject, value) + WYT table | ✅ written (`database/scripts/sql/`) |
 | WYT extractor (`extract_wyt.py`) | ✅ built |
 | Reservoir-storage extractor (`extract_reservoir_storage.py`) | ✅ built |
+| River-flow, delta-salinity, CWS, ag, groundwater, salmon extractors | ✅ built (see `open_issues.md`) |
+| System-deliveries seeder + extractor (`extract_system_deliveries.py`) | ✅ built (25 metric subjects, no aggregation) |
 
 Known gaps are tracked in [`open_issues.md`](open_issues.md).
 
@@ -188,9 +190,3 @@ psql "$DATABASE_URL" -f etl/data_in_depth/output/reservoir_storage_values.sql
 - New table DDL → descriptively-named `create_*.sql` in `database/scripts/sql/`
   (current house convention; the numbered `sql_archive/` sequence is legacy).
 
-## Not done yet / next
-
-- `verify_reservoir_storage.py` (re-read DB: row counts, per-series percentile
-  spread, MEAN/CV vs CSV).
-- Reconcile the capacity mismatch in [`open_issues.md`](open_issues.md).
-- Add `PCT_CAP` / `DIMENSIONLESS` to the `unit` seed CSV (see open issues).
