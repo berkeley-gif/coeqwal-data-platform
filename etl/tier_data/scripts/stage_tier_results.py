@@ -223,12 +223,12 @@ def stage_fw_exp(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_salmon(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """
-    WRC_SALMON_AB/TIERS_WRLCM_Modified_By_EL_2026-06-22.csv -> WRC_SALMON_AB.csv
+    WRC_SALMON_AB/TIERS_WRLCM_01A_TIERS_best_year_MASTER_capacity_percent_Th_6_18_2026-08-10_2026-08-10_ALL_TierDataOnly_Modified_By_EL.csv -> WRC_SALMON_AB.csv
 
     Schema: scenario, Tier_range, tier_score_cont.
     Keep: scenario, tier_score_cont.
     """
-    src = _find_single(source_dir / "WRC_SALMON_AB", "TIERS_WRLCM_Modified_By_EL_2026-06-22.csv")
+    src = _find_single(source_dir / "WRC_SALMON_AB", "TIERS_WRLCM_01A_TIERS_best_year_MASTER_capacity_percent_Th_6_18_2026-08-10_2026-08-10_ALL_TierDataOnly_Modified_By_EL.csv")
     if src is None:
         matches = _find_glob(source_dir / "WRC_SALMON_AB", "*.csv")
         if not matches:
