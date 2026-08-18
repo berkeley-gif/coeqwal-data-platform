@@ -115,7 +115,7 @@ def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """ENV_FLOWS/Continuous_Tier_Table_June18(1).csv -> ENV_FLOWS.csv"""
-    src = _find_single(source_dir / "ENV_FLOWS", "Continuous_Tier_Table_June18(1).csv")
+    src = _find_single(source_dir / "ENV_FLOWS", "eFlows_Continuous_Tier_Table.csv")
     if src is None:
         matches = _find_glob(source_dir / "ENV_FLOWS", "*.csv")
         if not matches:
