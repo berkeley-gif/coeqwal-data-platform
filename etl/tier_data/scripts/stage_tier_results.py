@@ -78,7 +78,7 @@ def _write(df: pd.DataFrame, out_path: Path, dry_run: bool, label: str) -> None:
 
 
 def stage_cws_del(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """CWS_DEL/20260603_all_scenarios_through_ecearth_tiers_continuous.csv -> CWS_DEL.csv"""
+    """CWS_DEL/20260813_all_scenarios_through_ecearth_tiers_continuous.csv -> CWS_DEL.csv"""
     src = _find_single(source_dir / "CWS_DEL", "20260813_all_scenarios_through_ecearth_tiers_continuous.csv")
     if src is None:
         matches = _find_glob(source_dir / "CWS_DEL", "*.csv")
@@ -114,7 +114,7 @@ def stage_ag_rev(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_env_flows(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """ENV_FLOWS/Continuous_Tier_Table_June18(1).csv -> ENV_FLOWS.csv"""
+    """ENV_FLOWS/eFlows_Continuous_Tier_Table.csv -> ENV_FLOWS.csv"""
     src = _find_single(source_dir / "ENV_FLOWS", "eFlows_Continuous_Tier_Table.csv")
     if src is None:
         matches = _find_glob(source_dir / "ENV_FLOWS", "*.csv")
@@ -150,7 +150,7 @@ def stage_res_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_gw_stor(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """GW_STOR/Continuous_GroundWater_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> GW_STOR.csv"""
+    """GW_STOR/Continuous_GroundWater_Tiers_Revised_08132026.csv -> GW_STOR.csv"""
     src = _find_single(source_dir / "GW_STOR", "Continuous_GroundWater_Tiers_Revised_08132026.csv")
     if src is None:
         matches = _find_glob(source_dir / "GW_STOR", "*.csv")
@@ -186,7 +186,7 @@ def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 
 def stage_fw_delta_uses(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
-    """FW_DELTA_USES/Continuous_InDeltaSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> FW_DELTA_USES.csv"""
+    """FW_DELTA_USES/Continuous_InDeltaSalinity_Tiers_Revised_08112026.csv -> FW_DELTA_USES.csv"""
     src = _find_single(source_dir / "FW_DELTA_USES", "Continuous_InDeltaSalinity_Tiers_Revised_08112026.csv")
     if src is None:
         matches = _find_glob(source_dir / "FW_DELTA_USES", "*.csv")
