@@ -241,7 +241,7 @@ def load_ag_rev_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_counts.add_value(tier)
+            tier_counts.add_value(tier_continuous)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'AG_REV',
@@ -347,7 +347,7 @@ def load_env_flows_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_counts.add_value(tier)
+            tier_counts.add_value(tier_continuous)
             location_results.append({
                 'scenario_short_code': scenario,
                 'tier_short_code': 'ENV_FLOWS',
@@ -401,7 +401,7 @@ def load_res_stor_data() -> Tuple[List[Dict], List[Dict]]:
                 continue
             tier_continuous = float(tier_val)
             tier = math.trunc(tier_continuous)
-            tier_counts.add_value(tier)
+            tier_counts.add_value(tier_continuous)
             res_id = _res_stor_location_id(res_col)
             res_name = TIER_LOCATION_NAMES.get('RES_STOR', {}).get(res_id, res_id)
             location_results.append({
@@ -462,7 +462,7 @@ def load_gw_stor_data() -> Tuple[List[Dict], List[Dict]]:
             if tier == 0:
                 tier_continuous = float(1)
                 tier = 1  # tier 0 maps to tier 1 (no impact)
-            tier_counts.add_value(tier)
+            tier_counts.add_value(tier_continuous)
             mapbox_id = convert_wba_id_to_mapbox_format(wba_col)
             location_results.append({
                 'scenario_short_code': scenario,
