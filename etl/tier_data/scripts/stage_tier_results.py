@@ -187,7 +187,7 @@ def stage_delta_eco(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
 
 def stage_fw_delta_uses(source_dir: Path, out_dir: Path, dry_run: bool) -> bool:
     """FW_DELTA_USES/Continuous_InDeltaSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv -> FW_DELTA_USES.csv"""
-    src = _find_single(source_dir / "FW_DELTA_USES", "Continuous_InDeltaSalinity_Tiers_Hist_CC50_CC95_TAI_ECV.csv")
+    src = _find_single(source_dir / "FW_DELTA_USES", "Continuous_InDeltaSalinity_Tiers_Revised_08112026.csv")
     if src is None:
         matches = _find_glob(source_dir / "FW_DELTA_USES", "*.csv")
         if not matches:
