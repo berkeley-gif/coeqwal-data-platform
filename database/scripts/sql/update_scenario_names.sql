@@ -1,4 +1,3 @@
-BEGIN
 UPDATE scenario_hydroclimate_sibling SET short_description = 'Existing operational rules for Central Valley water allocations, as specified by DWR in 2023, with  recent (2020) land use and TUCP actions. Strategy also includes the reintroduction of up to 2,000 female winter-run Chinook salmon spawners to the McCloud River (above Shasta Dam).' WHERE short_code = 's0020-R';
 UPDATE scenario_hydroclimate_sibling SET name = 'Groundwater pumping limits via reduced crop acreage in the San Joaquin Valley', short_description = 'Groundwater pumping limits in the San Joaquin Valley, achieved through reductions in irrigated crop acreage to reflect compliance with SGMA.' WHERE short_code = 's0026';
 UPDATE scenario_hydroclimate_sibling SET short_description = 'Groundwater pumping limits applied throughout the Sacramento and San Joaquin Valley to reflect compliance with SGMA.' WHERE short_code = 's0027';
@@ -17,4 +16,3 @@ UPDATE scenario_hydroclimate_sibling SET name = 'Maintain Delta outflows (45% un
 UPDATE scenario_hydroclimate_sibling SET name = 'Increase Delta outflows (55% unimpaired flow target)', short_description = 'Increases Delta outflow requirements (from approximately 45% to 55% of unimpaired volume), consistent with operations in USBR Alternative 3 for the Long-Term Operation (LTO) of the Central Valley Project.' WHERE short_code = 's0042';
 UPDATE scenario_hydroclimate_sibling SET name = 'Increase Delta outflows (65% unimpaired flow target)', short_description = 'Increases Delta outflow requirements (from approximately 45% to 65% of unimpaired volume), consistent with operations in USBR Alternative 3 for the Long-Term Operation (LTO) of the Central Valley Project.' WHERE short_code = 's0039';
 UPDATE scenario_hydroclimate_sibling SET short_description = 'Removes the fall (X2) salinity standard in the Delta.' WHERE short_code = 's0045';
-COMMIT
