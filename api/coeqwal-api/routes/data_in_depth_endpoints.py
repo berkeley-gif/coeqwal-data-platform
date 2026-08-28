@@ -289,7 +289,7 @@ async def river_flows(
 # no S_/C_ prefix, so this endpoint scopes by an EXPLICIT source-variable list
 # (the robust approach the prefix trick stands in for elsewhere). Add delta
 # salinity vars here as more land.
-DELTA_SOURCE_VARS = ["X2_PRV_KM"]
+DELTA_SOURCE_VARS = ["X2_PRV"]  
 DELTA_VALID_UNITS = {"km"}
 DELTA_DEFAULT_PERIODS = ["april", "sept"]
 DELTA_VALID_PERIODS = {"april", "sept"}
