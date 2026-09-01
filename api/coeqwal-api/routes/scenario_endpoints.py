@@ -79,13 +79,12 @@ async def get_all_scenarios(
             s.hydroclimate_sibling,
             s.is_active,
             sg.name,
-            sg.short_description,
-            sg.display_order
+            sg.short_description
         FROM scenario s
         LEFT JOIN scenario_hydroclimate_sibling sg
             ON s.hydroclimate_sibling = sg.short_code
         {where}
-        ORDER BY sg.display_order
+        ORDER BY s.short_code
         """
 
         rows = await connection.fetch(base_query.format(where="WHERE s.is_active = TRUE"))
@@ -102,8 +101,7 @@ async def get_all_scenarios(
             "short_description": row["short_description"],
             "hydroclimate_id": row["hydroclimate_id"],
             "sibling_group": row["hydroclimate_sibling"],
-            "is_active": bool(row["is_active"]),
-            "display_order": row["display_order"]
+            "is_active": bool(row["is_active"])
             if row["is_active"] is not None
             else True,
         }
