@@ -85,7 +85,7 @@ async def get_all_scenarios(
         LEFT JOIN scenario_hydroclimate_sibling sg
             ON s.hydroclimate_sibling = sg.short_code
         {where}
-        ORDER BY s.short_code
+        ORDER BY sg.display_order
         """
 
         rows = await connection.fetch(base_query.format(where="WHERE s.is_active = TRUE"))
