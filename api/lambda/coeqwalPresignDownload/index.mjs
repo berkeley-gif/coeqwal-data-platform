@@ -88,8 +88,9 @@ async function keyExists(key) {
 
 // Expected CSV keys
 const csvKeysFor = (id) => ({
-  output: `scenario/${id}/csv/${id}_coeqwal_calsim_output.csv`,
-  sv:     `scenario/${id}/csv/${id}_coeqwal_sv_input.csv`,
+  output:  `scenario/${id}/csv/${id}_coeqwal_calsim_output.csv`,
+  sv:      `scenario/${id}/csv/${id}_coeqwal_sv_input.csv`,
+  monthly: `scenario/${id}/csv/${id}_monthly_time_series.csv`,
 });
 
 // Presign a GET for download with Content-Disposition to force download
@@ -137,9 +138,13 @@ export async function handler(event) {
       const scenarios = [];
       for (const id of ids) {
         const zipKey = await findZipKey(id);
-        const { output: outKey, sv: svKey } = csvKeysFor(id);
+        const { output: outKey, sv: svKey, monthly: monthlyKey } = csvKeysFor(id);
 
-        const [hasOut, hasSv] = await Promise.all([keyExists(outKey), keyExists(svKey)]);
+        const [hasOut, hasSv, hasMonthly] = await Promise.all([
+          keyExists(outKey),
+          keyExists(svKey),
+          keyExists(monthlyKey),
+        ]);
 
         scenarios.push({
           scenario_id: id,
@@ -153,6 +158,9 @@ export async function handler(event) {
             sv_csv: hasSv
               ? { key: svKey, filename: svKey.split('/').pop() }
               : null,
+            monthly_time_series_csv: hasMonthly
+              ? { key: monthlyKey, filename: monthlyKey.split('/').pop() }
+              : null,
           },
         });
       }
@@ -160,7 +168,7 @@ export async function handler(event) {
       return json(200, { scenarios });
     }
 
-    // GET /download?scenario=s0020&type=zip|output|sv
+    // GET /download?scenario=s0020&type=zip|output|sv|monthly
     if (method === 'GET' && path.endsWith('/download')) {
       const qs = event.queryStringParameters || {};
       const scenario = String(qs.scenario || '');
@@ -169,8 +177,8 @@ export async function handler(event) {
       if (!validScenario(scenario)) {
         return json(400, { error: 'Invalid scenario (expected like s0020)' });
       }
-      if (!['zip', 'output', 'sv'].includes(type)) {
-        return json(400, { error: 'Invalid type (must be zip|output|sv)' });
+      if (!['zip', 'output', 'sv', 'monthly'].includes(type)) {
+        return json(400, { error: 'Invalid type (must be zip|output|sv|monthly)' });
       }
 
       let key;
@@ -179,8 +187,8 @@ export async function handler(event) {
         key = await findZipKey(scenario);
         if (!key) return json(404, { error: 'ZIP not found' });
       } else {
-        const { output: outKey, sv: svKey } = csvKeysFor(scenario);
-        key = type === 'output' ? outKey : svKey;
+        const { output: outKey, sv: svKey, monthly: monthlyKey } = csvKeysFor(scenario);
+        key = type === 'output' ? outKey : type === 'sv' ? svKey : monthlyKey;
         const exists = await keyExists(key);
         if (!exists) return json(404, { error: 'CSV not found' });
       }
