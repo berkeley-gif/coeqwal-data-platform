@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS regional_tier_mean (
-    scenario_short_code VARCHAR PRIMARY KEY,
+    scenario_short_code VARCHAR,
     hydroclimate VARCHAR,
     nod_ag numeric(5,3),
     sod_ag numeric(5,3),
